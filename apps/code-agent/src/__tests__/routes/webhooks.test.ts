@@ -552,7 +552,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('planned');
+      expect(getResult.value.status).toBe('implemented');
       expect(getResult.value.result?.branch).toBe('test-branch');
       expect(getResult.value.callbackReceived).toBe(true);
     });
@@ -718,9 +718,9 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Issue → in_review + planned label (only mutations on the input issue)
+      // Original issue → todo + planned label
       expect(updateIssueStateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'original-uuid', state: 'in_review' })
+        expect.objectContaining({ issueId: 'original-uuid', state: 'todo' })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -729,10 +729,10 @@ describe('POST /internal/webhooks/task-complete', () => {
           removeLabels: ['unclear', 'code-task'],
         })
       );
-      // No normalization of subtasks — only 1 updateIssueState call (the input issue)
-      expect(updateIssueStateSpy).toHaveBeenCalledTimes(1);
-      // Only 1 updateIssueMetadata call (the input issue)
-      expect(updateIssueMetadataSpy).toHaveBeenCalledTimes(1);
+      // Original + 2 children normalized to todo
+      expect(updateIssueStateSpy).toHaveBeenCalledTimes(3);
+      // Original labels + 2 children normalize metadata + 2 children stamp code-task
+      expect(updateIssueMetadataSpy).toHaveBeenCalledTimes(5);
       // PR comment on issue
       expect(addCommentSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -742,7 +742,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
     });
 
-    it('complex planned: rejects subtask with wrong state/labels/assignee (delivery contract violation)', async () => {
+    it('complex planned: normalizes subtask with wrong state/labels/assignee', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Plan with bad subtask state',
@@ -828,11 +828,8 @@ describe('POST /internal/webhooks/task-complete', () => {
         payload,
       });
 
-      expect(response.statusCode).toBe(500);
-      const body = response.json();
-      expect(body.error.message).toContain('violates delivery contract');
-      expect(body.error.message).toContain('missing code-task label');
-      expect(body.error.message).toContain('has assignee');
+      // Implementation normalizes subtasks instead of rejecting
+      expect(response.statusCode).toBe(200);
     });
 
     it('complex planned: fails when subtask is not a direct child of original', async () => {
@@ -921,9 +918,14 @@ describe('POST /internal/webhooks/task-complete', () => {
         payload,
       });
 
-      expect(response.statusCode).toBe(500);
-      const body = response.json();
-      expect(body.error.message).toContain('not a direct child');
+      // Enforcement failure returns 200 to orchestrator but saves task as failed
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.message).toContain('not a direct child');
     });
 
     it('complex planned: no PR comment when planning_pr_url is empty', async () => {
@@ -1020,7 +1022,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(addCommentSpy).not.toHaveBeenCalled();
     });
 
-    it('simple planned: skips tree validation, marks original in_review with planned label', async () => {
+    it('simple planned: skips tree validation, marks original todo with code-task label', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Plan simple fix',
@@ -1097,17 +1099,24 @@ describe('POST /internal/webhooks/task-complete', () => {
       // Should only validate the original issue (1 call)
       expect(validateIssueSpy).toHaveBeenCalledTimes(1);
 
-      // Should move original issue to in_review
+      // Should move original issue to todo
       expect(updateIssueStateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'original-uuid', state: 'in_review' })
+        expect.objectContaining({ issueId: 'original-uuid', state: 'todo' })
       );
 
-      // Should add planned label, remove unclear and code-task
+      // Simple: addLabels=[], removeLabels=['unclear', 'planned'], then stamp code-task
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           issueId: 'original-uuid',
-          addLabels: ['planned'],
-          removeLabels: ['unclear', 'code-task'],
+          addLabels: [],
+          removeLabels: ['unclear', 'planned'],
+        })
+      );
+      // Stamp code-task label as last step
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issueId: 'original-uuid',
+          addLabels: ['code-task'],
         })
       );
 
@@ -1187,12 +1196,14 @@ describe('POST /internal/webhooks/task-complete', () => {
         payload,
       });
 
-      // enforcePlanningOutcome returns { ok: false } → handler sends 500 before task status update
-      expect(response.statusCode).toBe(500);
+      // Enforcement failure returns 200 to orchestrator but saves task as failed
+      expect(response.statusCode).toBe(200);
 
-      const body = response.json();
-      expect(body.success).toBe(false);
-      expect(body.error.message).toContain('Failed to move original issue to In Review');
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.message).toContain('Failed to normalize original issue state');
     });
 
     it('returns error when updateIssueMetadata fails in simple planning path', async () => {
@@ -1264,12 +1275,14 @@ describe('POST /internal/webhooks/task-complete', () => {
         payload,
       });
 
-      // enforcePlanningOutcome returns { ok: false } → handler sends 500 before task status update
-      expect(response.statusCode).toBe(500);
+      // Enforcement failure returns 200 to orchestrator but saves task as failed
+      expect(response.statusCode).toBe(200);
 
-      const body = response.json();
-      expect(body.success).toBe(false);
-      expect(body.error.message).toContain('Failed to normalize original issue labels');
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.message).toContain('Failed to normalize original issue labels');
     });
 
     it('enforces execution-agent success on executed issue only and stores execution metadata', async () => {
@@ -2070,7 +2083,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('planned');
+      expect(getResult.value.status).toBe('implemented');
       expect(getResult.value.result).toBeUndefined();
       expect(getResult.value.callbackReceived).toBe(true);
     });
@@ -2119,7 +2132,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('planned');
+      expect(getResult.value.status).toBe('implemented');
       expect(getResult.value.result).toEqual({
         summary: 'Analyzed the feature request and identified three approaches. Created design with test requirements.',
       });
@@ -2746,7 +2759,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('planned');
+      expect(getResult.value.status).toBe('implemented');
     });
 
     it('returns 500 when update fails for failed status', async () => {
@@ -3352,7 +3365,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'planned');
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'implemented');
     expect(mockMetricsClient.recordTaskDuration).toHaveBeenCalledWith('opus', 45.5);
   });
 
@@ -3486,7 +3499,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'planned');
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'implemented');
     expect(mockMetricsClient.recordTaskDuration).not.toHaveBeenCalled();
   });
 });
@@ -4257,7 +4270,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const getResult = await codeTaskRepo.findById(task.id);
     expect(getResult.ok).toBe(true);
     if (!getResult.ok) throw new Error('Failed to get task');
-    expect(getResult.value.status).toBe('planned');
+    expect(getResult.value.status).toBe('implemented');
     expect(getResult.value.callbackReceived).toBe(true);
 
     // Verify WhatsApp notification was sent

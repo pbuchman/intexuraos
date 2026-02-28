@@ -16,12 +16,19 @@ export interface CompletionVerifierInput {
   rawLogs: string;
 }
 
+export interface CompletionVerifierTrace {
+  transcript: string;
+  prompt: string;
+  response: string;
+}
+
 export interface CompletionVerifierVerdict {
   /** True when Gemini extraction succeeded and all Zod fields were present — does NOT mean the agent completed its task. */
   passed: boolean;
   missingFields: string[];
   verifierFailure: boolean;
   agentData?: PlanningAgentData | ExecutionAgentData | PullRequestAgentData;
+  trace: CompletionVerifierTrace;
 }
 
 export interface PlanningAgentData {
@@ -259,6 +266,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         agentType: input.agentType,
         model: this.model,
         promptChars: prompt.length,
+        transcript,
       },
       'Gemini completion verifier request'
     );
@@ -275,7 +283,12 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         },
         'Gemini completion verifier returned no response'
       );
-      return { passed: false, missingFields: [], verifierFailure: true };
+      return {
+        passed: false,
+        missingFields: [],
+        verifierFailure: true,
+        trace: { transcript, prompt, response: '' },
+      };
     }
 
     this.logger.info(
@@ -284,6 +297,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         attempt: input.attempt,
         model: this.model,
         responseChars: generated.value.content.length,
+        response: generated.value.content,
       },
       'Gemini completion verifier response'
     );
@@ -302,7 +316,12 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         },
         'Gemini completion verifier response parsing failed'
       );
-      return { passed: false, missingFields: [], verifierFailure: true };
+      return {
+        passed: false,
+        missingFields: [],
+        verifierFailure: true,
+        trace: { transcript, prompt, response: generated.value.content },
+      };
     }
 
     const parseResult = schema.safeParse(rawJson);
@@ -318,7 +337,12 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         },
         'Gemini completion verifier Zod validation failed'
       );
-      return { passed: false, missingFields, verifierFailure: false };
+      return {
+        passed: false,
+        missingFields,
+        verifierFailure: false,
+        trace: { transcript, prompt, response: generated.value.content },
+      };
     }
 
     const agentData = toAgentData(input.agentType, parseResult.data);
@@ -333,7 +357,13 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       'Gemini completion verifier parsed verdict'
     );
 
-    return { passed: true, missingFields: [], verifierFailure: false, agentData };
+    return {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      agentData,
+      trace: { transcript, prompt, response: generated.value.content },
+    };
   }
 
   private createLlmClient(config: CompletionVerifierConfig): LlmGenerateClient {

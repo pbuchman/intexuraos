@@ -786,6 +786,20 @@ export class TaskDispatcher {
       );
     }
     this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    this.appendOrchestratorTaskLog(task.taskId, `━━━ Verification Trace ━━━`);
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `📋 Transcript (last 50 lines):\n${verification.trace.transcript}`
+    );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `📝 Prompt sent to Gemini:\n${verification.trace.prompt}`
+    );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `🤖 Gemini response:\n${verification.trace.response}`
+    );
+    this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     if (typeof exitCode === 'number') {
       task.lastExitCode = exitCode;

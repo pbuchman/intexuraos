@@ -328,6 +328,11 @@ describe('OrchestratorCompletionVerifier', () => {
         summary: 'The agent planned successfully.',
         unclear_clarification: '',
       });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validPlanningResponse,
+      });
     });
 
     it('returns passed for unclear outcome', async () => {
@@ -356,6 +361,11 @@ describe('OrchestratorCompletionVerifier', () => {
       });
       expect(result.passed).toBe(true);
       expect(result.agentData?.agentType).toBe('planning');
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: expect.any(String),
+      });
     });
   });
 
@@ -395,6 +405,11 @@ describe('OrchestratorCompletionVerifier', () => {
         gh_pr_url: 'https://github.com/org/repo/pull/901',
         summary: 'Implemented the feature.',
       });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validExecutionResponse,
+      });
     });
   });
 
@@ -432,6 +447,11 @@ describe('OrchestratorCompletionVerifier', () => {
         comments_replied: 'yes',
         summary: 'Addressed review comments.',
       });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validPRResponse,
+      });
     });
   });
 
@@ -457,6 +477,11 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.verifierFailure).toBe(true);
       expect(result.missingFields).toEqual([]);
       expect(result.agentData).toBeUndefined();
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: '',
+      });
     });
   });
 
@@ -480,6 +505,11 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(true);
       expect(result.missingFields).toEqual([]);
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: 'not json at all',
+      });
     });
   });
 
@@ -504,6 +534,11 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.verifierFailure).toBe(false);
       expect(result.missingFields.length).toBeGreaterThan(0);
       expect(result.missingFields).toContain('comments_replied');
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: JSON.stringify({ gh_pr_url: 'https://github.com/org/repo/pull/1' }),
+      });
     });
   });
 
@@ -535,6 +570,11 @@ describe('OrchestratorCompletionVerifier', () => {
       });
       expect(result.passed).toBe(true);
       expect(result.agentData?.agentType).toBe('planning');
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: wrappedResponse,
+      });
     });
   });
 });

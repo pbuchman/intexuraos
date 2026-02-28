@@ -651,11 +651,48 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        if (result?.planning_outcome_label === 'planned') {
-          const planningEnforcement = await enforcePlanningOutcome('planned', result);
-          if (!planningEnforcement.ok) {
-            request.log.error({ taskId, error: planningEnforcement.message }, 'Planning deterministic enforcement failed');
-            return reply.fail('INTERNAL_ERROR', planningEnforcement.message);
+        if (task.agentType === 'planning') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Planning completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'PLANNING_AGENT_ENFORCEMENT_FAILED',
+                message: 'Planning completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          if (result.planning_outcome_label === 'planned') {
+            const planningEnforcement = await enforcePlanningOutcome('planned', result);
+            if (!planningEnforcement.ok) {
+              request.log.error({ taskId, error: planningEnforcement.message }, 'Planning deterministic enforcement failed');
+              const failResult = await codeTaskRepo.update(taskId, {
+                status: 'failed',
+                completedAt,
+                result,
+                error: {
+                  code: 'PLANNING_AGENT_ENFORCEMENT_FAILED',
+                  message: planningEnforcement.message,
+                },
+                callbackReceived: true,
+              });
+              if (!failResult.ok) {
+                return reply.fail('INTERNAL_ERROR', failResult.error.message);
+              }
+              // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+              return await reply.send({ received: true });
+            }
           }
         }
 
@@ -669,11 +706,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         const resolvedStatus =
-          result?.planning_outcome_label === 'planned'
-            ? 'planned'
-            : task.agentType === 'execution' || task.agentType === 'pull_request'
-              ? 'implemented'
-              : 'planned';
+          task.agentType === 'planning' ? 'planned' : 'implemented';
         const updateResult = await codeTaskRepo.update(taskId, {
           status: resolvedStatus,
           completedAt,
@@ -691,7 +724,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         // Transition Linear issue to In Review when PR is created (best-effort for planning only)
         // execution and pull_request agents have deterministic enforcement
         /* v8 ignore start -- ts-type: optional property checks create type narrowing branches @preserve */
-        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && prNumber !== undefined && task.linearIssueId !== undefined) {
+        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && prNumber !== undefined && task.linearIssueId !== undefined) {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
         /* v8 ignore stop @preserve */
@@ -781,7 +814,21 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           const unclearEnforcement = await enforcePlanningOutcome('unclear', result, taskError);
           if (!unclearEnforcement.ok) {
             request.log.error({ taskId, error: unclearEnforcement.message }, 'Planning unclear deterministic enforcement failed');
-            return reply.fail('INTERNAL_ERROR', unclearEnforcement.message);
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: 'PLANNING_AGENT_ENFORCEMENT_FAILED',
+                message: unclearEnforcement.message,
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
           }
         }
         const updateResult = await codeTaskRepo.update(taskId, {
