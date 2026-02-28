@@ -116,26 +116,6 @@ const intexuraPlugin: FastifyPluginCallback = (
     }
   );
 
-  // Handle JSON parse errors from the custom content-type parser above.
-  // When JSON.parse() throws, parseComplete(error) causes Fastify to emit
-  // FST_ERR_CTP_INVALID_JSON_BODY. Return 400 instead of the default 500.
-  fastify.setErrorHandler(async (error, _request, reply) => {
-    const fastifyError = error as { code?: string };
-    if (
-      fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
-      fastifyError.code === 'FST_ERR_CTP_EMPTY_JSON_BODY'
-    ) {
-      reply.status(400);
-      await (reply as FastifyReply & { fail: FastifyReply['fail'] }).fail(
-        'INVALID_REQUEST',
-        'Invalid JSON body'
-      );
-      return;
-    }
-    // Re-throw so the app-level error handler (e.g. setupSentryErrorHandler) can take over.
-    throw error;
-  });
-
   done();
 };
 
