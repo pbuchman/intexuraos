@@ -16,6 +16,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import {
   createTaskForPR,
   type CreateTaskForPRDeps,
+  type CreateTaskForPRRequest,
 } from '../../../domain/usecases/createTaskForPR.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 
@@ -95,7 +96,7 @@ describe('createTaskForPR', () => {
     };
   }
 
-  function createRequest(overrides: { prTitle?: string } = {}): { repository: string; prNumber: number; prTitle?: string; senderLogin: string; comment: string; eventId: string } {
+  function createRequest(overrides: Partial<Pick<CreateTaskForPRRequest, 'prTitle' | 'workerType'>> = {}): CreateTaskForPRRequest {
     return {
       repository,
       prNumber,
@@ -541,6 +542,92 @@ describe('createTaskForPR', () => {
       await createTaskForPR(createDeps(), createRequest({ prTitle: '[INT-500] Fix bug' }));
 
       expect(capturedLabels).toEqual(['code-task', 'backend', 'pr-comment']);
+    });
+  });
+
+  describe('workerType selection', () => {
+    function setupFullHappyPath(): void {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockTransaction.get.mockResolvedValue({
+        exists: false,
+        data: (): undefined => undefined,
+      });
+
+      mockLinearIssueService.ensureIssueExists.mockResolvedValue({
+        linearIssueId: 'INT-100',
+        linearIssueTitle: 'Test Issue',
+        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-100',
+        linearFallback: false,
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      });
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({ ...mockExistingTask, id: 'task_new' })
+      );
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' })
+      );
+
+      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
+    }
+
+    it('dispatches with explicit workerType when provided', async () => {
+      setupFullHappyPath();
+
+      let capturedWorkerType: string | undefined;
+      mockTaskDispatcher.dispatch.mockImplementation(async (input: { workerType: string }) => {
+        capturedWorkerType = input.workerType;
+        return ok({ dispatched: true, workerLocation: 'home-dev' });
+      });
+
+      let capturedCreateWorkerType: string | undefined;
+      mockCodeTaskRepo.create.mockImplementation(async (input: { id: string; workerType: string }) => {
+        capturedCreateWorkerType = input.workerType;
+        return ok({ ...mockExistingTask, id: input.id });
+      });
+
+      const result = await createTaskForPR(createDeps(), createRequest({ workerType: 'sonnet' }));
+
+      if (!result.ok) {
+        throw new Error('Expected success result: ' + result.error.message);
+      }
+      expect(capturedWorkerType).toBe('sonnet');
+      expect(capturedCreateWorkerType).toBe('sonnet');
+    });
+
+    it('defaults to auto when workerType is omitted', async () => {
+      setupFullHappyPath();
+
+      let capturedWorkerType: string | undefined;
+      mockTaskDispatcher.dispatch.mockImplementation(async (input: { workerType: string }) => {
+        capturedWorkerType = input.workerType;
+        return ok({ dispatched: true, workerLocation: 'home-dev' });
+      });
+
+      const result = await createTaskForPR(createDeps(), createRequest());
+
+      if (!result.ok) {
+        throw new Error('Expected success result: ' + result.error.message);
+      }
+      expect(capturedWorkerType).toBe('auto');
+    });
+
+    it('returns invalid_worker_type for unsupported workerType', async () => {
+      const result = await createTaskForPR(
+        createDeps(),
+        createRequest({ workerType: 'unsupported' as never })
+      );
+
+      if (result.ok) {
+        throw new Error('Expected error result');
+      }
+      expect(result.error.code).toBe('invalid_worker_type');
+      expect(result.error.message).toContain('unsupported');
     });
   });
 

@@ -16,6 +16,8 @@ import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTa
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
+import { WorkerTypeSchema } from '../githubWebhookAgent/models.js';
+import type { WorkerType } from '../githubWebhookAgent/models.js';
 import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
 
@@ -32,6 +34,8 @@ export interface CreateTaskForPRRequest {
   comment: string;
   /** GitHub webhook event ID for deduplication */
   eventId: string;
+  /** Explicit worker type from webhook agent directive (defaults to 'auto') */
+  workerType?: WorkerType;
 }
 
 export type CreateTaskForPRErrorCode =
@@ -39,6 +43,7 @@ export type CreateTaskForPRErrorCode =
   | 'no_workers_configured'
   | 'task_creation_failed'
   | 'linear_issue_failed'
+  | 'invalid_worker_type'
   | 'internal_error';
 
 export interface CreateTaskForPRError {
@@ -122,6 +127,18 @@ export async function createTaskForPR(
     { repository, prNumber, senderLogin, eventId },
     'Creating task from PR comment'
   );
+
+  // Step 0: Validate workerType if provided
+  if (request.workerType !== undefined) {
+    const parsed = WorkerTypeSchema.safeParse(request.workerType);
+    if (!parsed.success) {
+      return err({
+        code: 'invalid_worker_type',
+        message: `Invalid worker type: ${request.workerType}`,
+      });
+    }
+  }
+  const resolvedWorkerType = request.workerType ?? 'auto';
 
   // Step 1: Resolve GitHub username to userId
   const userResult = await userLookupService.resolveUserFromGitHubUsername(senderLogin);
@@ -216,7 +233,7 @@ export async function createTaskForPR(
         prompt: buildTaskPrompt(request),
         sanitizedPrompt: request.comment.slice(0, 1000),
         systemPromptHash: 'pr-comment-auto',
-        workerType: 'auto',
+        workerType: resolvedWorkerType,
         workerLocation: worker.name,
         repository,
         baseBranch: 'main',
@@ -309,7 +326,7 @@ export async function createTaskForPR(
     systemPromptHash: 'pr-comment-auto',
     repository,
     baseBranch: 'main',
-    workerType: 'auto',
+    workerType: resolvedWorkerType,
     webhookUrl,
     webhookSecret,
     traceId: eventId,
