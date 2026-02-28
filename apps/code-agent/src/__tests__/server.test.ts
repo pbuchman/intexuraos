@@ -1,6 +1,7 @@
 /**
  * Tests for server configuration.
  */
+import { Writable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock jose library for JWT validation
@@ -189,6 +190,33 @@ describe('server configuration', () => {
     // Fastify exposes the server's requestTimeout via the underlying http.Server
     const httpServer = app.server;
     expect(httpServer.requestTimeout).toBe(120000);
+  });
+
+  it('provides a functional request.log when loggerStream is supplied', async () => {
+    const chunks: string[] = [];
+    const logStream = new Writable({
+      write(chunk: Buffer, _encoding: string, callback: () => void): void {
+        chunks.push(chunk.toString());
+        callback();
+      },
+    });
+
+    const appWithLogger = await buildServer(logStream);
+
+    // Trigger a request — the onRequest hook in intexuraFastifyPlugin adds requestId,
+    // and if Fastify has a real logger, request.log will write to our stream.
+    // We add a route that explicitly logs via request.log to verify it works.
+    appWithLogger.get('/test-log', async (request, reply) => {
+      request.log.error({ test: true }, 'test-log-message');
+      return await reply.ok({ logged: true });
+    });
+
+    await appWithLogger.inject({ method: 'GET', url: '/test-log' });
+
+    const output = chunks.join('');
+    expect(output).toContain('test-log-message');
+
+    await appWithLogger.close();
   });
 
   it('serves health endpoint correctly with timeout configured', async () => {
