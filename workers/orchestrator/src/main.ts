@@ -65,7 +65,13 @@ export async function main(
     logger.info({ port: config.port }, 'Orchestrator HTTP server started');
 
     // Run startup recovery
-    await runStartupRecovery(statePersistence, dispatcher, webhookClient, logger, isolationProvider);
+    await runStartupRecovery(
+      statePersistence,
+      dispatcher,
+      webhookClient,
+      logger,
+      isolationProvider
+    );
 
     // Schedule background jobs
     const tokenRefreshInterval = scheduleTokenRefresh(tokenService, logger);
@@ -113,8 +119,8 @@ async function runStartupRecovery(
   let containerMap: Map<string, DiscoveredContainer> | null = null;
 
   if (isolationProvider?.listWorkerContainers !== undefined) {
+    let timeoutHandle: NodeJS.Timeout | undefined = undefined;
     try {
-      let timeoutHandle: NodeJS.Timeout | undefined = undefined;
       const timeoutPromise = new Promise<null>((resolve) => {
         timeoutHandle = setTimeout(() => {
           resolve(null);
@@ -136,14 +142,15 @@ async function runStartupRecovery(
       containerMap = discoveryResult;
 
       if (containerMap !== null) {
-        logger.info(
-          { containerCount: containerMap.size },
-          'Container discovery completed'
-        );
+        logger.info({ containerCount: containerMap.size }, 'Container discovery completed');
       } else {
-        logger.warn({ timeout: ADOPTION_TIMEOUT_MS }, 'Container discovery timed out, falling back to state-only recovery');
+        logger.warn(
+          { timeout: ADOPTION_TIMEOUT_MS },
+          'Container discovery timed out, falling back to state-only recovery'
+        );
       }
     } catch (error) {
+      clearTimeout(timeoutHandle);
       logger.warn({ error }, 'Container discovery failed, falling back to state-only recovery');
     }
   }
