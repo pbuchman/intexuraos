@@ -183,6 +183,7 @@ export async function drainTaskQueue(
 
     const updateResult = await codeTaskRepo.update(task.id, {
       status: 'dispatched',
+      dispatchedAt: new Date(),
       workerLocation: dispatchResult.value.workerLocation,
       cancelNonce,
       cancelNonceExpiresAt,

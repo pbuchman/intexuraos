@@ -347,6 +347,7 @@ describe('drainTaskQueue', () => {
     // Verify task updated with dispatched status, cancel nonce, and worker location
     expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
       status: 'dispatched',
+      dispatchedAt: expect.any(Date),
       workerLocation: 'home-mac',
       cancelNonce: 'abcd1234',
       cancelNonceExpiresAt: expect.any(String),

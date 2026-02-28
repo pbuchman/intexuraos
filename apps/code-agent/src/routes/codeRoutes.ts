@@ -3790,7 +3790,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               data: {
                 type: 'object',
                 properties: {
-                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped'] },
+                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped', 'failed'] },
                   taskId: { type: 'string' },
                 },
                 required: ['action'],
