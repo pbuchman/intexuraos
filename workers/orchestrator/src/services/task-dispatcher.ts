@@ -152,7 +152,6 @@ export class TaskDispatcher {
     // Start worker attempt with continueSession: true
     const startResult = await this.startWorkerAttempt(task, {
       prompt: task.prompt,
-      hasChildren: task.hasChildren ?? false,
       continueSession: true,
     });
 
@@ -265,7 +264,6 @@ export class TaskDispatcher {
 
       const startResult = await this.startWorkerAttempt(task, {
         prompt: request.prompt,
-        hasChildren: request.hasChildren,
         continueSession: false,
       });
       if (!startResult.ok) {
@@ -504,7 +502,6 @@ export class TaskDispatcher {
       const preamble = this.buildResumePreamble();
       const resumeResult = await this.startWorkerAttempt(task, {
         prompt: preamble + message,
-        hasChildren: task.hasChildren ?? false,
         continueSession: true,
         injectActiveGoal: true,
       });
@@ -786,6 +783,20 @@ export class TaskDispatcher {
       );
     }
     this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    this.appendOrchestratorTaskLog(task.taskId, `━━━ Verification Trace ━━━`);
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `📋 Transcript (last 50 lines):\n${verification.trace.transcript}`
+    );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `📝 Prompt sent to Gemini:\n${verification.trace.prompt}`
+    );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `🤖 Gemini response:\n${verification.trace.response}`
+    );
+    this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     if (typeof exitCode === 'number') {
       task.lastExitCode = exitCode;
@@ -880,7 +891,6 @@ export class TaskDispatcher {
         await this.teardownAttempt(task.taskId, true);
         const resumeResult = await this.startWorkerAttempt(task, {
           prompt: combinedPrompt,
-          hasChildren: task.hasChildren ?? false,
           continueSession: true,
           injectActiveGoal: true,
         });
@@ -926,7 +936,6 @@ export class TaskDispatcher {
       this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
       const resumeStart = await this.startWorkerAttempt(task, {
         prompt: resumePrompt,
-        hasChildren: task.hasChildren ?? false,
         continueSession: true,
       });
 
@@ -1030,7 +1039,8 @@ export class TaskDispatcher {
       base.planning_outcome_label = agentData.outcome;
       base.planning_superpowers_writing_plans_used =
         agentData.superpowers_writing_plans === 'used' ? '1' : '0';
-      base.planning_issue_url = agentData.linear_task_url;
+      base.planning_linear_url = agentData.linear_url;
+      base.planning_is_complex = agentData.is_complex;
       if (agentData.pr_url !== '') {
         base.planning_pr_url = agentData.pr_url;
       }
@@ -1203,7 +1213,6 @@ export class TaskDispatcher {
       await this.teardownAttempt(task.taskId, true);
       const resumeResult = await this.startWorkerAttempt(task, {
         prompt: combinedPrompt,
-        hasChildren: task.hasChildren ?? false,
         continueSession: true,
         injectActiveGoal: true,
       });
@@ -1233,7 +1242,6 @@ export class TaskDispatcher {
     task: Task,
     params: {
       prompt: string;
-      hasChildren: boolean;
       continueSession: boolean;
       injectActiveGoal?: boolean;
     }
@@ -1241,7 +1249,7 @@ export class TaskDispatcher {
     this.attemptCompletionSignals.delete(task.taskId);
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Starting worker attempt: continueSession=${String(params.continueSession)} hasChildren=${String(params.hasChildren)}`
+      `Starting worker attempt: continueSession=${String(params.continueSession)}`
     );
     const workerTypeConfig = WORKER_TYPES[task.workerType];
     this.appendOrchestratorTaskLog(
@@ -1277,7 +1285,6 @@ export class TaskDispatcher {
           ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
           taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
           linearIssueLabels: task.linearIssueLabels,
-          hasChildren: params.hasChildren,
           workerType: task.workerType,
           ...(task.agentType !== undefined && { agentType: task.agentType }),
         }) +
@@ -1454,20 +1461,6 @@ export class TaskDispatcher {
         }
         const branch = pr.headRefName;
         const commits = Array.isArray(pr.commits) ? pr.commits.length : 0;
-        /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
-
-        // Check CI status
-        let ciFailed: boolean | undefined;
-        try {
-          const { stdout: ciOutput } = await execAsync(
-            /* v8 ignore stop @preserve */
-            `gh pr checks ${String(pr.number)} --json state --jq '[.[] | select(.state == "FAILURE")] | length'`,
-            execOptions
-          );
-          ciFailed = parseInt(ciOutput.trim(), 10) > 0;
-        } catch {
-          this.logger.warn({ taskId: task.taskId }, 'Failed to check CI status for PR');
-        }
 
         // Check for rebase result
         let rebaseResult: TaskResult['rebaseResult'] | undefined;
@@ -1503,7 +1496,6 @@ export class TaskDispatcher {
           commits,
           prUrl: pr.url,
           summary: pr.title,
-          ...(ciFailed !== undefined && { ciFailed }),
           /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
           ...(rebaseResult !== undefined && { rebaseResult }),
           /* v8 ignore stop @preserve */

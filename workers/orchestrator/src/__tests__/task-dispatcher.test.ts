@@ -235,6 +235,7 @@ describe('TaskDispatcher', () => {
   };
 
   type VerifierMockResult = CompletionVerifierVerdict;
+  const dummyTrace = { transcript: '', prompt: '', response: '' };
 
   const singleAttemptCompletionControl = {
     maxAttempts: 1,
@@ -244,11 +245,13 @@ describe('TaskDispatcher', () => {
           passed: true,
           missingFields: [],
           verifierFailure: false,
+          trace: dummyTrace,
           agentData: {
             agentType: 'planning' as const,
             outcome: 'planned',
             superpowers_writing_plans: 'used',
-            linear_task_url: '',
+            linear_url: '',
+            is_complex: '0',
             pr_url: '',
             summary: 'Task completed',
             unclear_clarification: '',
@@ -1400,6 +1403,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: ['gh_pr_url'],
         verifierFailure: false,
+        trace: dummyTrace,
       });
       const internal = agentDispatcher as unknown as {
         checkForResult: (task: unknown) => Promise<unknown>;
@@ -1445,6 +1449,7 @@ describe('TaskDispatcher', () => {
         passed: true,
         missingFields: [],
         verifierFailure: false,
+        trace: dummyTrace,
         agentData: {
           agentType: 'execution',
           superpowers_executing_plans: 'used',
@@ -1460,7 +1465,6 @@ describe('TaskDispatcher', () => {
         branch: 'feat/execution-task',
         commits: 2,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/900',
-        ciFailed: false,
       });
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
         executionFinalAssistantLog()
@@ -1503,6 +1507,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: false,
+        trace: dummyTrace,
       });
       const request: CreateTaskRequest = {
         taskId: 'claude-error-test',
@@ -1789,6 +1794,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: false,
+        trace: dummyTrace,
       });
       const request: CreateTaskRequest = {
         taskId: 'docker-header-error',
@@ -1837,6 +1843,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: false,
+        trace: dummyTrace,
       });
       const request: CreateTaskRequest = {
         taskId: 'split-json-error',
@@ -1956,11 +1963,13 @@ describe('TaskDispatcher', () => {
           passed: false,
           missingFields: ['agent_final_block'],
           verifierFailure: false,
+          trace: dummyTrace,
         })
         .mockResolvedValueOnce({
           passed: true,
           missingFields: [],
           verifierFailure: false,
+          trace: dummyTrace,
           agentData: {
             agentType: 'execution',
             superpowers_executing_plans: 'used',
@@ -1992,14 +2001,12 @@ describe('TaskDispatcher', () => {
         checkForResult: (task: unknown) => Promise<{
           branch: string;
           commits: number;
-          ciFailed: boolean;
           prUrl: string;
         }>;
       };
       vi.spyOn(resumeDispatcherInternal, 'checkForResult').mockResolvedValue({
         branch: 'resume-branch',
         commits: 2,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/999',
       });
 
@@ -2062,6 +2069,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: true,
+        trace: dummyTrace,
       });
 
       const verifierFailureDispatcher = new TaskDispatcher(
@@ -2086,14 +2094,12 @@ describe('TaskDispatcher', () => {
         checkForResult: (task: unknown) => Promise<{
           branch: string;
           commits: number;
-          ciFailed: boolean;
           prUrl: string;
         }>;
       };
       vi.spyOn(verifierFailureInternal, 'checkForResult').mockResolvedValue({
         branch: 'verifier-failure-branch',
         commits: 2,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/1234',
       });
 
@@ -2164,6 +2170,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: ['some_field'],
         verifierFailure: false,
+        trace: dummyTrace,
       });
 
       const resumeFailDispatcher = new TaskDispatcher(
@@ -2188,14 +2195,12 @@ describe('TaskDispatcher', () => {
         checkForResult: (task: unknown) => Promise<{
           branch: string;
           commits: number;
-          ciFailed: boolean;
           prUrl: string;
         }>;
       };
       vi.spyOn(internal, 'checkForResult').mockResolvedValue({
         branch: 'resume-fail-branch',
         commits: 1,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/1000',
       });
 
@@ -2306,6 +2311,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: ['criteria_a'],
         verifierFailure: false,
+        trace: dummyTrace,
       });
 
       const preserveDispatcher = new TaskDispatcher(
@@ -2383,6 +2389,7 @@ describe('TaskDispatcher', () => {
               passed: true,
               missingFields: [],
               verifierFailure: false,
+              trace: dummyTrace,
             }),
             describe: (): { enabled: boolean } => ({ enabled: true }),
           },
@@ -2434,6 +2441,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: true,
+        trace: dummyTrace,
       });
 
       const fallbackDispatcher = new TaskDispatcher(
@@ -2480,14 +2488,12 @@ describe('TaskDispatcher', () => {
         checkForResult: (task: unknown) => Promise<{
           branch: string;
           commits: number;
-          ciFailed: boolean;
           prUrl: string;
         }>;
       };
       vi.spyOn(fallbackInternal, 'checkForResult').mockResolvedValue({
         branch: 'fallback-branch',
         commits: 1,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/1001',
       });
 
@@ -2734,6 +2740,7 @@ describe('TaskDispatcher', () => {
               passed: true,
               missingFields: [],
               verifierFailure: false,
+              trace: dummyTrace,
             }),
             describe: (): { enabled: boolean } => ({ enabled: true }),
           },
@@ -3585,7 +3592,6 @@ describe('TaskDispatcher', () => {
       vi.spyOn(obsInternal, 'checkForResult').mockResolvedValue({
         branch: 'feat/obs-test',
         commits: 3,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/500',
       });
 
@@ -3612,7 +3618,7 @@ describe('TaskDispatcher', () => {
       expect(resultLog).toContain('prUrl=https://github.com/pbuchman/intexuraos/pull/500');
       expect(resultLog).toContain('branch=feat/obs-test');
       expect(resultLog).toContain('commits=3');
-      expect(resultLog).toContain('ciFailed=false');
+      expect(resultLog).toContain('ciFailed=unknown');
       vi.useRealTimers();
     });
 
@@ -3625,11 +3631,13 @@ describe('TaskDispatcher', () => {
           passed: false,
           missingFields: ['final_block'],
           verifierFailure: false,
+          trace: dummyTrace,
         })
         .mockResolvedValueOnce({
           passed: true,
           missingFields: [],
           verifierFailure: false,
+          trace: dummyTrace,
           agentData: {
             agentType: 'execution',
             superpowers_executing_plans: 'used',
@@ -3663,7 +3671,6 @@ describe('TaskDispatcher', () => {
       vi.spyOn(promptInternal, 'checkForResult').mockResolvedValue({
         branch: 'feat/prompt-test',
         commits: 1,
-        ciFailed: true,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/900',
       });
 

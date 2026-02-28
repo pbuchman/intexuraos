@@ -61,7 +61,8 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      linear_task_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      is_complex: '0',
       pr_url: '',
       summary: 'Planned the task.',
       unclear_clarification: '',
@@ -73,7 +74,8 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'unclear',
       superpowers_writing_plans: 'not used',
-      linear_task_url: '',
+      linear_url: '',
+      is_complex: '0',
       pr_url: '',
       summary: 'Could not plan.',
       unclear_clarification: 'Need more info.',
@@ -85,7 +87,8 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      linear_task_url: 'https://linear.app/pbuchman/issue/INT-631',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-631',
+      is_complex: '1',
       pr_url: 'https://github.com/pbuchman/intexuraos/pull/950',
       summary: 'Planned and created PR.',
       unclear_clarification: '',
@@ -97,7 +100,8 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'done',
       superpowers_writing_plans: 'used',
-      linear_task_url: '',
+      linear_url: '',
+      is_complex: '0',
       pr_url: '',
       summary: 'x',
       unclear_clarification: '',
@@ -163,7 +167,8 @@ describe('buildPlanningPrompt', () => {
     expect(prompt).toContain('Planning Agent');
     expect(prompt).toContain('outcome');
     expect(prompt).toContain('superpowers_writing_plans');
-    expect(prompt).toContain('linear_task_url');
+    expect(prompt).toContain('linear_url');
+    expect(prompt).toContain('is_complex');
     expect(prompt).toContain('pr_url');
     expect(prompt).toContain('unclear_clarification');
     expect(prompt).toContain('line1\nline2');
@@ -287,7 +292,8 @@ describe('OrchestratorCompletionVerifier', () => {
     const validPlanningResponse = JSON.stringify({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      linear_task_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      is_complex: '0',
       pr_url: '',
       summary: 'The agent planned successfully.',
       unclear_clarification: '',
@@ -316,10 +322,16 @@ describe('OrchestratorCompletionVerifier', () => {
         agentType: 'planning',
         outcome: 'planned',
         superpowers_writing_plans: 'used',
-        linear_task_url: 'https://linear.app/intexuraos/issue/INT-100',
+        linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+        is_complex: '0',
         pr_url: '',
         summary: 'The agent planned successfully.',
         unclear_clarification: '',
+      });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validPlanningResponse,
       });
     });
 
@@ -330,7 +342,8 @@ describe('OrchestratorCompletionVerifier', () => {
           content: JSON.stringify({
             outcome: 'unclear',
             superpowers_writing_plans: 'not used',
-            linear_task_url: '',
+            linear_url: '',
+            is_complex: '0',
             pr_url: '',
             summary: 'Could not plan.',
             unclear_clarification: 'Need info about auth approach.',
@@ -348,6 +361,11 @@ describe('OrchestratorCompletionVerifier', () => {
       });
       expect(result.passed).toBe(true);
       expect(result.agentData?.agentType).toBe('planning');
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: expect.any(String),
+      });
     });
   });
 
@@ -387,6 +405,11 @@ describe('OrchestratorCompletionVerifier', () => {
         gh_pr_url: 'https://github.com/org/repo/pull/901',
         summary: 'Implemented the feature.',
       });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validExecutionResponse,
+      });
     });
   });
 
@@ -424,6 +447,11 @@ describe('OrchestratorCompletionVerifier', () => {
         comments_replied: 'yes',
         summary: 'Addressed review comments.',
       });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validPRResponse,
+      });
     });
   });
 
@@ -449,6 +477,11 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.verifierFailure).toBe(true);
       expect(result.missingFields).toEqual([]);
       expect(result.agentData).toBeUndefined();
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: '',
+      });
     });
   });
 
@@ -472,6 +505,11 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(true);
       expect(result.missingFields).toEqual([]);
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: 'not json at all',
+      });
     });
   });
 
@@ -496,6 +534,11 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.verifierFailure).toBe(false);
       expect(result.missingFields.length).toBeGreaterThan(0);
       expect(result.missingFields).toContain('comments_replied');
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: JSON.stringify({ gh_pr_url: 'https://github.com/org/repo/pull/1' }),
+      });
     });
   });
 
@@ -504,7 +547,8 @@ describe('OrchestratorCompletionVerifier', () => {
       const wrappedResponse = `Here is the result:\n${JSON.stringify({
         outcome: 'planned',
         superpowers_writing_plans: 'used',
-        linear_task_url: 'https://linear.app/intexuraos/issue/INT-50',
+        linear_url: 'https://linear.app/intexuraos/issue/INT-50',
+        is_complex: '0',
         pr_url: '',
         summary: 'Planned.',
         unclear_clarification: '',
@@ -526,6 +570,11 @@ describe('OrchestratorCompletionVerifier', () => {
       });
       expect(result.passed).toBe(true);
       expect(result.agentData?.agentType).toBe('planning');
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: wrappedResponse,
+      });
     });
   });
 });

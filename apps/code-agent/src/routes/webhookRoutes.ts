@@ -35,9 +35,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         comment_replied?: boolean;
         planning_outcome_label?: 'planned' | 'unclear';
         planning_superpowers_writing_plans_used?: '0' | '1';
-        planning_issue_url?: string;
-        planning_trivial_task?: '0' | '1' | '';
-        planning_doc_path?: string;
+        planning_linear_url?: string;
+        planning_is_complex?: '0' | '1';
         planning_pr_url?: string;
         planning_unclear_clarification?: string;
         execution_outcome_label?: 'implemented';
@@ -70,25 +69,23 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 prUrl: { type: 'string' },
                 branch: { type: 'string' },
                 commits: { type: 'number' },
+                // --- Fields used in handler logic (strictly validated) ---
+                comment_replied: { type: 'boolean' },
+                planning_outcome_label: { type: 'string', enum: ['planned', 'unclear'] },
+                planning_is_complex: { type: 'string', enum: ['0', '1'] },
+                planning_pr_url: { type: 'string' },
+                planning_unclear_clarification: { type: 'string' },
+                execution_linear_issue_url: { type: 'string' },
+                // --- Pass-through fields (stored to Firestore, not acted on) ---
                 summary: { type: 'string' },
                 ciFailed: { type: 'boolean' },
                 partialWork: { type: 'boolean' },
-                rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'] },
-                comment_replied: { type: 'boolean' },
-                planning_outcome_label: { type: 'string', enum: ['planned', 'unclear'] },
-                planning_superpowers_writing_plans_used: { type: 'string', enum: ['0', '1'] },
-                planning_issue_url: { type: 'string' },
-                planning_trivial_task: { type: 'string' },
-                planning_doc_path: { type: 'string' },
-                planning_pr_url: { type: 'string' },
-                planning_unclear_clarification: { type: 'string' },
-                execution_outcome_label: { type: 'string', enum: ['implemented'] },
-                execution_superpowers_executing_plans_used: { type: 'string', enum: ['0', '1'] },
-                execution_superpowers_requesting_code_review_used: {
-                  type: 'string',
-                  enum: ['0', '1'],
-                },
-                execution_linear_issue_url: { type: 'string' },
+                rebaseResult: { type: 'string' },
+                planning_superpowers_writing_plans_used: { type: 'string' },
+                planning_linear_url: { type: 'string' },
+                execution_outcome_label: { type: 'string' },
+                execution_superpowers_executing_plans_used: { type: 'string' },
+                execution_superpowers_requesting_code_review_used: { type: 'string' },
               },
               required: [],
             },
@@ -132,7 +129,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_issue_url?: string; planning_child_issue_count?: string; planning_doc_path?: string; planning_pr_url?: string; planning_unclear_clarification?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_linear_url?: string; planning_is_complex?: '0' | '1'; planning_pr_url?: string; planning_unclear_clarification?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/webhooks/task-complete',
       });
@@ -241,136 +238,99 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const originalIssueUuid = originalIssue.id;
 
         if (outcome === 'planned') {
-          const planningIssueUrl = planningResult.planning_issue_url ?? '';
-          const planningIdentifier = parseLinearIdentifierFromUrl(planningIssueUrl);
+          const isComplex = planningResult.planning_is_complex === '1';
 
-          if (planningIdentifier === null) {
-            // No valid Linear planning issue URL found — treat the original issue as the plan itself.
-            // This handles cases where the worker determined no separate planning issue was needed
-            // (e.g., trivial tasks). Skip planning issue tree validation; update original issue state and labels.
-            request.log.info(
-              {
-                taskId,
-                linearIssueId: task.linearIssueId,
-                rawPlanningIssueUrl: planningIssueUrl,
-              },
-              'Trivial planning path: no valid planning issue URL, updating original issue directly'
-            );
-
-            const markReview = await linearAgentClient.updateIssueState({
+          // Normalize original issue: state → todo, labels based on complexity
+          const [markTodo, parentLabels] = await Promise.all([
+            linearAgentClient.updateIssueState({
               userId: task.userId,
               issueId: originalIssueUuid,
-              state: 'in_review',
-            });
-            if (!markReview.ok) {
-              return { ok: false, message: `Failed to move original issue to In Review: ${markReview.error.message}` };
-            }
-
-            const originalLabelNormalize = await linearAgentClient.updateIssueMetadata({
-              userId: task.userId,
-              issueId: originalIssueUuid,
-              addLabels: ['planned'],
-              removeLabels: ['unclear', 'code-task'],
-            });
-            if (!originalLabelNormalize.ok) {
-              return { ok: false, message: `Failed to normalize original issue labels: ${originalLabelNormalize.error.message}` };
-            }
-
-            return { ok: true };
-          }
-
-          const planningIssueValidation = await linearAgentClient.validateIssue({
-            userId: task.userId,
-            identifier: planningIdentifier,
-          });
-          if (!planningIssueValidation.ok) {
-            return { ok: false, message: `Failed to validate planning issue: ${planningIssueValidation.error.message}` };
-          }
-
-          const planningTreeResult = await linearAgentClient.fetchIssueTree({
-            userId: task.userId,
-            issueId: planningIssueValidation.value.id,
-          });
-          if (!planningTreeResult.ok) {
-            return { ok: false, message: `Failed to fetch planning issue tree: ${planningTreeResult.error.message}` };
-          }
-
-          if (planningTreeResult.value.root.parentId !== originalIssueUuid) {
-            return { ok: false, message: 'Planning issue is not a child of original issue' };
-          }
-
-          const planningLinkComment = `Planning issue created: ${planningIssueUrl}`;
-          const commentOriginalResult = await linearAgentClient.addComment({
-            userId: task.userId,
-            issueId: originalIssueUuid,
-            body: planningLinkComment,
-          });
-          if (!commentOriginalResult.ok) {
-            return { ok: false, message: `Failed to comment original issue: ${commentOriginalResult.error.message}` };
-          }
-
-          const markReview = await linearAgentClient.updateIssueState({
-            userId: task.userId,
-            issueId: originalIssueUuid,
-            state: 'in_review',
-          });
-          if (!markReview.ok) {
-            return { ok: false, message: `Failed to move original issue to In Review: ${markReview.error.message}` };
-          }
-
-          const originalLabelNormalize = await linearAgentClient.updateIssueMetadata({
-            userId: task.userId,
-            issueId: originalIssueUuid,
-            addLabels: ['planned'],
-            removeLabels: ['unclear', 'code-task'],
-          });
-          if (!originalLabelNormalize.ok) {
-            return { ok: false, message: `Failed to normalize original issue labels: ${originalLabelNormalize.error.message}` };
-          }
-
-          const normalizeTargets = [
-            planningTreeResult.value.root,
-            ...planningTreeResult.value.descendants,
-          ];
-          for (const issueNode of normalizeTargets) {
-            const stateResult = await linearAgentClient.updateIssueState({
-              userId: task.userId,
-              issueId: issueNode.id,
               state: 'todo',
-            });
-            if (!stateResult.ok) {
-              return { ok: false, message: `Failed to move planning tree issue to Todo: ${stateResult.error.message}` };
-            }
-
-            const metadataResult = await linearAgentClient.updateIssueMetadata({
-              userId: task.userId,
-              issueId: issueNode.id,
-              assigneeId: null,
-              addLabels: ['code-task'],
-              removeLabels: ['planned', 'unclear'],
-            });
-            if (!metadataResult.ok) {
-              return { ok: false, message: `Failed to normalize planning tree issue labels/assignee: ${metadataResult.error.message}` };
-            }
-          }
-
-          const planningPrUrl = planningResult.planning_pr_url ?? '';
-          if (planningPrUrl !== '') {
-            const originalPrComment = await linearAgentClient.addComment({
+            }),
+            linearAgentClient.updateIssueMetadata({
               userId: task.userId,
               issueId: originalIssueUuid,
-              body: `Planning PR: ${planningPrUrl}`,
-            });
-            if (!originalPrComment.ok) {
-              return { ok: false, message: `Failed to comment planning PR on original issue: ${originalPrComment.error.message}` };
-            }
-            const planningPrComment = await linearAgentClient.addComment({
+              addLabels: isComplex ? ['planned'] : [],
+              removeLabels: isComplex ? ['unclear', 'code-task'] : ['unclear', 'planned'],
+            }),
+          ]);
+          if (!markTodo.ok) {
+            return { ok: false, message: `Failed to normalize original issue state: ${markTodo.error.message}` };
+          }
+          if (!parentLabels.ok) {
+            return { ok: false, message: `Failed to normalize original issue labels: ${parentLabels.error.message}` };
+          }
+
+          if (isComplex) {
+            const treeResult = await linearAgentClient.fetchIssueTree({
               userId: task.userId,
-              issueId: planningTreeResult.value.root.id,
-              body: `Planning PR: ${planningPrUrl}`,
+              issueId: originalIssueUuid,
             });
-            if (!planningPrComment.ok) {
-              return { ok: false, message: `Failed to comment planning PR on planning issue: ${planningPrComment.error.message}` };
+            if (!treeResult.ok) {
+              return { ok: false, message: `Failed to fetch issue tree: ${treeResult.error.message}` };
+            }
+
+            const descendants = treeResult.value.descendants;
+
+            // Validate hierarchy + normalize each subtask in one pass
+            for (const descendant of descendants) {
+              if (descendant.parentId !== originalIssueUuid) {
+                return { ok: false, message: `Subtask ${descendant.identifier} is not a direct child of the input issue — task rejected` };
+              }
+
+              const normalizeState = await linearAgentClient.updateIssueState({
+                userId: task.userId,
+                issueId: descendant.id,
+                state: 'todo',
+              });
+              if (!normalizeState.ok) {
+                return { ok: false, message: `Failed to normalize subtask ${descendant.identifier} state: ${normalizeState.error.message}` };
+              }
+
+              const normalizeMetadata = await linearAgentClient.updateIssueMetadata({
+                userId: task.userId,
+                issueId: descendant.id,
+                assigneeId: null,
+                removeLabels: ['planned', 'unclear'],
+              });
+              if (!normalizeMetadata.ok) {
+                return { ok: false, message: `Failed to normalize subtask ${descendant.identifier} metadata: ${normalizeMetadata.error.message}` };
+              }
+            }
+
+            // Comment PR URL on issue if provided
+            const planningPrUrl = planningResult.planning_pr_url ?? '';
+            if (planningPrUrl !== '') {
+              const prComment = await linearAgentClient.addComment({
+                userId: task.userId,
+                issueId: originalIssueUuid,
+                body: `Planning PR: ${planningPrUrl}`,
+              });
+              if (!prComment.ok) {
+                return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
+              }
+            }
+
+            // LAST: stamp code-task on each subtask — proof of successful processing
+            for (const descendant of descendants) {
+              const stampCodeTask = await linearAgentClient.updateIssueMetadata({
+                userId: task.userId,
+                issueId: descendant.id,
+                addLabels: ['code-task'],
+              });
+              if (!stampCodeTask.ok) {
+                return { ok: false, message: `Failed to add code-task label to subtask ${descendant.identifier}: ${stampCodeTask.error.message}` };
+              }
+            }
+          } else {
+            // LAST: stamp code-task on parent — proof of successful processing
+            const stampCodeTask = await linearAgentClient.updateIssueMetadata({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              addLabels: ['code-task'],
+            });
+            if (!stampCodeTask.ok) {
+              return { ok: false, message: `Failed to add code-task label to original issue: ${stampCodeTask.error.message}` };
             }
           }
 
@@ -691,11 +651,48 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        if (result?.planning_outcome_label === 'planned') {
-          const planningEnforcement = await enforcePlanningOutcome('planned', result);
-          if (!planningEnforcement.ok) {
-            request.log.error({ taskId, error: planningEnforcement.message }, 'Planning deterministic enforcement failed');
-            return reply.fail('INTERNAL_ERROR', planningEnforcement.message);
+        if (task.agentType === 'planning') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Planning completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'PLANNING_AGENT_ENFORCEMENT_FAILED',
+                message: 'Planning completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          if (result.planning_outcome_label === 'planned') {
+            const planningEnforcement = await enforcePlanningOutcome('planned', result);
+            if (!planningEnforcement.ok) {
+              request.log.error({ taskId, error: planningEnforcement.message }, 'Planning deterministic enforcement failed');
+              const failResult = await codeTaskRepo.update(taskId, {
+                status: 'failed',
+                completedAt,
+                result,
+                error: {
+                  code: 'PLANNING_AGENT_ENFORCEMENT_FAILED',
+                  message: planningEnforcement.message,
+                },
+                callbackReceived: true,
+              });
+              if (!failResult.ok) {
+                return reply.fail('INTERNAL_ERROR', failResult.error.message);
+              }
+              // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+              return await reply.send({ received: true });
+            }
           }
         }
 
@@ -709,11 +706,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         const resolvedStatus =
-          result?.planning_outcome_label === 'planned'
-            ? 'planned'
-            : task.agentType === 'execution' || task.agentType === 'pull_request'
-              ? 'implemented'
-              : 'planned';
+          task.agentType === 'planning' ? 'planned' : 'implemented';
         const updateResult = await codeTaskRepo.update(taskId, {
           status: resolvedStatus,
           completedAt,
@@ -728,10 +721,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
-        // Transition Linear issue to In Review when PR is created (best-effort for planning only)
-        // execution and pull_request agents have deterministic enforcement
+        // Best-effort In Review transition for agent types without deterministic enforcement
+        // (planning, execution, and pull_request agents handle this in their own enforcement paths)
         /* v8 ignore start -- ts-type: optional property checks create type narrowing branches @preserve */
-        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && prNumber !== undefined && task.linearIssueId !== undefined) {
+        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && prNumber !== undefined && task.linearIssueId !== undefined) {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
         /* v8 ignore stop @preserve */
@@ -821,7 +814,21 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           const unclearEnforcement = await enforcePlanningOutcome('unclear', result, taskError);
           if (!unclearEnforcement.ok) {
             request.log.error({ taskId, error: unclearEnforcement.message }, 'Planning unclear deterministic enforcement failed');
-            return reply.fail('INTERNAL_ERROR', unclearEnforcement.message);
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: 'PLANNING_AGENT_ENFORCEMENT_FAILED',
+                message: unclearEnforcement.message,
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
           }
         }
         const updateResult = await codeTaskRepo.update(taskId, {
