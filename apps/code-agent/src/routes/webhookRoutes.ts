@@ -36,7 +36,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         planning_outcome_label?: 'planned' | 'unclear';
         planning_superpowers_writing_plans_used?: '0' | '1';
         planning_issue_url?: string;
-        planning_trivial_task?: '0' | '1' | '';
+        planning_child_issue_count?: string;
         planning_doc_path?: string;
         planning_pr_url?: string;
         planning_clarification_message?: string;
@@ -81,7 +81,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 planning_outcome_label: { type: 'string', enum: ['planned', 'unclear'] },
                 planning_superpowers_writing_plans_used: { type: 'string', enum: ['0', '1'] },
                 planning_issue_url: { type: 'string' },
-                planning_trivial_task: { type: 'string' },
+                planning_child_issue_count: { type: 'string' },
                 planning_doc_path: { type: 'string' },
                 planning_pr_url: { type: 'string' },
                 planning_clarification_message: { type: 'string' },
@@ -138,7 +138,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_issue_url?: string; planning_trivial_task?: '0' | '1' | ''; planning_doc_path?: string; planning_pr_url?: string; planning_clarification_message?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_trivial_task?: '0' | '1'; execution_subagents?: string; execution_review_iterations?: number; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_issue_url?: string; planning_child_issue_count?: string; planning_doc_path?: string; planning_pr_url?: string; planning_clarification_message?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_trivial_task?: '0' | '1'; execution_subagents?: string; execution_review_iterations?: number; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/webhooks/task-complete',
       });
@@ -249,8 +249,40 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (outcome === 'planned') {
           const planningIssueUrl = planningResult.planning_issue_url ?? '';
           const planningIdentifier = parseLinearIdentifierFromUrl(planningIssueUrl);
+
           if (planningIdentifier === null) {
-            return { ok: false, message: 'Missing or invalid planning_issue_url for planned outcome' };
+            // No valid Linear planning issue URL found — treat the original issue as the plan itself.
+            // This handles cases where the worker determined no separate planning issue was needed
+            // (e.g., trivial tasks). Skip planning issue tree validation; update original issue state and labels.
+            request.log.info(
+              {
+                taskId,
+                linearIssueId: task.linearIssueId,
+                rawPlanningIssueUrl: planningIssueUrl,
+              },
+              'Trivial planning path: no valid planning issue URL, updating original issue directly'
+            );
+
+            const markReview = await linearAgentClient.updateIssueState({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              state: 'in_review',
+            });
+            if (!markReview.ok) {
+              return { ok: false, message: `Failed to move original issue to In Review: ${markReview.error.message}` };
+            }
+
+            const originalLabelNormalize = await linearAgentClient.updateIssueMetadata({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              addLabels: ['planned'],
+              removeLabels: ['unclear', 'code-task'],
+            });
+            if (!originalLabelNormalize.ok) {
+              return { ok: false, message: `Failed to normalize original issue labels: ${originalLabelNormalize.error.message}` };
+            }
+
+            return { ok: true };
           }
 
           const planningIssueValidation = await linearAgentClient.validateIssue({
