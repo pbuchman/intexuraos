@@ -123,7 +123,9 @@ describe('setupSentryErrorHandler', () => {
     setupSentryErrorHandler(app);
 
     app.get('/test', async () => {
-      const error: Partial<FastifyError> = new Error('Body cannot be empty when content-type is set to \'application/json\'');
+      const error: Partial<FastifyError> = new Error(
+        "Body cannot be empty when content-type is set to 'application/json'"
+      );
       error.code = 'FST_ERR_CTP_EMPTY_JSON_BODY';
       throw error;
     });
