@@ -37,9 +37,11 @@ export function createChatAgentClient(config: ServiceClientConfig): ChatAgentCli
         }
       );
 
+      /* v8 ignore start -- upstream: fetchWithAuth error path, covered by internal-clients tests @preserve */
       if (!response.ok) {
         return response;
       }
+      /* v8 ignore stop @preserve */
 
       return ok(response.value.data);
     },

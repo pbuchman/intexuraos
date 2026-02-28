@@ -1,0 +1,25 @@
+{
+  "description": "Issue comment with explicit worker directive — should produce task-dispatch with workerType",
+  "event": {
+    "id": "fixture-directive-001",
+    "githubEventId": 3001,
+    "repository": "pbuchman/intexuraos",
+    "repositoryId": 100,
+    "pullRequestNumber": 55,
+    "pullRequestId": 202,
+    "eventType": "issue_comment",
+    "action": "created",
+    "senderLogin": "pbuchman",
+    "senderId": 301,
+    "senderType": "User",
+    "title": "Refactor service",
+    "body": "/intex worker=opus\nPlease refactor the auth module",
+    "state": "open",
+    "mergedAt": null,
+    "payload": {}
+  },
+  "expected": {
+    "decisionKind": "create_pr_comment_task",
+    "actionCount": 1
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "description": "Issue comment created — should produce task-dispatch plan",
+  "event": {
+    "id": "fixture-comment-001",
+    "githubEventId": 2001,
+    "repository": "pbuchman/intexuraos",
+    "repositoryId": 100,
+    "pullRequestNumber": 42,
+    "pullRequestId": 201,
+    "eventType": "issue_comment",
+    "action": "created",
+    "senderLogin": "pbuchman",
+    "senderId": 301,
+    "senderType": "User",
+    "title": "Fix auth bug",
+    "body": "Please fix the authentication issue in the login flow",
+    "state": "open",
+    "mergedAt": null,
+    "payload": {}
+  },
+  "expected": {
+    "decisionKind": "create_pr_comment_task",
+    "actionCount": 1
+  }
+}

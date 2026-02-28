@@ -479,6 +479,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
 
       // GitHubWebhookAgent handoff (fire-and-forget)
       const agentConfig = loadGitHubWebhookAgentConfig();
+      /* v8 ignore start -- module-init: agent disabled by default, integration-tested via replay harness @preserve */
       if (agentConfig.enabled) {
         const agentDeps: ProcessEventDeps = {
           logger,
@@ -516,6 +517,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
           logger.error({ error }, 'Webhook agent processing failed');
         });
       }
+      /* v8 ignore stop @preserve */
 
       const isEditedByAllowedBot =
         parsedEvent.eventType === 'issue_comment' &&

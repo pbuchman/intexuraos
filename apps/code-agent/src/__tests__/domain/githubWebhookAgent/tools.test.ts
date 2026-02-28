@@ -133,6 +133,27 @@ describe('createDispatchTaskTool', () => {
     expect(result.error).toContain('user_not_found');
   });
 
+  it('ignores invalid workerType silently', async () => {
+    const deps = makeToolDeps();
+    const tool = createDispatchTaskTool(deps);
+
+    const step = makeStep('dispatch_task', {
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      senderLogin: 'testuser',
+      comment: 'Fix it',
+      eventId: 'evt-1',
+      workerType: 'invalid-type',
+    });
+
+    const result = await tool.execute(step);
+
+    expect(result.ok).toBe(true);
+    expect(deps.createTaskForPR).toHaveBeenCalledWith(
+      expect.not.objectContaining({ workerType: 'invalid-type' })
+    );
+  });
+
   it('returns error when required params are missing', async () => {
     const deps = makeToolDeps();
     const tool = createDispatchTaskTool(deps);
@@ -214,6 +235,29 @@ describe('createChatNotifyTool', () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain('API_ERROR');
+  });
+
+  it('passes metadata when provided', async () => {
+    const deps = makeToolDeps();
+    const tool = createChatNotifyTool(deps);
+
+    const step = makeStep('notify_chat', {
+      userId: 'user_456',
+      eventId: 'evt-meta-1',
+      threadKey: 'pr-42',
+      kind: 'webhook_action',
+      message: 'With metadata',
+      metadata: { prNumber: 42, repository: 'test/repo' },
+    });
+
+    const result = await tool.execute(step);
+
+    expect(result.ok).toBe(true);
+    expect(deps.chatAgentClient.emitSystemEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: { prNumber: 42, repository: 'test/repo' },
+      })
+    );
   });
 
   it('returns error when required params are missing', async () => {

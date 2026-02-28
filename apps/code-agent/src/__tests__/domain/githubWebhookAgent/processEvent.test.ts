@@ -217,6 +217,96 @@ describe('processGitHubWebhookEvent', () => {
     });
   });
 
+  describe('send_task_message mode', () => {
+    it('produces send_task_message plan when existing task exists', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: true }),
+        hasExistingTask: (): Promise<boolean> => Promise.resolve(true),
+        saveRunRecord,
+      });
+
+      const result = await processGitHubWebhookEvent(deps, makeEvent());
+
+      expect(result.handled).toBe(true);
+      const savedRecord = saveRunRecord.mock.calls[0]?.[0] as {
+        decision: { decision: { kind: string } };
+      } | undefined;
+      expect(savedRecord?.decision.decision.kind).toBe('send_task_message');
+    });
+  });
+
+  describe('notify mode', () => {
+    it('records run without executing tools in notify mode', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+      const executeTool = vi.fn();
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: false, notifyOnly: true }),
+        executorDeps: {
+          getToolForAction: () => ({
+            execute: executeTool,
+            idempotencyKey: (step: { actionId: string }): string => step.actionId,
+          }),
+          isActionCompleted: (): Promise<boolean> => Promise.resolve(false),
+          markActionCompleted: (): Promise<void> => Promise.resolve(),
+        },
+        saveRunRecord,
+      });
+
+      const result = await processGitHubWebhookEvent(deps, makeEvent());
+
+      expect(result.handled).toBe(true);
+      expect(result.mode).toBe('notify');
+      expect(executeTool).not.toHaveBeenCalled();
+      expect(saveRunRecord).toHaveBeenCalledTimes(1);
+    });
+
+    it('records failed outcome when validation fails in notify mode', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: false, notifyOnly: true }),
+        isUserMapped: (): boolean => false,
+        saveRunRecord,
+      });
+
+      const result = await processGitHubWebhookEvent(deps, makeEvent());
+
+      expect(result.handled).toBe(true);
+      const savedRecord = saveRunRecord.mock.calls[0]?.[0] as { outcome: string; error?: string } | undefined;
+      expect(savedRecord?.outcome).toBe('failed');
+      expect(savedRecord?.error).toBeDefined();
+    });
+  });
+
+  describe('validation warnings', () => {
+    it('logs warning when action plan fails validation in execute mode', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+      const mockLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      } as unknown as Logger;
+
+      const deps = makeDeps({
+        logger: mockLogger,
+        config: makeConfig({ enabled: true, observeOnly: false, notifyOnly: false }),
+        isUserMapped: (): boolean => false,
+        saveRunRecord,
+      });
+
+      await processGitHubWebhookEvent(deps, makeEvent());
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ errors: expect.any(Array) }),
+        expect.stringContaining('validation')
+      );
+    });
+  });
+
   describe('non-actionable events', () => {
     it('produces noop plan for non-actionable events', async () => {
       const saveRunRecord = vi.fn().mockResolvedValue(undefined);

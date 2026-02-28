@@ -1,0 +1,25 @@
+{
+  "description": "PR synchronize event — actionable when sender allowed, noop when disallowed",
+  "event": {
+    "id": "fixture-pr-sync-001",
+    "githubEventId": 1001,
+    "repository": "pbuchman/intexuraos",
+    "repositoryId": 100,
+    "pullRequestNumber": 10,
+    "pullRequestId": 200,
+    "eventType": "pull_request",
+    "action": "synchronize",
+    "senderLogin": "testuser",
+    "senderId": 300,
+    "senderType": "User",
+    "title": "Update dependencies",
+    "body": null,
+    "state": "open",
+    "mergedAt": null,
+    "payload": {}
+  },
+  "expected": {
+    "decisionKind": "noop",
+    "actionCount": 0
+  }
+}
