@@ -249,8 +249,40 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (outcome === 'planned') {
           const planningIssueUrl = planningResult.planning_issue_url ?? '';
           const planningIdentifier = parseLinearIdentifierFromUrl(planningIssueUrl);
+
           if (planningIdentifier === null) {
-            return { ok: false, message: 'Missing or invalid planning_issue_url for planned outcome' };
+            // No valid Linear planning issue URL found — treat the original issue as the plan itself.
+            // This handles cases where the worker determined no separate planning issue was needed
+            // (e.g., trivial tasks). Skip planning issue tree validation; update original issue state and labels.
+            request.log.info(
+              {
+                taskId,
+                linearIssueId: task.linearIssueId,
+                rawPlanningIssueUrl: planningIssueUrl,
+              },
+              'Trivial planning path: no valid planning issue URL, updating original issue directly'
+            );
+
+            const markReview = await linearAgentClient.updateIssueState({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              state: 'in_review',
+            });
+            if (!markReview.ok) {
+              return { ok: false, message: `Failed to move original issue to In Review: ${markReview.error.message}` };
+            }
+
+            const originalLabelNormalize = await linearAgentClient.updateIssueMetadata({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              addLabels: ['planned'],
+              removeLabels: ['unclear', 'code-task'],
+            });
+            if (!originalLabelNormalize.ok) {
+              return { ok: false, message: `Failed to normalize original issue labels: ${originalLabelNormalize.error.message}` };
+            }
+
+            return { ok: true };
           }
 
           const planningIssueValidation = await linearAgentClient.validateIssue({
