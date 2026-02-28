@@ -7,15 +7,20 @@ import cors from '@fastify/cors';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { intexuraFastifyPlugin } from '@intexuraos/common-http';
-import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
+import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { registerRoutes } from './routes/index.js';
 import { loadConfig } from './config.js';
 import { getServices } from './services.js';
 import { createJwtValidator } from './infra/auth/jwtValidator.js';
 
-export async function buildServer(): Promise<FastifyInstance> {
+export async function buildServer(loggerStream?: NodeJS.WritableStream): Promise<FastifyInstance> {
   const app = fastify({
-    logger: false,
+    logger: loggerStream !== undefined
+      ? { level: 'error', stream: loggerStream }
+      : process.env['NODE_ENV'] === 'test'
+        ? false
+        : { level: process.env['LOG_LEVEL'] ?? 'info', stream: createLogStream() },
+    disableRequestLogging: true,
     requestTimeout: 120000, // 120s — safety net above client's 90s timeout
   });
 
