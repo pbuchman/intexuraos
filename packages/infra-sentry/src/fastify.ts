@@ -59,7 +59,12 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
     }
 
     // Handle Fastify-specific errors
-    if (fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+    // Defense-in-depth: the custom JSON parser in intexuraFastifyPlugin handles empty bodies,
+    // but if the parser is not registered, this catches the error as a 400 instead of 500.
+    if (
+      fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
+      fastifyError.code === 'FST_ERR_CTP_EMPTY_JSON_BODY'
+    ) {
       reply.status(400);
       await fastifyReply.fail('INVALID_REQUEST', 'Invalid JSON body');
       return;

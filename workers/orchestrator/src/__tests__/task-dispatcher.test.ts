@@ -9,7 +9,7 @@ import type { WebhookClient } from '../services/webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from '../types/api.js';
-import type { TaskResult } from '../types/task.js';
+import type { Task, TaskResult } from '../types/task.js';
 import type { OrchestratorState } from '../types/state.js';
 import type { IsolationProvider, WorkerHandle } from '../services/isolation/types.js';
 import type { TokenRefresher } from '../services/isolation/token-refresher.js';
@@ -170,6 +170,7 @@ describe('TaskDispatcher', () => {
     waitForCompletion: vi.fn(async () => 0),
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
     listWorkers: vi.fn(async () => []),
+    cleanupTaskSession: vi.fn(async () => undefined),
   };
 
   // Mock TokenRefresher
@@ -4218,6 +4219,153 @@ describe('TaskDispatcher', () => {
       expect(template).toContain('Comment replied:');
       expect(template).toContain('Tracking comment: updated');
       expect(template).toContain('Linear issue:');
+    });
+  });
+
+  describe('adoptTask', () => {
+    const createTask = (overrides?: Partial<Task>): Task => ({
+      taskId: 'adopt-task-1',
+      workerType: 'auto',
+      prompt: 'Test prompt for adoption',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret-123',
+      status: 'running',
+      worktreePath: '/tmp/worktrees/adopt-task-1',
+      containerId: 'container-adopt-task-1',
+      startedAt: new Date().toISOString(),
+      attemptCount: 1,
+      maxAttempts: 3,
+      verificationHistory: [],
+      linearIssueLabels: [],
+      hasChildren: false,
+      ...overrides,
+    });
+
+    it('should adopt a task: increments runningCount, calls createWorker with continueSession: true', async () => {
+      const task = createTask();
+
+      const result = await dispatcher.adoptTask(task);
+
+      expect(result.ok).toBe(true);
+      expect(dispatcher.getRunningCount()).toBe(1);
+      expect(mockLogForwarder.registerTask).toHaveBeenCalledWith('adopt-task-1', 'secret-123');
+      expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'adopt-task-1',
+          continueSession: true,
+        })
+      );
+      expect(statePersistence.modify).toHaveBeenCalled();
+    });
+
+    it('should reject when task is at maxAttempts', async () => {
+      const task = createTask({ attemptCount: 3, maxAttempts: 3 });
+
+      const result = await dispatcher.adoptTask(task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_status');
+        expect(result.error.message).toBe('Task at max attempts');
+      }
+      expect(dispatcher.getRunningCount()).toBe(0);
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+    });
+
+    it('should reject when at capacity', async () => {
+      // Fill capacity first
+      for (let i = 0; i < 5; i++) {
+        const request: CreateTaskRequest = {
+          taskId: `fill-task-${String(i)}`,
+          workerType: 'auto',
+          prompt: 'Fill',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          linearIssueLabels: [],
+          hasChildren: false,
+        };
+        await dispatcher.submitTask(request);
+        await flushAsync();
+      }
+
+      const task = createTask({ taskId: 'adopt-overflow' });
+
+      const result = await dispatcher.adoptTask(task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('at_capacity');
+      }
+      expect(dispatcher.getRunningCount()).toBe(5);
+    });
+
+    it('should decrement runningCount on startWorkerAttempt failure', async () => {
+      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
+        new Error('Container creation failed')
+      );
+
+      const task = createTask();
+
+      const result = await dispatcher.adoptTask(task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('service_error');
+      }
+      expect(dispatcher.getRunningCount()).toBe(0);
+      expect(mockTokenRefresher.unregisterTask).toHaveBeenCalledWith('adopt-task-1');
+      expect(mockLogForwarder.unregisterTask).toHaveBeenCalledWith('adopt-task-1');
+      expect(mockIsolationProvider.cleanupTaskSession).toHaveBeenCalledWith('adopt-task-1');
+    });
+
+    it('should increment attemptCount by 1', async () => {
+      const task = createTask({ attemptCount: 2, maxAttempts: 3 });
+
+      const result = await dispatcher.adoptTask(task);
+
+      expect(result.ok).toBe(true);
+      expect(task.attemptCount).toBe(3);
+    });
+
+    it('should use fallback defaults when attemptCount, maxAttempts, and hasChildren are undefined', async () => {
+      const task = createTask();
+      delete task.attemptCount;
+      delete task.maxAttempts;
+      delete task.hasChildren;
+
+      const result = await dispatcher.adoptTask(task);
+
+      expect(result.ok).toBe(true);
+      // attemptCount defaults to 0 via ??, then incremented to 1
+      expect(task.attemptCount).toBe(1);
+      expect(dispatcher.getRunningCount()).toBe(1);
+      // hasChildren defaults to false via ??
+      expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: task.taskId,
+          continueSession: true,
+        })
+      );
+      expect(statePersistence.modify).toHaveBeenCalled();
+    });
+
+    it('should reject with fallback maxAttempts when attemptCount exceeds completionMaxAttempts default', async () => {
+      const task = createTask();
+      // completionMaxAttempts is 1 in test config
+      // attemptCount defaults to 0 via ??, but we set it to 1 to match the default maxAttempts
+      delete task.maxAttempts;
+      task.attemptCount = 1;
+
+      const result = await dispatcher.adoptTask(task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_status');
+        expect(result.error.message).toBe('Task at max attempts');
+      }
+      expect(dispatcher.getRunningCount()).toBe(0);
     });
   });
 });

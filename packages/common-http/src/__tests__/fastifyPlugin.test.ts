@@ -227,4 +227,64 @@ describe('Intexura Fastify Plugin', () => {
       }
     });
   });
+
+  describe('JSON body parser', () => {
+    it('accepts empty body with Content-Type application/json', async () => {
+      app.post('/test', async (request, reply) => {
+        return reply.ok({ receivedBody: request.body });
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/test',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: '',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.receivedBody).toBeNull();
+    });
+
+    it('parses valid JSON body', async () => {
+      app.post('/test', async (request, reply) => {
+        return reply.ok({ receivedBody: request.body });
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/test',
+        headers: {
+          'content-type': 'application/json',
+        },
+        payload: JSON.stringify({ key: 'value' }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.receivedBody).toEqual({ key: 'value' });
+    });
+
+    it('returns error for invalid JSON body', async () => {
+      app.post('/test', async (_request, reply) => {
+        return reply.ok({ message: 'should not reach' });
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/test',
+        headers: {
+          'content-type': 'application/json',
+        },
+        payload: 'not valid json{',
+      });
+
+      // Fastify returns 400 for invalid JSON when it catches the parse error
+      expect(response.statusCode).toBe(400);
+    });
+  });
 });

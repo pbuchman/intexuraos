@@ -33,7 +33,7 @@ const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 
 export interface DispatchError {
-  type: 'at_capacity' | 'invalid_request' | 'service_error';
+  type: 'at_capacity' | 'invalid_request' | 'invalid_status' | 'service_error';
   message: string;
   originalError?: unknown;
 }
@@ -117,6 +117,82 @@ export class TaskDispatcher {
     this.executeTaskSetup(request).catch((error: unknown) => {
       this.logger.error({ taskId: request.taskId, error }, 'Unhandled error in async task setup');
     });
+
+    return { ok: true, value: undefined };
+  }
+
+  async adoptTask(task: Task): Promise<Result<void, DispatchError>> {
+    // Check if task is already at maxAttempts
+    if ((task.attemptCount ?? 0) >= (task.maxAttempts ?? this.completionMaxAttempts)) {
+      return {
+        ok: false,
+        error: { type: 'invalid_status', message: 'Task at max attempts' },
+      };
+    }
+
+    // Atomic capacity check
+    const capacityCheck = await this.capacityMutex.runExclusive(() => {
+      if (this.runningCount >= this.config.capacity) {
+        return {
+          ok: false as const,
+          error: { type: 'at_capacity' as const, message: 'Service at capacity' },
+        };
+      }
+      this.runningCount++;
+      return { ok: true as const, value: undefined };
+    });
+
+    if (!capacityCheck.ok) {
+      return capacityCheck;
+    }
+
+    // Register with log forwarder
+    this.logForwarder.registerTask(task.taskId, task.webhookSecret);
+
+    // Start worker attempt with continueSession: true
+    const startResult = await this.startWorkerAttempt(task, {
+      prompt: task.prompt,
+      hasChildren: task.hasChildren ?? false,
+      continueSession: true,
+    });
+
+    if (!startResult.ok) {
+      this.runningCount--;
+      this.isolation.tokenRefresher.unregisterTask(task.taskId);
+      this.logForwarder.unregisterTask(task.taskId);
+      await this.isolation.provider.cleanupTaskSession?.(task.taskId);
+      return {
+        ok: false,
+        error: {
+          type: 'service_error',
+          message: 'Failed to start worker for adopted task',
+          originalError: startResult.error,
+        },
+      };
+    }
+
+    // Increment attempt count after successful start
+    task.attemptCount = (task.attemptCount ?? 0) + 1;
+    task.containerId = startResult.containerId;
+    await this.saveTask(task);
+
+    this.scheduleTimeoutWarning(task.taskId);
+    this.scheduleTimeoutKill(task.taskId);
+    this.startCompletionMonitoring(task.taskId);
+
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Task adopted after restart: attempt=${String(task.attemptCount)}/${String(task.maxAttempts ?? this.completionMaxAttempts)} containerId=${task.containerId}`
+    );
+
+    this.logger.info(
+      {
+        taskId: task.taskId,
+        attemptCount: task.attemptCount,
+        containerId: startResult.containerId,
+      },
+      `Task adopted: id=${task.taskId} attempt=${String(task.attemptCount)}/${String(task.maxAttempts ?? this.completionMaxAttempts)}`
+    );
 
     return { ok: true, value: undefined };
   }
