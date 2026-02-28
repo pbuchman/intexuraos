@@ -167,13 +167,16 @@ export async function drainTaskQueue(
 
       // Other dispatch failures (network_error, dispatch_failed, etc.) — fail the task
       logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with non-capacity error');
-      await codeTaskRepo.update(task.id, {
+      const failUpdateResult = await codeTaskRepo.update(task.id, {
         status: 'failed',
         error: {
           code: dispatchError.code,
           message: `Drain dispatch failed: ${dispatchError.message}`,
         },
       });
+      if (!failUpdateResult.ok) {
+        logger.error({ taskId: task.id, error: failUpdateResult.error }, 'Failed to persist failed status during drain');
+      }
       return ok({ action: 'failed', taskId: task.id });
     }
 

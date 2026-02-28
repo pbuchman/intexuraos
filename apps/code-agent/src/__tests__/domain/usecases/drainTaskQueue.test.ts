@@ -325,6 +325,34 @@ describe('drainTaskQueue', () => {
     });
   });
 
+  it('logs error when fail-status update itself fails during non-capacity error', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    setupWorkerSettings();
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      err({ code: 'network_error', message: 'Connection refused' })
+    );
+
+    mockCodeTaskRepo.update.mockResolvedValue(
+      err({ code: 'FIRESTORE_ERROR', message: 'Firestore write failed' })
+    );
+
+    const result = await drainTaskQueue(createDeps());
+
+    // Still returns failed action even if update didn't persist
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+    }
+
+    // Verify error was logged about the failed update
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-123' }),
+      'Failed to persist failed status during drain'
+    );
+  });
+
   it('dispatches successfully and updates task status', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));

@@ -381,10 +381,18 @@ ${additionalContext.trim()}
       }
 
       const queuedAt = new Date();
-      await codeTaskRepo.update(retryTask.id, {
+      const queueUpdateResult = await codeTaskRepo.update(retryTask.id, {
         status: 'queued',
         queuedAt,
       });
+
+      if (!queueUpdateResult.ok) {
+        logger.error({ taskId: retryTask.id, error: queueUpdateResult.error }, 'Failed to persist queued status');
+        return err({
+          code: 'internal_error',
+          message: 'Failed to queue task',
+        });
+      }
 
       const queuePosition = queueCount + 1;
       const estimatedWaitMinutes = queuePosition * 5;

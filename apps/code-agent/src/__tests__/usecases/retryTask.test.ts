@@ -1443,6 +1443,52 @@ describe('retryTask use case', () => {
       );
     });
 
+    it('returns internal_error when queue status update fails', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
+      const retryTaskId = 'retry-task-queue-fail';
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'http://localhost:3000',
+              enabled: true,
+              cfAccessClientId: undefined,
+              cfAccessClientSecret: undefined,
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+        })
+      );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({ labels: [], childCount: 0 })
+      );
+      const createdTask = createMockTask({ id: retryTaskId });
+      mockCodeTaskRepo.create.mockResolvedValue(ok(createdTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: 'All workers at capacity' })
+      );
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(2));
+      mockCodeTaskRepo.update.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Firestore write failed' })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Failed to queue task');
+      }
+      expect(mockWhatsAppNotifier.notifyTaskQueued).not.toHaveBeenCalled();
+    });
+
     it('returns error when dispatch returns at_capacity and queue is full', async () => {
       const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
       const mockTask = createMockTask({ completedAt: sixMinutesAgo });

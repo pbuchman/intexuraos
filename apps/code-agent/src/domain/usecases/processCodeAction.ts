@@ -342,10 +342,18 @@ export async function processCodeAction(
       }
 
       const queuedAt = new Date();
-      await codeTaskRepo.update(task.id, {
+      const queueUpdateResult = await codeTaskRepo.update(task.id, {
         status: 'queued',
         queuedAt,
       });
+
+      if (!queueUpdateResult.ok) {
+        logger.error({ taskId: task.id, error: queueUpdateResult.error }, 'Failed to persist queued status');
+        return err({
+          code: 'internal_error',
+          message: 'Failed to queue task',
+        });
+      }
 
       const queuePosition = queueCount + 1;
       const estimatedWaitMinutes = queuePosition * 5;

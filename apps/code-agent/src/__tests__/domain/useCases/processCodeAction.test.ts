@@ -1119,6 +1119,56 @@ describe('processCodeAction', () => {
     expect(whatsappNotifier.notifyTaskQueued).toHaveBeenCalled();
   });
 
+  it('returns internal_error when queue status update fails', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-queue-fail',
+        userId: 'user-789',
+        prompt: 'Queue fail test',
+        sanitizedPrompt: 'Queue fail test',
+        systemPromptHash: 'hash-123',
+        workerType: 'opus',
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-1',
+        approvalEventId: 'approval-queue-fail',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      })
+    );
+
+    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+      err({ code: 'at_capacity', message: 'All workers busy' })
+    );
+    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(5));
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'Firestore write failed' })
+    );
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      {
+        actionId: 'action-1',
+        approvalEventId: 'approval-queue-fail',
+        userId: 'user-789',
+        prompt: 'Queue fail test',
+        workerType: 'opus',
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('internal_error');
+      expect(result.error.message).toBe('Failed to queue task');
+    }
+    expect(whatsappNotifier.notifyTaskQueued).not.toHaveBeenCalled();
+  });
+
   it('returns queue_full when dispatch returns at_capacity and queue is full', async () => {
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({
