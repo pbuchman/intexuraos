@@ -1101,9 +1101,6 @@ describe('POST /internal/webhooks/task-complete', () => {
           execution_outcome_label: 'implemented' as const,
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
-          execution_trivial_task: '0' as const,
-          execution_subagents: 'impl (code changes), reviewer (review loop)',
-          execution_review_iterations: 2,
           execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
         },
       };
@@ -1186,9 +1183,6 @@ describe('POST /internal/webhooks/task-complete', () => {
           execution_outcome_label: 'implemented' as const,
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
-          execution_trivial_task: '0' as const,
-          execution_subagents: 'impl (code changes), reviewer (review loop)',
-          execution_review_iterations: 2,
           execution_linear_issue_url: '[INT-123](https://linear.app/intexuraos/issue/INT-123)',
         },
       };
@@ -1272,9 +1266,6 @@ describe('POST /internal/webhooks/task-complete', () => {
           execution_outcome_label: 'implemented' as const,
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
-          execution_trivial_task: '1' as const,
-          execution_subagents: 'none',
-          execution_review_iterations: 1,
           execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-999',
         },
       };
@@ -1338,9 +1329,6 @@ describe('POST /internal/webhooks/task-complete', () => {
           execution_outcome_label: 'implemented' as const,
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
-          execution_trivial_task: '1' as const,
-          execution_subagents: 'none',
-          execution_review_iterations: 0,
           execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
         },
       };
