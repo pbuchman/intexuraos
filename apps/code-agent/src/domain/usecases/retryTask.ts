@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { loadConfig } from '../../config.js';
 
 /**
  * Cool-off period before retry is allowed (1 minute).
@@ -58,6 +59,7 @@ export type RetryTaskErrorCode =
   | 'invalid_status'
   | 'too_soon'
   | 'worker_not_configured'
+  | 'queue_full'
   | 'internal_error';
 
 /**
@@ -349,9 +351,64 @@ ${additionalContext.trim()}
   /* v8 ignore stop @preserve */
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
+  const config = loadConfig();
 
   if (!dispatchResult.ok) {
     const dispatchError = dispatchResult.error;
+
+    // INT-619: Queue task when all workers are at capacity
+    if (dispatchError.code === 'at_capacity') {
+      const queueCountResult = await codeTaskRepo.countQueued();
+      /* v8 ignore start -- test-infra: Firestore countQueued failure fallback to fail-closed @preserve */
+      if (!queueCountResult.ok) {
+        logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
+      }
+      /* v8 ignore stop @preserve */
+      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize;
+
+      if (queueCount >= config.queue.maxSize) {
+        await codeTaskRepo.update(retryTask.id, {
+          status: 'failed',
+          error: {
+            code: 'queue_full',
+            message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
+          },
+        });
+        return err({
+          code: 'queue_full',
+          message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
+        });
+      }
+
+      const queuedAt = new Date();
+      const queueUpdateResult = await codeTaskRepo.update(retryTask.id, {
+        status: 'queued',
+        queuedAt,
+      });
+
+      if (!queueUpdateResult.ok) {
+        logger.error({ taskId: retryTask.id, error: queueUpdateResult.error }, 'Failed to persist queued status');
+        return err({
+          code: 'internal_error',
+          message: 'Failed to queue task',
+        });
+      }
+
+      const queuePosition = queueCount + 1;
+      const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
+      await whatsappNotifier.notifyTaskQueued(userId, retryTask, queuePosition, estimatedWaitMinutes);
+
+      logger.info({ taskId: retryTask.id, queuePosition }, 'Retry task queued due to worker capacity');
+
+      return ok({
+        codeTaskId: retryTask.id,
+        resourceUrl: `/#/code-tasks/${retryTask.id}`,
+        workerLocation: 'queued' as WorkerLocation,
+        retriedFrom: originalTaskId,
+      });
+    }
+
+    // Non-at_capacity dispatch errors — fail as before
     logger.warn(
       { taskId: retryTask.id, error: dispatchError },
       'Dispatch failed for retry task, but task was created'

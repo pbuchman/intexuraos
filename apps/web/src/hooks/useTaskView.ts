@@ -54,7 +54,7 @@ export interface TaskViewState {
   startImplementation: (workerType?: string) => Promise<string>;
 }
 
-const ACTIVE_STATUSES: CodeTaskStatus[] = ['dispatched', 'running'];
+const ACTIVE_STATUSES: CodeTaskStatus[] = ['dispatched', 'running', 'queued'];
 
 /**
  * Single hook for the Code Task View page.
