@@ -1405,5 +1405,31 @@ describe('DockerProvider', () => {
         },
       ]);
     });
+
+    it('skips containers with empty Names array', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValue([
+        {
+          Id: 'container-good',
+          Names: ['/claude-worker-task_abc'],
+          State: 'running',
+          Created: Math.floor(Date.now() / 1000),
+        },
+        {
+          Id: 'container-bad',
+          Names: [],
+          State: 'running',
+          Created: Math.floor(Date.now() / 1000),
+        },
+      ]);
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.taskId).toBe('task_abc');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { containerId: 'container-bad' },
+        expect.stringContaining('no recognizable name')
+      );
+    });
   });
 });

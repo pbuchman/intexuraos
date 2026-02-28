@@ -367,11 +367,17 @@ export class DockerProvider implements IsolationProvider {
         filters: { name: ['claude-worker-'] },
       });
 
-      return containers.map((c) => ({
-        containerId: c.Id,
-        taskId: (c.Names[0] ?? '').replace(/^\/claude-worker-/, ''),
-        state: c.State,
-      }));
+      return containers
+        .map((c) => {
+          const rawName = c.Names[0] ?? '';
+          const taskId = rawName.replace(/^\/claude-worker-/, '');
+          if (taskId === '') {
+            this.logger.warn({ containerId: c.Id }, 'Container has no recognizable name, skipping');
+            return null;
+          }
+          return { containerId: c.Id, taskId, state: c.State };
+        })
+        .filter((c): c is DiscoveredContainer => c !== null);
     } catch (error) {
       this.logger.warn({ error }, 'Failed to list worker containers for discovery');
       return [];
