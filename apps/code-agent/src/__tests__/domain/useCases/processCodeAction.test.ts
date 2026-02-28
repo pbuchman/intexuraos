@@ -1165,7 +1165,7 @@ describe('processCodeAction', () => {
     }
   });
 
-  it('queues task when countQueued fails (falls back to 0, under maxSize)', async () => {
+  it('returns queue_full when countQueued fails (fail-closed)', async () => {
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({
         id: 'new-task-count-err',
@@ -1191,7 +1191,7 @@ describe('processCodeAction', () => {
     vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
       err({ code: 'at_capacity', message: 'All workers busy' })
     );
-    // countQueued fails — should fall back to 0, which is under maxSize
+    // countQueued fails — should fall back to maxSize (fail-closed), triggering queue_full
     vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(
       err({ code: 'FIRESTORE_ERROR', message: 'DB error' })
     );
@@ -1208,14 +1208,10 @@ describe('processCodeAction', () => {
       }
     );
 
-    // Task should be queued (fallback to 0 < maxSize 10)
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.codeTaskId).toBe('new-task-count-err');
+    // Task should be rejected as queue_full (fallback to maxSize >= maxSize)
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('queue_full');
     }
-    expect(codeTaskRepo.update).toHaveBeenCalledWith(
-      'new-task-count-err',
-      expect.objectContaining({ status: 'queued', queuedAt: expect.any(Date) })
-    );
   });
 });

@@ -410,7 +410,7 @@ export async function submitToExecutionAgent(
         const failMarkResult = await codeTaskRepo.update(executionTaskId, {
           status: 'failed',
           error: {
-            code: 'at_capacity',
+            code: 'queue_full',
             message: 'All workers at capacity and queue is full',
           },
         });

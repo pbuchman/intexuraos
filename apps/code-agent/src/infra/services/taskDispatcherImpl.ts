@@ -218,7 +218,13 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           'Failed to dispatch to worker'
         );
 
-        if (error instanceof Error && /50[234]/.test(error.message)) {
+        if (error instanceof Error && error.message.includes('503')) {
+          continue;
+        }
+
+        // 502/504 are infrastructure errors, not capacity — don't treat as retryable capacity
+        if (error instanceof Error && (error.message.includes('502') || error.message.includes('504'))) {
+          allCapacityRelated = false;
           continue;
         }
 

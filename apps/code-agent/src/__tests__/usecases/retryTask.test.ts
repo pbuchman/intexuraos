@@ -1503,7 +1503,7 @@ describe('retryTask use case', () => {
       expect(mockWhatsAppNotifier.notifyTaskQueued).not.toHaveBeenCalled();
     });
 
-    it('queues task when countQueued fails (falls back to 0, under maxSize)', async () => {
+    it('returns queue_full when countQueued fails (fail-closed)', async () => {
       const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
       const mockTask = createMockTask({ completedAt: sixMinutesAgo });
       const retryTaskId = 'retry-task-count-err';
@@ -1533,7 +1533,7 @@ describe('retryTask use case', () => {
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'at_capacity', message: 'All workers at capacity' })
       );
-      // countQueued fails — should fall back to 0, which is under maxSize
+      // countQueued fails — should fall back to maxSize (fail-closed), triggering queue_full
       mockCodeTaskRepo.countQueued.mockResolvedValue(
         err({ code: 'FIRESTORE_ERROR', message: 'DB error' })
       );
@@ -1542,15 +1542,11 @@ describe('retryTask use case', () => {
       const deps = createDeps();
       const result = await retryTask(deps, { originalTaskId, userId });
 
-      // Task should be queued (fallback to 0 < maxSize)
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.codeTaskId).toBe(retryTaskId);
+      // Task should be rejected as queue_full (fallback to maxSize >= maxSize)
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
       }
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
-        retryTaskId,
-        expect.objectContaining({ status: 'queued', queuedAt: expect.any(Date) })
-      );
     });
   });
 });
