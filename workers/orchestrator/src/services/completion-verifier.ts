@@ -16,19 +16,27 @@ export interface CompletionVerifierInput {
   rawLogs: string;
 }
 
+export interface CompletionVerifierTrace {
+  transcript: string;
+  prompt: string;
+  response: string;
+}
+
 export interface CompletionVerifierVerdict {
   /** True when Gemini extraction succeeded and all Zod fields were present — does NOT mean the agent completed its task. */
   passed: boolean;
   missingFields: string[];
   verifierFailure: boolean;
   agentData?: PlanningAgentData | ExecutionAgentData | PullRequestAgentData;
+  trace: CompletionVerifierTrace;
 }
 
 export interface PlanningAgentData {
   agentType: 'planning';
   outcome: 'planned' | 'unclear';
   superpowers_writing_plans: 'used' | 'not used';
-  linear_task_url: string;
+  linear_url: string;
+  is_complex: '0' | '1';
   pr_url: string;
   summary: string;
   unclear_clarification: string;
@@ -63,7 +71,8 @@ export interface CompletionVerifierConfig {
 export const PLANNING_SCHEMA = z.object({
   outcome: z.enum(['planned', 'unclear']),
   superpowers_writing_plans: z.enum(['used', 'not used']),
-  linear_task_url: z.string(),
+  linear_url: z.string(),
+  is_complex: z.enum(['0', '1']),
   pr_url: z.string(),
   summary: z.string(),
   unclear_clarification: z.string(),
@@ -116,13 +125,14 @@ export function buildPlanningPrompt(transcript: string): string {
     'Fields:',
     '- outcome: "planned" if the agent produced a plan, "unclear" if the agent could not plan',
     '- superpowers_writing_plans: "used" if the agent invoked the writing-plans skill, "not used" otherwise',
-    '- linear_task_url: the Linear issue URL (string, empty string if not found)',
+    '- linear_url: the Linear issue URL — the single issue the agent received as input and edited in-place (string, empty string if not found)',
+    '- is_complex: "1" if the agent created subtasks for parallel execution, "0" otherwise',
     '- pr_url: the GitHub Pull Request URL if the agent created one (string, empty string if not found)',
     '- summary: 3-5 sentence summary of what happened — the LLM agent typically states this clearly as a summary block in its final output',
     '- unclear_clarification: required when outcome is "unclear" — the message explaining why; empty string if outcome is "planned"',
     '',
     'Example valid response:',
-    '{"outcome":"planned","superpowers_writing_plans":"used","linear_task_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","pr_url":"","summary":"The planning agent analyzed the task requirements and created a detailed implementation plan with 5 child issues. The plan covers API endpoints, database schema, and test strategy.","unclear_clarification":""}',
+    '{"outcome":"planned","superpowers_writing_plans":"used","linear_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","is_complex":"1","pr_url":"https://github.com/pbuchman/intexuraos/pull/944","summary":"The planning agent analyzed the task requirements and created a detailed implementation plan with 5 child issues. The plan covers API endpoints, database schema, and test strategy.","unclear_clarification":""}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -256,6 +266,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         agentType: input.agentType,
         model: this.model,
         promptChars: prompt.length,
+        transcript,
       },
       'Gemini completion verifier request'
     );
@@ -272,7 +283,12 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         },
         'Gemini completion verifier returned no response'
       );
-      return { passed: false, missingFields: [], verifierFailure: true };
+      return {
+        passed: false,
+        missingFields: [],
+        verifierFailure: true,
+        trace: { transcript, prompt, response: '' },
+      };
     }
 
     this.logger.info(
@@ -281,6 +297,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         attempt: input.attempt,
         model: this.model,
         responseChars: generated.value.content.length,
+        response: generated.value.content,
       },
       'Gemini completion verifier response'
     );
@@ -299,7 +316,12 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         },
         'Gemini completion verifier response parsing failed'
       );
-      return { passed: false, missingFields: [], verifierFailure: true };
+      return {
+        passed: false,
+        missingFields: [],
+        verifierFailure: true,
+        trace: { transcript, prompt, response: generated.value.content },
+      };
     }
 
     const parseResult = schema.safeParse(rawJson);
@@ -315,7 +337,12 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         },
         'Gemini completion verifier Zod validation failed'
       );
-      return { passed: false, missingFields, verifierFailure: false };
+      return {
+        passed: false,
+        missingFields,
+        verifierFailure: false,
+        trace: { transcript, prompt, response: generated.value.content },
+      };
     }
 
     const agentData = toAgentData(input.agentType, parseResult.data);
@@ -330,7 +357,13 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       'Gemini completion verifier parsed verdict'
     );
 
-    return { passed: true, missingFields: [], verifierFailure: false, agentData };
+    return {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      agentData,
+      trace: { transcript, prompt, response: generated.value.content },
+    };
   }
 
   private createLlmClient(config: CompletionVerifierConfig): LlmGenerateClient {

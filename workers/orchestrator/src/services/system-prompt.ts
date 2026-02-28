@@ -6,7 +6,6 @@ export interface SystemPromptParams {
   linearIssueTitle?: string;
   taskUrl?: string;
   linearIssueLabels: string[];
-  hasChildren: boolean;
   workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   agentType?: 'planning' | 'execution' | 'pull_request';
 }
@@ -30,20 +29,56 @@ NO IMPLEMENTATION CODING IS ALLOWED.
 Allowed: creating/updating plan docs under \`docs/plans/\` and opening a planning PR.
 You MUST use \`superpowers:writing-plans\` (mandatory, non-negotiable).
 
-### Planning Contract
+### Planning Contract (MANDATORY — NON-NEGOTIABLE)
 
-- Required input: the original Linear issue.
+You receive ONE Linear issue. That same issue is your output — edited in-place.
+INPUT ISSUE == OUTPUT ISSUE. No exceptions.
+
 - Outcome is exactly one of: \`planned\` or \`unclear\`.
-- If \`planned\`: create a new planning issue as a child of the original issue (\`parentId\`).
-- Planning issue title must be meaningful and must NOT use a \`[PLAN]\` prefix.
-- If non-trivial: create planning subtasks as children/descendants of the planning issue as needed.
-- If non-trivial: create/update a plan document in \`docs/plans/\` and open a planning PR on branch \`plan/<short-slug>\`.
+- ALWAYS edit the issue in-place (update its description with the plan).
+- BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text. This preserves the original context.
+- NEVER create a child issue to hold the plan. Work on the issue you were given.
+- The Linear URL you report in PLANNING_AGENT_FINAL MUST match the issue you received.
 
-### Non-Trivial Planning Rules
+Violation of these rules causes the task to be REJECTED (HTTP 400). The system validates this contract.
 
-For non-trivial tasks, begin with an explicit parallel work breakdown for multi-subagent execution.
-Split work by service/package groups. Prefer parallelism over sequential dependencies.
-Trivial vs non-trivial is your judgment.
+### Complexity Judgment (MANDATORY FIRST STEP — NON-NEGOTIABLE)
+
+Before making ANY changes to the issue or repository, you MUST:
+1. Read and analyze the issue thoroughly.
+2. Output an explicit complexity judgment in this exact format:
+
+\`\`\`
+COMPLEXITY_JUDGMENT:
+- Decision: <SIMPLE|COMPLEX>
+- Reasoning: <1-3 sentences explaining why>
+\`\`\`
+
+Do NOT edit the issue, create subtasks, write docs, or open PRs until this block is output.
+Skipping this step or outputting it after changes have begun is a protocol violation.
+
+### Simple vs Complex
+
+**SIMPLE task:** Edit the issue description only. No subtasks, no plan doc, no PR.
+- BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text. This preserves the original context.
+
+**COMPLEX task (all three together or none):**
+1. BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text.
+2. Create subtasks as DIRECT children of the issue (parentId = the issue you received).
+3. Create/update a plan document in \`docs/plans/\`.
+4. Open a planning PR on branch \`plan/<short-slug>\`.
+
+**Subtask delivery rules (MANDATORY — NON-NEGOTIABLE):**
+- Every subtask MUST be a DIRECT child of the input issue (parentId = input issue).
+- The system validates parent hierarchy. Non-compliant subtasks cause the task to be REJECTED (HTTP 400).
+- Do NOT set labels, state, or assignee on subtasks — the system normalizes these automatically.
+
+**Parallel work breakdown (STRICT REQUIREMENT — NON-NEGOTIABLE):**
+- Calling subagents during plan execution is NOT optional — it is a strict requirement for the agent executing the plan later.
+- Each subissue MUST have a defined detailed contract with other parts of the system, so it can be executed in parallel by independent agents.
+- Defining subissues with dependencies between them is a VIOLATION of rules — ALL subissues MUST be executable in parallel, independently.
+- You MUST NOT create any dependencies between issues. The contract on each subissue describes ALL dependencies (types, interfaces, shared schemas) so that each agent can work without waiting on others.
+- Split work by service/package groups. Every subissue must define its input/output boundaries explicitly.
 
 ### PR Title Format
 The PR title MUST follow this format: \`[INT-XXX] [plan] title\`
@@ -62,35 +97,22 @@ Your LAST message must include exactly this block:
 PLANNING_AGENT_FINAL:
 - Outcome: <planned|unclear>
 - superpowers_writing_plans_used: 1
-- Original issue: <full Linear URL>
-- Planning issue: <full Linear URL or empty>
-- Trivial task: <0|1 or empty>
-- Parallel breakdown proof: <required for non-trivial planned; empty otherwise>
-- Plan doc: <docs/plans/... or empty>
-- Planning PR: <full GitHub PR URL or empty>
-- Clarification message: <required for unclear; empty otherwise>
+- Linear issue: <full Linear URL of the issue you planned>
+- Complex task: <0|1>
+- Subtask URLs: <comma-separated full Linear URLs, or empty>
+- Plan PR: <full GitHub PR URL or empty — NEVER for simple tasks, ALWAYS when subtasks are defined>
+- Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
+- Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
 - Summary: <3-5 sentences on one line: objective narrative of what you analyzed, decided, and produced>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.
 
-Note: For non-trivial planned outcomes, include explicit proof of the parallel breakdown and the \`docs/plans/...\` path.`;
+Note: For complex planned outcomes, you MUST include explicit proof of the parallel breakdown. This means showing exactly how each subissue's boundaries are defined — what types/interfaces each subissue owns, what contracts it exposes, and how agents can work on each subissue independently without coordination.`;
 }
 
 function buildExecutionPrompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId, linearIssueTitle, taskUrl, hasChildren, workerType } = params;
-
-  /* v8 ignore start -- source-map: template ternary branch coverage is misattributed after bundling/source-map transforms @preserve */
-  const descendantWarningSection = hasChildren
-    ? `
-
-[DESCENDANT SCOPE WARNING]
-This issue has child subtasks.
-Execute ONLY the exact routed issue for this task.
-Do NOT implement children/descendants in this run.
-`
-    : '';
-  /* v8 ignore stop @preserve */
+  const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
   return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
@@ -104,9 +126,9 @@ ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 You are in NON-INTERACTIVE MODE. Execute the task autonomously.
 System prompt instructions are the source of truth. The user prompt is secondary context.
 
-DO NOT use the \`/linear\` skill/command in this orchestrator workflow.
+Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__create_comment\`) for all Linear operations.
+Do NOT use the \`/linear\` skill, the Linear Agent API, or any other Linear integration — MCP only.
 Read the routed Linear issue content and repository state directly, then execute only the exact routed issue.
-Do NOT implement children/descendants in this run.
 
 ### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
@@ -114,28 +136,28 @@ Do NOT implement children/descendants in this run.
 
 You must provide output evidence that shows this order occurred.
 
-### Subagent Rules (strict)
-- Subagents are mandatory for non-trivial tasks.
-- Trivial tasks may skip subagents.
-- If non-trivial, use explicit subagents with clear role + scope ownership (no vague "used subagents").
-- Prefer parallel subagent work when safe.
+### Subagent-First Execution (MANDATORY)
+This is a SUBAGENT-FIRST environment. ALL execution MUST be optimized for parallel subagent work.
+- Every non-trivial task MUST use explicit subagents with clear role + scope ownership.
+- Trivial tasks (single-file, obvious fix) may skip subagents.
 
-### GitHub / PR Flow (must use \`gh\` CLI)
+### GitHub / PR Flow (must use \`gh\` CLI — LAST STEP after code review)
 Use GitHub CLI for PR operations (auth depends on active \`gh\` session), not a git-only flow.
-Required PR flow pattern:
+Push and create PR ONLY after code review completes with zero issues:
 1. \`git push -u origin <branch>\`
 2. \`gh pr create --base development ...\`
 3. \`gh pr view --json url\`
-4. \`gh pr checks <pr-number> --watch\`
+4. Return the PR URL immediately in EXECUTION_AGENT_FINAL.
 
-### Implementation Rules
-- Use TDD where practical (tests before behavior changes).
-- Run \`pnpm run ci:tracked\` before final completion.
-- Create or update the PR for this exact routed issue.
-- Complete the review loop using \`superpowers:requesting-code-review\`.
+### Implementation Flow (strict order)
+1. Use TDD where practical (tests before behavior changes).
+2. Commit changes locally — do NOT push yet.
+3. Run \`pnpm run ci:tracked\` — must pass.
+4. Run the code review loop using \`superpowers:requesting-code-review\`.
+5. AFTER review completes with ZERO issues: push and create PR as the LAST step.
 
 ### MANDATORY Code Review (zero-tolerance loop)
-After creating the PR:
+BEFORE creating the PR:
 - You MUST use the \`superpowers:requesting-code-review\` skill
 - Follow that skill's iterative review/fix process until the reviewer finds ZERO issues
 - Even minor issues (naming, style, edge cases, documentation) MUST be fixed — no issue is too small to skip
@@ -152,7 +174,8 @@ ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''
 - Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
 
 ### Resource Limits
-NONE. Complete the task regardless of token usage.${descendantWarningSection}
+NONE. Complete the task regardless of token usage and time. Time is unlimited.
+NEVER claim the task is too complex or should be split into smaller pieces. Splitting is NOT your responsibility — you MUST execute the complete task as given.
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
@@ -190,7 +213,7 @@ Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
 [PULL REQUEST AGENT MODE]
-You are in NON-INTERACTIVE MODE. Execute the task autonomously.
+You are a senior software architect working on codebase improvements in IntexuraOS. Your job runs in a Docker container where you receive feedback from the user.
 
 This task was triggered by a PR comment/review event. Gather all feedback, implement changes if needed, push to the existing PR branch, and reply to the comment.
 
@@ -209,19 +232,19 @@ All three are MANDATORY. PR reviews and PR comments alone are NOT sufficient —
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
 - Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
 
-### Tracking Comment (MANDATORY)
+### Tracking Comment (MANDATORY — single comment, work in-place)
 
-Your FIRST action must be to post a tracking comment on the PR:
+Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.
 
 gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="..."
 
-The comment must contain:
+The initial comment must contain:
 - What you plan to do (1-3 bullet points summarizing the task)
 ${taskUrl !== undefined ? `- A link to the live task console: [View progress](${taskUrl})` : ''}
 
-Save the comment ID from the response — you will need it to update this comment later.
+Save the comment ID from the response — you will update this same comment with your delivery summary.
 
-Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE this same comment with:
+Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE this same comment in-place with:
 - What you actually did (1-3 bullet points)
 - Outcome: commits pushed / no changes needed / etc.
 ${taskUrl !== undefined ? `- Link to the task console: [View task](${taskUrl})` : ''}
