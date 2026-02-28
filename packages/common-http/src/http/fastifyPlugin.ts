@@ -36,7 +36,10 @@ const intexuraPlugin: FastifyPluginCallback = (
   fastify.addContentTypeParser(
     'application/json',
     { parseAs: 'string' },
-    (_request: FastifyRequest, body: string, parseComplete: (err: Error | null, result?: unknown) => void): void => {
+    (request: FastifyRequest, body: string, parseComplete: (err: Error | null, result?: unknown) => void): void => {
+      // Store raw body for services that need it (e.g. webhook signature validation)
+      (request as unknown as { rawBody: string }).rawBody = body;
+
       if (body === '') {
         parseComplete(null, null);
         return;
