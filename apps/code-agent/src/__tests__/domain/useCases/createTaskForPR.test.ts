@@ -624,6 +624,38 @@ describe('createTaskForPR', () => {
       expect(result.error.message).toContain('Firestore write failed');
     });
 
+    it('propagates existingTaskId when ACTIVE_TASK_EXISTS dedup fires', async () => {
+      setupHappyPathMocks();
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        err({ code: 'ACTIVE_TASK_EXISTS', message: 'Active task exists for Linear issue', existingTaskId: 'task_active_123' })
+      );
+
+      const result = await createTaskForPR(createDeps(), createRequest());
+
+      if (result.ok) {
+        throw new Error('Expected error result');
+      }
+      expect(result.error.code).toBe('task_creation_failed');
+      expect(result.error.existingTaskId).toBe('task_active_123');
+    });
+
+    it('does not include existingTaskId for non-dedup repo errors', async () => {
+      setupHappyPathMocks();
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Connection timeout' })
+      );
+
+      const result = await createTaskForPR(createDeps(), createRequest());
+
+      if (result.ok) {
+        throw new Error('Expected error result');
+      }
+      expect(result.error.code).toBe('task_creation_failed');
+      expect(result.error.existingTaskId).toBeUndefined();
+    });
+
     it('returns internal_error when transaction throws', async () => {
       mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
         ok({ userId, worker: mockWorker })
