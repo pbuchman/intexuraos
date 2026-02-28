@@ -773,6 +773,136 @@ describe('main.ts', () => {
 
       expect(mockDispatcher.adoptTask).toHaveBeenCalledTimes(2);
     });
+
+    it('falls through to interrupted webhook when adoptTask returns error result', async () => {
+      const runningTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'container-1',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': runningTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      vi.mocked(mockIsolationProvider.listWorkerContainers!).mockResolvedValue([
+        { containerId: 'container-1', taskId: 'task-1', state: 'running' },
+      ]);
+
+      vi.mocked(mockDispatcher.adoptTask).mockResolvedValue({
+        ok: false,
+        error: { type: 'at_capacity', message: 'No capacity' },
+      });
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      expect(mockDispatcher.adoptTask).toHaveBeenCalledWith(runningTask);
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'task-1',
+            status: 'interrupted',
+          }),
+        })
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-1' }),
+        'Adoption failed, marking as interrupted'
+      );
+    });
+
+    it('falls back to state-only recovery when container discovery times out', async () => {
+      const runningTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'container-1',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': runningTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      // Return a never-resolving promise to simulate a hang
+      vi.mocked(mockIsolationProvider.listWorkerContainers!).mockReturnValue(
+        new Promise<DiscoveredContainer[]>(() => {
+          // Never resolves
+        })
+      );
+
+      const { main } = await import('../main.js');
+
+      const mainPromise = main(
+        mockConfig,
+        mockStatePersistence,
+        mockDispatcher,
+        mockTokenService,
+        mockWebhookClient,
+        mockHeartbeatManager,
+        mockLogger,
+        undefined,
+        mockIsolationProvider
+      );
+
+      // Advance past the 60-second timeout
+      await vi.advanceTimersByTimeAsync(60_001);
+
+      try {
+        await mainPromise;
+      } catch {
+        // Expected
+      }
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.any(Error) }),
+        'Container discovery failed, falling back to state-only recovery'
+      );
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'task-1',
+            status: 'interrupted',
+          }),
+        })
+      );
+    });
   });
 
   describe('scheduleTokenRefresh', () => {
