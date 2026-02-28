@@ -1,5 +1,14 @@
 import type { DecisionKind } from '../models.js';
 
+export function extractMergeableState(payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const pr = (payload as Record<string, unknown>)['pull_request'];
+  if (typeof pr !== 'object' || pr === null) return null;
+  const state = (pr as Record<string, unknown>)['mergeable_state'];
+  if (typeof state !== 'string') return null;
+  return state;
+}
+
 export interface ConflictEligibilityInput {
   eventType: string;
   action: string | null;

@@ -5,6 +5,8 @@ import { evaluateWebhookActionabilityRules, type RuleEvaluationInput } from './r
 import { compileWebhookActionPlan, type ActionCompilerInput } from './actionCompiler.js';
 import { validateWebhookActionPlan } from './validator.js';
 import { evaluateWorkflowRepairEligibility, type RepairEligibilityDeps } from './eventFamilies/githubActionResult.js';
+import { evaluateConflictResolutionEligibility, extractMergeableState, type ConflictEligibilityDeps } from './eventFamilies/pullRequest.js';
+import { buildDecisionFromEvaluator } from './decisionBuilder.js';
 
 export interface ReplayFixtureEvent {
   id: string;
@@ -42,6 +44,7 @@ export interface ReplayDeps {
   hasExistingTask: boolean;
   ownsProcessingMarker: boolean;
   repairDeps: RepairEligibilityDeps;
+  conflictDeps: ConflictEligibilityDeps;
 }
 
 export interface ReplayDiagnostics {
@@ -79,6 +82,42 @@ function classifyEventGroup(eventType: string): WebhookEventGroup {
   return 'other';
 }
 
+function buildRulesResult(
+  eventGroup: WebhookEventGroup,
+  event: ReplayFixtureEvent,
+  senderAllowed: boolean,
+  hasExistingTask: boolean
+): { decision: WebhookAgentDecision; reasonCode: string } {
+  const ruleInput: RuleEvaluationInput = {
+    eventGroup,
+    action: event.action,
+    senderLogin: event.senderLogin,
+    senderAllowed,
+    body: event.body,
+    hasExistingTask,
+  };
+
+  const ruleResult = evaluateWebhookActionabilityRules(ruleInput);
+  const isActionable = ruleResult.actionability !== 'non_actionable';
+
+  return {
+    decision: {
+      version: '1.0',
+      eventGroup,
+      actionability: ruleResult.actionability,
+      confidence: ruleResult.confidence,
+      reasoning: ruleResult.reasoning,
+      requestedWorkerType: null,
+      decision: {
+        kind: isActionable
+          ? (hasExistingTask ? 'send_task_message' : 'create_pr_comment_task')
+          : 'noop',
+      },
+    },
+    reasonCode: ruleResult.reasonCode,
+  };
+}
+
 export function replayWebhookEventDryRun(
   deps: ReplayDeps,
   fixture: ReplayFixture
@@ -105,43 +144,36 @@ export function replayWebhookEventDryRun(
       deps.repairDeps
     );
 
-    decision = {
-      version: '1.0',
-      eventGroup,
-      actionability: repairResult.eligible ? 'actionable' : 'non_actionable',
-      confidence: 1.0,
-      reasoning: repairResult.reasoning,
-      requestedWorkerType: null,
-      decision: { kind: repairResult.decisionKind },
-    };
-    ruleReasonCode = repairResult.reasonCode;
-  } else {
-    const ruleInput: RuleEvaluationInput = {
-      eventGroup,
-      action: event.action,
-      senderLogin: event.senderLogin,
-      senderAllowed,
-      body: event.body,
-      hasExistingTask: deps.hasExistingTask,
-    };
-
-    const ruleResult = evaluateWebhookActionabilityRules(ruleInput);
-    const isActionable = ruleResult.actionability !== 'non_actionable';
-
-    decision = {
-      version: '1.0',
-      eventGroup,
-      actionability: ruleResult.actionability,
-      confidence: ruleResult.confidence,
-      reasoning: ruleResult.reasoning,
-      requestedWorkerType: null,
-      decision: {
-        kind: isActionable
-          ? (deps.hasExistingTask ? 'send_task_message' : 'create_pr_comment_task')
-          : 'noop',
+    const built = buildDecisionFromEvaluator(eventGroup, repairResult);
+    decision = built.decision;
+    ruleReasonCode = built.reasonCode;
+  } else if (eventGroup === 'pull_request') {
+    const mergeableState = extractMergeableState(event.payload);
+    const conflictResult = evaluateConflictResolutionEligibility(
+      {
+        eventType: event.eventType,
+        action: event.action,
+        mergeableState,
+        pullRequestNumber: event.pullRequestNumber,
+        repository: event.repository,
+        senderLogin: event.senderLogin,
       },
-    };
-    ruleReasonCode = ruleResult.reasonCode;
+      deps.conflictDeps
+    );
+
+    if (conflictResult.eligible) {
+      const built = buildDecisionFromEvaluator(eventGroup, conflictResult);
+      decision = built.decision;
+      ruleReasonCode = built.reasonCode;
+    } else {
+      const result = buildRulesResult(eventGroup, event, senderAllowed, deps.hasExistingTask);
+      decision = result.decision;
+      ruleReasonCode = result.reasonCode;
+    }
+  } else {
+    const result = buildRulesResult(eventGroup, event, senderAllowed, deps.hasExistingTask);
+    decision = result.decision;
+    ruleReasonCode = result.reasonCode;
   }
 
   const compilerInput: ActionCompilerInput = {

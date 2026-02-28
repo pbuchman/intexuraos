@@ -21,7 +21,7 @@ export interface RepairEligibilityResult {
   reasoning: string;
 }
 
-const FAILURE_CONCLUSIONS = new Set(['failure', 'timed_out', 'cancelled']);
+const FAILURE_CONCLUSIONS = new Set(['failure', 'timed_out']);
 
 function hasFailureConclusion(state: string): boolean {
   const parts = state.split('/');

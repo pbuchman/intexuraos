@@ -71,6 +71,10 @@ function makeDeps(overrides: Partial<ProcessEventDeps> = {}): ProcessEventDeps {
       isRepairDuplicate: (): boolean => false,
       isProtectedBranch: (): boolean => false,
     },
+    conflictDeps: {
+      isConflictDuplicate: (): boolean => false,
+      isProtectedBranch: (): boolean => false,
+    },
     ...overrides,
   };
 }
@@ -387,6 +391,88 @@ describe('processGitHubWebhookEvent', () => {
       const savedRecord = saveRunRecord.mock.calls[0]?.[0] as {
         decision: { decision: { kind: string } };
       } | undefined;
+      expect(savedRecord?.decision.decision.kind).toBe('noop');
+    });
+  });
+
+  describe('pull_request conflict routing', () => {
+    it('routes PR with dirty mergeableState to create_code_action', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: true }),
+        classifyEventGroup: (): 'pull_request' => 'pull_request',
+        saveRunRecord,
+      });
+
+      const event = makeEvent({
+        eventType: 'pull_request',
+        action: 'synchronize',
+        payload: { pull_request: { mergeable_state: 'dirty' } },
+        pullRequestNumber: 55,
+      });
+
+      await processGitHubWebhookEvent(deps, event);
+
+      const savedRecord = saveRunRecord.mock.calls[0]?.[0] as {
+        decision: { decision: { kind: string }; actionability: string };
+      } | undefined;
+      expect(savedRecord?.decision.decision.kind).toBe('create_code_action');
+      expect(savedRecord?.decision.actionability).toBe('actionable');
+    });
+
+    it('falls through to rules when PR has no conflict', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: true }),
+        classifyEventGroup: (): 'pull_request' => 'pull_request',
+        isSenderAllowed: (): boolean => false,
+        saveRunRecord,
+      });
+
+      const event = makeEvent({
+        eventType: 'pull_request',
+        action: 'synchronize',
+        payload: { pull_request: { mergeable_state: 'clean' } },
+        pullRequestNumber: 55,
+      });
+
+      await processGitHubWebhookEvent(deps, event);
+
+      const savedRecord = saveRunRecord.mock.calls[0]?.[0] as {
+        decision: { decision: { kind: string } };
+      } | undefined;
+      expect(savedRecord?.decision.decision.kind).toBe('noop');
+    });
+
+    it('blocks conflict resolution on protected branch and falls through to rules', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: true }),
+        classifyEventGroup: (): 'pull_request' => 'pull_request',
+        conflictDeps: {
+          isConflictDuplicate: (): boolean => false,
+          isProtectedBranch: (): boolean => true,
+        },
+        isSenderAllowed: (): boolean => false,
+        saveRunRecord,
+      });
+
+      const event = makeEvent({
+        eventType: 'pull_request',
+        action: 'synchronize',
+        payload: { pull_request: { mergeable_state: 'dirty' } },
+        pullRequestNumber: 55,
+      });
+
+      await processGitHubWebhookEvent(deps, event);
+
+      const savedRecord = saveRunRecord.mock.calls[0]?.[0] as {
+        decision: { decision: { kind: string } };
+      } | undefined;
+      expect(savedRecord?.decision.decision.kind).not.toBe('create_code_action');
       expect(savedRecord?.decision.decision.kind).toBe('noop');
     });
   });

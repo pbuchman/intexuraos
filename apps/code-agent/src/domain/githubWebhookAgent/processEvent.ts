@@ -7,6 +7,8 @@ import { compileWebhookActionPlan, type ActionCompilerInput } from './actionComp
 import { validateWebhookActionPlan } from './validator.js';
 import { executeWebhookActionPlan, type ExecutorDeps } from './executor.js';
 import { evaluateWorkflowRepairEligibility, type RepairEligibilityDeps } from './eventFamilies/githubActionResult.js';
+import { evaluateConflictResolutionEligibility, extractMergeableState, type ConflictEligibilityDeps } from './eventFamilies/pullRequest.js';
+import { buildDecisionFromEvaluator } from './decisionBuilder.js';
 
 export interface ProcessEventDeps {
   logger: Logger;
@@ -18,6 +20,7 @@ export interface ProcessEventDeps {
   hasExistingTask: (repository: string, prNumber: number) => Promise<boolean>;
   saveRunRecord: (record: WebhookAgentRunRecord) => Promise<void>;
   repairDeps: RepairEligibilityDeps;
+  conflictDeps: ConflictEligibilityDeps;
 }
 
 export interface ProcessEventResult {
@@ -29,6 +32,39 @@ export interface ProcessEventResult {
 
 function generateRunId(): string {
   return `run_${crypto.randomUUID()}`;
+}
+
+function buildRulesDecision(
+  eventGroup: WebhookEventGroup,
+  event: GitHubPREvent,
+  senderAllowed: boolean,
+  existingTask: boolean
+): WebhookAgentDecision {
+  const ruleInput: RuleEvaluationInput = {
+    eventGroup,
+    action: event.action,
+    senderLogin: event.senderLogin,
+    senderAllowed,
+    body: event.body,
+    hasExistingTask: existingTask,
+  };
+
+  const ruleResult = evaluateWebhookActionabilityRules(ruleInput);
+  const isActionable = ruleResult.actionability !== 'non_actionable';
+
+  return {
+    version: '1.0',
+    eventGroup,
+    actionability: ruleResult.actionability,
+    confidence: ruleResult.confidence,
+    reasoning: ruleResult.reasoning,
+    requestedWorkerType: null,
+    decision: {
+      kind: isActionable
+        ? (existingTask ? 'send_task_message' : 'create_pr_comment_task')
+        : 'noop',
+    },
+  };
 }
 
 export async function processGitHubWebhookEvent(
@@ -64,41 +100,30 @@ export async function processGitHubWebhookEvent(
       deps.repairDeps
     );
 
-    decision = {
-      version: '1.0',
-      eventGroup,
-      actionability: repairResult.eligible ? 'actionable' : 'non_actionable',
-      confidence: 1.0,
-      reasoning: repairResult.reasoning,
-      requestedWorkerType: null,
-      decision: { kind: repairResult.decisionKind },
-    };
-  } else {
-    const ruleInput: RuleEvaluationInput = {
-      eventGroup,
-      action: event.action,
-      senderLogin: event.senderLogin,
-      senderAllowed,
-      body: event.body,
-      hasExistingTask: existingTask,
-    };
-
-    const ruleResult = evaluateWebhookActionabilityRules(ruleInput);
-    const isActionable = ruleResult.actionability !== 'non_actionable';
-
-    decision = {
-      version: '1.0',
-      eventGroup,
-      actionability: ruleResult.actionability,
-      confidence: ruleResult.confidence,
-      reasoning: ruleResult.reasoning,
-      requestedWorkerType: null,
-      decision: {
-        kind: isActionable
-          ? (existingTask ? 'send_task_message' as const : 'create_pr_comment_task' as const)
-          : 'noop' as const,
+    const built = buildDecisionFromEvaluator(eventGroup, repairResult);
+    decision = built.decision;
+  } else if (eventGroup === 'pull_request') {
+    const mergeableState = extractMergeableState(event.payload);
+    const conflictResult = evaluateConflictResolutionEligibility(
+      {
+        eventType: event.eventType,
+        action: event.action,
+        mergeableState,
+        pullRequestNumber: event.pullRequestNumber,
+        repository: event.repository,
+        senderLogin: event.senderLogin,
       },
-    };
+      deps.conflictDeps
+    );
+
+    if (conflictResult.eligible) {
+      const built = buildDecisionFromEvaluator(eventGroup, conflictResult);
+      decision = built.decision;
+    } else {
+      decision = buildRulesDecision(eventGroup, event, senderAllowed, existingTask);
+    }
+  } else {
+    decision = buildRulesDecision(eventGroup, event, senderAllowed, existingTask);
   }
 
   const compilerInput: ActionCompilerInput = {

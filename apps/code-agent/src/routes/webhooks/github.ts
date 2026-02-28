@@ -515,6 +515,10 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
             isRepairDuplicate: (): boolean => false,
             isProtectedBranch: (): boolean => false,
           },
+          conflictDeps: {
+            isConflictDuplicate: (): boolean => false,
+            isProtectedBranch: (): boolean => false,
+          },
         };
 
         void processGitHubWebhookEvent(agentDeps, savedEvent).catch((error: unknown) => {

@@ -15,6 +15,10 @@ function makeReplayDeps(overrides: Partial<ReplayDeps> = {}): ReplayDeps {
       isRepairDuplicate: (): boolean => false,
       isProtectedBranch: (): boolean => false,
     },
+    conflictDeps: {
+      isConflictDuplicate: (): boolean => false,
+      isProtectedBranch: (): boolean => false,
+    },
     ...overrides,
   };
 }
@@ -149,6 +153,74 @@ describe('replayWebhookEventDryRun', () => {
     expect(result.decision.decision.kind).toBe('create_code_action');
     expect(result.decision.actionability).toBe('actionable');
     expect(result.diagnostics.ruleReasonCode).toBe('workflow_failure_eligible');
+  });
+
+  it('routes PR with dirty mergeableState to conflict resolution', () => {
+    const fixture: ReplayFixture = {
+      event: {
+        id: 'fixture-pr-conflict-001',
+        githubEventId: 4001,
+        repository: 'pbuchman/intexuraos',
+        repositoryId: 100,
+        pullRequestNumber: 55,
+        pullRequestId: 300,
+        eventType: 'pull_request',
+        action: 'synchronize',
+        senderLogin: 'testuser',
+        senderId: 300,
+        senderType: 'User',
+        title: 'Add feature',
+        body: null,
+        state: 'open',
+        mergedAt: null,
+        payload: { pull_request: { mergeable_state: 'dirty' } },
+      },
+      expected: {
+        decisionKind: 'create_code_action',
+        actionCount: 1,
+      },
+    };
+    const deps = makeReplayDeps();
+
+    const result = replayWebhookEventDryRun(deps, fixture);
+
+    expect(result.diagnostics.eventGroup).toBe('pull_request');
+    expect(result.decision.decision.kind).toBe('create_code_action');
+    expect(result.decision.actionability).toBe('actionable');
+    expect(result.diagnostics.ruleReasonCode).toBe('conflict_detected');
+  });
+
+  it('falls through to rules when PR has no conflict', () => {
+    const fixture: ReplayFixture = {
+      event: {
+        id: 'fixture-pr-clean-001',
+        githubEventId: 4002,
+        repository: 'pbuchman/intexuraos',
+        repositoryId: 100,
+        pullRequestNumber: 55,
+        pullRequestId: 300,
+        eventType: 'pull_request',
+        action: 'synchronize',
+        senderLogin: 'testuser',
+        senderId: 300,
+        senderType: 'User',
+        title: 'Add feature',
+        body: null,
+        state: 'open',
+        mergedAt: null,
+        payload: { pull_request: { mergeable_state: 'clean' } },
+      },
+      expected: {
+        decisionKind: 'noop',
+        actionCount: 0,
+      },
+    };
+    const deps = makeReplayDeps({ isSenderAllowed: (): boolean => false });
+
+    const result = replayWebhookEventDryRun(deps, fixture);
+
+    expect(result.diagnostics.eventGroup).toBe('pull_request');
+    expect(result.decision.decision.kind).toBe('noop');
   });
 
   it('classifies unknown event types as other', () => {
