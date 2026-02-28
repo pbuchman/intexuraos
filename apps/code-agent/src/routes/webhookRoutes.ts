@@ -239,28 +239,30 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const originalIssueUuid = originalIssue.id;
 
         if (outcome === 'planned') {
-          // Normalize original issue state to Todo
-          const markTodo = await linearAgentClient.updateIssueState({
-            userId: task.userId,
-            issueId: originalIssueUuid,
-            state: 'todo',
-          });
+          const isComplex = planningResult.planning_is_complex === '1';
+
+          // Normalize original issue: state → todo, labels based on complexity
+          const [markTodo, parentLabels] = await Promise.all([
+            linearAgentClient.updateIssueState({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              state: 'todo',
+            }),
+            linearAgentClient.updateIssueMetadata({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              addLabels: isComplex ? ['planned'] : [],
+              removeLabels: isComplex ? ['unclear', 'code-task'] : ['unclear', 'planned'],
+            }),
+          ]);
           if (!markTodo.ok) {
             return { ok: false, message: `Failed to normalize original issue state: ${markTodo.error.message}` };
           }
+          if (!parentLabels.ok) {
+            return { ok: false, message: `Failed to normalize original issue labels: ${parentLabels.error.message}` };
+          }
 
-          if (planningResult.planning_is_complex === '1') {
-            // COMPLEX: parent gets planned label, children are execution targets
-            const originalLabelNormalize = await linearAgentClient.updateIssueMetadata({
-              userId: task.userId,
-              issueId: originalIssueUuid,
-              addLabels: ['planned'],
-              removeLabels: ['unclear', 'code-task'],
-            });
-            if (!originalLabelNormalize.ok) {
-              return { ok: false, message: `Failed to normalize original issue labels: ${originalLabelNormalize.error.message}` };
-            }
-
+          if (isComplex) {
             const treeResult = await linearAgentClient.fetchIssueTree({
               userId: task.userId,
               issueId: originalIssueUuid,
@@ -271,15 +273,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
             const descendants = treeResult.value.descendants;
 
-            // Reject if any subtask is not a direct child — structural violation
+            // Validate hierarchy + normalize each subtask in one pass
             for (const descendant of descendants) {
               if (descendant.parentId !== originalIssueUuid) {
                 return { ok: false, message: `Subtask ${descendant.identifier} is not a direct child of the input issue — task rejected` };
               }
-            }
 
-            // Normalize each subtask: state, assignee, cleanup labels
-            for (const descendant of descendants) {
               const normalizeState = await linearAgentClient.updateIssueState({
                 userId: task.userId,
                 issueId: descendant.id,
@@ -325,16 +324,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               }
             }
           } else {
-            // SIMPLE: clean up labels first, then stamp code-task last
-            const cleanLabels = await linearAgentClient.updateIssueMetadata({
-              userId: task.userId,
-              issueId: originalIssueUuid,
-              removeLabels: ['unclear', 'planned'],
-            });
-            if (!cleanLabels.ok) {
-              return { ok: false, message: `Failed to clean original issue labels: ${cleanLabels.error.message}` };
-            }
-
             // LAST: stamp code-task on parent — proof of successful processing
             const stampCodeTask = await linearAgentClient.updateIssueMetadata({
               userId: task.userId,
