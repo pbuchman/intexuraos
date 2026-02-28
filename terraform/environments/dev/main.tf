@@ -1422,6 +1422,8 @@ module "code_agent" {
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_QUEUE_MAX_SIZE             = "10"
+    INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
   })
 
   depends_on = [
@@ -1742,6 +1744,49 @@ resource "google_cloud_scheduler_job" "retry_pending_actions" {
     module.actions_agent,
   ]
 }
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Drain Task Queue (INT-619)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_code_agent" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.code_agent.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.code_agent]
+}
+
+resource "google_cloud_scheduler_job" "drain_task_queue" {
+  name        = "intexuraos-drain-task-queue-${var.environment}"
+  description = "Drain queued code tasks when workers become available"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/drain-queue"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Firebase Authentication (Identity Platform)
 # -----------------------------------------------------------------------------

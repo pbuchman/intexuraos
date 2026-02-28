@@ -31,7 +31,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
   opus: {
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    model: 'opus',
+    model: 'claude-opus-4-5-20251101',
   },
   auto: {
     apiBaseUrl: 'https://api.anthropic.com',

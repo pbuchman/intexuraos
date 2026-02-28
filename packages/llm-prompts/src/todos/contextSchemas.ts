@@ -11,10 +11,7 @@ import { z } from 'zod';
 export const ExtractedItemSchema = z.object({
   title: z.string(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).nullable(),
-  dueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'dueDate must be ISO-8601 date format YYYY-MM-DD')
-    .nullable(),
+  dueDate: z.string().nullable(),
   reasoning: z.string(),
 });
 
