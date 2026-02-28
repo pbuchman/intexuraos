@@ -28,6 +28,7 @@ function makeCompilerInput(overrides: Partial<ActionCompilerInput> = {}): Action
     decision: makeDecision(),
     hasExistingTask: false,
     userMapped: true,
+    ownsProcessingMarker: false,
     ...overrides,
   };
 }

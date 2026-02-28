@@ -22,6 +22,11 @@ const DispatchTaskParamsSchema = z.object({
   workerType: z.string().optional(),
 });
 
+const MarkProcessingParamsSchema = z.object({
+  repository: z.string().min(1),
+  commentId: z.number().int().positive(),
+});
+
 const ChatNotifyParamsSchema = z.object({
   userId: z.string().min(1),
   eventId: z.string().min(1),
@@ -100,6 +105,30 @@ export function createDispatchTaskTool(deps: ToolDeps): ActionTool {
       }
 
       const result = await deps.createTaskForPR(request);
+
+      if (!result.ok) {
+        return { ok: false, error: `${result.error.code}: ${result.error.message}` };
+      }
+
+      return { ok: true };
+    },
+    idempotencyKey: (step: ActionStep): string => step.actionId,
+  };
+}
+
+export interface MarkProcessingToolDeps {
+  addReaction: (repository: string, commentId: number) => Promise<Result<void, { code: string; message: string }>>;
+}
+
+export function createMarkProcessingTool(deps: MarkProcessingToolDeps): ActionTool {
+  return {
+    execute: async (step: ActionStep): Promise<ActionToolResult> => {
+      const parsed = MarkProcessingParamsSchema.safeParse(step.params);
+      if (!parsed.success) {
+        return { ok: false, error: `Invalid params: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')} required` };
+      }
+
+      const result = await deps.addReaction(parsed.data.repository, parsed.data.commentId);
 
       if (!result.ok) {
         return { ok: false, error: `${result.error.code}: ${result.error.message}` };

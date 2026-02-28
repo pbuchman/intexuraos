@@ -10,6 +10,7 @@ export interface ActionCompilerInput {
   decision: WebhookAgentDecision;
   hasExistingTask: boolean;
   userMapped: boolean;
+  ownsProcessingMarker: boolean;
 }
 
 function makeActionId(runId: string, type: string, index: number): string {
@@ -33,63 +34,79 @@ function compileSendTaskMessagePlan(runId: string): WebhookActionPlan {
 
 function compileCreatePrCommentTaskPlan(
   runId: string,
-  decision: WebhookAgentDecision
+  decision: WebhookAgentDecision,
+  ownsMarker: boolean
 ): WebhookActionPlan {
-  const actions: ActionStep[] = [
-    {
-      actionId: makeActionId(runId, 'dispatch', 0),
-      type: 'dispatch_task',
-      params: {
-        workerType: decision.requestedWorkerType,
-      },
-    },
-    {
-      actionId: makeActionId(runId, 'mark', 1),
+  const actions: ActionStep[] = [];
+  let index = 0;
+
+  if (ownsMarker) {
+    actions.push({
+      actionId: makeActionId(runId, 'mark', index),
       type: 'mark_processing',
       params: {},
+    });
+    index++;
+  }
+
+  actions.push({
+    actionId: makeActionId(runId, 'dispatch', index),
+    type: 'dispatch_task',
+    params: {
+      workerType: decision.requestedWorkerType,
     },
-  ];
+  });
+
   return { version: '1.0', decisionKind: 'create_pr_comment_task', actions };
 }
 
 function compileCreateCodeActionPlan(
   runId: string,
-  decision: WebhookAgentDecision
+  decision: WebhookAgentDecision,
+  ownsMarker: boolean
 ): WebhookActionPlan {
-  const actions: ActionStep[] = [
-    {
-      actionId: makeActionId(runId, 'dispatch', 0),
-      type: 'dispatch_task',
-      params: {
-        workerType: decision.requestedWorkerType,
-      },
-    },
-    {
-      actionId: makeActionId(runId, 'mark', 1),
+  const actions: ActionStep[] = [];
+  let index = 0;
+
+  if (ownsMarker) {
+    actions.push({
+      actionId: makeActionId(runId, 'mark', index),
       type: 'mark_processing',
       params: {},
+    });
+    index++;
+  }
+
+  actions.push({
+    actionId: makeActionId(runId, 'dispatch', index),
+    type: 'dispatch_task',
+    params: {
+      workerType: decision.requestedWorkerType,
     },
-    {
-      actionId: makeActionId(runId, 'notify', 2),
-      type: 'notify_chat',
-      params: {},
-    },
-  ];
+  });
+  index++;
+
+  actions.push({
+    actionId: makeActionId(runId, 'notify', index),
+    type: 'notify_chat',
+    params: {},
+  });
+
   return { version: '1.0', decisionKind: 'create_code_action', actions };
 }
 
 const COMPILERS: Record<
   DecisionKind,
-  (runId: string, decision: WebhookAgentDecision) => WebhookActionPlan
+  (runId: string, decision: WebhookAgentDecision, ownsMarker: boolean) => WebhookActionPlan
 > = {
   noop: () => compileNoopPlan(),
   send_task_message: (runId) => compileSendTaskMessagePlan(runId),
-  create_pr_comment_task: (runId, decision) => compileCreatePrCommentTaskPlan(runId, decision),
-  create_code_action: (runId, decision) => compileCreateCodeActionPlan(runId, decision),
+  create_pr_comment_task: (runId, decision, ownsMarker) => compileCreatePrCommentTaskPlan(runId, decision, ownsMarker),
+  create_code_action: (runId, decision, ownsMarker) => compileCreateCodeActionPlan(runId, decision, ownsMarker),
 };
 
 export function compileWebhookActionPlan(input: ActionCompilerInput): WebhookActionPlan {
   const kind = input.decision.decision.kind;
   const compiler = COMPILERS[kind];
-  return compiler(input.runId, input.decision);
+  return compiler(input.runId, input.decision, input.ownsProcessingMarker);
 }
