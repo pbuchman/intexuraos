@@ -598,6 +598,7 @@ cat /var/log/intexuraos/container-cleanup.log
 Requires Docker. T1 (no-Docker graceful exit) runs without Docker; T2–T12 are skipped if Docker is unavailable.
 
 ---
+
 ## Testing
 
 ```bash

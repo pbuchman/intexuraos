@@ -336,6 +336,14 @@ describe('createTaskForPR', () => {
       expect(capturedPrompt).toContain(`PR #${String(prNumber)}`);
       expect(capturedPrompt).toContain('gh pr view');
       expect(capturedPrompt).toContain(comment);
+      // Enhanced instructions
+      expect(capturedPrompt).toContain('/requesting-code-review');
+      expect(capturedPrompt).toContain('DETAILED reasoning');
+      expect(capturedPrompt).toContain('gh api /repos/');
+      expect(capturedPrompt).toContain('/pulls/');
+      expect(capturedPrompt).toContain('/reviews');
+      expect(capturedPrompt).toContain('/comments');
+      expect(capturedPrompt).toContain('/issues/');
     });
   });
 
