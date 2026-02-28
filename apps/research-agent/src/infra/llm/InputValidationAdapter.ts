@@ -111,7 +111,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     }
 
     const cleaned = this.cleanImprovedPrompt(result.value.content);
-    const validationError = this.validateImprovedPrompt(cleaned, result.value.content);
+    const validationError = this.validateImprovedPrompt(cleaned, result.value.content, prompt);
 
     if (validationError !== null) {
       return await this.attemptImprovementRepair(prompt, result.value.content, validationError, result.value.usage);
@@ -232,7 +232,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     }
 
     const cleaned = this.cleanImprovedPrompt(result.value.content);
-    const validationError = this.validateImprovedPrompt(cleaned, result.value.content);
+    const validationError = this.validateImprovedPrompt(cleaned, result.value.content, originalPrompt);
 
     if (validationError !== null) {
       logLlmParseError(
@@ -279,7 +279,7 @@ export class InputValidationAdapter implements InputValidationProvider {
       .trim();
   }
 
-  private validateImprovedPrompt(cleaned: string, raw: string): string | null {
+  private validateImprovedPrompt(cleaned: string, raw: string, originalPrompt: string): string | null {
     if (cleaned.length === 0) {
       return 'Response is empty after cleaning';
     }
@@ -310,6 +310,16 @@ export class InputValidationAdapter implements InputValidationProvider {
 
     if (/\b(explanation|reasoning|notes?|commentary|analysis)\b:/.exec(lowerContent) !== null) {
       return 'Response includes explanatory text - should only contain the improved prompt';
+    }
+
+    const multiOptionError = detectMultipleOptions(cleaned);
+    if (multiOptionError !== null) {
+      return multiOptionError;
+    }
+
+    const languageDriftError = detectLanguageDrift(originalPrompt, cleaned);
+    if (languageDriftError !== null) {
+      return languageDriftError;
     }
 
     return null;
@@ -348,4 +358,76 @@ function parseJsonWithZod<T>(
   }
 
   return { ok: true, value: result.data };
+}
+
+/**
+ * Detect multiple options/variations in a response.
+ * The prompt contract requires "NO options or variations - just ONE improved version".
+ */
+function detectMultipleOptions(text: string): string | null {
+  // Numbered list: "1. ... 2. ..." (at least two items)
+  if (/(?:^|\n)\s*1[.)]\s+.+(?:\n)\s*2[.)]\s+/m.exec(text) !== null) {
+    return 'Response contains multiple options - should be a single improved prompt';
+  }
+
+  // "Option N:" labels
+  if (/option\s+\d\s*:/i.exec(text) !== null) {
+    return 'Response contains multiple options - should be a single improved prompt';
+  }
+
+  // Standalone " OR " as a separator between two sentence-like segments (question marks or periods on both sides)
+  if (/[.?!]\s+OR\s+[A-Z]/.exec(text) !== null) {
+    return 'Response contains multiple options - should be a single improved prompt';
+  }
+
+  // Bullet-point list with 2+ items (dash or bullet character at line start)
+  const bulletLines = text.split('\n').filter((line) => /^\s*[-•*]\s+\S/.exec(line) !== null);
+  if (bulletLines.length >= 2) {
+    return 'Response contains multiple options - should be a single improved prompt';
+  }
+
+  // Known limitation: comma-separated alternatives (e.g., "Option A, option B, or option C")
+  // are not detected. This is intentional to avoid false positives on natural prose.
+
+  return null;
+}
+
+/**
+ * Detect obvious language drift between original prompt and improved output.
+ * Uses Unicode script detection: if the original contains non-Latin script characters
+ * (Cyrillic, CJK, Arabic, Hebrew, Thai, Devanagari, etc.) but the output is purely
+ * Latin/ASCII, this indicates the LLM switched languages.
+ */
+function detectLanguageDrift(originalPrompt: string, improvedPrompt: string): string | null {
+  const nonLatinRatio = getNonLatinRatio(originalPrompt);
+
+  // If the original prompt has significant non-Latin content (>30% of alpha characters),
+  // the improved prompt must also contain non-Latin characters
+  if (nonLatinRatio > 0.3) {
+    const improvedNonLatinRatio = getNonLatinRatio(improvedPrompt);
+    if (improvedNonLatinRatio < 0.1) {
+      return 'Response language does not match input language - output must preserve the original language';
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Calculate the ratio of non-Latin alphabetic characters to total alphabetic characters.
+ * Returns 0 for empty strings or strings with no alphabetic characters.
+ */
+function getNonLatinRatio(text: string): number {
+  // Match all Unicode alphabetic characters
+  const allAlpha = text.match(/\p{Letter}/gu);
+  if (allAlpha === null) {
+    return 0;
+  }
+
+  // Match only basic ASCII Latin letters (a-z, A-Z). Accented Latin characters (e, u, etc.)
+  // are counted as "non-Latin" here, but the 0.3/0.1 thresholds account for this.
+  const latinAlpha = text.match(/[a-zA-Z]/g);
+  const latinCount = latinAlpha === null ? 0 : latinAlpha.length;
+
+  return (allAlpha.length - latinCount) / allAlpha.length;
 }

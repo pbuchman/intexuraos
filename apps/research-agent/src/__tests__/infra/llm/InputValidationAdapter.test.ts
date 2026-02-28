@@ -32,6 +32,36 @@ describe('InputValidationAdapter', () => {
       mockLogger
     );
 
+  /**
+   * Helper for semantic rejection tests: mocks a successful LLM response followed
+   * by a failed repair, then asserts that improveInput rejects with the expected message.
+   */
+  async function expectSemanticRejection(
+    content: string,
+    input: string,
+    expectedMessage: string
+  ): Promise<void> {
+    mockGenerate.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content,
+        usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+      },
+    });
+    mockGenerate.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Repair failed' },
+    });
+
+    const adapter = createAdapter();
+    const result = await adapter.improveInput(input);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain(expectedMessage);
+    }
+  }
+
   describe('validateInput', () => {
     it('returns validation result for valid JSON response', async () => {
       mockGenerate.mockResolvedValueOnce({
@@ -451,6 +481,188 @@ describe('InputValidationAdapter', () => {
       if (result.ok) {
         expect(result.value.improvedPrompt).toBe('Clean improved prompt');
       }
+    });
+  });
+
+  describe('improveInput - semantic checks (F-015)', () => {
+    describe('multi-option detection', () => {
+      it('rejects response with numbered options (1. / 2.)', async () => {
+        await expectSemanticRejection(
+          '1. What are the best travel tips for Europe?\n2. What are the best travel tips for Asia?',
+          'travel tips',
+          'multiple options'
+        );
+      });
+
+      it('rejects response with "Option 1:" / "Option 2:" labels', async () => {
+        await expectSemanticRejection(
+          'Option 1: Budget travel in Europe. Option 2: Luxury travel in Asia.',
+          'travel tips',
+          'multiple options'
+        );
+      });
+
+      it('rejects response with "OR" separator between alternatives', async () => {
+        await expectSemanticRejection(
+          'What are the best budget airlines in Europe? OR What are the cheapest train routes across Europe?',
+          'travel tips',
+          'multiple options'
+        );
+      });
+
+      it('rejects response with bullet-point alternatives (- or •)', async () => {
+        await expectSemanticRejection(
+          '- What are the best travel tips for Europe?\n- What are the best travel tips for Asia?',
+          'travel tips',
+          'multiple options'
+        );
+      });
+
+      it('accepts a single well-formed prompt that happens to contain the word "or"', async () => {
+        mockGenerate.mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: 'What are the best budget airlines for travel to Europe or Asia in 2026?',
+            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+          },
+        });
+
+        const adapter = createAdapter();
+        const result = await adapter.improveInput('travel tips');
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.improvedPrompt).toContain('budget airlines');
+        }
+      });
+    });
+
+    describe('language drift detection', () => {
+      it('rejects English output when input is in Cyrillic script', async () => {
+        await expectSemanticRejection(
+          'What are the best budget travel destinations in 2026?',
+          'Какие лучшие направления для путешествий',
+          'language'
+        );
+      });
+
+      it('rejects English output when input is in CJK script', async () => {
+        await expectSemanticRejection(
+          'What are the best travel tips for Japan in 2026?',
+          '日本旅行のヒント',
+          'language'
+        );
+      });
+
+      it('rejects English output when input is in Arabic script', async () => {
+        await expectSemanticRejection(
+          'What are the best travel tips for the Middle East?',
+          'نصائح السفر في الشرق الأوسط',
+          'language'
+        );
+      });
+
+      it('accepts output that preserves the same non-Latin script', async () => {
+        mockGenerate.mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: 'Какие лучшие бюджетные направления для путешествий в Европу в 2026 году?',
+            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+          },
+        });
+
+        const adapter = createAdapter();
+        const result = await adapter.improveInput('Какие лучшие направления для путешествий');
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.improvedPrompt).toContain('направления');
+        }
+      });
+
+      it('skips language drift check when original prompt has no letter characters', async () => {
+        mockGenerate.mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: 'What are the best options for 123 type products in 2026?',
+            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+          },
+        });
+
+        const adapter = createAdapter();
+        const result = await adapter.improveInput('123 456 ???');
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.improvedPrompt).toContain('2026');
+        }
+      });
+
+      it('accepts English-to-English improvement (no drift)', async () => {
+        mockGenerate.mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: 'What are the best budget travel tips for solo travelers in Southeast Asia in 2026?',
+            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+          },
+        });
+
+        const adapter = createAdapter();
+        const result = await adapter.improveInput('travel tips');
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.improvedPrompt).toContain('travel tips');
+        }
+      });
+    });
+
+    describe('F-015 contract test', () => {
+      it('output contract matches parser expectations after semantic checks', async () => {
+        // Valid single-option, same-language response should still return the expected shape
+        mockGenerate.mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: 'What are the best budget travel destinations in Europe for solo travelers in 2026?',
+            usage: { inputTokens: 15, outputTokens: 10, costUsd: 0.002 },
+          },
+        });
+
+        const adapter = createAdapter();
+        const result = await adapter.improveInput('travel tips europe');
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value).toHaveProperty('improvedPrompt');
+          expect(result.value).toHaveProperty('usage');
+          expect(result.value.usage).toHaveProperty('inputTokens');
+          expect(result.value.usage).toHaveProperty('outputTokens');
+          expect(result.value.usage).toHaveProperty('costUsd');
+          expect(typeof result.value.improvedPrompt).toBe('string');
+          expect(result.value.improvedPrompt.length).toBeGreaterThan(0);
+        }
+      });
+    });
+
+    describe('F-015 regression test', () => {
+      it('rejects previously-accepted multi-option response that violated prompt contract', async () => {
+        // This would have passed the old validator (structure-only checks)
+        // but violates "NO options or variations - just ONE improved version"
+        await expectSemanticRejection(
+          '1. Compare the most affordable European destinations for solo backpackers in 2026\n2. Evaluate budget-friendly hostels and travel routes across Western Europe for 2026',
+          'cheap europe travel',
+          'multiple options'
+        );
+      });
+
+      it('rejects previously-accepted language-drifted response', async () => {
+        // Original is in Cyrillic, response is in English — old validator would accept
+        await expectSemanticRejection(
+          'What are the most effective and safe weight loss methods for adults in 2026, considering diet, physical activity, and long-term sustainability?',
+          'как похудеть безопасно',
+          'language'
+        );
+      });
     });
   });
 
