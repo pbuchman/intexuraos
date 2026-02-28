@@ -41,7 +41,7 @@ export const linearActionExtractionPrompt: PromptBuilder<
 > = {
   name: 'linear-action-extraction',
   description: 'Extracts structured Linear issue data from natural language text',
-  version: '1.2.0',
+  version: '1.3.0',
 
   build(input: LinearIssueExtractionPromptInput, deps?: LinearIssueExtractionPromptDeps): string {
     const maxLength = deps?.maxDescriptionLength ?? 2000;
