@@ -872,12 +872,167 @@ describe('POST /internal/webhooks/task-complete', () => {
         })
       );
 
-      // Task should be marked as planned
+      // Should NOT add a comment (no planning issue to link)
+      expect(addCommentSpy).not.toHaveBeenCalled();
+
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.status).toBe('planned');
       expect(getResult.value.result?.planning_outcome_label).toBe('planned');
+    });
+
+    it('returns error when updateIssueState fails in trivial planning path', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan trivial fix',
+        sanitizedPrompt: 'Plan trivial fix',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
+
+      validateIssueSpy.mockReset();
+      validateIssueSpy.mockResolvedValueOnce(
+        ok({
+          id: 'original-uuid',
+          identifier: 'INT-123',
+          title: 'Original issue',
+          url: 'https://linear.app/intexuraos/issue/INT-123',
+          labels: [],
+          childCount: 0,
+        })
+      );
+      updateIssueStateSpy.mockReset();
+      updateIssueStateSpy.mockResolvedValueOnce(
+        err({ code: 'UNAVAILABLE' as const, message: 'Linear API down' })
+      );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Trivial task',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '0' as const,
+          planning_issue_url: 'not a URL',
+          planning_child_issue_count: '0',
+          planning_doc_path: '',
+          planning_pr_url: '',
+          planning_clarification_message: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      // enforcePlanningOutcome returns { ok: false } → handler sends 500 before task status update
+      expect(response.statusCode).toBe(500);
+
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Failed to move original issue to In Review');
+    });
+
+    it('returns error when updateIssueMetadata fails in trivial planning path', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan trivial fix',
+        sanitizedPrompt: 'Plan trivial fix',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
+      const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
+
+      validateIssueSpy.mockReset();
+      validateIssueSpy.mockResolvedValueOnce(
+        ok({
+          id: 'original-uuid',
+          identifier: 'INT-123',
+          title: 'Original issue',
+          url: 'https://linear.app/intexuraos/issue/INT-123',
+          labels: [],
+          childCount: 0,
+        })
+      );
+      updateIssueStateSpy.mockReset();
+      updateIssueStateSpy.mockResolvedValueOnce(ok(undefined));
+      updateIssueMetadataSpy.mockReset();
+      updateIssueMetadataSpy.mockResolvedValueOnce(
+        err({ code: 'UNAVAILABLE' as const, message: 'Linear API down' })
+      );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Trivial task',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '0' as const,
+          planning_issue_url: 'not a URL',
+          planning_child_issue_count: '0',
+          planning_doc_path: '',
+          planning_pr_url: '',
+          planning_clarification_message: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      // enforcePlanningOutcome returns { ok: false } → handler sends 500 before task status update
+      expect(response.statusCode).toBe(500);
+
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Failed to normalize original issue labels');
     });
 
     it('enforces execution-agent success on executed issue only and stores execution metadata', async () => {
