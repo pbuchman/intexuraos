@@ -120,6 +120,50 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
       );
 
       if (!createResult.ok) {
+        // Route comment to existing task if dedup found one
+        if (createResult.error.existingTaskId !== undefined) {
+          const existingTaskId = createResult.error.existingTaskId;
+          const taskResult = await services.codeTaskRepo.findById(existingTaskId);
+
+          if (taskResult.ok) {
+            const existingTask = taskResult.value;
+            const payload = event.payload as Record<string, unknown> | undefined;
+            const message = buildDispatchMessage(event, payload);
+
+            const sendResult = await sendTaskMessage(
+              {
+                logger: services.logger,
+                codeTaskRepo: services.codeTaskRepo,
+                logLineRepo: services.logLineRepo,
+                taskDispatcher: services.taskDispatcher,
+                workerSettingsRepo: services.workerSettingsRepo,
+                statusMirrorService: services.statusMirrorService,
+                whatsappNotifier: services.whatsappNotifier,
+              },
+              { taskId: existingTaskId, userId: existingTask.userId, message }
+            );
+
+            if (sendResult.ok) {
+              await services.codeTaskRepo.update(existingTaskId, { prNumber: event.pullRequestNumber });
+              logger.info(
+                { taskId: existingTaskId, prNumber: event.pullRequestNumber },
+                'Routed PR comment to existing task (dedup ACTIVE_TASK_EXISTS)'
+              );
+            } else {
+              logger.error(
+                { taskId: existingTaskId, error: sendResult.error, prNumber: event.pullRequestNumber },
+                'Failed to route PR comment to existing task'
+              );
+            }
+            return;
+          }
+
+          logger.error(
+            { existingTaskId, error: taskResult.error },
+            'Failed to fetch existing task for comment routing'
+          );
+        }
+
         logger.error(
           { repository: event.repository, prNumber: event.pullRequestNumber, error: createResult.error },
           'Failed to create task from PR comment'
