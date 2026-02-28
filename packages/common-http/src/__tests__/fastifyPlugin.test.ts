@@ -284,7 +284,7 @@ describe('Intexura Fastify Plugin', () => {
       });
 
       // Fastify returns 400 for invalid JSON when it catches the parse error
-      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      expect(response.statusCode).toBe(400);
     });
   });
 });
