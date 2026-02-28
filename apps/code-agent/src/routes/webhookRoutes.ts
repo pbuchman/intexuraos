@@ -251,9 +251,18 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           const planningIdentifier = parseLinearIdentifierFromUrl(planningIssueUrl);
 
           if (planningIdentifier === null) {
-            // Trivial task: no valid planning issue URL means the original issue already serves
-            // as the plan (e.g., the worker determined the issue is simple enough to implement directly).
-            // Skip planning issue tree validation; just update original issue state.
+            // No valid Linear planning issue URL found — treat the original issue as the plan itself.
+            // This handles cases where the worker determined no separate planning issue was needed
+            // (e.g., trivial tasks). Skip planning issue tree validation; update original issue state and labels.
+            request.log.info(
+              {
+                taskId,
+                linearIssueId: task.linearIssueId,
+                rawPlanningIssueUrl: planningIssueUrl,
+              },
+              'Trivial planning path: no valid planning issue URL, updating original issue directly'
+            );
+
             const markReview = await linearAgentClient.updateIssueState({
               userId: task.userId,
               issueId: originalIssueUuid,

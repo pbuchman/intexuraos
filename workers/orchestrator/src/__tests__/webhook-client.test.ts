@@ -164,6 +164,50 @@ describe('WebhookClient', () => {
       vi.useRealTimers();
     });
 
+    it('should log error details when send delivery attempt fails', async () => {
+      vi.useFakeTimers();
+
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      } as Response);
+
+      const statePersistence = createStatePersistence();
+      const warnSpy = vi.fn();
+      const spiedLogger: Logger = { ...mockLogger, warn: warnSpy };
+      const client = new WebhookClient(statePersistence, spiedLogger, 'test-internal-auth-token');
+
+      const payload: WebhookPayload = {
+        taskId: 'task-send-log',
+        status: 'completed',
+        duration: 1000,
+      };
+
+      const resultPromise = client.send({
+        url: 'https://example.com/webhook',
+        secret: 'test-secret',
+        payload,
+        taskId: 'task-send-log',
+      });
+
+      await vi.advanceTimersByTimeAsync(70000);
+      await vi.runAllTimersAsync();
+      await resultPromise;
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-send-log',
+          errorType: '5xx',
+          errorMessage: expect.stringContaining('Server error'),
+          attempt: expect.any(Number),
+        }),
+        expect.stringContaining('Webhook delivery attempt failed')
+      );
+
+      vi.useRealTimers();
+    });
+
     it('should succeed on 2nd attempt and stop retrying', async () => {
       let attemptCount = 0;
       mockFetch.mockImplementation(async () => {
@@ -563,11 +607,12 @@ describe('WebhookClient', () => {
       await vi.runAllTimersAsync();
       await retryPromise;
 
-      // Should log the error type and task ID when retry fails
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: 'task-log-err',
           errorType: '5xx',
+          errorMessage: expect.stringContaining('Server error'),
+          attempt: expect.any(Number),
         }),
         expect.stringContaining('Pending webhook retry attempt failed')
       );
