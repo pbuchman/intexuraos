@@ -123,12 +123,16 @@ async function runStartupRecovery(
         }
       };
 
-      await Promise.race([
-        adoptionWork(),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Container discovery timed out')), ADOPTION_TIMEOUT_MS)
-        ),
-      ]);
+      let timeoutHandle: NodeJS.Timeout;
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error('Container discovery timed out')),
+          ADOPTION_TIMEOUT_MS
+        );
+      });
+
+      await Promise.race([adoptionWork(), timeoutPromise]);
+      clearTimeout(timeoutHandle!);
     } catch (error) {
       logger.warn({ error }, 'Container discovery failed, falling back to state-only recovery');
       containerMap = null;
