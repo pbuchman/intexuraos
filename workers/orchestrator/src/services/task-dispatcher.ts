@@ -21,8 +21,8 @@ import {
   type CompletionAgentType,
   type CompletionVerifier,
   type CompletionVerifierVerdict,
+  getLast50Lines,
 } from './completion-verifier.js';
-import { analyzeRetryDecision } from './adaptive-retry.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 
 const execAsync = promisify(exec);
@@ -446,7 +446,6 @@ export class TaskDispatcher {
       task.startedAt = new Date().toISOString();
       task.attemptCount = 1;
       task.verificationHistory = [];
-      delete task.previousResult;
       delete task.completedAt;
       if (wasCompleted) {
         task.resumedAfterSuccess = true;
@@ -648,9 +647,9 @@ export class TaskDispatcher {
     }
 
     const attempt = task.attemptCount ?? 1;
-    const maxAttempts = this.completionMaxAttempts;
+    const maxAttempts = task.maxAttempts ?? 5;
     const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-    const completionAgentType = isPRComment
+    const completionAgentType: CompletionAgentType = isPRComment
       ? 'pull_request'
       : task.agentType === 'execution'
         ? 'execution'
@@ -680,7 +679,6 @@ export class TaskDispatcher {
     }
 
     const result = await this.checkForResult(task);
-    const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
     if (result !== undefined) {
       this.appendOrchestratorTaskLog(
@@ -688,40 +686,28 @@ export class TaskDispatcher {
         `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
       );
     }
+    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Running completion verification: exitCode=${String(exitCode ?? 'unknown')} claudeError=${claudeError ?? 'none'} detectedPr=${result?.prUrl ?? 'none'}`
+      `Running completion verification: attempt=${String(attempt)}/${String(maxAttempts)}`
     );
-    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
     const verification = await this.completionVerifier.verify({
       taskId: task.taskId,
       attempt,
       maxAttempts,
       agentType: completionAgentType,
-      originalPrompt: task.prompt,
       rawLogs,
-      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-      linearIssueLabels: task.linearIssueLabels,
-      ...(result !== undefined && { taskResult: result }),
-      ...(typeof exitCode === 'number' && { workerExitCode: exitCode }),
-      ...(claudeError !== undefined && { claudeError }),
     });
     this.appendOrchestratorTaskLog(task.taskId, `━━━ Verification Result ━━━`);
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `  Passed: ${String(verification.passed)} | Confidence: ${verification.confidence.toFixed(2)}`
+      `  Passed: ${String(verification.passed)} | VerifierFailure: ${String(verification.verifierFailure)}`
     );
-    if (verification.reasons.length > 0) {
-      this.appendOrchestratorTaskLog(task.taskId, `  Reasons: ${verification.reasons.join(' | ')}`);
-    }
-    if (verification.missingCriteria.length > 0) {
+    if (verification.missingFields.length > 0) {
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `  Missing: ${verification.missingCriteria.join(' | ')}`
+        `  Missing fields: ${verification.missingFields.join(' | ')}`
       );
-    }
-    if (verification.resumeInstruction.length > 0) {
-      this.appendOrchestratorTaskLog(task.taskId, `  Resume: ${verification.resumeInstruction}`);
     }
     this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
@@ -735,23 +721,52 @@ export class TaskDispatcher {
       {
         attempt,
         passed: verification.passed,
-        confidence: verification.confidence,
-        reasons: verification.reasons,
-        missingCriteria: verification.missingCriteria,
-        resumeInstruction: verification.resumeInstruction,
-        usedLlm: verification.usedLlm,
-        ...(verification.verifierFailure === true && { verifierFailure: true }),
-        ...(verification.extractedSummary !== undefined && {
-          extractedSummary: verification.extractedSummary,
-        }),
+        missingFields: verification.missingFields,
+        verifierFailure: verification.verifierFailure,
         createdAt: new Date().toISOString(),
       },
     ];
 
-    if (verification.verifierFailure === true) {
+    // Verifier failure (Gemini down/parse error): retry Gemini immediately if attempts remain
+    if (verification.verifierFailure) {
+      if (attempt < maxAttempts) {
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Verifier failure; retrying Gemini (${String(attempt + 1)}/${String(maxAttempts)})`
+        );
+        // Re-call verifier with same logs — counts as an attempt
+        const retryVerification = await this.completionVerifier.verify({
+          taskId: task.taskId,
+          attempt: attempt + 1,
+          maxAttempts,
+          agentType: completionAgentType,
+          rawLogs,
+        });
+        task.verificationHistory = [
+          ...(task.verificationHistory ?? []),
+          {
+            attempt: attempt + 1,
+            passed: retryVerification.passed,
+            missingFields: retryVerification.missingFields,
+            verifierFailure: retryVerification.verifierFailure,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+        task.attemptCount = attempt + 1;
+
+        if (retryVerification.passed && retryVerification.agentData !== undefined) {
+          this.appendOrchestratorTaskLog(task.taskId, 'Verifier retry succeeded');
+          await this.flushTaskLogs(task.taskId);
+          await this.collectTurnMetrics(task, attempt + 1);
+          const finalResult = this.buildResultFromVerification(task, result, retryVerification);
+          await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
+          return;
+        }
+      }
+
       const error: TaskError = {
         code: 'TASK_COMPLETION_VERIFIER_FAILED',
-        message: verification.reasons.join('; '),
+        message: 'Gemini verifier unavailable',
         remediation: {
           action: 'contact_support',
           manualSteps: [
@@ -760,139 +775,18 @@ export class TaskDispatcher {
           ],
         },
       };
-
-      const failurePayload: { result?: TaskResult; error: TaskError } = { error };
-      /* v8 ignore start -- source-map: binary-expr branch coverage is misreported on strict undefined guard @preserve */
-      if (result !== undefined) {
-        failurePayload.result = result;
-      }
-      /* v8 ignore stop @preserve */
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Terminal failure: verifier unavailable (${verification.reasons.join(' | ')})`
-      );
+      this.appendOrchestratorTaskLog(task.taskId, 'Terminal failure: verifier unavailable');
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'failed', failurePayload);
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
       return;
     }
 
-    if (!verification.passed) {
-      if (result !== undefined && task.previousResult !== undefined) {
-        const diffs: string[] = [];
-        const prev = task.previousResult;
-        if (prev.commits !== result.commits)
-          diffs.push(`commits ${String(prev.commits ?? 0)}→${String(result.commits ?? 0)}`);
-        if (prev.ciFailed !== result.ciFailed)
-          diffs.push(
-            `ciFailed ${String(prev.ciFailed ?? 'unknown')}→${String(result.ciFailed ?? 'unknown')}`
-          );
-        if (prev.prUrl === undefined && result.prUrl !== undefined) diffs.push('prUrl (new)');
-        if (diffs.length > 0) {
-          this.appendOrchestratorTaskLog(task.taskId, `Result diff: ${diffs.join(', ')}`);
-        }
-      }
-
-      const retryDecision = analyzeRetryDecision({
-        currentAttempt: attempt,
-        baseMaxAttempts: maxAttempts,
-        verificationHistory: task.verificationHistory ?? [],
-        ...(result !== undefined && { currentResult: result }),
-        ...(task.previousResult !== undefined && { previousResult: task.previousResult }),
-      });
-
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Adaptive retry: ${retryDecision.outcome} (score=${String(retryDecision.progressScore)}, resultProgress=${String(retryDecision.signalBreakdown.resultProgress)}, verificationTrend=${String(retryDecision.signalBreakdown.verificationTrend)}, effective=${String(retryDecision.effectiveMaxAttempts)}) — ${retryDecision.reason}`
-      );
-      this.logger.info(
-        {
-          taskId: task.taskId,
-          attempt,
-          maxAttempts,
-          outcome: retryDecision.outcome,
-          progressScore: retryDecision.progressScore,
-          signalBreakdown: retryDecision.signalBreakdown,
-          effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
-          hasCurrentResult: result !== undefined,
-          hasPreviousResult: task.previousResult !== undefined,
-          verificationHistoryLength: (task.verificationHistory ?? []).length,
-        },
-        'Adaptive retry decision'
-      );
-
-      if (retryDecision.outcome === 'continue') {
-        this.logForwarder.appendChunk(task.taskId, '\n\n');
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Verification failed; continuing with next attempt (${String(attempt + 1)}/${String(retryDecision.effectiveMaxAttempts)})`
-        );
-        await this.flushTaskLogs(task.taskId);
-        await this.teardownAttempt(task.taskId, true);
-
-        if (result !== undefined) {
-          task.previousResult = result;
-        }
-
-        const resumePromptBody = this.buildResumePrompt(task.prompt, verification, {
-          agentType: completionAgentType,
-          ...(result !== undefined && { taskResult: result }),
-          ...(typeof exitCode === 'number' && { workerExitCode: exitCode }),
-          ...(claudeError !== undefined && { claudeError }),
-        });
-        const resumePrompt = this.buildResumePreamble() + resumePromptBody;
-        const resumePreview =
-          resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '…' : resumePrompt;
-        this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
-        const nextAttempt = attempt + 1;
-        const resumeStart = await this.startWorkerAttempt(task, {
-          prompt: resumePrompt,
-          hasChildren: task.hasChildren ?? false,
-          continueSession: true,
-        });
-
-        if (resumeStart.ok) {
-          task.attemptCount = nextAttempt;
-          task.containerId = resumeStart.containerId;
-          await this.saveTask(task);
-          this.logger.info(
-            {
-              taskId: task.taskId,
-              attempt: nextAttempt,
-              effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
-              progressScore: retryDecision.progressScore,
-            },
-            'Resumed task with follow-up attempt'
-          );
-          this.appendOrchestratorTaskLog(
-            task.taskId,
-            `Resume attempt started successfully: attempt=${String(nextAttempt)}/${String(retryDecision.effectiveMaxAttempts)}`
-          );
-          this.claudeErrors.delete(task.taskId);
-          this.taskExitCodes.delete(task.taskId);
-          return;
-        }
-
-        const resumeError: TaskError = {
-          code: 'RESUME_ATTEMPT_FAILED',
-          message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
-          remediation: { action: 'retry' },
-        };
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
-        );
-        await this.flushTaskLogs(task.taskId);
-        await this.collectTurnMetrics(task, attempt);
-        await this.finalizeTask(task, 'failed', {
-          ...(result !== undefined && { result }),
-          error: resumeError,
-        });
-        return;
-      }
-    }
-
-    if (verification.passed) {
+    // Verification passed
+    if (verification.passed && verification.agentData !== undefined) {
       const pendingQueue = this.pendingMessages.get(task.taskId);
       if (pendingQueue !== undefined && pendingQueue.length > 0) {
         this.pendingMessages.delete(task.taskId);
@@ -930,226 +824,177 @@ export class TaskDispatcher {
       this.appendOrchestratorTaskLog(task.taskId, 'Completion verification passed');
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
-      const finalResult = this.injectExtractedSummary(result, verification.extractedSummary);
-      if (completionAgentType === 'planning' && verification.planningMetadata !== undefined) {
-        const planningResult: TaskResult = {
-          ...(finalResult ?? {}),
-          planning_outcome_label: verification.planningMetadata.outcomeLabel,
-          planning_superpowers_writing_plans_used:
-            verification.planningMetadata.superpowersWritingPlansUsed,
-          planning_issue_url: verification.planningMetadata.planningIssueUrl ?? '',
-          planning_child_issue_count: String(verification.planningMetadata.childIssueCount ?? 0),
-          planning_doc_path: verification.planningMetadata.docPath ?? '',
-          planning_pr_url: verification.planningMetadata.prUrl ?? '',
-          planning_clarification_message: verification.planningMetadata.clarificationMessage ?? '',
-        };
+      const finalResult = this.buildResultFromVerification(task, result, verification);
+      await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
+      return;
+    }
 
-        if (verification.planningMetadata.outcomeLabel === 'unclear') {
-          await this.finalizeTask(task, 'failed', {
-            result: planningResult,
-            error: {
-              code: 'PLANNING_AGENT_UNCLEAR',
-              message:
-                verification.planningMetadata.clarificationMessage ??
-                'Planning agent reported unclear outcome',
-            },
-          });
-          return;
-        }
+    // Missing fields: re-launch Claude with adjusted prompt if attempts remain
+    if (verification.missingFields.length > 0 && attempt < maxAttempts) {
+      this.logForwarder.appendChunk(task.taskId, '\n\n');
+      const nextAttempt = attempt + 1;
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Missing fields; re-launching Claude (${String(nextAttempt)}/${String(maxAttempts)}): ${verification.missingFields.join(', ')}`
+      );
+      await this.flushTaskLogs(task.taskId);
+      await this.teardownAttempt(task.taskId, true);
 
-        await this.finalizeTask(task, 'completed', { result: planningResult });
+      const resumePrompt = this.buildMissingFieldsPrompt(
+        completionAgentType,
+        verification.missingFields,
+        rawLogs
+      );
+      const resumePreview =
+        resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '\u2026' : resumePrompt;
+      this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
+      const resumeStart = await this.startWorkerAttempt(task, {
+        prompt: resumePrompt,
+        hasChildren: task.hasChildren ?? false,
+        continueSession: true,
+      });
+
+      if (resumeStart.ok) {
+        task.attemptCount = nextAttempt;
+        task.containerId = resumeStart.containerId;
+        await this.saveTask(task);
+        this.logger.info(
+          { taskId: task.taskId, attempt: nextAttempt, maxAttempts },
+          'Resumed task with follow-up attempt'
+        );
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Resume attempt started: attempt=${String(nextAttempt)}/${String(maxAttempts)}`
+        );
+        this.claudeErrors.delete(task.taskId);
+        this.taskExitCodes.delete(task.taskId);
         return;
       }
-      if (completionAgentType === 'execution' && verification.executionMetadata !== undefined) {
-        const executionResult: TaskResult = {
-          ...(finalResult ?? {}),
-          execution_outcome_label: verification.executionMetadata.outcomeLabel,
-          execution_superpowers_executing_plans_used:
-            verification.executionMetadata.superpowersExecutingPlansUsed,
-          execution_superpowers_requesting_code_review_used:
-            verification.executionMetadata.superpowersRequestingCodeReviewUsed,
-          execution_trivial_task: verification.executionMetadata.trivialTask,
-          execution_subagents: verification.executionMetadata.subagents,
-          execution_review_iterations: verification.executionMetadata.reviewIterations,
-          execution_linear_issue_url: verification.executionMetadata.linearIssueUrl,
-        };
-        await this.finalizeTask(task, 'completed', { result: executionResult });
-        return;
-      }
-      await this.finalizeTask(task, 'completed', {
-        ...(finalResult !== undefined && { result: finalResult }),
+
+      const resumeError: TaskError = {
+        code: 'RESUME_ATTEMPT_FAILED',
+        message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
+        remediation: { action: 'retry' },
+      };
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
+      );
+      await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error: resumeError,
       });
       return;
     }
 
+    // Terminal failure: no attempts left
     const error: TaskError = {
       code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-      message: verification.reasons.join('; '),
+      message:
+        verification.missingFields.length > 0
+          ? `Missing fields: ${verification.missingFields.join(', ')}`
+          : 'Completion verification failed',
       remediation: {
         action: 'retry',
-        ...(verification.missingCriteria.length > 0 && {
-          manualSteps: verification.missingCriteria,
+        ...(verification.missingFields.length > 0 && {
+          manualSteps: verification.missingFields,
         }),
       },
     };
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Terminal failure: completion criteria not met (${verification.reasons.join(' | ')})`
+      `Terminal failure: completion criteria not met after ${String(attempt)} attempts`
     );
     await this.flushTaskLogs(task.taskId);
     await this.collectTurnMetrics(task, attempt);
-
-    const failedResult = this.injectExtractedSummary(result, verification.extractedSummary);
     await this.finalizeTask(task, 'failed', {
-      ...(failedResult !== undefined && { result: failedResult }),
+      ...(result !== undefined && { result }),
       error,
     });
   }
 
-  private buildResumePrompt(
-    originalPrompt: string,
-    verification: CompletionVerifierVerdict,
-    context: {
-      agentType: CompletionAgentType;
-      taskResult?: TaskResult;
-      workerExitCode?: number;
-      claudeError?: string;
-    }
+  private buildMissingFieldsPrompt(
+    agentType: CompletionAgentType,
+    missingFields: string[],
+    rawLogs: string
   ): string {
-    const verifierReasons =
-      verification.reasons.length > 0
-        ? verification.reasons.map((reason) => `- ${reason}`).join('\n')
-        : '- No verifier reasons provided';
-    const missingCriteria =
-      verification.missingCriteria.length > 0
-        ? verification.missingCriteria.map((criteria) => `- ${criteria}`).join('\n')
-        : '- Completion criteria not met';
-    const detectedState = [
-      `- agentType: ${context.agentType}`,
-      `- workerExitCode: ${String(context.workerExitCode ?? 'unknown')}`,
-      `- claudeError: ${context.claudeError ?? 'none'}`,
-      `- detectedPrUrl: ${context.taskResult?.prUrl ?? 'none'}`,
-      `- detectedCiTrackedSuccess: ${String(context.taskResult?.ciFailed === false)}`,
-      `- detectedCiFailed: ${String(context.taskResult?.ciFailed ?? 'unknown')}`,
-      `- detectedBranch: ${context.taskResult?.branch ?? 'none'}`,
-      `- detectedCommitsOnPr: ${String(context.taskResult?.commits ?? 'unknown')}`,
-    ].join('\n');
-    const strictFieldGuidance = this.buildAgentContractGuidance(context.agentType);
-    const contractTemplate = this.buildAgentFinalTemplate(context.agentType);
-    const extractedSummarySection =
-      verification.extractedSummary !== undefined && verification.extractedSummary !== ''
-        ? ['Verifier summary of previous attempt:', verification.extractedSummary, ''].join('\n')
-        : '';
-
+    const transcript = getLast50Lines(rawLogs);
     return [
-      originalPrompt,
-      '',
       '[AUTO-CONTINUE ATTEMPT]',
-      'Previous attempt did not meet completion criteria.',
-      'This is a machine-verification failure. Optimize for machine-detectable evidence and exact contract formatting, not narrative justification.',
-      'Address the exact gaps below, then finish.',
+      'Your last response was missing required fields for the completion verifier.',
       '',
-      'Verifier reasons (why the previous answer failed):',
-      verifierReasons,
+      `Missing fields: ${missingFields.join(', ')}`,
       '',
-      'Missing criteria:',
-      missingCriteria,
+      'Please ensure your final message includes all required information.',
+      `Agent type: ${agentType}`,
       '',
-      'Machine-detected state from the previous attempt:',
-      detectedState,
-      '',
-      extractedSummarySection,
-      'Required action:',
-      verification.resumeInstruction,
-      '',
-      'Strict final-block formatting rules (do not add annotations to strict fields):',
-      strictFieldGuidance,
-      '',
-      'Use this exact final block shape and move extra explanation into Summary:',
-      contractTemplate,
-      '',
-      'If the task appears pre-completed / already merged:',
-      '- Do not assume the verifier will accept an old merged PR as task completion evidence.',
-      '- First run the PR/branch pre-flight checks above (in the resume pre-flight section).',
-      '- If the branch is clean and no PR exists for this branch, create a fresh follow-up branch/PR when the task contract requires a PR.',
-      '- If a new PR is impossible or inappropriate, show command output evidence and ask for guidance instead of claiming success.',
+      'Last 50 lines of transcript for reference:',
+      transcript,
       '',
       'Constraints:',
       '- Do not restart from scratch.',
       '- Continue from current repository/worktree state.',
-      '- Your last message must satisfy the required agent final block contract.',
     ].join('\n');
   }
 
-  private buildAgentContractGuidance(agentType: CompletionAgentType): string {
-    if (agentType === 'execution') {
-      return [
-        '- `PR` line must be only a GitHub PR URL (no trailing notes like "(already merged)").',
-        '- `Outcome` line must be exactly `implemented`.',
-        '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
-        '- `Review iterations` line must contain digits only (example: `0`).',
-        '- `superpowers_executing_plans_used` and `superpowers_requesting_code_review_used` must be exactly `1`.',
-        '- `trivial_task` must be exactly `0` or `1`.',
-        '- `subagents` may be `none` only when `trivial_task` is `1`.',
-        '- Put explanations and caveats in `Summary`, not on strict fields.',
-      ].join('\n');
+  private buildResultFromVerification(
+    task: Task,
+    gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
+    verification: CompletionVerifierVerdict
+  ): TaskResult {
+    const base: TaskResult = { ...(gitResult ?? {}) };
+    const agentData = verification.agentData;
+    if (agentData === undefined) return base;
+
+    base.summary = agentData.summary;
+
+    if (agentData.agentType === 'planning') {
+      base.planning_outcome_label = agentData.outcome;
+      base.planning_superpowers_writing_plans_used =
+        agentData.superpowers_writing_plans === 'used' ? '1' : '0';
+      base.planning_issue_url = agentData.linear_task_url;
+      base.planning_clarification_message = agentData.clarification_message;
+    } else if (agentData.agentType === 'execution') {
+      base.execution_outcome_label = 'implemented';
+      base.execution_superpowers_executing_plans_used =
+        agentData.superpowers_executing_plans === 'used' ? '1' : '0';
+      base.execution_superpowers_requesting_code_review_used =
+        agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
+      if (agentData.gh_pr_url !== '') {
+        base.prUrl = agentData.gh_pr_url;
+      }
+      if (task.linearIssueId !== undefined) {
+        base.execution_linear_issue_url = `https://linear.app/intexuraos/issue/${task.linearIssueId}`;
+      }
+    } else {
+      if (agentData.gh_pr_url !== '') {
+        base.prUrl = agentData.gh_pr_url;
+      }
+      base.comment_replied = agentData.comments_replied === 'yes';
     }
 
-    if (agentType === 'pull_request') {
-      return [
-        '- `PR` line must be only a GitHub PR URL.',
-        '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
-        '- `Comment replied` line must be exactly `yes` or `no`.',
-        '- `Tracking comment` line must be exactly `updated` or `not_applicable`.',
-        '- Put extra explanation in `Summary`, not on strict fields.',
-      ].join('\n');
-    }
-
-    return [
-      '- `Linear label set` line must be exactly `code-task` or `unclear`.',
-      '- `Outcome` line must be exactly `planned` or `unclear`.',
-      '- `Linear issue` line must be a full Linear URL.',
-      '- Put explanations in `Summary`, not on strict fields.',
-    ].join('\n');
+    return base;
   }
 
-  private buildAgentFinalTemplate(agentType: CompletionAgentType): string {
-    if (agentType === 'execution') {
-      return [
-        'EXECUTION_AGENT_FINAL:',
-        '- Outcome: implemented',
-        '- PR: https://github.com/<owner>/<repo>/pull/<number>',
-        '- CI evidence: pnpm run ci:tracked successful',
-        '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
-        '- Review iterations: 0',
-        '- superpowers_executing_plans_used: 1',
-        '- superpowers_requesting_code_review_used: 1',
-        '- trivial_task: 0',
-        '- subagents: backend-reviewer (API contract checks), test-runner (targeted CI verification)',
-        '- Skill sequence proof: superpowers:executing-plans before superpowers:requesting-code-review',
-        '- Summary: <3-5 factual sentences>',
-      ].join('\n');
+  private async finalizeTaskWithResult(
+    task: Task,
+    agentType: CompletionAgentType,
+    finalResult: TaskResult
+  ): Promise<void> {
+    if (agentType === 'planning' && finalResult.planning_outcome_label === 'unclear') {
+      await this.finalizeTask(task, 'failed', {
+        result: finalResult,
+        error: {
+          code: 'PLANNING_AGENT_UNCLEAR',
+          message:
+            finalResult.planning_clarification_message ?? 'Planning agent reported unclear outcome',
+        },
+      });
+      return;
     }
-
-    if (agentType === 'pull_request') {
-      return [
-        'PULL_REQUEST_AGENT_FINAL:',
-        '- PR: https://github.com/<owner>/<repo>/pull/<number>',
-        '- CI evidence: pnpm run ci:tracked successful',
-        '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
-        '- Comment replied: yes',
-        '- Tracking comment: updated',
-        '- Summary: <3-5 factual sentences>',
-      ].join('\n');
-    }
-
-    return [
-      'PLANNING_AGENT_FINAL:',
-      '- Outcome: planned',
-      '- superpowers_writing_plans_used: 1',
-      '- Original issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
-      '- Summary: <3-5 factual sentences>',
-    ].join('\n');
+    await this.finalizeTask(task, 'completed', { result: finalResult });
   }
 
   private buildResumePreamble(): string {
@@ -1229,18 +1074,8 @@ export class TaskDispatcher {
       {
         attempt,
         passed: !hasHardError,
-        confidence: 1,
-        reasons: hasHardError
-          ? [
-              ...(typeof exitCode === 'number' && exitCode !== 0
-                ? [`Non-zero exit code: ${String(exitCode)}`]
-                : []),
-              ...(claudeError !== undefined ? [`Claude error: ${claudeError}`] : []),
-            ]
-          : ['Loosened verification passed (resumed after success)'],
-        missingCriteria: [],
-        resumeInstruction: hasHardError ? 'Resolve the error and retry.' : '',
-        usedLlm: false,
+        missingFields: [],
+        verifierFailure: false,
         createdAt: new Date().toISOString(),
       },
     ];
@@ -1605,18 +1440,6 @@ export class TaskDispatcher {
       this.logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
       return undefined;
     }
-  }
-
-  private injectExtractedSummary(
-    result: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
-    extractedSummary: string | undefined // @allow-undefined-type -- function parameter, not optional property
-  ): TaskResult | undefined {
-    // @allow-undefined-type -- return type, not optional property
-    if (extractedSummary === undefined) return result;
-    if (result !== undefined) {
-      return { ...result, summary: extractedSummary };
-    }
-    return { summary: extractedSummary };
   }
 
   private detectClaudeError(taskId: string, chunk: string): void {
