@@ -28,7 +28,8 @@ export interface PlanningAgentData {
   agentType: 'planning';
   outcome: 'planned' | 'unclear';
   superpowers_writing_plans: 'used' | 'not used';
-  linear_task_url: string;
+  original_issue_url: string;
+  is_complex: '0' | '1';
   pr_url: string;
   summary: string;
   unclear_clarification: string;
@@ -63,7 +64,8 @@ export interface CompletionVerifierConfig {
 export const PLANNING_SCHEMA = z.object({
   outcome: z.enum(['planned', 'unclear']),
   superpowers_writing_plans: z.enum(['used', 'not used']),
-  linear_task_url: z.string(),
+  original_issue_url: z.string(),
+  is_complex: z.enum(['0', '1']),
   pr_url: z.string(),
   summary: z.string(),
   unclear_clarification: z.string(),
@@ -116,13 +118,14 @@ export function buildPlanningPrompt(transcript: string): string {
     'Fields:',
     '- outcome: "planned" if the agent produced a plan, "unclear" if the agent could not plan',
     '- superpowers_writing_plans: "used" if the agent invoked the writing-plans skill, "not used" otherwise',
-    '- linear_task_url: the Linear issue URL (string, empty string if not found)',
+    '- original_issue_url: the original Linear issue URL that was edited in-place (string, empty string if not found)',
+    '- is_complex: "1" if the agent created subtasks for parallel execution, "0" otherwise',
     '- pr_url: the GitHub Pull Request URL if the agent created one (string, empty string if not found)',
     '- summary: 3-5 sentence summary of what happened — the LLM agent typically states this clearly as a summary block in its final output',
     '- unclear_clarification: required when outcome is "unclear" — the message explaining why; empty string if outcome is "planned"',
     '',
     'Example valid response:',
-    '{"outcome":"planned","superpowers_writing_plans":"used","linear_task_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","pr_url":"","summary":"The planning agent analyzed the task requirements and created a detailed implementation plan with 5 child issues. The plan covers API endpoints, database schema, and test strategy.","unclear_clarification":""}',
+    '{"outcome":"planned","superpowers_writing_plans":"used","original_issue_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","is_complex":"1","pr_url":"https://github.com/pbuchman/intexuraos/pull/944","summary":"The planning agent analyzed the task requirements and created a detailed implementation plan with 5 child issues. The plan covers API endpoints, database schema, and test strategy.","unclear_clarification":""}',
     '',
     'Transcript (last 50 lines):',
     transcript,

@@ -34,16 +34,21 @@ You MUST use \`superpowers:writing-plans\` (mandatory, non-negotiable).
 
 - Required input: the original Linear issue.
 - Outcome is exactly one of: \`planned\` or \`unclear\`.
-- If \`planned\`: create a new planning issue as a child of the original issue (\`parentId\`).
-- Planning issue title must be meaningful and must NOT use a \`[PLAN]\` prefix.
-- If non-trivial: create planning subtasks as children/descendants of the planning issue as needed.
-- If non-trivial: create/update a plan document in \`docs/plans/\` and open a planning PR on branch \`plan/<short-slug>\`.
+- ALWAYS edit the original issue in-place (update its description with the plan).
+- NEVER create a separate "planning issue" child. The original issue IS the plan container.
 
-### Non-Trivial Planning Rules
+### Simple vs Complex
 
-For non-trivial tasks, begin with an explicit parallel work breakdown for multi-subagent execution.
+**SIMPLE task:** Edit the original issue description only. No subtasks, no plan doc, no PR.
+
+**COMPLEX task (all three together or none):**
+1. Create subtasks as DIRECT children of the original issue (parentId = original).
+2. Create/update a plan document in \`docs/plans/\`.
+3. Open a planning PR on branch \`plan/<short-slug>\`.
+
+Begin with an explicit parallel work breakdown for multi-subagent execution.
 Split work by service/package groups. Prefer parallelism over sequential dependencies.
-Trivial vs non-trivial is your judgment.
+Simple vs complex is your judgment.
 
 ### PR Title Format
 The PR title MUST follow this format: \`[INT-XXX] [plan] title\`
@@ -62,19 +67,18 @@ Your LAST message must include exactly this block:
 PLANNING_AGENT_FINAL:
 - Outcome: <planned|unclear>
 - superpowers_writing_plans_used: 1
-- Original issue: <full Linear URL>
-- Planning issue: <full Linear URL or empty>
-- Trivial task: <0|1 or empty>
-- Parallel breakdown proof: <required for non-trivial planned; empty otherwise>
-- Plan doc: <docs/plans/... or empty>
-- Planning PR: <full GitHub PR URL or empty>
+- Original issue: <full Linear URL of the original issue you edited>
+- Complex task: <0|1>
+- Subtask URLs: <comma-separated full Linear URLs, or empty>
+- Plan PR: <full GitHub PR URL or empty>
+- Parallel breakdown proof: <required when Complex task=1; empty otherwise>
 - Clarification message: <required for unclear; empty otherwise>
 - Summary: <3-5 sentences on one line: objective narrative of what you analyzed, decided, and produced>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.
 
-Note: For non-trivial planned outcomes, include explicit proof of the parallel breakdown and the \`docs/plans/...\` path.`;
+Note: For complex planned outcomes, include explicit proof of the parallel breakdown.`;
 }
 
 function buildExecutionPrompt(params: SystemPromptParams): string {
