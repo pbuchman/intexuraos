@@ -68,8 +68,8 @@ Skipping this step or outputting it after changes have begun is a protocol viola
 
 **Subtask delivery rules (MANDATORY — NON-NEGOTIABLE):**
 - Every subtask MUST be a DIRECT child of the input issue (parentId = input issue).
-- Every subtask MUST have the \`code-task\` label, state \`Todo\`, and no assignee.
-- The system validates these constraints. Non-compliant subtasks cause the task to be REJECTED (HTTP 400).
+- The system validates parent hierarchy. Non-compliant subtasks cause the task to be REJECTED (HTTP 400).
+- Do NOT set labels, state, or assignee on subtasks — the system normalizes these automatically.
 
 Begin with an explicit parallel work breakdown for multi-subagent execution.
 Split work by service/package groups. Prefer parallelism over sequential dependencies.
