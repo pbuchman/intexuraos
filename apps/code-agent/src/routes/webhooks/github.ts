@@ -17,6 +17,7 @@ import {
 } from '../../infra/github-event-parser.js';
 import { sendTaskMessage } from '../../domain/usecases/sendTaskMessage.js';
 import { createTaskForPR } from '../../domain/usecases/createTaskForPR.js';
+import { enrichReviewWithComments, formatEnrichedReview } from '../../domain/usecases/enrichReviewWithComments.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import type { Logger } from 'pino';
@@ -72,6 +73,25 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
     }
 
     const services = getServices();
+
+    /* v8 ignore start -- test-infra: fire-and-forget enrichment path, only reachable via pull_request_review dispatch which is not testable via route integration tests @preserve */
+    let enrichedComment = event.body ?? '';
+    if (event.eventType === 'pull_request_review') {
+      const reviewId = extractReviewId(event.payload);
+      if (reviewId !== null) {
+        const enrichResult = await enrichReviewWithComments(
+          { logger, gitHubPREventRepo: services.gitHubPREventRepo },
+          { repository: event.repository, pullRequestNumber: event.pullRequestNumber, reviewId, reviewBody: event.body }
+        );
+        if (enrichResult.ok) {
+          enrichedComment = formatEnrichedReview(enrichResult.value); // @allow-result-access -- narrowed by enrichResult.ok
+        } else {
+          logger.warn({ error: enrichResult.error, reviewId, repository: event.repository, prNumber: event.pullRequestNumber }, 'Review enrichment failed, using raw body'); // @allow-result-access -- narrowed by !enrichResult.ok
+        }
+      }
+    }
+    /* v8 ignore stop @preserve */
+
     const taskResult = await services.codeTaskRepo.findByPR(event.repository, event.pullRequestNumber);
 
     /* v8 ignore start -- upstream: Firestore error path in fire-and-forget dispatch @preserve */
@@ -114,7 +134,7 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           prNumber: event.pullRequestNumber,
           ...(event.title !== null && { prTitle: event.title }),
           senderLogin: event.senderLogin,
-          comment: event.body ?? '',
+          comment: enrichedComment,
           eventId: event.id,
         }
       );
@@ -128,7 +148,7 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           if (existingTaskResult.ok) {
             const existingTask = existingTaskResult.value; // @allow-result-access -- narrowed by existingTaskResult.ok above
             const payload = event.payload as Record<string, unknown> | undefined;
-            const message = buildDispatchMessage(event, payload);
+            const message = buildDispatchMessage(event, payload, enrichedComment);
 
             const sendResult = await sendTaskMessage(
               {
@@ -190,7 +210,7 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
     /* v8 ignore stop @preserve */
 
     const payload = event.payload as Record<string, unknown> | undefined;
-    const message = buildDispatchMessage(event, payload);
+    const message = buildDispatchMessage(event, payload, enrichedComment);
 
     const sendResult = await sendTaskMessage(
       {
@@ -229,6 +249,15 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
 }
 
 /* v8 ignore start -- test-infra: fire-and-forget helpers only reachable when findByPR returns a task, not testable via route integration tests @preserve */
+function extractReviewId(payload: unknown): number | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const p = payload as Record<string, unknown>;
+  const review = p['review'] as Record<string, unknown> | undefined;
+  if (review === undefined) return null;
+  const id = review['id'];
+  return typeof id === 'number' ? id : null;
+}
+
 function extractId(payload: Record<string, unknown> | undefined, key: string): string {
   if (payload === undefined) return 'unknown';
   const obj = payload[key] as Record<string, unknown> | undefined;
@@ -247,30 +276,29 @@ function extractReviewState(payload: Record<string, unknown> | undefined): strin
 /* v8 ignore stop @preserve */
 
 /* v8 ignore start -- test-infra: fire-and-forget message builder only reachable when findByPR returns a task @preserve */
-function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unknown> | undefined): string {
+function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unknown> | undefined, enrichedBody?: string): string {
   const { repository, pullRequestNumber: prNumber, senderLogin, body } = event;
 
   if (event.eventType === 'pull_request_review') {
     const reviewId = extractId(payload, 'review');
     const reviewState = extractReviewState(payload);
+    const reviewContent = enrichedBody ?? event.body ?? '(empty)';
     return [
       `[PR Review] New review on PR #${String(prNumber)} in ${repository}`,
       `From: @${senderLogin}`,
       `Review ID: ${reviewId}`,
       `Review state: ${reviewState}`,
       '',
-      'Review body:',
-      body ?? '(empty)',
+      reviewContent,
       '',
       'Instructions:',
       `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged`,
-      `2. Fetch inline comments for this review: gh api /repos/${repository}/pulls/${String(prNumber)}/reviews/${reviewId}/comments`,
-      '3. React with rocket to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=rocket',
-      '4. Read all comments and understand the full context',
-      '5. For questions: investigate codebase, reply with answer',
-      '6. For fix requests: make changes, commit, reply with reasoning',
-      '7. Reply to each comment: gh api /repos/${repository}/pulls/${prNumber}/comments -f body="..." -F in_reply_to={id}',
-      '8. If review body exists, react with rocket and reply to the review as well',
+      `2. React with rocket to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=rocket`,
+      '3. Read all comments above and understand the full context',
+      '4. For questions: investigate codebase, reply with answer',
+      '5. For fix requests: make changes, commit, reply with reasoning',
+      `6. Reply to each comment: gh api /repos/${repository}/pulls/${String(prNumber)}/comments -f body="..." -F in_reply_to={id}`,
+      '7. If review body exists, react with rocket and reply to the review as well',
     ].join('\n');
   }
 
