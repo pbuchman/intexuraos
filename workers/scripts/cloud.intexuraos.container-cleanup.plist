@@ -8,7 +8,7 @@
   Installation:
     1. Copy this file to ~/Library/LaunchAgents/
     2. Edit ProgramArguments[1] to the absolute path of cleanup-containers.sh
-    3. Load:  launchctl load ~/Library/LaunchAgents/com.intexuraos.container-cleanup.plist
+    3. Load:  launchctl load ~/Library/LaunchAgents/cloud.intexuraos.container-cleanup.plist
     4. Verify: launchctl list | grep intexuraos
 
   The job runs every 6 hours (21600 seconds).
@@ -18,7 +18,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.intexuraos.container-cleanup</string>
+  <string>cloud.intexuraos.container-cleanup</string>
 
   <key>ProgramArguments</key>
   <array>

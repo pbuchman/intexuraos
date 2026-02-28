@@ -283,6 +283,23 @@ async cleanupOrphanedContainers(): Promise<void> {
 }
 ```
 
+### 5. Cron-Based Cleanup (External)
+
+A standalone shell script (`workers/scripts/cleanup-containers.sh`) runs on a schedule via systemd timer (Linux) or launchd LaunchAgent (macOS). It provides continuous garbage collection of exited containers **between** orchestrator restarts:
+
+1. Lists all containers matching the `claude-worker-` prefix
+2. Skips **running** containers unconditionally
+3. Skips containers younger than `RETENTION_DAYS` (default: 1 day)
+4. Re-checks container state before removal (TOCTOU race protection)
+5. Removes eligible stopped containers with `docker rm` (no `-f` flag)
+6. Queries the orchestrator `/health` endpoint as a best-effort liveness check
+
+This complements the in-process `cleanupOrphanedContainers()` which only runs at orchestrator startup. The cron handles cases where the orchestrator is long-running and containers accumulate from preserved debugging sessions, crashes, or stale worktree remnants.
+
+**Schedule:** Every 6 hours (systemd timer with 5-minute randomized jitter; launchd fixed interval).
+
+**Known limitation:** The cleanup script does not query individual task IDs from the orchestrator. Protection against deleting active containers relies on Docker state (running containers are unconditionally skipped). A future `/tasks?status=running` endpoint would provide additional safety.
+
 ---
 
 ## Resume & Orphan Detection
@@ -548,12 +565,17 @@ The following could be made configurable in future iterations:
 
 ### Key Files
 
-| File                                                             | Purpose                                |
-| ---------------------------------------------------------------- | -------------------------------------- |
-| `workers/orchestrator/src/services/task-dispatcher.ts`           | Task orchestration, timeout management |
-| `workers/orchestrator/src/services/isolation/docker-provider.ts` | Docker container lifecycle             |
-| `workers/orchestrator/src/services/worktree-manager.ts`          | Git worktree management                |
-| `apps/code-agent/src/domain/usecases/detectZombieTasks.ts`       | Zombie task detection                  |
+| File                                                             | Purpose                                          |
+| ---------------------------------------------------------------- | ------------------------------------------------ |
+| `workers/orchestrator/src/services/task-dispatcher.ts`           | Task orchestration, timeout management           |
+| `workers/orchestrator/src/services/isolation/docker-provider.ts` | Docker container lifecycle                       |
+| `workers/orchestrator/src/services/worktree-manager.ts`          | Git worktree management                          |
+| `apps/code-agent/src/domain/usecases/detectZombieTasks.ts`       | Zombie task detection                            |
+| `workers/scripts/cleanup-containers.sh`                          | Cron-based container cleanup (external)          |
+| `workers/scripts/container-cleanup.service`                      | systemd oneshot unit for cleanup                 |
+| `workers/scripts/container-cleanup.timer`                        | systemd timer (6-hour interval)                  |
+| `workers/scripts/cloud.intexuraos.container-cleanup.plist`       | macOS LaunchAgent for cleanup                    |
+| `workers/scripts/provision-cleanup-cron.sh`                      | VM provisioning helper for systemd cleanup setup |
 
 ### Related Issues
 
