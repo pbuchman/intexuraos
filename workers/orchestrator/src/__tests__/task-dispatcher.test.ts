@@ -4328,5 +4328,44 @@ describe('TaskDispatcher', () => {
       expect(result.ok).toBe(true);
       expect(task.attemptCount).toBe(3);
     });
+
+    it('should use fallback defaults when attemptCount, maxAttempts, and hasChildren are undefined', async () => {
+      const task = createTask();
+      delete task.attemptCount;
+      delete task.maxAttempts;
+      delete task.hasChildren;
+
+      const result = await dispatcher.adoptTask(task);
+
+      expect(result.ok).toBe(true);
+      // attemptCount defaults to 0 via ??, then incremented to 1
+      expect(task.attemptCount).toBe(1);
+      expect(dispatcher.getRunningCount()).toBe(1);
+      // hasChildren defaults to false via ??
+      expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: task.taskId,
+          continueSession: true,
+        })
+      );
+      expect(statePersistence.modify).toHaveBeenCalled();
+    });
+
+    it('should reject with fallback maxAttempts when attemptCount exceeds completionMaxAttempts default', async () => {
+      const task = createTask();
+      // completionMaxAttempts is 1 in test config
+      // attemptCount defaults to 0 via ??, but we set it to 1 to match the default maxAttempts
+      delete task.maxAttempts;
+      task.attemptCount = 1;
+
+      const result = await dispatcher.adoptTask(task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_status');
+        expect(result.error.message).toBe('Task at max attempts');
+      }
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
   });
 });
