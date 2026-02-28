@@ -248,7 +248,7 @@ describe('TaskDispatcher', () => {
             agentType: 'planning' as const,
             outcome: 'planned',
             superpowers_writing_plans: 'used',
-            original_issue_url: '',
+            linear_url: '',
             is_complex: '0',
             pr_url: '',
             summary: 'Task completed',

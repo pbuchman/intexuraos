@@ -73,7 +73,7 @@ export interface TaskResult {
   comment_replied?: boolean;
   planning_outcome_label?: 'planned' | 'unclear';
   planning_superpowers_writing_plans_used?: '0' | '1';
-  planning_original_issue_url?: string;
+  planning_linear_url?: string;
   planning_is_complex?: '0' | '1';
   planning_pr_url?: string;
   planning_unclear_clarification?: string;

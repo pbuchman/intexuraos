@@ -25,6 +25,22 @@ describe('system-prompt', () => {
     expect(result).toContain('PLANNING_AGENT_FINAL:');
   });
 
+  it('requires complexity judgment before any changes in planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('### Complexity Judgment (MANDATORY FIRST STEP');
+    expect(result).toContain('COMPLEXITY_JUDGMENT:');
+    expect(result).toContain('- Decision: <SIMPLE|COMPLEX>');
+    expect(result).toContain(
+      'Do NOT edit the issue, create subtasks, write docs, or open PRs until this block is output'
+    );
+
+    // Complexity Judgment section must appear BEFORE Simple vs Complex
+    const judgmentIdx = result.indexOf('### Complexity Judgment');
+    const simpleComplexIdx = result.indexOf('### Simple vs Complex');
+    expect(judgmentIdx).toBeLessThan(simpleComplexIdx);
+  });
+
   it('includes PR Description Format in planning prompt with Linear link, task URL, and worker type', () => {
     const result = buildSystemPrompt({
       ...baseParams,

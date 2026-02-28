@@ -35,7 +35,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         comment_replied?: boolean;
         planning_outcome_label?: 'planned' | 'unclear';
         planning_superpowers_writing_plans_used?: '0' | '1';
-        planning_original_issue_url?: string;
+        planning_linear_url?: string;
         planning_is_complex?: '0' | '1';
         planning_pr_url?: string;
         planning_unclear_clarification?: string;
@@ -76,7 +76,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 comment_replied: { type: 'boolean' },
                 planning_outcome_label: { type: 'string', enum: ['planned', 'unclear'] },
                 planning_superpowers_writing_plans_used: { type: 'string', enum: ['0', '1'] },
-                planning_original_issue_url: { type: 'string' },
+                planning_linear_url: { type: 'string' },
                 planning_is_complex: { type: 'string', enum: ['0', '1'] },
                 planning_pr_url: { type: 'string' },
                 planning_unclear_clarification: { type: 'string' },
@@ -130,7 +130,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_original_issue_url?: string; planning_is_complex?: '0' | '1'; planning_pr_url?: string; planning_unclear_clarification?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_linear_url?: string; planning_is_complex?: '0' | '1'; planning_pr_url?: string; planning_unclear_clarification?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/webhooks/task-complete',
       });
@@ -259,49 +259,40 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             return { ok: false, message: `Failed to normalize original issue labels: ${originalLabelNormalize.error.message}` };
           }
 
-          // COMPLEX: validate subtasks are direct children and normalize them
+          // COMPLEX: validate subtask contract — no normalization, reject on violation
           if (planningResult.planning_is_complex === '1') {
             const treeResult = await linearAgentClient.fetchIssueTree({
               userId: task.userId,
               issueId: originalIssueUuid,
             });
             if (!treeResult.ok) {
-              return { ok: false, message: `Failed to fetch original issue tree: ${treeResult.error.message}` };
+              return { ok: false, message: `Failed to fetch issue tree: ${treeResult.error.message}` };
             }
 
             const descendants = treeResult.value.descendants;
 
-            // Validate all descendants are direct children of the original issue
+            // Validate: every descendant must be a direct child of the input issue
             for (const descendant of descendants) {
               if (descendant.parentId !== originalIssueUuid) {
-                return { ok: false, message: `Subtask ${descendant.identifier} is not a direct child of original issue` };
+                return { ok: false, message: `Subtask ${descendant.identifier} is not a direct child of the input issue — task rejected` };
               }
             }
 
-            // Normalize each descendant: state → todo, add code-task, remove planned/unclear, clear assignee
+            // Validate: every subtask must already have code-task label, Todo state, no assignee
             for (const descendant of descendants) {
-              const stateResult = await linearAgentClient.updateIssueState({
-                userId: task.userId,
-                issueId: descendant.id,
-                state: 'todo',
-              });
-              if (!stateResult.ok) {
-                return { ok: false, message: `Failed to move subtask to Todo: ${stateResult.error.message}` };
-              }
-
-              const metadataResult = await linearAgentClient.updateIssueMetadata({
-                userId: task.userId,
-                issueId: descendant.id,
-                assigneeId: null,
-                addLabels: ['code-task'],
-                removeLabels: ['planned', 'unclear'],
-              });
-              if (!metadataResult.ok) {
-                return { ok: false, message: `Failed to normalize subtask labels/assignee: ${metadataResult.error.message}` };
+              const hasCodeTask = descendant.labels.includes('code-task');
+              const isTodo = descendant.state === 'Todo';
+              const hasNoAssignee = descendant.assigneeId === null;
+              if (!hasCodeTask || !isTodo || !hasNoAssignee) {
+                const violations: string[] = [];
+                if (!hasCodeTask) violations.push('missing code-task label');
+                if (!isTodo) violations.push(`state is "${descendant.state}" not "Todo"`);
+                if (!hasNoAssignee) violations.push('has assignee');
+                return { ok: false, message: `Subtask ${descendant.identifier} violates delivery contract: ${violations.join(', ')} — task rejected` };
               }
             }
 
-            // Comment PR URL on original issue if provided
+            // Comment PR URL on issue if provided
             const planningPrUrl = planningResult.planning_pr_url ?? '';
             if (planningPrUrl !== '') {
               const prComment = await linearAgentClient.addComment({
@@ -310,7 +301,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 body: `Planning PR: ${planningPrUrl}`,
               });
               if (!prComment.ok) {
-                return { ok: false, message: `Failed to comment planning PR on original issue: ${prComment.error.message}` };
+                return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
               }
             }
           }
