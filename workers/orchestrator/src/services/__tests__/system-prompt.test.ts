@@ -6,7 +6,6 @@ describe('system-prompt', () => {
     taskId: 'task-123',
     linearIssueId: 'INT-123',
     linearIssueLabels: [] as string[],
-    hasChildren: false,
     workerType: 'auto' as const,
   };
 

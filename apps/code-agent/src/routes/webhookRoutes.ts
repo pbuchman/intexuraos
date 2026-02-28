@@ -721,8 +721,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
-        // Transition Linear issue to In Review when PR is created (best-effort for planning only)
-        // execution and pull_request agents have deterministic enforcement
+        // Best-effort In Review transition for agent types without deterministic enforcement
+        // (planning, execution, and pull_request agents handle this in their own enforcement paths)
         /* v8 ignore start -- ts-type: optional property checks create type narrowing branches @preserve */
         if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && prNumber !== undefined && task.linearIssueId !== undefined) {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);

@@ -6,7 +6,6 @@ export interface SystemPromptParams {
   linearIssueTitle?: string;
   taskUrl?: string;
   linearIssueLabels: string[];
-  hasChildren: boolean;
   workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   agentType?: 'planning' | 'execution' | 'pull_request';
 }
