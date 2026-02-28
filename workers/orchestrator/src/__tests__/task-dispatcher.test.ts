@@ -1465,7 +1465,6 @@ describe('TaskDispatcher', () => {
         branch: 'feat/execution-task',
         commits: 2,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/900',
-        ciFailed: false,
       });
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
         executionFinalAssistantLog()
@@ -2002,14 +2001,12 @@ describe('TaskDispatcher', () => {
         checkForResult: (task: unknown) => Promise<{
           branch: string;
           commits: number;
-          ciFailed: boolean;
           prUrl: string;
         }>;
       };
       vi.spyOn(resumeDispatcherInternal, 'checkForResult').mockResolvedValue({
         branch: 'resume-branch',
         commits: 2,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/999',
       });
 
@@ -2097,14 +2094,12 @@ describe('TaskDispatcher', () => {
         checkForResult: (task: unknown) => Promise<{
           branch: string;
           commits: number;
-          ciFailed: boolean;
           prUrl: string;
         }>;
       };
       vi.spyOn(verifierFailureInternal, 'checkForResult').mockResolvedValue({
         branch: 'verifier-failure-branch',
         commits: 2,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/1234',
       });
 
@@ -2200,14 +2195,12 @@ describe('TaskDispatcher', () => {
         checkForResult: (task: unknown) => Promise<{
           branch: string;
           commits: number;
-          ciFailed: boolean;
           prUrl: string;
         }>;
       };
       vi.spyOn(internal, 'checkForResult').mockResolvedValue({
         branch: 'resume-fail-branch',
         commits: 1,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/1000',
       });
 
@@ -2495,14 +2488,12 @@ describe('TaskDispatcher', () => {
         checkForResult: (task: unknown) => Promise<{
           branch: string;
           commits: number;
-          ciFailed: boolean;
           prUrl: string;
         }>;
       };
       vi.spyOn(fallbackInternal, 'checkForResult').mockResolvedValue({
         branch: 'fallback-branch',
         commits: 1,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/1001',
       });
 
@@ -3601,7 +3592,6 @@ describe('TaskDispatcher', () => {
       vi.spyOn(obsInternal, 'checkForResult').mockResolvedValue({
         branch: 'feat/obs-test',
         commits: 3,
-        ciFailed: false,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/500',
       });
 
@@ -3628,7 +3618,7 @@ describe('TaskDispatcher', () => {
       expect(resultLog).toContain('prUrl=https://github.com/pbuchman/intexuraos/pull/500');
       expect(resultLog).toContain('branch=feat/obs-test');
       expect(resultLog).toContain('commits=3');
-      expect(resultLog).toContain('ciFailed=false');
+      expect(resultLog).toContain('ciFailed=unknown');
       vi.useRealTimers();
     });
 
@@ -3681,7 +3671,6 @@ describe('TaskDispatcher', () => {
       vi.spyOn(promptInternal, 'checkForResult').mockResolvedValue({
         branch: 'feat/prompt-test',
         commits: 1,
-        ciFailed: true,
         prUrl: 'https://github.com/pbuchman/intexuraos/pull/900',
       });
 
