@@ -955,7 +955,10 @@ export class TaskDispatcher {
       base.planning_superpowers_writing_plans_used =
         agentData.superpowers_writing_plans === 'used' ? '1' : '0';
       base.planning_issue_url = agentData.linear_task_url;
-      base.planning_clarification_message = agentData.clarification_message;
+      if (agentData.pr_url !== '') {
+        base.planning_pr_url = agentData.pr_url;
+      }
+      base.planning_unclear_clarification = agentData.unclear_clarification;
     } else if (agentData.agentType === 'execution') {
       base.execution_outcome_label = 'implemented';
       base.execution_superpowers_executing_plans_used =
@@ -989,7 +992,7 @@ export class TaskDispatcher {
         error: {
           code: 'PLANNING_AGENT_UNCLEAR',
           message:
-            finalResult.planning_clarification_message ?? 'Planning agent reported unclear outcome',
+            finalResult.planning_unclear_clarification ?? 'Planning agent reported unclear outcome',
         },
       });
       return;
