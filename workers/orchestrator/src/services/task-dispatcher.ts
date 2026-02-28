@@ -157,7 +157,7 @@ export class TaskDispatcher {
     });
 
     if (!startResult.ok) {
-      if (this.runningCount > 0) this.runningCount--;
+      this.runningCount--;
       this.isolation.tokenRefresher.unregisterTask(task.taskId);
       this.logForwarder.unregisterTask(task.taskId);
       await this.isolation.provider.cleanupTaskSession?.(task.taskId);
