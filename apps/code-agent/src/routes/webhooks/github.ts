@@ -123,6 +123,59 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
       );
 
       if (!createResult.ok) {
+        // Route comment to existing task if dedup found one
+        if (createResult.error.existingTaskId !== undefined) {
+          const existingTaskId = createResult.error.existingTaskId;
+          const existingTaskResult = await services.codeTaskRepo.findById(existingTaskId);
+
+          if (existingTaskResult.ok) {
+            const existingTask = existingTaskResult.value; // @allow-result-access -- narrowed by existingTaskResult.ok above
+            const payload = event.payload as Record<string, unknown> | undefined;
+            const message = buildDispatchMessage(event, payload);
+
+            const sendResult = await sendTaskMessage(
+              {
+                logger: services.logger,
+                codeTaskRepo: services.codeTaskRepo,
+                logLineRepo: services.logLineRepo,
+                taskDispatcher: services.taskDispatcher,
+                workerSettingsRepo: services.workerSettingsRepo,
+                statusMirrorService: services.statusMirrorService,
+                whatsappNotifier: services.whatsappNotifier,
+              },
+              { taskId: existingTaskId, userId: existingTask.userId, message }
+            );
+
+            if (sendResult.ok) {
+              const updateResult = await services.codeTaskRepo.update(existingTaskId, { prNumber: event.pullRequestNumber });
+              if (updateResult.ok) {
+                logger.info(
+                  { taskId: existingTaskId, prNumber: event.pullRequestNumber },
+                  'Routed PR comment to existing task (dedup ACTIVE_TASK_EXISTS)'
+                );
+              } else {
+                logger.warn(
+                  { taskId: existingTaskId, prNumber: event.pullRequestNumber, error: updateResult.error },
+                  'Routed PR comment but failed to persist prNumber — future comments may not auto-route'
+                );
+              }
+            } else {
+              logger.error(
+                { taskId: existingTaskId, error: sendResult.error, prNumber: event.pullRequestNumber },
+                'Failed to route PR comment to existing task'
+              );
+            }
+            return;
+          }
+
+          logger.error(
+            { existingTaskId, errorCode: existingTaskResult.error.code, error: existingTaskResult.error },
+            existingTaskResult.error.code === 'NOT_FOUND'
+              ? 'Existing task not found for comment routing (possible race condition — task may have been deleted)'
+              : 'Failed to fetch existing task for comment routing (Firestore error)'
+          );
+        }
+
         logger.error(
           { repository: event.repository, prNumber: event.pullRequestNumber, error: createResult.error },
           'Failed to create task from PR comment'

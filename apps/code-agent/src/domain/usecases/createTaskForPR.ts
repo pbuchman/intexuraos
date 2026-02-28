@@ -49,6 +49,7 @@ export type CreateTaskForPRErrorCode =
 export interface CreateTaskForPRError {
   code: CreateTaskForPRErrorCode;
   message: string;
+  existingTaskId?: string;
 }
 
 export interface CreateTaskForPRDeps {
@@ -260,6 +261,7 @@ export async function createTaskForPR(
         return err({
           code: 'task_creation_failed' as CreateTaskForPRErrorCode,
           message: createResult.error.message,
+          ...('existingTaskId' in createResult.error && { existingTaskId: createResult.error.existingTaskId }),
         });
       }
 
