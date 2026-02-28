@@ -4,6 +4,7 @@ import type { ActionPlanValidationResult } from './validator.js';
 import { evaluateWebhookActionabilityRules, type RuleEvaluationInput } from './rules.js';
 import { compileWebhookActionPlan, type ActionCompilerInput } from './actionCompiler.js';
 import { validateWebhookActionPlan } from './validator.js';
+import { evaluateWorkflowRepairEligibility, type RepairEligibilityDeps } from './eventFamilies/githubActionResult.js';
 
 export interface ReplayFixtureEvent {
   id: string;
@@ -40,6 +41,7 @@ export interface ReplayDeps {
   isUserMapped: (senderLogin: string) => boolean;
   hasExistingTask: boolean;
   ownsProcessingMarker: boolean;
+  repairDeps: RepairEligibilityDeps;
 }
 
 export interface ReplayDiagnostics {
@@ -87,31 +89,60 @@ export function replayWebhookEventDryRun(
   const eventGroup = classifyEventGroup(event.eventType);
   const senderAllowed = deps.isSenderAllowed(event.senderLogin);
 
-  const ruleInput: RuleEvaluationInput = {
-    eventGroup,
-    action: event.action,
-    senderLogin: event.senderLogin,
-    senderAllowed,
-    body: event.body,
-    hasExistingTask: deps.hasExistingTask,
-  };
+  let decision: WebhookAgentDecision;
+  let ruleReasonCode: string;
 
-  const ruleResult = evaluateWebhookActionabilityRules(ruleInput);
-  const isActionable = ruleResult.actionability !== 'non_actionable';
+  if (eventGroup === 'github_action_result') {
+    const repairResult = evaluateWorkflowRepairEligibility(
+      {
+        eventType: event.eventType,
+        action: event.action,
+        state: event.state,
+        pullRequestNumber: event.pullRequestNumber,
+        repository: event.repository,
+        senderLogin: event.senderLogin,
+      },
+      deps.repairDeps
+    );
 
-  const decision: WebhookAgentDecision = {
-    version: '1.0',
-    eventGroup,
-    actionability: ruleResult.actionability,
-    confidence: ruleResult.confidence,
-    reasoning: ruleResult.reasoning,
-    requestedWorkerType: null,
-    decision: {
-      kind: isActionable
-        ? (deps.hasExistingTask ? 'send_task_message' : 'create_pr_comment_task')
-        : 'noop',
-    },
-  };
+    decision = {
+      version: '1.0',
+      eventGroup,
+      actionability: repairResult.eligible ? 'actionable' : 'non_actionable',
+      confidence: 1.0,
+      reasoning: repairResult.reasoning,
+      requestedWorkerType: null,
+      decision: { kind: repairResult.decisionKind },
+    };
+    ruleReasonCode = repairResult.reasonCode;
+  } else {
+    const ruleInput: RuleEvaluationInput = {
+      eventGroup,
+      action: event.action,
+      senderLogin: event.senderLogin,
+      senderAllowed,
+      body: event.body,
+      hasExistingTask: deps.hasExistingTask,
+    };
+
+    const ruleResult = evaluateWebhookActionabilityRules(ruleInput);
+    const isActionable = ruleResult.actionability !== 'non_actionable';
+
+    decision = {
+      version: '1.0',
+      eventGroup,
+      actionability: ruleResult.actionability,
+      confidence: ruleResult.confidence,
+      reasoning: ruleResult.reasoning,
+      requestedWorkerType: null,
+      decision: {
+        kind: isActionable
+          ? (deps.hasExistingTask ? 'send_task_message' : 'create_pr_comment_task')
+          : 'noop',
+      },
+    };
+    ruleReasonCode = ruleResult.reasonCode;
+  }
 
   const compilerInput: ActionCompilerInput = {
     runId,
@@ -138,7 +169,7 @@ export function replayWebhookEventDryRun(
     validation,
     diagnostics: {
       eventGroup,
-      ruleReasonCode: ruleResult.reasonCode,
+      ruleReasonCode,
       validationFailed,
       fallbackApplied: validationFailed,
     },

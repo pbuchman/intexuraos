@@ -71,7 +71,7 @@ export function evaluateWebhookActionabilityRules(
     };
   }
 
-  if (input.eventGroup === 'other' || input.eventGroup === 'github_action_result') {
+  if (input.eventGroup === 'other') {
     return {
       actionability: 'non_actionable',
       reasonCode: 'unsupported_event_group',

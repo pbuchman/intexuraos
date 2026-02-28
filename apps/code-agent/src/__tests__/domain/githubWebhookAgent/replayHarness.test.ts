@@ -11,6 +11,10 @@ function makeReplayDeps(overrides: Partial<ReplayDeps> = {}): ReplayDeps {
     isUserMapped: (): boolean => true,
     hasExistingTask: false,
     ownsProcessingMarker: false,
+    repairDeps: {
+      isRepairDuplicate: (): boolean => false,
+      isProtectedBranch: (): boolean => false,
+    },
     ...overrides,
   };
 }
@@ -99,7 +103,7 @@ describe('replayWebhookEventDryRun', () => {
     expect(result.validation.valid).toBe(true);
   });
 
-  it('classifies github action result events correctly', () => {
+  it('classifies github action result events and routes through repair evaluator', () => {
     const fixture = makePrSyncFixture();
     fixture.event.eventType = 'check_run';
     fixture.event.action = null;
@@ -109,6 +113,42 @@ describe('replayWebhookEventDryRun', () => {
 
     expect(result.diagnostics.eventGroup).toBe('github_action_result');
     expect(result.decision.decision.kind).toBe('noop');
+    expect(result.diagnostics.ruleReasonCode).toBe('unsupported_ci_event');
+  });
+
+  it('produces create_code_action for eligible workflow failure', () => {
+    const fixture: ReplayFixture = {
+      event: {
+        id: 'fixture-wf-fail-001',
+        githubEventId: 3001,
+        repository: 'pbuchman/intexuraos',
+        repositoryId: 100,
+        pullRequestNumber: 42,
+        pullRequestId: 200,
+        eventType: 'workflow_run',
+        action: 'completed',
+        senderLogin: 'github-actions[bot]',
+        senderId: 400,
+        senderType: 'Bot',
+        title: null,
+        body: null,
+        state: 'completed/failure',
+        mergedAt: null,
+        payload: {},
+      },
+      expected: {
+        decisionKind: 'create_code_action',
+        actionCount: 2,
+      },
+    };
+    const deps = makeReplayDeps();
+
+    const result = replayWebhookEventDryRun(deps, fixture);
+
+    expect(result.diagnostics.eventGroup).toBe('github_action_result');
+    expect(result.decision.decision.kind).toBe('create_code_action');
+    expect(result.decision.actionability).toBe('actionable');
+    expect(result.diagnostics.ruleReasonCode).toBe('workflow_failure_eligible');
   });
 
   it('classifies unknown event types as other', () => {

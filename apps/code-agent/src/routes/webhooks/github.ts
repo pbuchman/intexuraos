@@ -511,6 +511,10 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
             logger.info({ runId: record.runId, outcome: record.outcome }, 'Webhook agent run recorded');
             return Promise.resolve();
           },
+          repairDeps: {
+            isRepairDuplicate: (): boolean => false,
+            isProtectedBranch: (): boolean => false,
+          },
         };
 
         void processGitHubWebhookEvent(agentDeps, savedEvent).catch((error: unknown) => {

@@ -1,11 +1,12 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { GitHubWebhookAgentConfig } from '../../config/githubWebhookAgentConfig.js';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
-import type { WebhookEventGroup, WebhookAgentRunRecord } from './models.js';
+import type { WebhookEventGroup, WebhookAgentRunRecord, WebhookAgentDecision } from './models.js';
 import { evaluateWebhookActionabilityRules, type RuleEvaluationInput } from './rules.js';
 import { compileWebhookActionPlan, type ActionCompilerInput } from './actionCompiler.js';
 import { validateWebhookActionPlan } from './validator.js';
 import { executeWebhookActionPlan, type ExecutorDeps } from './executor.js';
+import { evaluateWorkflowRepairEligibility, type RepairEligibilityDeps } from './eventFamilies/githubActionResult.js';
 
 export interface ProcessEventDeps {
   logger: Logger;
@@ -16,6 +17,7 @@ export interface ProcessEventDeps {
   isUserMapped: (senderLogin: string) => boolean;
   hasExistingTask: (repository: string, prNumber: number) => Promise<boolean>;
   saveRunRecord: (record: WebhookAgentRunRecord) => Promise<void>;
+  repairDeps: RepairEligibilityDeps;
 }
 
 export interface ProcessEventResult {
@@ -47,32 +49,57 @@ export async function processGitHubWebhookEvent(
   const userMapped = deps.isUserMapped(event.senderLogin);
   const existingTask = await deps.hasExistingTask(event.repository, event.pullRequestNumber);
 
-  const ruleInput: RuleEvaluationInput = {
-    eventGroup,
-    action: event.action,
-    senderLogin: event.senderLogin,
-    senderAllowed,
-    body: event.body,
-    hasExistingTask: existingTask,
-  };
+  let decision: WebhookAgentDecision;
 
-  const ruleResult = evaluateWebhookActionabilityRules(ruleInput);
+  if (eventGroup === 'github_action_result') {
+    const repairResult = evaluateWorkflowRepairEligibility(
+      {
+        eventType: event.eventType,
+        action: event.action,
+        state: event.state,
+        pullRequestNumber: event.pullRequestNumber,
+        repository: event.repository,
+        senderLogin: event.senderLogin,
+      },
+      deps.repairDeps
+    );
 
-  const isActionable = ruleResult.actionability !== 'non_actionable';
+    decision = {
+      version: '1.0',
+      eventGroup,
+      actionability: repairResult.eligible ? 'actionable' : 'non_actionable',
+      confidence: 1.0,
+      reasoning: repairResult.reasoning,
+      requestedWorkerType: null,
+      decision: { kind: repairResult.decisionKind },
+    };
+  } else {
+    const ruleInput: RuleEvaluationInput = {
+      eventGroup,
+      action: event.action,
+      senderLogin: event.senderLogin,
+      senderAllowed,
+      body: event.body,
+      hasExistingTask: existingTask,
+    };
 
-  const decision = {
-    version: '1.0' as const,
-    eventGroup,
-    actionability: ruleResult.actionability,
-    confidence: ruleResult.confidence,
-    reasoning: ruleResult.reasoning,
-    requestedWorkerType: null,
-    decision: {
-      kind: isActionable
-        ? (existingTask ? 'send_task_message' as const : 'create_pr_comment_task' as const)
-        : 'noop' as const,
-    },
-  };
+    const ruleResult = evaluateWebhookActionabilityRules(ruleInput);
+    const isActionable = ruleResult.actionability !== 'non_actionable';
+
+    decision = {
+      version: '1.0',
+      eventGroup,
+      actionability: ruleResult.actionability,
+      confidence: ruleResult.confidence,
+      reasoning: ruleResult.reasoning,
+      requestedWorkerType: null,
+      decision: {
+        kind: isActionable
+          ? (existingTask ? 'send_task_message' as const : 'create_pr_comment_task' as const)
+          : 'noop' as const,
+      },
+    };
+  }
 
   const compilerInput: ActionCompilerInput = {
     runId,
@@ -104,7 +131,7 @@ export async function processGitHubWebhookEvent(
       : 'execute' as const;
 
   logger.info(
-    { runId, eventGroup, actionability: ruleResult.actionability, mode, eventId: event.id },
+    { runId, eventGroup, actionability: decision.actionability, mode, eventId: event.id },
     'Webhook agent processed event'
   );
 

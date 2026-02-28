@@ -38,12 +38,12 @@ describe('evaluateWebhookActionabilityRules', () => {
       expect(result.confidence).toBeGreaterThanOrEqual(0.9);
     });
 
-    it('returns non_actionable for github_action_result event group', () => {
+    it('returns uncertain for github_action_result event group (handled by repair evaluator)', () => {
       const result = evaluateWebhookActionabilityRules(
-        makeInput({ eventGroup: 'github_action_result' })
+        makeInput({ eventGroup: 'github_action_result', body: null })
       );
-      expect(result.actionability).toBe('non_actionable');
-      expect(result.reasonCode).toBe('unsupported_event_group');
+      expect(result.actionability).toBe('uncertain');
+      expect(result.reasonCode).toBe('needs_planner');
     });
   });
 

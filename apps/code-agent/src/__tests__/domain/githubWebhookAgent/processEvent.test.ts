@@ -67,6 +67,10 @@ function makeDeps(overrides: Partial<ProcessEventDeps> = {}): ProcessEventDeps {
     isUserMapped: (): boolean => true,
     hasExistingTask: (): Promise<boolean> => Promise.resolve(false),
     saveRunRecord: vi.fn().mockResolvedValue(undefined),
+    repairDeps: {
+      isRepairDuplicate: (): boolean => false,
+      isProtectedBranch: (): boolean => false,
+    },
     ...overrides,
   };
 }
@@ -304,6 +308,86 @@ describe('processGitHubWebhookEvent', () => {
         expect.objectContaining({ errors: expect.any(Array) }),
         expect.stringContaining('validation')
       );
+    });
+  });
+
+  describe('github_action_result repair routing', () => {
+    it('routes eligible workflow failure to create_code_action', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: true }),
+        classifyEventGroup: (): 'github_action_result' => 'github_action_result',
+        saveRunRecord,
+      });
+
+      const event = makeEvent({
+        eventType: 'workflow_run',
+        action: 'completed',
+        state: 'completed/failure',
+        pullRequestNumber: 42,
+      });
+
+      await processGitHubWebhookEvent(deps, event);
+
+      const savedRecord = saveRunRecord.mock.calls[0]?.[0] as {
+        decision: { decision: { kind: string }; actionability: string };
+      } | undefined;
+      expect(savedRecord?.decision.decision.kind).toBe('create_code_action');
+      expect(savedRecord?.decision.actionability).toBe('actionable');
+    });
+
+    it('routes ineligible workflow to noop', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: true }),
+        classifyEventGroup: (): 'github_action_result' => 'github_action_result',
+        saveRunRecord,
+      });
+
+      const event = makeEvent({
+        eventType: 'workflow_run',
+        action: 'completed',
+        state: 'completed/success',
+        pullRequestNumber: 42,
+      });
+
+      await processGitHubWebhookEvent(deps, event);
+
+      const savedRecord = saveRunRecord.mock.calls[0]?.[0] as {
+        decision: { decision: { kind: string }; actionability: string };
+      } | undefined;
+      expect(savedRecord?.decision.decision.kind).toBe('noop');
+      expect(savedRecord?.decision.actionability).toBe('non_actionable');
+    });
+
+    it('blocks repair on protected branch', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: true }),
+        classifyEventGroup: (): 'github_action_result' => 'github_action_result',
+        repairDeps: {
+          isRepairDuplicate: (): boolean => false,
+          isProtectedBranch: (): boolean => true,
+        },
+        saveRunRecord,
+      });
+
+      const event = makeEvent({
+        eventType: 'workflow_run',
+        action: 'completed',
+        state: 'completed/failure',
+        pullRequestNumber: 42,
+      });
+
+      await processGitHubWebhookEvent(deps, event);
+
+      const savedRecord = saveRunRecord.mock.calls[0]?.[0] as {
+        decision: { decision: { kind: string } };
+      } | undefined;
+      expect(savedRecord?.decision.decision.kind).toBe('noop');
     });
   });
 
