@@ -134,7 +134,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
           // Layer 3: Check active task for Linear issue (design lines 448-458)
           if (input.linearIssueId !== undefined) {
-            const activeStatuses = ['dispatched', 'running'] as const;
+            const activeStatuses = ['queued', 'dispatched', 'running'] as const;
             const linearQuery = collection
               .where('linearIssueId', '==', input.linearIssueId)
               .where('status', 'in', activeStatuses)
@@ -352,6 +352,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.callbackReceived !== undefined) {
           updateData['callbackReceived'] = input.callbackReceived;
         }
+        if (input.queuedAt !== undefined) {
+          updateData['queuedAt'] = Timestamp.fromDate(input.queuedAt);
+        }
         if (input.dispatchedAt !== undefined) {
           updateData['dispatchedAt'] = Timestamp.fromDate(input.dispatchedAt);
         }
@@ -488,7 +491,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
       linearIssueId: string
     ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>> => {
       try {
-        const activeStatuses = ['pending', 'dispatched', 'running'] as const;
+        const activeStatuses = ['queued', 'dispatched', 'running'] as const;
         const snapshot = await collection
           .where('linearIssueId', '==', linearIssueId)
           .where('status', 'in', activeStatuses)
@@ -516,6 +519,8 @@ export const createFirestoreCodeTaskRepository = (deps: {
     findZombieTasks: async (staleThreshold: Date): Promise<Result<CodeTask[], RepositoryError>> => {
       try {
         const snapshot = await collection
+          // Note: 'queued' excluded — queued tasks don't heartbeat (no updatedAt changes),
+          // so they'd be false positives. Queue TTL expiry in drainTaskQueue handles them.
           .where('status', 'in', ['running', 'dispatched'])
           .where('updatedAt', '<', Timestamp.fromDate(staleThreshold))
           .get();
@@ -737,6 +742,52 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok(undefined);
       } catch (error) {
         logger.error({ error, taskId }, 'Failed to delete task');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findOldestQueued: async (): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('status', '==', 'queued')
+          .orderBy('createdAt', 'asc')
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        const data = doc.data();
+        const task: CodeTask = {
+          ...data,
+          id: doc.id,
+          createdAt: data['createdAt'],
+          updatedAt: data['updatedAt'],
+        } as CodeTask;
+
+        return ok(task);
+      } catch (error) {
+        logger.error({ error }, 'Failed to find oldest queued task');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    countQueued: async (): Promise<Result<number, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('status', '==', 'queued')
+          .get();
+        return ok(snapshot.size);
+      } catch (error) {
+        logger.error({ error }, 'Failed to count queued tasks');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

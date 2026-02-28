@@ -1103,6 +1103,7 @@ export type CodeTaskWorkerLocation = string;
  * Task status lifecycle.
  */
 export type CodeTaskStatus =
+  | 'queued'
   | 'dispatched'
   | 'running'
   | 'planned'

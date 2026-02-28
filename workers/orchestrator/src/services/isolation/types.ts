@@ -31,7 +31,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
   opus: {
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    model: 'opus',
+    model: 'claude-opus-4-5-20251101',
   },
   auto: {
     apiBaseUrl: 'https://api.anthropic.com',
@@ -88,6 +88,12 @@ export interface ResourceUsage {
   cpuPercent: number;
   memoryUsedMB: number;
   memoryLimitMB: number;
+}
+
+export interface DiscoveredContainer {
+  containerId: string;
+  taskId: string;
+  state: string;
 }
 
 export interface IsolationProvider {
@@ -147,6 +153,8 @@ export interface IsolationProvider {
   preserveWorker?(taskId: string): Promise<void>;
 
   listPreservedWorkers?(): Promise<{ containerId: string; taskId: string; preservedAt: string }[]>;
+
+  listWorkerContainers?(): Promise<DiscoveredContainer[]>;
 
   getImageInfo?(): {
     configuredRef: string;

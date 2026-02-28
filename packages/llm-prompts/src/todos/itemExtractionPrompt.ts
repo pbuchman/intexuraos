@@ -16,7 +16,7 @@ export const itemExtractionPrompt: PromptBuilder<
 > = {
   name: 'todo-item-extraction',
   description: 'Extracts actionable, non-repetitive todo items from description',
-  version: '2.0.0',
+  version: '1.2.0',
 
   build(input: ItemExtractionPromptInput, deps?: ItemExtractionPromptDeps): string {
     const maxItems = deps?.maxItems ?? 50;

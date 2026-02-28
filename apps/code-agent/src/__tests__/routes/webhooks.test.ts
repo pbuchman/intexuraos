@@ -585,10 +585,10 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
           planning_issue_url: 'https://linear.app/intexuraos/issue/INT-999',
-          planning_child_issue_count: '3',
+          planning_trivial_task: '0' as const,
           planning_doc_path: 'docs/plans/test-plan.md',
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
-          planning_clarification_message: '',
+          planning_unclear_clarification: '',
         },
       };
 
@@ -646,10 +646,10 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
           planning_issue_url: '[INT-999](https://linear.app/intexuraos/issue/INT-999)',
-          planning_child_issue_count: '3',
+          planning_trivial_task: '0' as const,
           planning_doc_path: 'docs/plans/test-plan.md',
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
-          planning_clarification_message: '',
+          planning_unclear_clarification: '',
         },
       };
 
@@ -749,10 +749,10 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
           planning_issue_url: 'https://linear.app/intexuraos/issue/INT-999',
-          planning_child_issue_count: '1',
+          planning_trivial_task: '1' as const,
           planning_doc_path: '',
           planning_pr_url: '',
-          planning_clarification_message: '',
+          planning_unclear_clarification: '',
         },
       };
 
@@ -834,7 +834,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_child_issue_count: '0',
           planning_doc_path: '',
           planning_pr_url: '',
-          planning_clarification_message: '',
+          planning_unclear_clarification: '',
         },
       };
 
@@ -933,7 +933,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_child_issue_count: '0',
           planning_doc_path: '',
           planning_pr_url: '',
-          planning_clarification_message: '',
+          planning_unclear_clarification: '',
         },
       };
 
@@ -1011,7 +1011,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_child_issue_count: '0',
           planning_doc_path: '',
           planning_pr_url: '',
-          planning_clarification_message: '',
+          planning_unclear_clarification: '',
         },
       };
 
@@ -2063,10 +2063,10 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_outcome_label: 'unclear' as const,
           planning_superpowers_writing_plans_used: '1' as const,
           planning_issue_url: '',
-          planning_child_issue_count: '',
+          planning_trivial_task: '',
           planning_doc_path: '',
           planning_pr_url: '',
-          planning_clarification_message: 'Missing acceptance criteria and target service',
+          planning_unclear_clarification: 'Missing acceptance criteria and target service',
         },
         error: {
           code: 'PLANNING_AGENT_UNCLEAR',
@@ -2095,7 +2095,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('failed');
       expect(getResult.value.error?.code).toBe('PLANNING_AGENT_UNCLEAR');
       expect(getResult.value.result?.planning_outcome_label).toBe('unclear');
-      expect(getResult.value.result?.planning_clarification_message).toContain('Missing acceptance');
+      expect(getResult.value.result?.planning_unclear_clarification).toContain('Missing acceptance');
     });
   });
 

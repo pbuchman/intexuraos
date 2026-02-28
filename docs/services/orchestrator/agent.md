@@ -176,7 +176,7 @@ interface TaskResult {
   planning_outcome_label?: 'planned' | 'unclear';
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_issue_url?: string;
-  planning_child_issue_count?: string;
+  planning_trivial_task?: '0' | '1' | '';
   planning_doc_path?: string;
   planning_pr_url?: string;
   planning_clarification_message?: string;

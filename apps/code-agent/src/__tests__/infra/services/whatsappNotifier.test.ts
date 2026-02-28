@@ -901,4 +901,113 @@ describe('WhatsAppNotifier', () => {
       expect(getPublishSendMessageMock()).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('notifyTaskQueued', () => {
+    it('sends queued notification with Linear title', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login bug',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskQueued('user-123', task, 2, 10);
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('Task queued: Fix login bug');
+      expect(callArgs.message).toContain('Position: 2');
+      expect(callArgs.message).toContain('Estimated wait: ~10 minutes');
+      expect(callArgs.correlationId).toBe('trace-123');
+    });
+
+    it('falls back to prompt when Linear title is missing', async () => {
+      const task = createMockTask({
+        prompt: 'Fix the authentication bug that causes redirect loops',
+      });
+      const { linearIssueTitle: _, ...taskWithoutTitle } = task;
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskQueued('user-123', taskWithoutTitle, 1, 5);
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('Task queued: Fix the authentication bug that causes redi');
+    });
+
+    it('returns error when publisher fails', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login bug',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
+      );
+
+      const result = await notifier.notifyTaskQueued('user-123', task, 1, 5);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Service unavailable');
+      }
+    });
+  });
+
+  describe('notifyTaskQueueExpired', () => {
+    it('sends expired notification with Linear title', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login bug',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskQueueExpired('user-123', task);
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('Task expired in queue: Fix login bug');
+      expect(callArgs.message).toContain('Workers were still busy');
+      expect(callArgs.correlationId).toBe('trace-123');
+    });
+
+    it('falls back to prompt when Linear title is missing', async () => {
+      const task = createMockTask({
+        prompt: 'Fix the authentication bug that causes redirect loops',
+      });
+      const { linearIssueTitle: _, ...taskWithoutTitle } = task;
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskQueueExpired('user-123', taskWithoutTitle);
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('Task expired in queue: Fix the authentication bug that causes redi');
+    });
+
+    it('returns error when publisher fails', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login bug',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
+      );
+
+      const result = await notifier.notifyTaskQueueExpired('user-123', task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Service unavailable');
+      }
+    });
+  });
 });

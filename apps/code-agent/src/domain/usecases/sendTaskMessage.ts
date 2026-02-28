@@ -3,7 +3,7 @@
  *
  * Running tasks: message is queued on the worker and delivered when the current attempt completes.
  * Terminal tasks (completed/failed/interrupted): task resumes with the message via --continue.
- * Cancelled/dispatched tasks: rejected.
+ * Cancelled/dispatched/queued tasks: rejected.
  */
 
 import { Timestamp } from '@google-cloud/firestore';
@@ -66,7 +66,7 @@ export async function sendTaskMessage(
   const task = taskResult.value;
 
   // Step 2: Validate task status
-  if (task.status === 'cancelled' || task.status === 'dispatched') {
+  if (task.status === 'cancelled' || task.status === 'dispatched' || task.status === 'queued') {
     logger.warn({ taskId, status: task.status }, 'Cannot send message to task with this status');
     return err({
       code: 'invalid_status',

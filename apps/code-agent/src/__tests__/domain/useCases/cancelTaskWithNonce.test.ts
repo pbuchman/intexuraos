@@ -251,6 +251,30 @@ describe('cancelTaskWithNonce', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('allows cancelling queued tasks', async () => {
+    const queuedTask = { ...baseTask, status: 'queued' as const };
+    vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(queuedTask));
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+      ok({ ...queuedTask, status: 'cancelled' as const })
+    );
+
+    const result = await cancelTaskWithNonce(
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
+      { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.cancelled).toBe(true);
+    }
+
+    expect(codeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+      status: 'cancelled',
+      cancelNonce: null,
+      cancelNonceExpiresAt: null,
+    });
+  });
+
   it('successfully cancels task when nonce has no expiration time', async () => {
     const { cancelNonceExpiresAt: _, ...taskWithoutExpiry } = baseTask;
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(taskWithoutExpiry));
