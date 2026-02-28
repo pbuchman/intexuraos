@@ -519,7 +519,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
     findZombieTasks: async (staleThreshold: Date): Promise<Result<CodeTask[], RepositoryError>> => {
       try {
         const snapshot = await collection
-          .where('status', 'in', ['running', 'dispatched', 'queued'])
+          // Note: 'queued' excluded — queued tasks don't heartbeat (no updatedAt changes),
+          // so they'd be false positives. Queue TTL expiry in drainTaskQueue handles them.
+          .where('status', 'in', ['running', 'dispatched'])
           .where('updatedAt', '<', Timestamp.fromDate(staleThreshold))
           .get();
 

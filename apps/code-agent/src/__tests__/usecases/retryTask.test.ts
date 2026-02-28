@@ -1415,7 +1415,7 @@ describe('retryTask use case', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.codeTaskId).toBe(retryTaskId);
-        expect(result.value.workerLocation).toBe('home-mac');
+        expect(result.value.workerLocation).toBe('queued');
         expect(result.value.retriedFrom).toBe(originalTaskId);
       }
 

@@ -88,7 +88,22 @@ export async function drainTaskQueue(
         },
       });
 
-      await whatsappNotifier.notifyTaskQueueExpired(task.userId, task);
+      // Clear parent planning task's implementationTaskId if this was an execution agent task,
+      // so the web UI can re-submit (INT-619 review fix #2)
+      if (task.parentTaskId !== undefined) {
+        const parentResult = await codeTaskRepo.findById(task.parentTaskId);
+        if (parentResult.ok && parentResult.value.implementationTaskId === task.id) {
+          const clearResult = await codeTaskRepo.update(task.parentTaskId, { implementationTaskId: null });
+          if (!clearResult.ok) {
+            logger.warn({ parentTaskId: task.parentTaskId, expiredTaskId: task.id, error: clearResult.error }, 'Failed to clear implementationTaskId on parent task after queue expiry');
+          }
+        }
+      }
+
+      const notifyResult = await whatsappNotifier.notifyTaskQueueExpired(task.userId, task);
+      if (!notifyResult.ok) {
+        logger.warn({ taskId: task.id, error: notifyResult.error }, 'Failed to send queue expired notification');
+      }
 
       return ok({ action: 'expired', taskId: task.id });
     }
