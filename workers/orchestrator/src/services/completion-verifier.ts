@@ -36,7 +36,7 @@ export interface CompletionVerifierVerdict {
     outcomeLabel: 'planned' | 'unclear';
     superpowersWritingPlansUsed: '0' | '1';
     planningIssueUrl?: string;
-    trivialTask?: '0' | '1';
+    childIssueCount?: number;
     docPath?: string;
     prUrl?: string;
     clarificationMessage?: string;
@@ -76,8 +76,7 @@ interface PlanningMetadataExtraction {
   superpowersWritingPlansUsed?: '0' | '1';
   originalIssueUrl?: string;
   planningIssueUrl?: string;
-  trivialTask?: '0' | '1';
-  parallelBreakdownProof?: string;
+  childIssueCount?: number;
   docPath?: string;
   prUrl?: string;
   clarificationMessage?: string;
@@ -233,8 +232,7 @@ function extractPlanningMetadataFromMessage(message: string): PlanningMetadataEx
     rawPlanningIssueUrl !== undefined
       ? stripMarkdownLink(rawPlanningIssueUrl)
       : rawPlanningIssueUrl;
-  const trivialTask = readValue('- Trivial task:');
-  const parallelBreakdownProof = readValue('- Parallel breakdown proof:');
+  const childIssuesRaw = readValue('- Child issues:');
   const docPath = readValue('- Plan doc:');
   const rawPrUrl = readValue('- Planning PR:');
   const prUrl = rawPrUrl !== undefined ? stripMarkdownLink(rawPrUrl) : rawPrUrl;
@@ -247,8 +245,9 @@ function extractPlanningMetadataFromMessage(message: string): PlanningMetadataEx
       : {}),
     ...(originalIssueUrl !== undefined ? { originalIssueUrl } : {}),
     ...(planningIssueUrl !== undefined ? { planningIssueUrl } : {}),
-    ...(trivialTask === '0' || trivialTask === '1' ? { trivialTask } : {}),
-    ...(parallelBreakdownProof !== undefined ? { parallelBreakdownProof } : {}),
+    ...(childIssuesRaw !== undefined && /^\d+$/u.test(childIssuesRaw)
+      ? { childIssueCount: Number(childIssuesRaw) }
+      : {}),
     ...(docPath !== undefined ? { docPath } : {}),
     ...(prUrl !== undefined ? { prUrl } : {}),
     /* v8 ignore start -- ts-type: conditional object spread for optional extracted field @preserve */
@@ -547,7 +546,9 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
               ...(extracted.planningIssueUrl !== undefined && {
                 planningIssueUrl: extracted.planningIssueUrl,
               }),
-              ...(extracted.trivialTask !== undefined && { trivialTask: extracted.trivialTask }),
+              ...(extracted.childIssueCount !== undefined && {
+                childIssueCount: extracted.childIssueCount,
+              }),
               ...(extracted.docPath !== undefined && { docPath: extracted.docPath }),
               ...(extracted.prUrl !== undefined && { prUrl: extracted.prUrl }),
               /* v8 ignore start -- ts-type: conditional object spread for optional extracted field @preserve */
