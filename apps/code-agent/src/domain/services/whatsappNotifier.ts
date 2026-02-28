@@ -86,4 +86,34 @@ export interface WhatsAppNotifier {
     userId: string,
     task: CodeTask
   ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when task is queued due to worker capacity.
+   * INT-619
+   *
+   * @param userId - User ID to send notification to
+   * @param task - Queued task
+   * @param position - Position in queue (1-based)
+   * @param estimatedWaitMinutes - Estimated wait time in minutes
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyTaskQueued(
+    userId: string,
+    task: CodeTask,
+    position: number,
+    estimatedWaitMinutes: number
+  ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when queued task expires due to TTL.
+   * INT-619
+   *
+   * @param userId - User ID to send notification to
+   * @param task - Expired task
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyTaskQueueExpired(
+    userId: string,
+    task: CodeTask
+  ): Promise<Result<void, NotificationError>>;
 }

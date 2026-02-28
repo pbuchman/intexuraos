@@ -17,6 +17,7 @@ import type { WorkerLocation } from '../../domain/models/worker.js';
 import { hasCodeTaskLabel, hasUnclearLabel } from '../../domain/utils/labelUtils.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { loadConfig } from '../../config.js';
 
 export const EXECUTION_AGENT_PROMPT =
   'Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.';
@@ -54,6 +55,7 @@ export type SubmitToExecutionAgentErrorCode =
   | 'active_task_exists'
   | 'label_not_ready'
   | 'worker_not_configured'
+  | 'queue_full'
   | 'internal_error';
 
 /**
@@ -374,11 +376,102 @@ export async function submitToExecutionAgent(
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
 
-  /* v8 ignore start -- upstream: dispatcher error handling covered by integration tests @preserve */
   if (!dispatchResult.ok) {
-    /* v8 ignore stop @preserve */
-    // Step 13: Rollback on dispatch failure
     const dispatchError = dispatchResult.error;
+
+    // Step 13a: If at_capacity, try to queue instead of failing
+    if (dispatchError.code === 'at_capacity') {
+      const config = loadConfig();
+      const countResult = await codeTaskRepo.countQueued();
+
+      if (!countResult.ok) {
+        logger.error({ error: countResult.error }, 'Failed to count queued tasks, treating as queue full');
+      }
+
+      const queuedCount = countResult.ok ? countResult.value : config.queue.maxSize;
+
+      if (queuedCount >= config.queue.maxSize) {
+        // Queue is full — rollback and fail
+        logger.warn(
+          { taskId: executionTaskId, queuedCount, maxSize: config.queue.maxSize },
+          'Task queue full, cannot enqueue execution task'
+        );
+
+        const lockRollbackResult = await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
+        /* v8 ignore start -- upstream: Firestore write failure within dispatch failure path @preserve */
+        if (!lockRollbackResult.ok) {
+          logger.error(
+            { taskId: originalTask.id, executionTaskId, error: lockRollbackResult.error },
+            'Failed to rollback implementationTaskId after queue full'
+          );
+        }
+        /* v8 ignore stop @preserve */
+
+        const failMarkResult = await codeTaskRepo.update(executionTaskId, {
+          status: 'failed',
+          error: {
+            code: 'queue_full',
+            message: 'All workers at capacity and queue is full',
+          },
+        });
+        /* v8 ignore start -- upstream: Firestore write failure within dispatch failure path @preserve */
+        if (!failMarkResult.ok) {
+          logger.error(
+            { executionTaskId, error: failMarkResult.error },
+            'Failed to mark execution task as failed after queue full'
+          );
+        }
+        /* v8 ignore stop @preserve */
+
+        return err({
+          code: 'queue_full',
+          message: 'All workers are at capacity and the queue is full. Please try again later.',
+        });
+      }
+
+      // Queue has room — enqueue the task (do NOT rollback)
+      const position = queuedCount + 1;
+      const estimatedWaitMinutes = position * 5;
+
+      logger.info(
+        { taskId: executionTaskId, position, estimatedWaitMinutes },
+        'Enqueueing execution task — workers at capacity'
+      );
+
+      const queueResult = await codeTaskRepo.update(executionTaskId, {
+        status: 'queued',
+        queuedAt: new Date(),
+      });
+
+      /* v8 ignore start -- upstream: Firestore write failure within queue path @preserve */
+      if (!queueResult.ok) {
+        logger.error(
+          { executionTaskId, error: queueResult.error },
+          'Failed to update execution task to queued status'
+        );
+      }
+      /* v8 ignore stop @preserve */
+
+      const queuedTask = queueResult.ok ? queueResult.value : executionTask;
+
+      // Best-effort WhatsApp notification
+      const notifyResult = await whatsappNotifier.notifyTaskQueued(userId, queuedTask, position, estimatedWaitMinutes);
+      if (!notifyResult.ok) {
+        logger.warn(
+          { taskId: executionTaskId, error: notifyResult.error },
+          'Failed to send task queued notification'
+        );
+      }
+
+      return ok({
+        codeTaskId: executionTaskId,
+        resourceUrl: `/#/code-tasks/${executionTaskId}`,
+        workerLocation: 'queued' as WorkerLocation,
+        implementationOf: originalTask.id,
+      });
+    }
+
+    // Step 13b: Non-at_capacity errors — rollback and fail
     logger.error({ taskId: executionTaskId, error: dispatchError }, 'Failed to dispatch Execution Agent task, rolling back');
 
     // Roll back optimistic lock on planning task

@@ -294,5 +294,64 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
 
       return ok(undefined);
     },
+
+    async notifyTaskQueued(
+      userId: string,
+      task: CodeTask,
+      position: number,
+      estimatedWaitMinutes: number
+    ): Promise<Result<void, NotificationError>> {
+      const title = task.linearIssueTitle ?? task.prompt.slice(0, 50);
+      const message = `🕐 Task queued: ${title}
+
+All workers are busy. Your task is in the queue.
+
+Position: ${String(position)}
+Estimated wait: ~${String(estimatedWaitMinutes)} minutes
+
+Task ID: ${task.id}`;
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        correlationId: task.traceId,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
+
+    async notifyTaskQueueExpired(
+      userId: string,
+      task: CodeTask
+    ): Promise<Result<void, NotificationError>> {
+      const title = task.linearIssueTitle ?? task.prompt.slice(0, 50);
+      const message = `⏰ Task expired in queue: ${title}
+
+Workers were still busy and the task timed out. Please retry when workers are available.
+
+Task ID: ${task.id}`;
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        correlationId: task.traceId,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
   };
 }

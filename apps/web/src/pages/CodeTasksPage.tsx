@@ -42,10 +42,11 @@ interface StatusStyle {
 }
 
 const ALL_TASK_STATUSES: CodeTaskStatus[] = [
-  'dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled',
+  'queued', 'dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled',
 ];
 
 const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
+  queued: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Queued' },
   dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched' },
   running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running' },
   planned: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Planned' },
