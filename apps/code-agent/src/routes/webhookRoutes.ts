@@ -36,7 +36,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         planning_outcome_label?: 'planned' | 'unclear';
         planning_superpowers_writing_plans_used?: '0' | '1';
         planning_issue_url?: string;
-        planning_child_issue_count?: string;
+        planning_trivial_task?: '0' | '1' | '';
         planning_doc_path?: string;
         planning_pr_url?: string;
         planning_clarification_message?: string;
@@ -81,7 +81,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 planning_outcome_label: { type: 'string', enum: ['planned', 'unclear'] },
                 planning_superpowers_writing_plans_used: { type: 'string', enum: ['0', '1'] },
                 planning_issue_url: { type: 'string' },
-                planning_child_issue_count: { type: 'string' },
+                planning_trivial_task: { type: 'string' },
                 planning_doc_path: { type: 'string' },
                 planning_pr_url: { type: 'string' },
                 planning_clarification_message: { type: 'string' },
@@ -138,7 +138,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_issue_url?: string; planning_child_issue_count?: string; planning_doc_path?: string; planning_pr_url?: string; planning_clarification_message?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_trivial_task?: '0' | '1'; execution_subagents?: string; execution_review_iterations?: number; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_issue_url?: string; planning_trivial_task?: '0' | '1' | ''; planning_doc_path?: string; planning_pr_url?: string; planning_clarification_message?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_trivial_task?: '0' | '1'; execution_subagents?: string; execution_review_iterations?: number; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/webhooks/task-complete',
       });
