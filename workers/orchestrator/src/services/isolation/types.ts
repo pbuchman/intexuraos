@@ -90,6 +90,12 @@ export interface ResourceUsage {
   memoryLimitMB: number;
 }
 
+export interface DiscoveredContainer {
+  containerId: string;
+  taskId: string;
+  state: string;
+}
+
 export interface IsolationProvider {
   /**
    * Create and start an isolated worker container.
@@ -147,6 +153,8 @@ export interface IsolationProvider {
   preserveWorker?(taskId: string): Promise<void>;
 
   listPreservedWorkers?(): Promise<{ containerId: string; taskId: string; preservedAt: string }[]>;
+
+  listWorkerContainers?(): Promise<DiscoveredContainer[]>;
 
   getImageInfo?(): {
     configuredRef: string;

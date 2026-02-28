@@ -1349,4 +1349,61 @@ describe('DockerProvider', () => {
       expect(mockLogger.warn).toHaveBeenCalled();
     });
   });
+
+  describe('listWorkerContainers', () => {
+    it('returns discovered containers with taskId extracted from name', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        { Id: 'container-1', Names: ['/claude-worker-task-abc'], State: 'running' },
+        { Id: 'container-2', Names: ['/claude-worker-task-def'], State: 'exited' },
+      ]);
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toEqual([
+        { containerId: 'container-1', taskId: 'task-abc', state: 'running' },
+        { containerId: 'container-2', taskId: 'task-def', state: 'exited' },
+      ]);
+      expect(mocks.mockDocker.listContainers).toHaveBeenCalledWith({
+        all: true,
+        filters: { name: ['claude-worker-'] },
+      });
+    });
+
+    it('returns empty array when no containers exist', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toEqual([]);
+    });
+
+    it('returns empty array and logs warning when Docker is unreachable', async () => {
+      mocks.mockDocker.listContainers.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toEqual([]);
+      expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it('handles container names with complex taskIds', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'container-uuid',
+          Names: ['/claude-worker-550e8400-e29b-41d4-a716-446655440000'],
+          State: 'running',
+        },
+      ]);
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toEqual([
+        {
+          containerId: 'container-uuid',
+          taskId: '550e8400-e29b-41d4-a716-446655440000',
+          state: 'running',
+        },
+      ]);
+    });
+  });
 });
