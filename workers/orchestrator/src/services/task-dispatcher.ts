@@ -1703,11 +1703,28 @@ export class TaskDispatcher {
           return JSON.stringify(obj);
         }
 
+        if (type === 'rate_limit_event') {
+          return this.formatRateLimitEvent(obj);
+        }
+
         return jsonLine;
       } catch {
         return jsonLine;
       }
     });
+  }
+
+  private formatRateLimitEvent(obj: Record<string, unknown>): string {
+    const info = (obj['rate_limit_info'] as Record<string, unknown> | undefined) ?? {};
+    const status = (info['status'] as string | undefined) ?? 'unknown';
+    const rateLimitType = (info['rateLimitType'] as string | undefined) ?? '';
+    const resetsAt = info['resetsAt'] as number | undefined;
+
+    const typePart = rateLimitType !== '' ? ` ${rateLimitType}` : '';
+    const resetPart =
+      resetsAt !== undefined ? ` resets=${new Date(resetsAt * 1000).toISOString()}` : '';
+
+    return `[rate-limit] ${status}${typePart}${resetPart}`;
   }
 
   private formatInitMessage(obj: Record<string, unknown>): string {

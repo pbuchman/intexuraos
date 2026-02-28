@@ -51,6 +51,21 @@ describe('system-prompt', () => {
     expect(result).toContain('- Worker Type: `auto`');
   });
 
+  it('includes PR Title Format section in planning prompt with [plan] tag', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('### PR Title Format');
+    expect(result).toContain('`[INT-XXX] [plan] title`');
+  });
+
+  it('includes PR Title Format section in execution prompt without [plan] tag', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('### PR Title Format');
+    expect(result).toContain('`[INT-XXX] title`');
+    expect(result).not.toMatch(/\[INT-XXX\] \[plan\] title/);
+  });
+
   it('builds execution agent prompt with execution marker and final block', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
 
@@ -154,6 +169,16 @@ describe('system-prompt', () => {
     });
 
     expect(result).toContain('[AGENT:PULL_REQUEST]');
+  });
+
+  it('enforces zero-tolerance review loop in execution prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('zero-tolerance loop');
+    expect(result).toContain('ZERO issues');
+    expect(result).toContain('no issue is too small to skip');
+    expect(result).toContain('reviewer explicitly confirms no remaining issues');
+    expect(result).toContain('fix + re-review cycle');
   });
 
   it('includes PR review overlay in execution prompt', () => {
