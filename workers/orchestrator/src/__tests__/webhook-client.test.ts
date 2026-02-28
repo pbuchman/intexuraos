@@ -530,6 +530,51 @@ describe('WebhookClient', () => {
       vi.useRealTimers();
     });
 
+    it('should log error details when retry delivery fails', async () => {
+      vi.useFakeTimers();
+
+      const statePersistence = createStatePersistence();
+      const state = await statePersistence.load();
+
+      state.pendingWebhooks = [
+        {
+          url: 'https://example.com/webhook',
+          secret: 'secret',
+          payload: { taskId: 'task-log-err', status: 'completed' as const, duration: 1000 },
+          taskId: 'task-log-err',
+          attempts: 5,
+          createdAt: Date.now(),
+        },
+      ];
+      await statePersistence.save(state);
+
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      } as Response);
+
+      const warnSpy = vi.fn();
+      const spiedLogger: Logger = { ...mockLogger, warn: warnSpy };
+      const client = new WebhookClient(statePersistence, spiedLogger, 'test-internal-auth-token');
+
+      const retryPromise = client.retryPending();
+      await vi.advanceTimersByTimeAsync(70000);
+      await vi.runAllTimersAsync();
+      await retryPromise;
+
+      // Should log the error type and task ID when retry fails
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-log-err',
+          errorType: '5xx',
+        }),
+        expect.stringContaining('Pending webhook retry attempt failed')
+      );
+
+      vi.useRealTimers();
+    });
+
     it('should classify non-Error throwables as network errors', async () => {
       vi.useFakeTimers();
 

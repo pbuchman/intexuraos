@@ -780,6 +780,106 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.callbackReceived).toBe(false);
     });
 
+    it('handles trivial planning task without valid planning_issue_url — skips tree validation, marks original in_review', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan trivial fix',
+        sanitizedPrompt: 'Plan trivial fix',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const addCommentSpy = vi.mocked(linearAgentClient.addComment);
+      const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
+      const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
+
+      validateIssueSpy.mockReset();
+      validateIssueSpy.mockResolvedValueOnce(
+        ok({
+          id: 'original-uuid',
+          identifier: 'INT-123',
+          title: 'Original issue',
+          url: 'https://linear.app/intexuraos/issue/INT-123',
+          labels: [],
+          childCount: 0,
+        })
+      );
+      fetchIssueTreeSpy.mockClear();
+      addCommentSpy.mockClear();
+      updateIssueStateSpy.mockClear();
+      updateIssueMetadataSpy.mockClear();
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Issue already has a detailed plan, no separate planning issue needed',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '1' as const,
+          planning_issue_url: '(not needed - original issue serves as plan for trivial task)',
+          planning_child_issue_count: '0',
+          planning_doc_path: '',
+          planning_pr_url: '',
+          planning_clarification_message: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Should NOT fetch planning issue tree (no planning issue to validate)
+      expect(fetchIssueTreeSpy).not.toHaveBeenCalled();
+
+      // Should only validate the original issue (1 call, not 2)
+      expect(validateIssueSpy).toHaveBeenCalledTimes(1);
+
+      // Should move original issue to in_review
+      expect(updateIssueStateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'original-uuid', state: 'in_review' })
+      );
+
+      // Should add planned label, remove unclear and code-task
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issueId: 'original-uuid',
+          addLabels: ['planned'],
+          removeLabels: ['unclear', 'code-task'],
+        })
+      );
+
+      // Task should be marked as planned
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('planned');
+      expect(getResult.value.result?.planning_outcome_label).toBe('planned');
+    });
+
     it('enforces execution-agent success on executed issue only and stores execution metadata', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',

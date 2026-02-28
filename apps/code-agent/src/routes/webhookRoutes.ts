@@ -249,8 +249,31 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (outcome === 'planned') {
           const planningIssueUrl = planningResult.planning_issue_url ?? '';
           const planningIdentifier = parseLinearIdentifierFromUrl(planningIssueUrl);
+
           if (planningIdentifier === null) {
-            return { ok: false, message: 'Missing or invalid planning_issue_url for planned outcome' };
+            // Trivial task: no valid planning issue URL means the original issue already serves
+            // as the plan (e.g., the worker determined the issue is simple enough to implement directly).
+            // Skip planning issue tree validation; just update original issue state.
+            const markReview = await linearAgentClient.updateIssueState({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              state: 'in_review',
+            });
+            if (!markReview.ok) {
+              return { ok: false, message: `Failed to move original issue to In Review: ${markReview.error.message}` };
+            }
+
+            const originalLabelNormalize = await linearAgentClient.updateIssueMetadata({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              addLabels: ['planned'],
+              removeLabels: ['unclear', 'code-task'],
+            });
+            if (!originalLabelNormalize.ok) {
+              return { ok: false, message: `Failed to normalize original issue labels: ${originalLabelNormalize.error.message}` };
+            }
+
+            return { ok: true };
           }
 
           const planningIssueValidation = await linearAgentClient.validateIssue({

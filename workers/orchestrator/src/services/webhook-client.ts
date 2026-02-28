@@ -130,6 +130,17 @@ export class WebhookClient {
           break;
         } catch (error) {
           const errorType = this.classifyError(error);
+
+          this.logger.warn(
+            {
+              taskId: pending.taskId,
+              errorType: errorType.type,
+              errorMessage: errorType.message,
+              attempt: attempt + 1,
+            },
+            'Pending webhook retry attempt failed'
+          );
+
           if (errorType.type === '4xx') {
             break; // Don't retry 4xx
           }
