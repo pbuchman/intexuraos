@@ -180,6 +180,10 @@ function isValidGitHubPRAction(value: string): value is GitHubPRAction {
     // pull_request_review_comment actions
     'created',
     'deleted',
+    // CI event actions
+    'completed',
+    'requested',
+    'in_progress',
   ];
   return validActions.includes(value as GitHubPRAction);
 }
@@ -509,6 +513,239 @@ export function parsePushEvent(
 }
 
 /**
+ * Extract PR linkage from a pull_requests array (used by CI events).
+ * Returns { number, id } of the first linked PR, or { 0, 0 } if none.
+ */
+function extractPRLinkage(payload: Record<string, unknown>): { number: number; id: number } {
+  const pullRequests = payload['pull_requests'];
+  if (!Array.isArray(pullRequests) || pullRequests.length === 0) {
+    return { number: 0, id: 0 };
+  }
+
+  const first = pullRequests[0] as Record<string, unknown> | undefined;
+  if (first === undefined || typeof first !== 'object') {
+    return { number: 0, id: 0 };
+  }
+
+  const prNumber = first['number'];
+  const prId = first['id'];
+
+  return {
+    number: typeof prNumber === 'number' ? prNumber : 0,
+    id: typeof prId === 'number' ? prId : 0,
+  };
+}
+
+/**
+ * Parse a workflow_run event payload.
+ */
+export function parseWorkflowRunEvent(
+  payload: unknown
+): Result<CreateGitHubPREventInput, { code: 'INVALID_PAYLOAD'; message: string }> {
+  if (!payload || typeof payload !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Payload is not an object' });
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  const senderResult = extractSender(payload);
+  if (!senderResult.ok) {
+    return senderResult;
+  }
+
+  const action = p['action'];
+  const repository = p['repository'];
+  const workflowRun = p['workflow_run'];
+
+  if (!repository || typeof repository !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing repository' });
+  }
+
+  const repo = repository as Record<string, unknown>;
+  const repoName = repo['full_name'];
+  const repoId = repo['id'];
+
+  if (typeof repoName !== 'string' || typeof repoId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid repository data' });
+  }
+
+  if (!workflowRun || typeof workflowRun !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing workflow_run' });
+  }
+
+  const run = workflowRun as Record<string, unknown>;
+  const conclusion = run['conclusion'];
+  const status = run['status'];
+  const runName = run['name'];
+  const prLink = extractPRLinkage(run);
+
+  const createdAt = p['created_at'] ?? new Date().toISOString();
+
+  const validatedAction =
+    typeof action === 'string' && isValidGitHubPRAction(action) ? action : null;
+
+  return ok({
+    githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    repository: repoName,
+    repositoryId: repoId,
+    pullRequestNumber: prLink.number,
+    pullRequestId: prLink.id,
+    eventType: 'workflow_run' as GitHubEventType,
+    action: validatedAction,
+    senderLogin: senderResult.value.login,
+    senderId: senderResult.value.id,
+    senderType: senderResult.value.type,
+    title: typeof runName === 'string' ? runName : null,
+    body: null,
+    state: typeof status === 'string'
+      ? `${status}${typeof conclusion === 'string' ? `/${conclusion}` : ''}`
+      : null,
+    mergedAt: null,
+    createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
+    payload,
+  });
+}
+
+/**
+ * Parse a check_run event payload.
+ */
+export function parseCheckRunEvent(
+  payload: unknown
+): Result<CreateGitHubPREventInput, { code: 'INVALID_PAYLOAD'; message: string }> {
+  if (!payload || typeof payload !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Payload is not an object' });
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  const senderResult = extractSender(payload);
+  if (!senderResult.ok) {
+    return senderResult;
+  }
+
+  const action = p['action'];
+  const repository = p['repository'];
+  const checkRun = p['check_run'];
+
+  if (!repository || typeof repository !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing repository' });
+  }
+
+  const repo = repository as Record<string, unknown>;
+  const repoName = repo['full_name'];
+  const repoId = repo['id'];
+
+  if (typeof repoName !== 'string' || typeof repoId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid repository data' });
+  }
+
+  if (!checkRun || typeof checkRun !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing check_run' });
+  }
+
+  const cr = checkRun as Record<string, unknown>;
+  const conclusion = cr['conclusion'];
+  const status = cr['status'];
+  const checkName = cr['name'];
+  const prLink = extractPRLinkage(cr);
+
+  const createdAt = p['created_at'] ?? new Date().toISOString();
+
+  const validatedAction =
+    typeof action === 'string' && isValidGitHubPRAction(action) ? action : null;
+
+  return ok({
+    githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    repository: repoName,
+    repositoryId: repoId,
+    pullRequestNumber: prLink.number,
+    pullRequestId: prLink.id,
+    eventType: 'check_run' as GitHubEventType,
+    action: validatedAction,
+    senderLogin: senderResult.value.login,
+    senderId: senderResult.value.id,
+    senderType: senderResult.value.type,
+    title: typeof checkName === 'string' ? checkName : null,
+    body: null,
+    state: typeof status === 'string'
+      ? `${status}${typeof conclusion === 'string' ? `/${conclusion}` : ''}`
+      : null,
+    mergedAt: null,
+    createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
+    payload,
+  });
+}
+
+/**
+ * Parse a check_suite event payload.
+ */
+export function parseCheckSuiteEvent(
+  payload: unknown
+): Result<CreateGitHubPREventInput, { code: 'INVALID_PAYLOAD'; message: string }> {
+  if (!payload || typeof payload !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Payload is not an object' });
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  const senderResult = extractSender(payload);
+  if (!senderResult.ok) {
+    return senderResult;
+  }
+
+  const action = p['action'];
+  const repository = p['repository'];
+  const checkSuite = p['check_suite'];
+
+  if (!repository || typeof repository !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing repository' });
+  }
+
+  const repo = repository as Record<string, unknown>;
+  const repoName = repo['full_name'];
+  const repoId = repo['id'];
+
+  if (typeof repoName !== 'string' || typeof repoId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid repository data' });
+  }
+
+  if (!checkSuite || typeof checkSuite !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing check_suite' });
+  }
+
+  const cs = checkSuite as Record<string, unknown>;
+  const conclusion = cs['conclusion'];
+  const status = cs['status'];
+  const prLink = extractPRLinkage(cs);
+
+  const createdAt = p['created_at'] ?? new Date().toISOString();
+
+  const validatedAction =
+    typeof action === 'string' && isValidGitHubPRAction(action) ? action : null;
+
+  return ok({
+    githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    repository: repoName,
+    repositoryId: repoId,
+    pullRequestNumber: prLink.number,
+    pullRequestId: prLink.id,
+    eventType: 'check_suite' as GitHubEventType,
+    action: validatedAction,
+    senderLogin: senderResult.value.login,
+    senderId: senderResult.value.id,
+    senderType: senderResult.value.type,
+    title: null,
+    body: null,
+    state: typeof status === 'string'
+      ? `${status}${typeof conclusion === 'string' ? `/${conclusion}` : ''}`
+      : null,
+    mergedAt: null,
+    createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
+    payload,
+  });
+}
+
+/**
  * Parse a GitHub webhook event based on the event type.
  */
 export function parseGitHubWebhookEvent(
@@ -526,6 +763,12 @@ export function parseGitHubWebhookEvent(
       return parseIssueCommentEvent(payload);
     case 'push':
       return parsePushEvent(payload);
+    case 'workflow_run':
+      return parseWorkflowRunEvent(payload);
+    case 'check_run':
+      return parseCheckRunEvent(payload);
+    case 'check_suite':
+      return parseCheckSuiteEvent(payload);
     case 'ping':
       // Ping events don't need to be stored
       return ok(null);

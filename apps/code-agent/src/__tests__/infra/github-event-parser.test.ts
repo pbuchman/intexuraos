@@ -9,6 +9,9 @@ import {
   parsePullRequestReviewCommentEvent,
   parseIssueCommentEvent,
   parsePushEvent,
+  parseWorkflowRunEvent,
+  parseCheckRunEvent,
+  parseCheckSuiteEvent,
   parseGitHubWebhookEvent,
   shouldProcessRepository,
 } from '../../infra/github-event-parser.js';
@@ -1933,6 +1936,689 @@ describe('github-event-parser', () => {
       if (result.ok && result.value !== null) {
         expect(result.value.createdAt).toBeInstanceOf(Date); // @allow-result-access -- narrowed by result.ok && result.value !== null
         expect(result.value.createdAt).toEqual(createdDate); // @allow-result-access -- Date instance passed through
+      }
+    });
+  });
+
+  describe('parseWorkflowRunEvent', () => {
+    const validWorkflowRunPayload = {
+      id: 90001,
+      action: 'completed',
+      repository: {
+        id: 456,
+        full_name: 'intexuraos/code-agent',
+      },
+      workflow_run: {
+        name: 'CI',
+        head_sha: 'abc123def456',
+        status: 'completed',
+        conclusion: 'failure',
+        pull_requests: [{ number: 42, id: 101 }],
+      },
+      sender: {
+        login: 'github-actions[bot]',
+        id: 41898282,
+        type: 'Bot',
+      },
+    };
+
+    it('should parse workflow_run completed with failure', () => {
+      const result = parseWorkflowRunEvent(validWorkflowRunPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.eventType).toBe('workflow_run'); // @allow-result-access -- narrowed above
+        expect(result.value.action).toBe('completed'); // @allow-result-access -- narrowed above
+        expect(result.value.state).toBe('completed/failure'); // @allow-result-access -- narrowed above
+        expect(result.value.title).toBe('CI'); // @allow-result-access -- narrowed above
+        expect(result.value.pullRequestNumber).toBe(42); // @allow-result-access -- narrowed above
+        expect(result.value.pullRequestId).toBe(101); // @allow-result-access -- narrowed above
+        expect(result.value.senderLogin).toBe('github-actions[bot]'); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle workflow_run without pull_requests list', () => {
+      const payload = {
+        ...validWorkflowRunPayload,
+        workflow_run: {
+          name: 'Deploy',
+          head_sha: 'abc123',
+          status: 'completed',
+          conclusion: 'success',
+        },
+      };
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.pullRequestNumber).toBe(0); // @allow-result-access -- narrowed above
+        expect(result.value.pullRequestId).toBe(0); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle workflow_run without conclusion yet', () => {
+      const payload = {
+        ...validWorkflowRunPayload,
+        action: 'requested',
+        workflow_run: {
+          name: 'CI',
+          head_sha: 'abc123',
+          status: 'queued',
+        },
+      };
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.state).toBe('queued'); // @allow-result-access -- narrowed above
+        expect(result.value.action).toBe('requested'); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should return error for missing workflow_run', () => {
+      const { workflow_run: _, ...payload } = validWorkflowRunPayload;
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Missing workflow_run');
+      }
+    });
+
+    it('should return error for non-object payload', () => {
+      const result = parseWorkflowRunEvent(null);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+      }
+    });
+
+    it('should return error for missing repository', () => {
+      const { repository: _, ...payload } = validWorkflowRunPayload;
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Missing repository');
+      }
+    });
+
+    it('should return error for invalid repository data', () => {
+      const payload = {
+        ...validWorkflowRunPayload,
+        repository: { id: 'not-a-number', full_name: 123 },
+      };
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Invalid repository data');
+      }
+    });
+
+    it('should return error for missing sender', () => {
+      const { sender: _, ...payload } = validWorkflowRunPayload;
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('sender');
+      }
+    });
+
+    it('should use Date.now() fallback when id is missing', () => {
+      const { id: _, ...payload } = validWorkflowRunPayload;
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.githubEventId).toBeGreaterThan(0); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle non-string workflow name', () => {
+      const payload = {
+        ...validWorkflowRunPayload,
+        workflow_run: {
+          name: 123,
+          head_sha: 'abc',
+          status: 'completed',
+          conclusion: 'success',
+        },
+      };
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.title).toBeNull(); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle createdAt as Date object', () => {
+      const createdDate = new Date('2026-01-01T00:00:00Z');
+      const payload = {
+        ...validWorkflowRunPayload,
+        created_at: createdDate,
+      };
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.createdAt).toEqual(createdDate); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle unknown action by setting null', () => {
+      const payload = {
+        ...validWorkflowRunPayload,
+        action: 'unknown_action_xyz',
+      };
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.action).toBeNull(); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle pull_requests with non-object first element', () => {
+      const payload = {
+        ...validWorkflowRunPayload,
+        workflow_run: {
+          name: 'CI',
+          head_sha: 'abc',
+          status: 'completed',
+          conclusion: 'failure',
+          pull_requests: ['not-an-object'],
+        },
+      };
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.pullRequestNumber).toBe(0); // @allow-result-access -- narrowed above
+        expect(result.value.pullRequestId).toBe(0); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle pull_requests with non-number fields', () => {
+      const payload = {
+        ...validWorkflowRunPayload,
+        workflow_run: {
+          name: 'CI',
+          head_sha: 'abc',
+          status: 'completed',
+          conclusion: 'failure',
+          pull_requests: [{ number: 'not-a-number', id: 'also-not' }],
+        },
+      };
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.pullRequestNumber).toBe(0); // @allow-result-access -- narrowed above
+        expect(result.value.pullRequestId).toBe(0); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle non-string status', () => {
+      const payload = {
+        ...validWorkflowRunPayload,
+        workflow_run: {
+          name: 'CI',
+          head_sha: 'abc',
+          status: null,
+          conclusion: null,
+        },
+      };
+
+      const result = parseWorkflowRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.state).toBeNull(); // @allow-result-access -- narrowed above
+      }
+    });
+  });
+
+  describe('parseCheckRunEvent', () => {
+    const validCheckRunPayload = {
+      id: 90002,
+      action: 'completed',
+      repository: {
+        id: 456,
+        full_name: 'intexuraos/code-agent',
+      },
+      check_run: {
+        name: 'build',
+        head_sha: 'def456abc789',
+        status: 'completed',
+        conclusion: 'success',
+        pull_requests: [{ number: 55, id: 202 }],
+      },
+      sender: {
+        login: 'github-actions[bot]',
+        id: 41898282,
+        type: 'Bot',
+      },
+    };
+
+    it('should parse check_run completed payload', () => {
+      const result = parseCheckRunEvent(validCheckRunPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.eventType).toBe('check_run'); // @allow-result-access -- narrowed above
+        expect(result.value.action).toBe('completed'); // @allow-result-access -- narrowed above
+        expect(result.value.state).toBe('completed/success'); // @allow-result-access -- narrowed above
+        expect(result.value.title).toBe('build'); // @allow-result-access -- narrowed above
+        expect(result.value.pullRequestNumber).toBe(55); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle check_run without conclusion yet', () => {
+      const payload = {
+        ...validCheckRunPayload,
+        action: 'created',
+        check_run: {
+          name: 'lint',
+          head_sha: 'abc123',
+          status: 'in_progress',
+        },
+      };
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.state).toBe('in_progress'); // @allow-result-access -- narrowed above
+        expect(result.value.pullRequestNumber).toBe(0); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should return error for missing check_run', () => {
+      const { check_run: _, ...payload } = validCheckRunPayload;
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Missing check_run');
+      }
+    });
+
+    it('should return error for non-object payload', () => {
+      const result = parseCheckRunEvent(null);
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('should return error for missing repository', () => {
+      const { repository: _, ...payload } = validCheckRunPayload;
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Missing repository');
+      }
+    });
+
+    it('should return error for invalid repository data', () => {
+      const payload = {
+        ...validCheckRunPayload,
+        repository: { id: 'bad', full_name: 456 },
+      };
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Invalid repository data');
+      }
+    });
+
+    it('should return error for missing sender', () => {
+      const { sender: _, ...payload } = validCheckRunPayload;
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('should use Date.now() fallback when id is missing', () => {
+      const { id: _, ...payload } = validCheckRunPayload;
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.githubEventId).toBeGreaterThan(0); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle non-string check name', () => {
+      const payload = {
+        ...validCheckRunPayload,
+        check_run: {
+          name: 999,
+          head_sha: 'abc',
+          status: 'completed',
+          conclusion: 'success',
+        },
+      };
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.title).toBeNull(); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle createdAt as Date object', () => {
+      const createdDate = new Date('2026-01-01T00:00:00Z');
+      const payload = {
+        ...validCheckRunPayload,
+        created_at: createdDate,
+      };
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.createdAt).toEqual(createdDate); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle unknown action by setting null', () => {
+      const payload = {
+        ...validCheckRunPayload,
+        action: 'unknown_xyz',
+      };
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.action).toBeNull(); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle non-string status', () => {
+      const payload = {
+        ...validCheckRunPayload,
+        check_run: {
+          name: 'build',
+          head_sha: 'abc',
+          status: null,
+          conclusion: null,
+        },
+      };
+
+      const result = parseCheckRunEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.state).toBeNull(); // @allow-result-access -- narrowed above
+      }
+    });
+  });
+
+  describe('parseCheckSuiteEvent', () => {
+    const validCheckSuitePayload = {
+      id: 90003,
+      action: 'completed',
+      repository: {
+        id: 456,
+        full_name: 'intexuraos/code-agent',
+      },
+      check_suite: {
+        head_sha: 'ghi789jkl012',
+        status: 'completed',
+        conclusion: 'failure',
+        pull_requests: [{ number: 60, id: 303 }],
+      },
+      sender: {
+        login: 'github-actions[bot]',
+        id: 41898282,
+        type: 'Bot',
+      },
+    };
+
+    it('should parse check_suite completed payload', () => {
+      const result = parseCheckSuiteEvent(validCheckSuitePayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.eventType).toBe('check_suite'); // @allow-result-access -- narrowed above
+        expect(result.value.state).toBe('completed/failure'); // @allow-result-access -- narrowed above
+        expect(result.value.pullRequestNumber).toBe(60); // @allow-result-access -- narrowed above
+        expect(result.value.title).toBeNull(); // @allow-result-access -- check_suite has no name
+      }
+    });
+
+    it('should handle check_suite without PR linkage', () => {
+      const payload = {
+        ...validCheckSuitePayload,
+        check_suite: {
+          head_sha: 'abc123',
+          status: 'completed',
+          conclusion: 'success',
+        },
+      };
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.pullRequestNumber).toBe(0); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should return error for missing check_suite', () => {
+      const { check_suite: _, ...payload } = validCheckSuitePayload;
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Missing check_suite');
+      }
+    });
+
+    it('should return error for non-object payload', () => {
+      const result = parseCheckSuiteEvent(null);
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('should return error for missing sender', () => {
+      const { sender: _, ...payload } = validCheckSuitePayload;
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('should return error for missing repository', () => {
+      const { repository: _, ...payload } = validCheckSuitePayload;
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Missing repository');
+      }
+    });
+
+    it('should return error for invalid repository data', () => {
+      const payload = {
+        ...validCheckSuitePayload,
+        repository: { id: 'bad', full_name: 456 },
+      };
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Invalid repository data');
+      }
+    });
+
+    it('should use Date.now() fallback when id is missing', () => {
+      const { id: _, ...payload } = validCheckSuitePayload;
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.githubEventId).toBeGreaterThan(0); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle createdAt as Date object', () => {
+      const createdDate = new Date('2026-01-01T00:00:00Z');
+      const payload = {
+        ...validCheckSuitePayload,
+        created_at: createdDate,
+      };
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.createdAt).toEqual(createdDate); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle unknown action by setting null', () => {
+      const payload = {
+        ...validCheckSuitePayload,
+        action: 'totally_unknown',
+      };
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.action).toBeNull(); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle non-string status', () => {
+      const payload = {
+        ...validCheckSuitePayload,
+        check_suite: {
+          head_sha: 'abc',
+          status: null,
+          conclusion: null,
+        },
+      };
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.state).toBeNull(); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should handle status without conclusion', () => {
+      const payload = {
+        ...validCheckSuitePayload,
+        check_suite: {
+          head_sha: 'abc',
+          status: 'in_progress',
+          pull_requests: [],
+        },
+      };
+
+      const result = parseCheckSuiteEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.state).toBe('in_progress'); // @allow-result-access -- narrowed above
+      }
+    });
+  });
+
+  describe('parseGitHubWebhookEvent - CI events', () => {
+    it('should route workflow_run to parseWorkflowRunEvent', () => {
+      const payload = {
+        id: 90001,
+        action: 'completed',
+        repository: { id: 456, full_name: 'intexuraos/code-agent' },
+        workflow_run: {
+          name: 'CI',
+          head_sha: 'abc123',
+          status: 'completed',
+          conclusion: 'failure',
+        },
+        sender: { login: 'bot', id: 1, type: 'Bot' },
+      };
+
+      const result = parseGitHubWebhookEvent('workflow_run', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.eventType).toBe('workflow_run'); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should route check_run to parseCheckRunEvent', () => {
+      const payload = {
+        id: 90002,
+        action: 'completed',
+        repository: { id: 456, full_name: 'intexuraos/code-agent' },
+        check_run: {
+          name: 'build',
+          head_sha: 'abc123',
+          status: 'completed',
+          conclusion: 'success',
+        },
+        sender: { login: 'bot', id: 1, type: 'Bot' },
+      };
+
+      const result = parseGitHubWebhookEvent('check_run', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.eventType).toBe('check_run'); // @allow-result-access -- narrowed above
+      }
+    });
+
+    it('should route check_suite to parseCheckSuiteEvent', () => {
+      const payload = {
+        id: 90003,
+        action: 'completed',
+        repository: { id: 456, full_name: 'intexuraos/code-agent' },
+        check_suite: {
+          head_sha: 'abc123',
+          status: 'completed',
+          conclusion: 'success',
+        },
+        sender: { login: 'bot', id: 1, type: 'Bot' },
+      };
+
+      const result = parseGitHubWebhookEvent('check_suite', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.eventType).toBe('check_suite'); // @allow-result-access -- narrowed above
       }
     });
   });

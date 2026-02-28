@@ -34,8 +34,16 @@ describe('groupWebhookEvent', () => {
     expect(groupWebhookEvent('ping', null)).toBe('other');
   });
 
-  it('groups unknown event type as other', () => {
-    expect(groupWebhookEvent('workflow_run', 'completed')).toBe('other');
+  it('groups workflow_run as github_action_result', () => {
+    expect(groupWebhookEvent('workflow_run', 'completed')).toBe('github_action_result');
+  });
+
+  it('groups check_run as github_action_result', () => {
+    expect(groupWebhookEvent('check_run', 'completed')).toBe('github_action_result');
+  });
+
+  it('groups check_suite as github_action_result', () => {
+    expect(groupWebhookEvent('check_suite', 'completed')).toBe('github_action_result');
   });
 
   it('groups completely unknown event as other', () => {

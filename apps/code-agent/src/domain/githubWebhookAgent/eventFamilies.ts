@@ -21,6 +21,9 @@ const EVENT_GROUP_MAPPINGS: readonly EventGroupMapping[] = [
   { eventType: 'issue_comment', group: 'comment' },
   { eventType: 'push', group: 'other' },
   { eventType: 'ping', group: 'other' },
+  { eventType: 'workflow_run', group: 'github_action_result' },
+  { eventType: 'check_run', group: 'github_action_result' },
+  { eventType: 'check_suite', group: 'github_action_result' },
 ];
 
 export function groupWebhookEvent(
