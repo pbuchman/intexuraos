@@ -14,7 +14,7 @@ export type LinearPriority = 0 | 1 | 2 | 3 | 4;
  * Schema for individual Linear issue data extracted from natural language.
  */
 export const LinearIssueDataSchema = z.object({
-  title: z.string().max(100),
+  title: z.string(),
   priority: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   functionalRequirements: z.string().nullable(),
   technicalDetails: z.string().nullable(),

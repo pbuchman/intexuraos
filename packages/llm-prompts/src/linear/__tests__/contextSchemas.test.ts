@@ -248,39 +248,6 @@ describe('LinearIssueDataSchema', () => {
     });
   });
 
-  describe('title length validation', () => {
-    it('accepts title at exactly 100 characters', () => {
-      const title = 'x'.repeat(100);
-      const result = LinearIssueDataSchema.safeParse({
-        title,
-        priority: 2,
-        functionalRequirements: null,
-        technicalDetails: null,
-        valid: true,
-        error: null,
-        reasoning: 'test',
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it('rejects title longer than 100 characters', () => {
-      const title = 'x'.repeat(101);
-      const result = LinearIssueDataSchema.safeParse({
-        title,
-        priority: 2,
-        functionalRequirements: null,
-        technicalDetails: null,
-        valid: true,
-        error: null,
-        reasoning: 'test',
-      });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues[0].path[0]).toBe('title');
-      }
-    });
-  });
-
   describe('edge cases', () => {
     it('accepts empty string title', () => {
       const result = LinearIssueDataSchema.safeParse({

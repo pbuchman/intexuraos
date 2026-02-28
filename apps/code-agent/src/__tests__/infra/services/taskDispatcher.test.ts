@@ -266,7 +266,7 @@ describe('taskDispatcherImpl', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
-    it('returns error when all workers fail', async () => {
+    it('returns at_capacity when all workers return 503', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -290,7 +290,7 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('worker_unavailable');
+        expect(result.error.code).toBe('at_capacity');
       }
     });
 

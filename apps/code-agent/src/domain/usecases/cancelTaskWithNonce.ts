@@ -45,7 +45,7 @@ export interface CancelTaskWithNonceDeps {
  * 2. Validate nonce matches
  * 3. Check nonce not expired
  * 4. Verify user owns the task
- * 5. Check task is cancellable (dispatched or running)
+ * 5. Check task is cancellable (dispatched, running, or queued)
  * 6. Update task status to cancelled, clear nonce
  * 7. Notify worker to stop (best effort)
  */
@@ -87,7 +87,7 @@ export async function cancelTaskWithNonce(
   }
 
   // Step 5: Check task is cancellable
-  const cancellableStatuses = ['dispatched', 'running'];
+  const cancellableStatuses = ['dispatched', 'running', 'queued'];
   if (!cancellableStatuses.includes(task.status)) {
     logger.info({ taskId, status: task.status }, 'Task not in cancellable state');
     return err({ code: 'task_not_cancellable', message: `Task is ${task.status}, cannot cancel` });

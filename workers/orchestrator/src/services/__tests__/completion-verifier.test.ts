@@ -50,8 +50,9 @@ const validPhase1Final = `PLANNING_AGENT_FINAL:
 - Outcome: planned
 - superpowers_writing_plans_used: 1
 - Original issue: https://linear.app/intexuraos/issue/INT-1
-- Child issues: 3
 - Planning issue: https://linear.app/intexuraos/issue/INT-10
+- Trivial task: 0
+- Parallel breakdown proof: Split work across orchestrator and code-agent streams
 - Plan doc: docs/plans/test-plan.md
 - Planning PR: https://github.com/intexuraos/intexuraos/pull/321
 - Clarification message:
@@ -1725,8 +1726,8 @@ describe('completion-verifier', () => {
 - Outcome: planned
 - superpowers_writing_plans_used: 1
 - Original issue: https://linear.app/intexuraos/issue/INT-1
-- Child issues: 3
 - Planning issue: [INT-659](https://linear.app/intexuraos/issue/INT-659)
+- Trivial task: 0
 - Plan doc: docs/plans/test.md
 - Planning PR: [PR #100](https://github.com/org/repo/pull/100)
 - Summary: Planned the feature with markdown URLs.`),
