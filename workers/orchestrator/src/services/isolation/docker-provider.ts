@@ -4,7 +4,13 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from '@intexuraos/common-core';
-import type { IsolationProvider, WorkerConfig, WorkerHandle, ResourceUsage } from './types.js';
+import type {
+  DiscoveredContainer,
+  IsolationProvider,
+  WorkerConfig,
+  WorkerHandle,
+  ResourceUsage,
+} from './types.js';
 
 export interface DockerProviderConfig {
   imageName: string;
@@ -346,6 +352,29 @@ export class DockerProvider implements IsolationProvider {
       }
     } catch (error) {
       this.logger.warn({ error }, 'Failed to list containers for cleanup');
+    }
+  }
+
+  /**
+   * Discover all worker containers currently known to Docker.
+   * Used during startup to find containers from previous orchestrator runs.
+   * Returns empty array (does not throw) if Docker is unreachable.
+   */
+  async listWorkerContainers(): Promise<DiscoveredContainer[]> {
+    try {
+      const containers = await this.docker.listContainers({
+        all: true,
+        filters: { name: ['claude-worker-'] },
+      });
+
+      return containers.map((c) => ({
+        containerId: c.Id,
+        taskId: (c.Names[0] ?? '').replace(/^\/claude-worker-/, ''),
+        state: c.State,
+      }));
+    } catch (error) {
+      this.logger.warn({ error }, 'Failed to list worker containers for discovery');
+      return [];
     }
   }
 
