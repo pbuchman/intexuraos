@@ -235,6 +235,7 @@ describe('TaskDispatcher', () => {
   };
 
   type VerifierMockResult = CompletionVerifierVerdict;
+  const dummyTrace = { transcript: '', prompt: '', response: '' };
 
   const singleAttemptCompletionControl = {
     maxAttempts: 1,
@@ -244,6 +245,7 @@ describe('TaskDispatcher', () => {
           passed: true,
           missingFields: [],
           verifierFailure: false,
+          trace: dummyTrace,
           agentData: {
             agentType: 'planning' as const,
             outcome: 'planned',
@@ -1401,6 +1403,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: ['gh_pr_url'],
         verifierFailure: false,
+        trace: dummyTrace,
       });
       const internal = agentDispatcher as unknown as {
         checkForResult: (task: unknown) => Promise<unknown>;
@@ -1446,6 +1449,7 @@ describe('TaskDispatcher', () => {
         passed: true,
         missingFields: [],
         verifierFailure: false,
+        trace: dummyTrace,
         agentData: {
           agentType: 'execution',
           superpowers_executing_plans: 'used',
@@ -1504,6 +1508,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: false,
+        trace: dummyTrace,
       });
       const request: CreateTaskRequest = {
         taskId: 'claude-error-test',
@@ -1790,6 +1795,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: false,
+        trace: dummyTrace,
       });
       const request: CreateTaskRequest = {
         taskId: 'docker-header-error',
@@ -1838,6 +1844,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: false,
+        trace: dummyTrace,
       });
       const request: CreateTaskRequest = {
         taskId: 'split-json-error',
@@ -1957,11 +1964,13 @@ describe('TaskDispatcher', () => {
           passed: false,
           missingFields: ['agent_final_block'],
           verifierFailure: false,
+          trace: dummyTrace,
         })
         .mockResolvedValueOnce({
           passed: true,
           missingFields: [],
           verifierFailure: false,
+          trace: dummyTrace,
           agentData: {
             agentType: 'execution',
             superpowers_executing_plans: 'used',
@@ -2063,6 +2072,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: true,
+        trace: dummyTrace,
       });
 
       const verifierFailureDispatcher = new TaskDispatcher(
@@ -2165,6 +2175,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: ['some_field'],
         verifierFailure: false,
+        trace: dummyTrace,
       });
 
       const resumeFailDispatcher = new TaskDispatcher(
@@ -2307,6 +2318,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: ['criteria_a'],
         verifierFailure: false,
+        trace: dummyTrace,
       });
 
       const preserveDispatcher = new TaskDispatcher(
@@ -2384,6 +2396,7 @@ describe('TaskDispatcher', () => {
               passed: true,
               missingFields: [],
               verifierFailure: false,
+              trace: dummyTrace,
             }),
             describe: (): { enabled: boolean } => ({ enabled: true }),
           },
@@ -2435,6 +2448,7 @@ describe('TaskDispatcher', () => {
         passed: false,
         missingFields: [],
         verifierFailure: true,
+        trace: dummyTrace,
       });
 
       const fallbackDispatcher = new TaskDispatcher(
@@ -2735,6 +2749,7 @@ describe('TaskDispatcher', () => {
               passed: true,
               missingFields: [],
               verifierFailure: false,
+              trace: dummyTrace,
             }),
             describe: (): { enabled: boolean } => ({ enabled: true }),
           },
@@ -3626,11 +3641,13 @@ describe('TaskDispatcher', () => {
           passed: false,
           missingFields: ['final_block'],
           verifierFailure: false,
+          trace: dummyTrace,
         })
         .mockResolvedValueOnce({
           passed: true,
           missingFields: [],
           verifierFailure: false,
+          trace: dummyTrace,
           agentData: {
             agentType: 'execution',
             superpowers_executing_plans: 'used',

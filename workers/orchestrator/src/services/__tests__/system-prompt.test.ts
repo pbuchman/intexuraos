@@ -20,9 +20,49 @@ describe('system-prompt', () => {
     expect(result).toContain('NO IMPLEMENTATION CODING IS ALLOWED');
     expect(result).toContain('docs/plans/');
     expect(result).toContain('superpowers:writing-plans');
-    expect(result).toContain('parallel work breakdown');
+    expect(result).toContain('Parallel work breakdown');
     expect(result).toContain('service/package');
     expect(result).toContain('PLANNING_AGENT_FINAL:');
+  });
+
+  it('requires archiving issue content before editing in planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('archive its current content by adding a Linear comment');
+    // Archive instruction appears in both Planning Contract and Simple vs Complex sections
+    const firstArchive = result.indexOf('archive its current content');
+    const secondArchive = result.indexOf('archive its current content', firstArchive + 1);
+    expect(secondArchive).toBeGreaterThan(firstArchive);
+  });
+
+  it('enforces strict parallel work breakdown rules for complex tasks', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('STRICT REQUIREMENT');
+    expect(result).toContain('strict requirement for the agent executing the plan');
+    expect(result).toContain('ALL subissues MUST be executable in parallel');
+    expect(result).toContain('MUST NOT create any dependencies between issues');
+    expect(result).toContain('input/output boundaries');
+  });
+
+  it('enforces Plan PR rules in PLANNING_AGENT_FINAL', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('NEVER for simple tasks, ALWAYS when subtasks are defined');
+  });
+
+  it('enforces Clarification message rules in PLANNING_AGENT_FINAL', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('REQUIRED for unclear outcomes');
+    expect(result).toContain('MUST be empty for successfully planned outcomes');
+  });
+
+  it('requires proof of parallel breakdown showing boundaries for complex outcomes', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('show service boundaries and contracts between subissues');
+    expect(result).toContain('agents can work on each subissue independently');
   });
 
   it('requires complexity judgment before any changes in planning prompt', () => {
@@ -89,7 +129,8 @@ describe('system-prompt', () => {
     expect(result).toContain('[AGENT:EXECUTION]');
     expect(result).toContain('[EXECUTION AGENT MODE]');
     expect(result).toContain('source of truth');
-    expect(result).toContain('DO NOT use the `/linear` skill/command');
+    expect(result).toContain('Linear MCP tools');
+    expect(result).toContain('Do NOT use the `/linear` skill');
     expect(result).toContain('superpowers:executing-plans');
     expect(result).toContain('superpowers:requesting-code-review');
     expect(result).toContain('gh pr create');
