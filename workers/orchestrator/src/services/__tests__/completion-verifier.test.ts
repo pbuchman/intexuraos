@@ -1685,9 +1685,7 @@ describe('completion-verifier', () => {
 
     it('returns plain URL unchanged', () => {
       expect(
-        CompletionVerifierTestUtils.stripMarkdownLink(
-          'https://linear.app/pbuchman/issue/INT-659'
-        )
+        CompletionVerifierTestUtils.stripMarkdownLink('https://linear.app/pbuchman/issue/INT-659')
       ).toBe('https://linear.app/pbuchman/issue/INT-659');
     });
 
