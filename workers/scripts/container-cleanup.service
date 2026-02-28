@@ -1,0 +1,34 @@
+# systemd service unit for IntexuraOS container cleanup.
+#
+# Installation (on VM):
+#   sudo cp container-cleanup.service /etc/systemd/system/
+#   sudo cp container-cleanup.timer   /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now container-cleanup.timer
+#
+# Manual run:
+#   sudo systemctl start container-cleanup.service
+
+[Unit]
+Description=IntexuraOS Docker container cleanup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Run as root — required for Docker socket access on the VM.
+# The Docker group alone is insufficient on some VM configurations
+# where /var/run/docker.sock is owned by root:root.
+User=root
+Group=root
+ExecStart=/opt/intexuraos/workers/scripts/cleanup-containers.sh
+Environment=CONTAINER_PREFIX=claude-worker-
+Environment=RETENTION_DAYS=1
+Environment=LOG_FILE=/var/log/intexuraos/container-cleanup.log
+Environment=ORCHESTRATOR_URL=http://localhost:8199
+
+# Safety: 60-second timeout
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

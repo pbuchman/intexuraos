@@ -681,4 +681,12 @@ workers/orchestrator/
   vitest.e2e.config.ts                # E2E test config (Docker-dependent)
   README.md                           # Setup and usage guide
   DEPLOYMENT.md                       # Build, deploy, and manage reference
+
+workers/scripts/                      # Container cleanup cron (shared with orchestrator)
+  cleanup-containers.sh               # Main cleanup script (age-based container removal)
+  test-container-cleanup.sh           # Integration test suite (T1–T12)
+  cloud.intexuraos.container-cleanup.plist  # macOS LaunchAgent (6-hour interval)
+  container-cleanup.service           # Linux systemd oneshot service
+  container-cleanup.timer             # Linux systemd timer (6-hour interval)
+  provision-cleanup-cron.sh           # VM provisioning helper
 ```
