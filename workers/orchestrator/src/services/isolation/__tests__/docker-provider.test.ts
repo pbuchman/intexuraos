@@ -1425,7 +1425,9 @@ describe('DockerProvider', () => {
       const result = await provider.listWorkerContainers();
 
       expect(result).toHaveLength(1);
-      expect(result[0]!.taskId).toBe('task_abc');
+      const firstResult = result[0];
+      expect(firstResult).toBeDefined();
+      expect(firstResult?.taskId).toBe('task_abc');
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { containerId: 'container-bad' },
         expect.stringContaining('no recognizable name')

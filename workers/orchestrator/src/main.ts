@@ -112,11 +112,13 @@ async function runStartupRecovery(
   // Discover containers (if isolation provider available)
   let containerMap: Map<string, DiscoveredContainer> | null = null;
 
-  if (isolationProvider?.listWorkerContainers != null) {
+  if (isolationProvider?.listWorkerContainers !== undefined) {
     try {
       let timeoutHandle: NodeJS.Timeout | undefined = undefined;
       const timeoutPromise = new Promise<null>((resolve) => {
-        timeoutHandle = setTimeout(() => resolve(null), ADOPTION_TIMEOUT_MS);
+        timeoutHandle = setTimeout(() => {
+          resolve(null);
+        }, ADOPTION_TIMEOUT_MS);
       });
 
       const discoveryResult = await Promise.race([
@@ -133,7 +135,7 @@ async function runStartupRecovery(
       clearTimeout(timeoutHandle);
       containerMap = discoveryResult;
 
-      if (containerMap != null) {
+      if (containerMap !== null) {
         logger.info(
           { containerCount: containerMap.size },
           'Container discovery completed'
@@ -147,12 +149,12 @@ async function runStartupRecovery(
   }
 
   // Handle stateless orphan containers (container exists but NOT in state)
-  if (containerMap != null) {
+  if (containerMap !== null && isolationProvider !== undefined) {
     const taskIdsInState = new Set(Object.keys(state.tasks));
     for (const [taskId] of containerMap) {
       if (!taskIdsInState.has(taskId)) {
         try {
-          await isolationProvider!.destroyWorker(taskId);
+          await isolationProvider.destroyWorker(taskId);
           logger.info({ taskId }, 'Removed stateless orphan container');
         } catch (error) {
           logger.error({ taskId, error }, 'Failed to remove orphan container');
@@ -173,7 +175,7 @@ async function runStartupRecovery(
     try {
       const container = containerMap?.get(task.taskId);
 
-      if (container != null && container.state === 'running') {
+      if (container?.state === 'running') {
         // Container is running — attempt adoption
         try {
           const result = await dispatcher.adoptTask(task);
@@ -189,11 +191,11 @@ async function runStartupRecovery(
         } catch (error) {
           logger.error({ taskId: task.taskId, error }, 'Adoption threw, marking as interrupted');
         }
-      } else if (container != null) {
+      } else if (container !== undefined && isolationProvider !== undefined) {
         // Non-running states (exited, paused, created, dead, restarting) are treated as terminated.
         // Container is destroyed and task is marked interrupted.
         try {
-          await isolationProvider!.destroyWorker(task.taskId);
+          await isolationProvider.destroyWorker(task.taskId);
           logger.info({ taskId: task.taskId }, 'Removed exited container');
         } catch (error) {
           logger.error({ taskId: task.taskId, error }, 'Failed to remove exited container');

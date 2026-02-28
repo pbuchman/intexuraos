@@ -84,6 +84,7 @@ describe('main.ts', () => {
     adoptTask: vi.fn(),
   } as unknown as TaskDispatcher;
 
+  const mockListWorkerContainers = vi.fn<() => Promise<DiscoveredContainer[]>>();
   const mockIsolationProvider: IsolationProvider = {
     createWorker: vi.fn(),
     destroyWorker: vi.fn(),
@@ -93,7 +94,7 @@ describe('main.ts', () => {
     waitForCompletion: vi.fn(),
     getResourceUsage: vi.fn(),
     listWorkers: vi.fn(),
-    listWorkerContainers: vi.fn<() => Promise<DiscoveredContainer[]>>(),
+    listWorkerContainers: mockListWorkerContainers,
   } as unknown as IsolationProvider;
 
   const mockTokenService: GitHubTokenService = {
@@ -133,7 +134,7 @@ describe('main.ts', () => {
     });
     vi.mocked(mockWebhookClient.retryPending).mockResolvedValue(undefined);
     vi.mocked(mockDispatcher.adoptTask).mockResolvedValue({ ok: true, value: undefined });
-    vi.mocked(mockIsolationProvider.listWorkerContainers!).mockResolvedValue([]);
+    mockListWorkerContainers.mockResolvedValue([]);
     vi.mocked(mockIsolationProvider.destroyWorker).mockResolvedValue(undefined);
   });
 
@@ -471,7 +472,7 @@ describe('main.ts', () => {
         pendingWebhooks: [],
       });
 
-      vi.mocked(mockIsolationProvider.listWorkerContainers!).mockResolvedValue([
+      mockListWorkerContainers.mockResolvedValue([
         { containerId: 'container-1', taskId: 'task-1', state: 'running' },
       ]);
 
@@ -522,7 +523,7 @@ describe('main.ts', () => {
       });
 
       // No containers discovered
-      vi.mocked(mockIsolationProvider.listWorkerContainers!).mockResolvedValue([]);
+      mockListWorkerContainers.mockResolvedValue([]);
 
       const { main } = await import('../main.js');
 
@@ -574,7 +575,7 @@ describe('main.ts', () => {
         pendingWebhooks: [],
       });
 
-      vi.mocked(mockIsolationProvider.listWorkerContainers!).mockResolvedValue([
+      mockListWorkerContainers.mockResolvedValue([
         { containerId: 'container-1', taskId: 'task-1', state: 'exited' },
       ]);
 
@@ -616,7 +617,7 @@ describe('main.ts', () => {
       });
 
       // But a container exists
-      vi.mocked(mockIsolationProvider.listWorkerContainers!).mockResolvedValue([
+      mockListWorkerContainers.mockResolvedValue([
         { containerId: 'orphan-container', taskId: 'orphan-task', state: 'running' },
       ]);
 
@@ -729,7 +730,7 @@ describe('main.ts', () => {
         pendingWebhooks: [],
       });
 
-      vi.mocked(mockIsolationProvider.listWorkerContainers!).mockResolvedValue([
+      mockListWorkerContainers.mockResolvedValue([
         { containerId: 'container-1', taskId: 'task-1', state: 'running' },
         { containerId: 'container-2', taskId: 'task-2', state: 'running' },
       ]);
@@ -796,7 +797,7 @@ describe('main.ts', () => {
         pendingWebhooks: [],
       });
 
-      vi.mocked(mockIsolationProvider.listWorkerContainers!).mockResolvedValue([
+      mockListWorkerContainers.mockResolvedValue([
         { containerId: 'container-1', taskId: 'task-1', state: 'running' },
       ]);
 
@@ -861,7 +862,7 @@ describe('main.ts', () => {
       });
 
       // Return a never-resolving promise to simulate a hang
-      vi.mocked(mockIsolationProvider.listWorkerContainers!).mockReturnValue(
+      mockListWorkerContainers.mockReturnValue(
         new Promise<DiscoveredContainer[]>(() => {
           // Never resolves
         })
