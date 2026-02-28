@@ -509,14 +509,14 @@ The orchestrator's in-process `cleanupOrphanedContainers()` removes stale contai
 
 ### Scripts
 
-| File                                        | Purpose                                                    |
-| ------------------------------------------- | ---------------------------------------------------------- |
-| `workers/scripts/cleanup-containers.sh`     | Main cleanup script — deletes exited containers past age   |
-| `workers/scripts/test-container-cleanup.sh`  | Integration test suite (T1–T12) using real Docker          |
-| `workers/scripts/cloud.intexuraos.container-cleanup.plist` | macOS LaunchAgent (6-hour interval)     |
-| `workers/scripts/container-cleanup.service`  | Linux systemd oneshot service                              |
-| `workers/scripts/container-cleanup.timer`    | Linux systemd timer (6-hour interval)                      |
-| `workers/scripts/provision-cleanup-cron.sh`  | VM provisioning helper (copies script + installs systemd)  |
+| File                                                       | Purpose                                                   |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| `workers/scripts/cleanup-containers.sh`                    | Main cleanup script — deletes exited containers past age  |
+| `workers/scripts/test-container-cleanup.sh`                | Integration test suite (T1–T12) using real Docker         |
+| `workers/scripts/cloud.intexuraos.container-cleanup.plist` | macOS LaunchAgent (6-hour interval)                       |
+| `workers/scripts/container-cleanup.service`                | Linux systemd oneshot service                             |
+| `workers/scripts/container-cleanup.timer`                  | Linux systemd timer (6-hour interval)                     |
+| `workers/scripts/provision-cleanup-cron.sh`                | VM provisioning helper (copies script + installs systemd) |
 
 ### How It Works
 
@@ -531,13 +531,13 @@ The orchestrator's in-process `cleanupOrphanedContainers()` removes stale contai
 
 All via environment variables (all optional):
 
-| Variable           | Default                  | Description                         |
-| ------------------ | ------------------------ | ----------------------------------- |
-| `CONTAINER_PREFIX` | `claude-worker-`         | Docker name prefix to match         |
-| `RETENTION_DAYS`   | `1`                      | Age threshold in days               |
-| `DRY_RUN`          | `false`                  | Set to `true` to preview only       |
-| `LOG_FILE`         | (stdout)                 | Path to log file                    |
-| `ORCHESTRATOR_URL` | `http://localhost:8199`  | Base URL of the orchestrator        |
+| Variable           | Default                 | Description                   |
+| ------------------ | ----------------------- | ----------------------------- |
+| `CONTAINER_PREFIX` | `claude-worker-`        | Docker name prefix to match   |
+| `RETENTION_DAYS`   | `1`                     | Age threshold in days         |
+| `DRY_RUN`          | `false`                 | Set to `true` to preview only |
+| `LOG_FILE`         | (stdout)                | Path to log file              |
+| `ORCHESTRATOR_URL` | `http://localhost:8199` | Base URL of the orchestrator  |
 
 ### macOS Setup (LaunchAgent)
 
