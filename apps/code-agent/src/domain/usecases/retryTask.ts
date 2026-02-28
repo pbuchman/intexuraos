@@ -395,20 +395,15 @@ ${additionalContext.trim()}
       }
 
       const queuePosition = queueCount + 1;
-      const estimatedWaitMinutes = queuePosition * 5;
+      const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
       await whatsappNotifier.notifyTaskQueued(userId, retryTask, queuePosition, estimatedWaitMinutes);
 
       logger.info({ taskId: retryTask.id, queuePosition }, 'Retry task queued due to worker capacity');
 
-      // Safe to access [0] because we return early if enabledWorkers.length === 0
-      /* v8 ignore start -- ts-type: optional chaining with nullish coalescing creates type narrowing branch @preserve */
-      const fallbackLocation = enabledWorkers[0]?.name ?? 'unknown';
-      /* v8 ignore stop @preserve */
-
       return ok({
         codeTaskId: retryTask.id,
         resourceUrl: `/#/code-tasks/${retryTask.id}`,
-        workerLocation: fallbackLocation,
+        workerLocation: 'queued' as WorkerLocation,
         retriedFrom: originalTaskId,
       });
     }

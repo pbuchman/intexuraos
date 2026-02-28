@@ -44,6 +44,7 @@ describe('drainTaskQueue', () => {
   let mockLogger: Logger;
   let mockCodeTaskRepo: {
     findOldestQueued: ReturnType<typeof vi.fn>;
+    findById: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
   };
@@ -82,6 +83,7 @@ describe('drainTaskQueue', () => {
 
     mockCodeTaskRepo = {
       findOldestQueued: vi.fn(),
+      findById: vi.fn(),
       update: vi.fn(),
       countQueued: vi.fn(),
     };
@@ -213,6 +215,122 @@ describe('drainTaskQueue', () => {
 
     // Verify notification sent
     expect(mockWhatsappNotifier.notifyTaskQueueExpired).toHaveBeenCalledWith('user-456', task);
+  });
+
+  it('clears parent implementationTaskId when expired task has parentTaskId', async () => {
+    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    const task = createMockTask({
+      queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      parentTaskId: 'parent-task-1',
+    });
+    const parentTask = createMockTask({
+      id: 'parent-task-1',
+      status: 'planned',
+      implementationTaskId: 'task-123',
+    });
+
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok(parentTask));
+    mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+    }
+
+    // Verify findById was called for parent
+    expect(mockCodeTaskRepo.findById).toHaveBeenCalledWith('parent-task-1');
+
+    // Verify implementationTaskId was cleared on parent
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('parent-task-1', { implementationTaskId: null });
+  });
+
+  it('does not clear parent implementationTaskId when it points to a different task', async () => {
+    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    const task = createMockTask({
+      queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      parentTaskId: 'parent-task-1',
+    });
+    const parentTask = createMockTask({
+      id: 'parent-task-1',
+      status: 'planned',
+      implementationTaskId: 'different-task-999',
+    });
+
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok(parentTask));
+    mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+    }
+
+    // Verify implementationTaskId was NOT cleared (parent points to different task)
+    expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith('parent-task-1', { implementationTaskId: null });
+  });
+
+  it('logs warning when clearing parent implementationTaskId fails', async () => {
+    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    const task = createMockTask({
+      queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      parentTaskId: 'parent-task-1',
+    });
+    const parentTask = createMockTask({
+      id: 'parent-task-1',
+      status: 'planned',
+      implementationTaskId: 'task-123',
+    });
+
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok(parentTask));
+    // First call: mark task as failed (succeeds), second call: clear parent (fails)
+    mockCodeTaskRepo.update
+      .mockResolvedValueOnce(ok(task))
+      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+    }
+
+    // Verify warning was logged
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ parentTaskId: 'parent-task-1', expiredTaskId: 'task-123' }),
+      'Failed to clear implementationTaskId on parent task after queue expiry'
+    );
+  });
+
+  it('logs warning when notifyTaskQueueExpired fails', async () => {
+    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    const task = createMockTask({
+      queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+    });
+
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+    mockWhatsappNotifier.notifyTaskQueueExpired.mockResolvedValue(
+      err({ code: 'SEND_FAILED', message: 'WhatsApp down' })
+    );
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+    }
+
+    // Verify warning was logged about notification failure
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-123' }),
+      'Failed to send queue expired notification'
+    );
   });
 
   it('uses createdAt when queuedAt is not set for TTL check', async () => {

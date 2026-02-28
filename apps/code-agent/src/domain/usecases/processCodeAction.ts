@@ -356,7 +356,7 @@ export async function processCodeAction(
       }
 
       const queuePosition = queueCount + 1;
-      const estimatedWaitMinutes = queuePosition * 5;
+      const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
       await whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
 
       logger.info({ taskId: task.id, queuePosition }, 'Task queued due to worker capacity');
@@ -364,9 +364,7 @@ export async function processCodeAction(
       return ok({
         codeTaskId: task.id,
         resourceUrl: `/#/code-tasks/${task.id}`,
-        /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check above) @preserve */
-        workerLocation: enabledWorkers[0]?.name ?? 'unknown',
-        /* v8 ignore stop @preserve */
+        workerLocation: 'queued' as WorkerLocation,
       });
     }
 
