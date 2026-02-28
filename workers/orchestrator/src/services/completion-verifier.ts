@@ -29,8 +29,9 @@ export interface PlanningAgentData {
   outcome: 'planned' | 'unclear';
   superpowers_writing_plans: 'used' | 'not used';
   linear_task_url: string;
+  pr_url: string;
   summary: string;
-  clarification_message: string;
+  unclear_clarification: string;
 }
 
 export interface ExecutionAgentData {
@@ -63,8 +64,9 @@ export const PLANNING_SCHEMA = z.object({
   outcome: z.enum(['planned', 'unclear']),
   superpowers_writing_plans: z.enum(['used', 'not used']),
   linear_task_url: z.string(),
+  pr_url: z.string(),
   summary: z.string(),
-  clarification_message: z.string(),
+  unclear_clarification: z.string(),
 });
 
 export const EXECUTION_SCHEMA = z.object({
@@ -92,21 +94,34 @@ export function getLast50Lines(rawLogs: string): string {
   return stripDockerHeaders(rawLogs).split('\n').slice(-50).join('\n');
 }
 
+function sharedPreamble(): string[] {
+  return [
+    'IMPORTANT RULES:',
+    '- Analyze the transcript from the END toward the beginning. The most recent output takes priority — e.g. pnpm run ci:tracked may have failed and then succeeded; the expected result is the final outcome.',
+    '- The LLM agent delivers its summary in one of the last assistant messages.',
+    '- superpowers_writing_plans: "used" only if the agent explicitly claims it invoked the writing-plans superpowers skill.',
+    '- Sample Linear URL format: https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration',
+    '',
+  ];
+}
+
 export function buildPlanningPrompt(transcript: string): string {
   return [
     'You are a task-completion verifier for the Planning Agent.',
     'Analyze the transcript below and extract the following fields as JSON.',
     'Return ONLY a JSON object, no markdown fences.',
     '',
+    ...sharedPreamble(),
     'Fields:',
     '- outcome: "planned" if the agent produced a plan, "unclear" if the agent could not plan',
     '- superpowers_writing_plans: "used" if the agent invoked the writing-plans skill, "not used" otherwise',
     '- linear_task_url: the Linear issue URL (string, empty string if not found)',
+    '- pr_url: the GitHub Pull Request URL if the agent created one (string, empty string if not found)',
     '- summary: 3-5 sentence summary of what happened',
-    '- clarification_message: required when outcome is "unclear" — the message explaining why; empty string if outcome is "planned"',
+    '- unclear_clarification: required when outcome is "unclear" — the message explaining why; empty string if outcome is "planned"',
     '',
     'Example valid response:',
-    '{"outcome":"planned","superpowers_writing_plans":"used","linear_task_url":"https://linear.app/intexuraos/issue/INT-100","summary":"The planning agent analyzed the task requirements and created a detailed implementation plan with 5 child issues. The plan covers API endpoints, database schema, and test strategy.","clarification_message":""}',
+    '{"outcome":"planned","superpowers_writing_plans":"used","linear_task_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","pr_url":"","summary":"The planning agent analyzed the task requirements and created a detailed implementation plan with 5 child issues. The plan covers API endpoints, database schema, and test strategy.","unclear_clarification":""}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -119,6 +134,7 @@ export function buildExecutionPrompt(transcript: string): string {
     'Analyze the transcript below and extract the following fields as JSON.',
     'Return ONLY a JSON object, no markdown fences.',
     '',
+    ...sharedPreamble(),
     'Fields:',
     '- superpowers_executing_plans: "used" if the agent invoked the executing-plans skill, "not used" otherwise',
     '- superpowers_requesting_code_review: "used" if the agent invoked the requesting-code-review skill, "not used" otherwise',
@@ -139,6 +155,7 @@ export function buildPullRequestPrompt(transcript: string): string {
     'Analyze the transcript below and extract the following fields as JSON.',
     'Return ONLY a JSON object, no markdown fences.',
     '',
+    ...sharedPreamble(),
     'Fields:',
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
     '- comments_replied: "yes" if the agent replied to PR comments, "no" otherwise',

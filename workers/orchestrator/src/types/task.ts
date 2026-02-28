@@ -77,7 +77,7 @@ export interface TaskResult {
   planning_child_issue_count?: string;
   planning_doc_path?: string;
   planning_pr_url?: string;
-  planning_clarification_message?: string;
+  planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented';
   execution_superpowers_executing_plans_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';

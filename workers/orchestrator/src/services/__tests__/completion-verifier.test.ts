@@ -62,8 +62,9 @@ describe('PLANNING_SCHEMA', () => {
       outcome: 'planned',
       superpowers_writing_plans: 'used',
       linear_task_url: 'https://linear.app/intexuraos/issue/INT-100',
+      pr_url: '',
       summary: 'Planned the task.',
-      clarification_message: '',
+      unclear_clarification: '',
     });
     expect(result.success).toBe(true);
   });
@@ -73,8 +74,21 @@ describe('PLANNING_SCHEMA', () => {
       outcome: 'unclear',
       superpowers_writing_plans: 'not used',
       linear_task_url: '',
+      pr_url: '',
       summary: 'Could not plan.',
-      clarification_message: 'Need more info.',
+      unclear_clarification: 'Need more info.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts planned outcome with pr_url', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_task_url: 'https://linear.app/pbuchman/issue/INT-631',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/950',
+      summary: 'Planned and created PR.',
+      unclear_clarification: '',
     });
     expect(result.success).toBe(true);
   });
@@ -84,8 +98,9 @@ describe('PLANNING_SCHEMA', () => {
       outcome: 'done',
       superpowers_writing_plans: 'used',
       linear_task_url: '',
+      pr_url: '',
       summary: 'x',
-      clarification_message: '',
+      unclear_clarification: '',
     });
     expect(result.success).toBe(false);
   });
@@ -149,8 +164,19 @@ describe('buildPlanningPrompt', () => {
     expect(prompt).toContain('outcome');
     expect(prompt).toContain('superpowers_writing_plans');
     expect(prompt).toContain('linear_task_url');
-    expect(prompt).toContain('clarification_message');
+    expect(prompt).toContain('pr_url');
+    expect(prompt).toContain('unclear_clarification');
     expect(prompt).toContain('line1\nline2');
+  });
+
+  it('includes shared preamble instructions', () => {
+    const prompt = buildPlanningPrompt('transcript');
+    expect(prompt).toContain('Analyze the transcript from the END toward the beginning');
+    expect(prompt).toContain('most recent output takes priority');
+    expect(prompt).toContain(
+      'LLM agent delivers its summary in one of the last assistant messages'
+    );
+    expect(prompt).toContain('Sample Linear URL format');
   });
 });
 
@@ -163,6 +189,14 @@ describe('buildExecutionPrompt', () => {
     expect(prompt).toContain('gh_pr_url');
     expect(prompt).toContain('exec-log');
   });
+
+  it('includes shared preamble instructions', () => {
+    const prompt = buildExecutionPrompt('transcript');
+    expect(prompt).toContain('Analyze the transcript from the END toward the beginning');
+    expect(prompt).toContain(
+      'LLM agent delivers its summary in one of the last assistant messages'
+    );
+  });
 });
 
 describe('buildPullRequestPrompt', () => {
@@ -172,6 +206,14 @@ describe('buildPullRequestPrompt', () => {
     expect(prompt).toContain('gh_pr_url');
     expect(prompt).toContain('comments_replied');
     expect(prompt).toContain('pr-log');
+  });
+
+  it('includes shared preamble instructions', () => {
+    const prompt = buildPullRequestPrompt('transcript');
+    expect(prompt).toContain('Analyze the transcript from the END toward the beginning');
+    expect(prompt).toContain(
+      'LLM agent delivers its summary in one of the last assistant messages'
+    );
   });
 });
 
@@ -245,8 +287,9 @@ describe('OrchestratorCompletionVerifier', () => {
       outcome: 'planned',
       superpowers_writing_plans: 'used',
       linear_task_url: 'https://linear.app/intexuraos/issue/INT-100',
+      pr_url: '',
       summary: 'The agent planned successfully.',
-      clarification_message: '',
+      unclear_clarification: '',
     });
 
     it('returns passed with agentData on valid response', async () => {
@@ -273,8 +316,9 @@ describe('OrchestratorCompletionVerifier', () => {
         outcome: 'planned',
         superpowers_writing_plans: 'used',
         linear_task_url: 'https://linear.app/intexuraos/issue/INT-100',
+        pr_url: '',
         summary: 'The agent planned successfully.',
-        clarification_message: '',
+        unclear_clarification: '',
       });
     });
 
@@ -286,8 +330,9 @@ describe('OrchestratorCompletionVerifier', () => {
             outcome: 'unclear',
             superpowers_writing_plans: 'not used',
             linear_task_url: '',
+            pr_url: '',
             summary: 'Could not plan.',
-            clarification_message: 'Need info about auth approach.',
+            unclear_clarification: 'Need info about auth approach.',
           }),
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
         },
@@ -459,8 +504,9 @@ describe('OrchestratorCompletionVerifier', () => {
         outcome: 'planned',
         superpowers_writing_plans: 'used',
         linear_task_url: 'https://linear.app/intexuraos/issue/INT-50',
+        pr_url: '',
         summary: 'Planned.',
-        clarification_message: '',
+        unclear_clarification: '',
       })}\nDone.`;
       generateMock.mockResolvedValueOnce({
         ok: true,
