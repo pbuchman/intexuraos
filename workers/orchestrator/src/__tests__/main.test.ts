@@ -891,8 +891,8 @@ describe('main.ts', () => {
       }
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.any(Error) }),
-        'Container discovery failed, falling back to state-only recovery'
+        expect.objectContaining({ timeout: 60_000 }),
+        'Container discovery timed out, falling back to state-only recovery'
       );
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({

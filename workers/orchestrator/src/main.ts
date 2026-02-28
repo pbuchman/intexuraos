@@ -7,7 +7,7 @@ import type { GitHubTokenService } from './github/token-service.js';
 import type { WebhookClient } from './services/webhook-client.js';
 import type { HeartbeatManager } from './heartbeat.js';
 import type { CredentialMonitor } from './services/isolation/credential-monitor.js';
-import type { IsolationProvider } from './services/isolation/types.js';
+import type { DiscoveredContainer, IsolationProvider } from './services/isolation/types.js';
 import { registerRoutes } from './routes.js';
 import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
@@ -110,32 +110,39 @@ async function runStartupRecovery(
   const runningTasks = Object.values(state.tasks).filter((t) => t.status === 'running');
 
   // Discover containers (if isolation provider available)
-  let containerMap: Map<string, { containerId: string; taskId: string; state: string }> | null =
-    null;
+  let containerMap: Map<string, DiscoveredContainer> | null = null;
 
   if (isolationProvider?.listWorkerContainers != null) {
     try {
-      const adoptionWork = async (): Promise<void> => {
-        const containers = await isolationProvider.listWorkerContainers!();
-        containerMap = new Map<string, { containerId: string; taskId: string; state: string }>();
-        for (const c of containers) {
-          containerMap.set(c.taskId, c);
-        }
-      };
-
-      let timeoutHandle: NodeJS.Timeout;
-      const timeoutPromise = new Promise<void>((_, reject) => {
-        timeoutHandle = setTimeout(
-          () => reject(new Error('Container discovery timed out')),
-          ADOPTION_TIMEOUT_MS
-        );
+      let timeoutHandle: NodeJS.Timeout | undefined = undefined;
+      const timeoutPromise = new Promise<null>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve(null), ADOPTION_TIMEOUT_MS);
       });
 
-      await Promise.race([adoptionWork(), timeoutPromise]);
-      clearTimeout(timeoutHandle!);
+      const discoveryResult = await Promise.race([
+        isolationProvider.listWorkerContainers().then((containers) => {
+          const map = new Map<string, DiscoveredContainer>();
+          for (const c of containers) {
+            map.set(c.taskId, c);
+          }
+          return map;
+        }),
+        timeoutPromise,
+      ]);
+
+      clearTimeout(timeoutHandle);
+      containerMap = discoveryResult;
+
+      if (containerMap != null) {
+        logger.info(
+          { containerCount: containerMap.size },
+          'Container discovery completed'
+        );
+      } else {
+        logger.warn({ timeout: ADOPTION_TIMEOUT_MS }, 'Container discovery timed out, falling back to state-only recovery');
+      }
     } catch (error) {
       logger.warn({ error }, 'Container discovery failed, falling back to state-only recovery');
-      containerMap = null;
     }
   }
 
@@ -183,7 +190,8 @@ async function runStartupRecovery(
           logger.error({ taskId: task.taskId, error }, 'Adoption threw, marking as interrupted');
         }
       } else if (container != null) {
-        // Container exists but not running (exited) — destroy it
+        // Non-running states (exited, paused, created, dead, restarting) are treated as terminated.
+        // Container is destroyed and task is marked interrupted.
         try {
           await isolationProvider!.destroyWorker(task.taskId);
           logger.info({ taskId: task.taskId }, 'Removed exited container');
