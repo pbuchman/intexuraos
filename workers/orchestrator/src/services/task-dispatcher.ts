@@ -938,7 +938,7 @@ export class TaskDispatcher {
           planning_superpowers_writing_plans_used:
             verification.planningMetadata.superpowersWritingPlansUsed,
           planning_issue_url: verification.planningMetadata.planningIssueUrl ?? '',
-          planning_trivial_task: verification.planningMetadata.trivialTask ?? '',
+          planning_child_issue_count: String(verification.planningMetadata.childIssueCount ?? 0),
           planning_doc_path: verification.planningMetadata.docPath ?? '',
           planning_pr_url: verification.planningMetadata.prUrl ?? '',
           planning_clarification_message: verification.planningMetadata.clarificationMessage ?? '',
