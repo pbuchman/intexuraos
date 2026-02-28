@@ -503,6 +503,101 @@ Check credential status: `curl http://localhost:8199/health | jq .anthropicOAuth
 
 ---
 
+## Container Cleanup Cron
+
+The orchestrator's in-process `cleanupOrphanedContainers()` removes stale containers on startup, but containers can also accumulate between restarts (e.g., orchestrator crash, long-running preserved containers). A cron-based cleanup script provides continuous garbage collection of exited `claude-worker-*` containers older than a configurable retention period.
+
+### Scripts
+
+| File                                                       | Purpose                                                   |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| `workers/scripts/cleanup-containers.sh`                    | Main cleanup script — deletes exited containers past age  |
+| `workers/scripts/test-container-cleanup.sh`                | Integration test suite (T1–T12) using real Docker         |
+| `workers/scripts/cloud.intexuraos.container-cleanup.plist` | macOS LaunchAgent (6-hour interval)                       |
+| `workers/scripts/container-cleanup.service`                | Linux systemd oneshot service                             |
+| `workers/scripts/container-cleanup.timer`                  | Linux systemd timer (6-hour interval)                     |
+| `workers/scripts/provision-cleanup-cron.sh`                | VM provisioning helper (copies script + installs systemd) |
+
+### How It Works
+
+1. Lists all Docker containers matching the `CONTAINER_PREFIX` (default: `claude-worker-`)
+2. Skips **running** containers unconditionally (never killed)
+3. Skips containers younger than `RETENTION_DAYS` (default: 1 day)
+4. Re-checks container state immediately before removal (TOCTOU protection)
+5. Removes eligible containers with `docker rm` (no `-f` flag — running containers fail safely)
+6. Queries the orchestrator `/health` endpoint (best-effort, falls back to age-based cleanup)
+
+### Configuration
+
+All via environment variables (all optional):
+
+| Variable           | Default                 | Description                   |
+| ------------------ | ----------------------- | ----------------------------- |
+| `CONTAINER_PREFIX` | `claude-worker-`        | Docker name prefix to match   |
+| `RETENTION_DAYS`   | `1`                     | Age threshold in days         |
+| `DRY_RUN`          | `false`                 | Set to `true` to preview only |
+| `LOG_FILE`         | (stdout)                | Path to log file              |
+| `ORCHESTRATOR_URL` | `http://localhost:8199` | Base URL of the orchestrator  |
+
+### macOS Setup (LaunchAgent)
+
+```bash
+# 1. Copy the plist
+cp workers/scripts/cloud.intexuraos.container-cleanup.plist \
+   ~/Library/LaunchAgents/cloud.intexuraos.container-cleanup.plist
+
+# 2. Edit the script path (ProgramArguments[1]) to your local path
+
+# 3. Load
+launchctl load ~/Library/LaunchAgents/cloud.intexuraos.container-cleanup.plist
+
+# 4. Verify
+launchctl list | grep intexuraos
+
+# Unload
+launchctl unload ~/Library/LaunchAgents/cloud.intexuraos.container-cleanup.plist
+```
+
+### Linux Setup (systemd)
+
+**Automated provisioning:**
+
+```bash
+sudo ./workers/scripts/provision-cleanup-cron.sh
+```
+
+This copies the cleanup script to `/opt/intexuraos/workers/scripts/`, installs the systemd service and timer, configures logrotate, and enables the timer.
+
+**Manual setup:**
+
+```bash
+sudo cp workers/scripts/cleanup-containers.sh /opt/intexuraos/workers/scripts/
+sudo chmod +x /opt/intexuraos/workers/scripts/cleanup-containers.sh
+sudo cp workers/scripts/container-cleanup.service /etc/systemd/system/
+sudo cp workers/scripts/container-cleanup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now container-cleanup.timer
+
+# Verify
+systemctl list-timers container-cleanup.timer --no-pager
+
+# Manual run
+sudo systemctl start container-cleanup.service
+
+# Logs
+cat /var/log/intexuraos/container-cleanup.log
+```
+
+### Running Tests
+
+```bash
+./workers/scripts/test-container-cleanup.sh         # All tests
+./workers/scripts/test-container-cleanup.sh T5       # Single test
+```
+
+Requires Docker. T1 (no-Docker graceful exit) runs without Docker; T2–T12 are skipped if Docker is unavailable.
+
+---
 ## Testing
 
 ```bash
