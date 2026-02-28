@@ -9,13 +9,8 @@ export type TaskStatus =
 export interface TaskVerificationRecord {
   attempt: number;
   passed: boolean;
-  confidence: number;
-  reasons: string[];
-  missingCriteria: string[];
-  resumeInstruction: string;
-  usedLlm: boolean;
-  verifierFailure?: boolean;
-  extractedSummary?: string;
+  missingFields: string[];
+  verifierFailure: boolean;
   createdAt: string;
 }
 
@@ -62,10 +57,6 @@ export interface Task {
    */
   verificationHistory?: TaskVerificationRecord[];
   /**
-   * Task result from the previous attempt (used by adaptive retry analyzer).
-   */
-  previousResult?: TaskResult;
-  /**
    * Set when a completed task is resumed via sendMessage().
    * Gates loosened completion verification (exit code + Claude error only).
    * Cleared before persisting in finalizeTask().
@@ -79,19 +70,17 @@ export interface TaskResult {
   commits?: number;
   summary?: string;
   ciFailed?: boolean;
+  comment_replied?: boolean;
   planning_outcome_label?: 'planned' | 'unclear';
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_issue_url?: string;
   planning_trivial_task?: '0' | '1' | '';
   planning_doc_path?: string;
   planning_pr_url?: string;
-  planning_clarification_message?: string;
+  planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented';
   execution_superpowers_executing_plans_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
-  execution_trivial_task?: '0' | '1';
-  execution_subagents?: string;
-  execution_review_iterations?: number;
   execution_linear_issue_url?: string;
   rebaseResult?: {
     attempted: boolean;

@@ -15,7 +15,7 @@ import type { IsolationProvider, WorkerHandle } from '../services/isolation/type
 import type { TokenRefresher } from '../services/isolation/token-refresher.js';
 import type { ApiKeyValidator } from '../services/api-key-validator.js';
 import type { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
-import type { CompletionAgentType } from '../services/completion-verifier.js';
+import type { CompletionVerifierVerdict } from '../services/completion-verifier.js';
 
 const flushAsync = async (): Promise<void> => {
   await new Promise((resolve) => {
@@ -71,9 +71,8 @@ const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
 - superpowers_writing_plans_used: 1
 - Original issue: https://linear.app/intexuraos/issue/INT-123
 - Planning issue: ${outcome === 'planned' ? 'https://linear.app/intexuraos/issue/INT-456' : ''}
-- Trivial task: ${outcome === 'planned' ? '1' : ''}
-- Parallel breakdown proof: 
-- Plan doc: 
+- Child issues: ${outcome === 'planned' ? '1' : '0'}
+- Plan doc:
 - Planning PR: 
 - Clarification message: ${outcome === 'unclear' ? 'Need API contract details from user' : ''}
 - Summary: Planning completed`,
@@ -235,33 +234,7 @@ describe('TaskDispatcher', () => {
     debug(): void {},
   };
 
-  interface VerifierMockResult {
-    passed: boolean;
-    confidence: number;
-    reasons: string[];
-    missingCriteria: string[];
-    resumeInstruction: string;
-    usedLlm: boolean;
-    verifierFailure?: boolean;
-    planningMetadata?: {
-      outcomeLabel: 'planned' | 'unclear';
-      superpowersWritingPlansUsed: '0' | '1';
-      planningIssueUrl?: string;
-      trivialTask?: '0' | '1';
-      docPath?: string;
-      prUrl?: string;
-      clarificationMessage?: string;
-    };
-    executionMetadata?: {
-      outcomeLabel: 'implemented';
-      superpowersExecutingPlansUsed: '0' | '1';
-      superpowersRequestingCodeReviewUsed: '0' | '1';
-      trivialTask: '0' | '1';
-      subagents: string;
-      reviewIterations: number;
-      linearIssueUrl: string;
-    };
-  }
+  type VerifierMockResult = CompletionVerifierVerdict;
 
   const singleAttemptCompletionControl = {
     maxAttempts: 1,
@@ -269,11 +242,17 @@ describe('TaskDispatcher', () => {
       verify: vi.fn(
         async (_input: unknown): Promise<VerifierMockResult> => ({
           passed: true,
-          confidence: 1,
-          reasons: ['verification passed'],
-          missingCriteria: [],
-          resumeInstruction: 'No further action required.',
-          usedLlm: true,
+          missingFields: [],
+          verifierFailure: false,
+          agentData: {
+            agentType: 'planning' as const,
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_task_url: '',
+            pr_url: '',
+            summary: 'Task completed',
+            unclear_clarification: '',
+          },
         })
       ),
       describe: (): { enabled: boolean; provider: string; model: string } => ({
@@ -1419,11 +1398,8 @@ describe('TaskDispatcher', () => {
     it('should mark execution-agent task as failed without PR', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
-        confidence: 1,
-        reasons: ['No PR URL found in task result'],
-        missingCriteria: ['PR URL created from branch'],
-        resumeInstruction: 'Create a PR and rerun CI.',
-        usedLlm: false,
+        missingFields: ['gh_pr_url'],
+        verifierFailure: false,
       });
       const internal = agentDispatcher as unknown as {
         checkForResult: (task: unknown) => Promise<unknown>;
@@ -1457,7 +1433,7 @@ describe('TaskDispatcher', () => {
             status: 'failed',
             error: expect.objectContaining({
               code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-              message: expect.stringContaining('No PR URL found in task result'),
+              message: expect.stringContaining('gh_pr_url'),
             }),
           }),
         })
@@ -1467,19 +1443,14 @@ describe('TaskDispatcher', () => {
     it('maps verifier executionMetadata to execution_* webhook fields for execution-agent tasks', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
-        confidence: 0.95,
-        reasons: ['execution criteria met'],
-        missingCriteria: [],
-        resumeInstruction: 'No action required.',
-        usedLlm: true,
-        executionMetadata: {
-          outcomeLabel: 'implemented',
-          superpowersExecutingPlansUsed: '1',
-          superpowersRequestingCodeReviewUsed: '1',
-          trivialTask: '0',
-          subagents: 'impl (code changes), reviewer (review loop)',
-          reviewIterations: 3,
-          linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-123',
+        missingFields: [],
+        verifierFailure: false,
+        agentData: {
+          agentType: 'execution',
+          superpowers_executing_plans: 'used',
+          superpowers_requesting_code_review: 'used',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/900',
+          summary: 'Execution completed successfully',
         },
       });
       const internal = agentDispatcher as unknown as {
@@ -1498,6 +1469,7 @@ describe('TaskDispatcher', () => {
         taskId: 'exec-metadata-task',
         workerType: 'auto',
         prompt: 'Execute task',
+        linearIssueId: 'INT-123',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
         linearIssueLabels: ['code-task'],
@@ -1519,9 +1491,6 @@ describe('TaskDispatcher', () => {
               execution_outcome_label: 'implemented',
               execution_superpowers_executing_plans_used: '1',
               execution_superpowers_requesting_code_review_used: '1',
-              execution_trivial_task: '0',
-              execution_subagents: 'impl (code changes), reviewer (review loop)',
-              execution_review_iterations: 3,
               execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
             }),
           }),
@@ -1530,32 +1499,11 @@ describe('TaskDispatcher', () => {
     });
 
     it('should mark task as failed when Claude reports is_error in stream result', async () => {
-      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockImplementationOnce(
-        async (input: unknown) => {
-          const claudeError =
-            typeof input === 'object' && input !== null && 'claudeError' in input
-              ? (input as { claudeError?: string }).claudeError
-              : undefined;
-          if (typeof claudeError === 'string' && claudeError !== '') {
-            return {
-              passed: false,
-              confidence: 1,
-              reasons: ['Claude stream reported an explicit error'],
-              missingCriteria: [`Claude error: ${claudeError}`],
-              resumeInstruction: 'Resolve the Claude stream error and continue.',
-              usedLlm: false,
-            };
-          }
-          return {
-            passed: true,
-            confidence: 1,
-            reasons: ['verification passed'],
-            missingCriteria: [],
-            resumeInstruction: 'No further action required.',
-            usedLlm: false,
-          };
-        }
-      );
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        verifierFailure: false,
+      });
       const request: CreateTaskRequest = {
         taskId: 'claude-error-test',
         workerType: 'auto',
@@ -1595,7 +1543,7 @@ describe('TaskDispatcher', () => {
             status: 'failed',
             error: expect.objectContaining({
               code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-              message: expect.stringContaining('Claude stream reported an explicit error'),
+              message: 'Completion verification failed',
             }),
           }),
         })
@@ -1837,32 +1785,11 @@ describe('TaskDispatcher', () => {
     });
 
     it('should detect Claude error in chunk with Docker header prefix', async () => {
-      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockImplementationOnce(
-        async (input: unknown) => {
-          const claudeError =
-            typeof input === 'object' && input !== null && 'claudeError' in input
-              ? (input as { claudeError?: string }).claudeError
-              : undefined;
-          if (typeof claudeError === 'string' && claudeError !== '') {
-            return {
-              passed: false,
-              confidence: 1,
-              reasons: ['Claude stream reported an explicit error'],
-              missingCriteria: [`Claude error: ${claudeError}`],
-              resumeInstruction: 'Resolve the Claude stream error and continue.',
-              usedLlm: false,
-            };
-          }
-          return {
-            passed: true,
-            confidence: 1,
-            reasons: ['verification passed'],
-            missingCriteria: [],
-            resumeInstruction: 'No further action required.',
-            usedLlm: false,
-          };
-        }
-      );
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        verifierFailure: false,
+      });
       const request: CreateTaskRequest = {
         taskId: 'docker-header-error',
         workerType: 'auto',
@@ -1898,7 +1825,7 @@ describe('TaskDispatcher', () => {
             status: 'failed',
             error: expect.objectContaining({
               code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-              message: expect.stringContaining('Claude stream reported an explicit error'),
+              message: 'Completion verification failed',
             }),
           }),
         })
@@ -1906,32 +1833,11 @@ describe('TaskDispatcher', () => {
     });
 
     it('should detect Claude error when result JSON is split across log chunks', async () => {
-      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockImplementationOnce(
-        async (input: unknown) => {
-          const claudeError =
-            typeof input === 'object' && input !== null && 'claudeError' in input
-              ? (input as { claudeError?: string }).claudeError
-              : undefined;
-          if (typeof claudeError === 'string' && claudeError !== '') {
-            return {
-              passed: false,
-              confidence: 1,
-              reasons: ['Claude stream reported an explicit error'],
-              missingCriteria: [`Claude error: ${claudeError}`],
-              resumeInstruction: 'Resolve the Claude stream error and continue.',
-              usedLlm: false,
-            };
-          }
-          return {
-            passed: true,
-            confidence: 1,
-            reasons: ['verification passed'],
-            missingCriteria: [],
-            resumeInstruction: 'No further action required.',
-            usedLlm: false,
-          };
-        }
-      );
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        verifierFailure: false,
+      });
       const request: CreateTaskRequest = {
         taskId: 'split-json-error',
         workerType: 'auto',
@@ -1966,7 +1872,7 @@ describe('TaskDispatcher', () => {
             status: 'failed',
             error: expect.objectContaining({
               code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-              message: expect.stringContaining('Claude stream reported an explicit error'),
+              message: 'Completion verification failed',
             }),
           }),
         })
@@ -2048,19 +1954,20 @@ describe('TaskDispatcher', () => {
         .fn()
         .mockResolvedValueOnce({
           passed: false,
-          confidence: 0.4,
-          reasons: ['missing agent evidence'],
-          missingCriteria: ['agent final block missing'],
-          resumeInstruction: 'Finish with required final block',
-          usedLlm: false,
+          missingFields: ['agent_final_block'],
+          verifierFailure: false,
         })
         .mockResolvedValueOnce({
           passed: true,
-          confidence: 0.95,
-          reasons: ['criteria met'],
-          missingCriteria: [],
-          resumeInstruction: 'No action required',
-          usedLlm: false,
+          missingFields: [],
+          verifierFailure: false,
+          agentData: {
+            agentType: 'execution',
+            superpowers_executing_plans: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+            summary: 'Completed successfully',
+          },
         });
 
       const resumeDispatcher = new TaskDispatcher(
@@ -2127,10 +2034,8 @@ describe('TaskDispatcher', () => {
         expect.objectContaining({
           attempt: 1,
           maxAttempts: 2,
-          linearIssueId: 'INT-999',
-          taskResult: expect.objectContaining({
-            prUrl: 'https://github.com/pbuchman/intexuraos/pull/999',
-          }),
+          agentType: 'execution',
+          taskId: 'resume-success-task',
         })
       );
 
@@ -2155,11 +2060,7 @@ describe('TaskDispatcher', () => {
       const verifierFailureState = createStatePersistence();
       const verify = vi.fn().mockResolvedValue({
         passed: false,
-        confidence: 0,
-        reasons: ['Gemini verifier unavailable: rate limited'],
-        missingCriteria: ['Gemini verifier response'],
-        resumeInstruction: 'Retry once verifier is healthy.',
-        usedLlm: true,
+        missingFields: [],
         verifierFailure: true,
       });
 
@@ -2213,8 +2114,12 @@ describe('TaskDispatcher', () => {
 
       const task = await verifierFailureDispatcher.getTask('verifier-failure-task');
       expect(task?.status).toBe('failed');
-      expect(task?.attemptCount).toBe(1);
+      // attemptCount is 2 because verifier retries Gemini once (attempt + 1)
+      expect(task?.attemptCount).toBe(2);
       expect(task?.verificationHistory?.[0]?.verifierFailure).toBe(true);
+      // Gemini retry also recorded
+      expect(task?.verificationHistory?.[1]?.verifierFailure).toBe(true);
+      // createWorker called once (only task worker, not the Gemini retry)
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(1);
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2257,11 +2162,8 @@ describe('TaskDispatcher', () => {
 
       const verify = vi.fn().mockResolvedValue({
         passed: false,
-        confidence: 0.2,
-        reasons: ['still missing'],
-        missingCriteria: [],
-        resumeInstruction: 'Try again',
-        usedLlm: false,
+        missingFields: ['some_field'],
+        verifierFailure: false,
       });
 
       const resumeFailDispatcher = new TaskDispatcher(
@@ -2326,64 +2228,6 @@ describe('TaskDispatcher', () => {
             }),
           }),
         })
-      );
-      vi.useRealTimers();
-    });
-
-    it('logs verifier summary fallback placeholders when reasons are empty', async () => {
-      vi.useFakeTimers();
-      const fallbackSummaryState = createStatePersistence();
-      const verify = vi.fn().mockResolvedValue({
-        passed: true,
-        confidence: 1,
-        reasons: [],
-        missingCriteria: [],
-        resumeInstruction: 'done',
-        usedLlm: true,
-      });
-
-      const fallbackSummaryDispatcher = new TaskDispatcher(
-        mockConfig,
-        fallbackSummaryState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        {
-          maxAttempts: 1,
-          verifier: {
-            verify,
-            describe: (): { enabled: boolean } => ({ enabled: true }),
-          },
-        }
-      );
-
-      const request: CreateTaskRequest = {
-        taskId: 'empty-verifier-reasons-task',
-        workerType: 'auto',
-        prompt: 'Verifier fallback placeholders',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: [],
-        hasChildren: false,
-      };
-
-      await fallbackSummaryDispatcher.submitTask(request);
-      await vi.advanceTimersByTimeAsync(0);
-      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-
-      const task = await fallbackSummaryDispatcher.getTask('empty-verifier-reasons-task');
-      expect(task?.status).toBe('completed');
-      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
-        'empty-verifier-reasons-task',
-        expect.stringContaining('Passed: true | Confidence: 1.00')
-      );
-      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
-        'empty-verifier-reasons-task',
-        expect.stringContaining('Resume: done')
       );
       vi.useRealTimers();
     });
@@ -2460,11 +2304,8 @@ describe('TaskDispatcher', () => {
       };
       const verify = vi.fn().mockResolvedValue({
         passed: false,
-        confidence: 0.25,
-        reasons: ['missing completion criteria'],
-        missingCriteria: ['criteria A'],
-        resumeInstruction: 'Fix and retry',
-        usedLlm: true,
+        missingFields: ['criteria_a'],
+        verifierFailure: false,
       });
 
       const preserveDispatcher = new TaskDispatcher(
@@ -2540,11 +2381,8 @@ describe('TaskDispatcher', () => {
           verifier: {
             verify: vi.fn().mockResolvedValue({
               passed: true,
-              confidence: 1,
-              reasons: ['ok'],
-              missingCriteria: [],
-              resumeInstruction: 'done',
-              usedLlm: true,
+              missingFields: [],
+              verifierFailure: false,
             }),
             describe: (): { enabled: boolean } => ({ enabled: true }),
           },
@@ -2594,11 +2432,8 @@ describe('TaskDispatcher', () => {
       const fallbackState = createStatePersistence();
       const verify = vi.fn().mockResolvedValue({
         passed: false,
-        confidence: 0.6,
-        reasons: ['not enough'],
-        missingCriteria: ['criterion-a'],
-        resumeInstruction: 'Add missing criterion',
-        usedLlm: false,
+        missingFields: [],
+        verifierFailure: true,
       });
 
       const fallbackDispatcher = new TaskDispatcher(
@@ -2659,16 +2494,27 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
+      // First call: attempt defaults to 1, maxAttempts defaults to 5 (fallback)
       expect(verify).toHaveBeenCalledWith(
         expect.objectContaining({
           attempt: 1,
-          maxAttempts: 1,
+          maxAttempts: 5,
+          taskId: 'fallback-metadata-task',
+        })
+      );
+      // Second call: Gemini retry at attempt 2
+      expect(verify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attempt: 2,
+          maxAttempts: 5,
+          taskId: 'fallback-metadata-task',
         })
       );
 
       const finalTask = await fallbackDispatcher.getTask('fallback-metadata-task');
       expect(finalTask?.status).toBe('failed');
-      expect(finalTask?.verificationHistory).toHaveLength(1);
+      // 2 records: initial verifier failure + one Gemini retry (also failed)
+      expect(finalTask?.verificationHistory).toHaveLength(2);
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
@@ -2886,11 +2732,8 @@ describe('TaskDispatcher', () => {
           verifier: {
             verify: vi.fn().mockResolvedValue({
               passed: true,
-              confidence: 1,
-              reasons: ['ok'],
-              missingCriteria: [],
-              resumeInstruction: 'done',
-              usedLlm: true,
+              missingFields: [],
+              verifierFailure: false,
             }),
             describe: (): { enabled: boolean } => ({ enabled: true }),
           },
@@ -3403,11 +3246,9 @@ describe('TaskDispatcher', () => {
       const finalTask = await resumedDispatcher.getTask('resumed-loosened-test');
       expect(finalTask?.status).toBe('completed');
       expect(finalTask?.verificationHistory).toHaveLength(1);
-      expect(finalTask?.verificationHistory?.[0]?.usedLlm).toBe(false);
       expect(finalTask?.verificationHistory?.[0]?.passed).toBe(true);
-      expect(finalTask?.verificationHistory?.[0]?.reasons).toContain(
-        'Loosened verification passed (resumed after success)'
-      );
+      expect(finalTask?.verificationHistory?.[0]?.missingFields).toEqual([]);
+      expect(finalTask?.verificationHistory?.[0]?.verifierFailure).toBe(false);
     });
 
     it('fails on non-zero exit code with TASK_RESUMED_HARD_ERROR', async () => {
@@ -3775,292 +3616,6 @@ describe('TaskDispatcher', () => {
       vi.useRealTimers();
     });
 
-    it('logs result diff when previous result exists and values changed', async () => {
-      vi.useFakeTimers();
-      const diffState = createStatePersistence();
-      const verify = vi
-        .fn()
-        .mockResolvedValueOnce({
-          passed: false,
-          confidence: 0.4,
-          reasons: ['incomplete'],
-          missingCriteria: ['PR required'],
-          resumeInstruction: 'Create PR',
-          usedLlm: false,
-        })
-        .mockResolvedValueOnce({
-          passed: false,
-          confidence: 0.5,
-          reasons: ['CI failing'],
-          missingCriteria: ['CI pass'],
-          resumeInstruction: 'Fix CI',
-          usedLlm: false,
-        })
-        .mockResolvedValueOnce({
-          passed: true,
-          confidence: 0.95,
-          reasons: ['all criteria met'],
-          missingCriteria: [],
-          resumeInstruction: 'No action required',
-          usedLlm: false,
-        });
-
-      const diffDispatcher = new TaskDispatcher(
-        mockConfig,
-        diffState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        {
-          maxAttempts: 3,
-          verifier: {
-            verify,
-            describe: (): { enabled: boolean } => ({ enabled: false }),
-          },
-        }
-      );
-
-      const diffInternal = diffDispatcher as unknown as {
-        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
-      };
-      vi.spyOn(diffInternal, 'checkForResult')
-        .mockResolvedValueOnce({
-          branch: 'feat/diff-test',
-          commits: 1,
-          ciFailed: true,
-        })
-        .mockResolvedValueOnce({
-          branch: 'feat/diff-test',
-          commits: 3,
-          ciFailed: false,
-          prUrl: 'https://github.com/pbuchman/intexuraos/pull/600',
-        })
-        .mockResolvedValueOnce({
-          branch: 'feat/diff-test',
-          commits: 4,
-          ciFailed: false,
-          prUrl: 'https://github.com/pbuchman/intexuraos/pull/600',
-        });
-
-      const request: CreateTaskRequest = {
-        taskId: 'obs-diff-task',
-        workerType: 'auto',
-        prompt: 'Test result diff',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: ['code-task'],
-        hasChildren: false,
-      };
-
-      await diffDispatcher.submitTask(request);
-      await vi.advanceTimersByTimeAsync(0);
-      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
-
-      // First attempt completes, verification fails, retry starts
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-      vi.mocked(mockLogForwarder.appendChunk).mockClear();
-
-      // Second attempt completes — previousResult now exists, diff should be logged
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-
-      const logs = getOrchestratorLogs();
-      const diffLog = logs.find((l) => l.includes('Result diff:'));
-      expect(diffLog).toBeDefined();
-      expect(diffLog).toContain('commits 1→3');
-      expect(diffLog).toContain('ciFailed true→false');
-      expect(diffLog).toContain('prUrl (new)');
-      vi.useRealTimers();
-    });
-
-    it('logs signal breakdown in adaptive retry task log', async () => {
-      vi.useFakeTimers();
-      const sigState = createStatePersistence();
-      const verify = vi
-        .fn()
-        .mockResolvedValueOnce({
-          passed: false,
-          confidence: 0.4,
-          reasons: ['incomplete'],
-          missingCriteria: ['CI pass'],
-          resumeInstruction: 'Run CI',
-          usedLlm: false,
-        })
-        .mockResolvedValueOnce({
-          passed: true,
-          confidence: 0.95,
-          reasons: ['done'],
-          missingCriteria: [],
-          resumeInstruction: 'No action required',
-          usedLlm: false,
-        });
-
-      const sigDispatcher = new TaskDispatcher(
-        mockConfig,
-        sigState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        {
-          maxAttempts: 2,
-          verifier: {
-            verify,
-            describe: (): { enabled: boolean } => ({ enabled: false }),
-          },
-        }
-      );
-
-      const sigInternal = sigDispatcher as unknown as {
-        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
-      };
-      vi.spyOn(sigInternal, 'checkForResult').mockResolvedValue({
-        branch: 'feat/sig-test',
-        commits: 2,
-        ciFailed: true,
-        prUrl: 'https://github.com/pbuchman/intexuraos/pull/700',
-      });
-
-      const request: CreateTaskRequest = {
-        taskId: 'obs-signal-task',
-        workerType: 'auto',
-        prompt: 'Test signal breakdown',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: ['code-task'],
-        hasChildren: false,
-      };
-
-      await sigDispatcher.submitTask(request);
-      await vi.advanceTimersByTimeAsync(0);
-      vi.mocked(mockLogForwarder.appendChunk).mockClear();
-      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
-
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-
-      const logs = getOrchestratorLogs();
-      const retryLog = logs.find((l) => l.includes('Adaptive retry:'));
-      expect(retryLog).toBeDefined();
-      expect(retryLog).toContain('resultProgress=');
-      expect(retryLog).toContain('verificationTrend=');
-      expect(retryLog).toContain('score=');
-      expect(retryLog).toContain('effective=');
-      vi.useRealTimers();
-    });
-
-    it('logs agent-type mismatch warning when planning-agent task creates a PR', async () => {
-      vi.useFakeTimers();
-      const phaseState = createStatePersistence();
-      const agentDispatcher = new TaskDispatcher(
-        mockConfig,
-        phaseState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        singleAttemptCompletionControl
-      );
-
-      const phaseInternal = agentDispatcher as unknown as {
-        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
-      };
-      vi.spyOn(phaseInternal, 'checkForResult').mockResolvedValue({
-        branch: 'feat/phase-mismatch',
-        commits: 1,
-        ciFailed: false,
-        prUrl: 'https://github.com/pbuchman/intexuraos/pull/800',
-      });
-
-      const warnSpy = vi.spyOn(mockLogger, 'warn');
-
-      const request: CreateTaskRequest = {
-        taskId: 'obs-phase-mismatch-task',
-        workerType: 'auto',
-        prompt: 'Design-only task',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: [],
-        hasChildren: false,
-      };
-
-      await agentDispatcher.submitTask(request);
-      await vi.advanceTimersByTimeAsync(0);
-      vi.mocked(mockLogForwarder.appendChunk).mockClear();
-      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
-
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-
-      const logs = getOrchestratorLogs();
-      const mismatchLog = logs.find((l) => l.includes('[WARN] Agent mismatch'));
-      expect(mismatchLog).toBeDefined();
-      expect(mismatchLog).toContain('task ran as Planning Agent but worker created PR');
-      expect(mismatchLog).toContain('https://github.com/pbuchman/intexuraos/pull/800');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: 'obs-phase-mismatch-task',
-          agentType: 'planning',
-          prUrl: 'https://github.com/pbuchman/intexuraos/pull/800',
-        }),
-        'Agent mismatch: Planning Agent task created a PR'
-      );
-      vi.useRealTimers();
-    });
-
-    it('does not log agent-type mismatch for execution-agent tasks with PR', async () => {
-      vi.useFakeTimers();
-      const noMismatchState = createStatePersistence();
-      const noMismatchDispatcher = new TaskDispatcher(
-        mockConfig,
-        noMismatchState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        singleAttemptCompletionControl
-      );
-
-      const noMismatchInternal = noMismatchDispatcher as unknown as {
-        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
-      };
-      vi.spyOn(noMismatchInternal, 'checkForResult').mockResolvedValue({
-        branch: 'feat/no-mismatch',
-        commits: 2,
-        ciFailed: false,
-        prUrl: 'https://github.com/pbuchman/intexuraos/pull/801',
-      });
-
-      const request: CreateTaskRequest = {
-        taskId: 'obs-no-mismatch-task',
-        workerType: 'auto',
-        prompt: 'Code-task with PR',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: ['code-task'],
-        hasChildren: false,
-      };
-
-      await noMismatchDispatcher.submitTask(request);
-      await vi.advanceTimersByTimeAsync(0);
-      vi.mocked(mockLogForwarder.appendChunk).mockClear();
-      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
-
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-
-      const logs = getOrchestratorLogs();
-      const mismatchLog = logs.find((l) => l.includes('[WARN] Phase mismatch'));
-      expect(mismatchLog).toBeUndefined();
-      vi.useRealTimers();
-    });
-
     it('logs truncated resume prompt when retrying', async () => {
       vi.useFakeTimers();
       const promptState = createStatePersistence();
@@ -4068,19 +3623,20 @@ describe('TaskDispatcher', () => {
         .fn()
         .mockResolvedValueOnce({
           passed: false,
-          confidence: 0.3,
-          reasons: ['not complete'],
-          missingCriteria: ['final block'],
-          resumeInstruction: 'Complete the implementation',
-          usedLlm: false,
+          missingFields: ['final_block'],
+          verifierFailure: false,
         })
         .mockResolvedValueOnce({
           passed: true,
-          confidence: 0.95,
-          reasons: ['done'],
-          missingCriteria: [],
-          resumeInstruction: 'No action required',
-          usedLlm: false,
+          missingFields: [],
+          verifierFailure: false,
+          agentData: {
+            agentType: 'execution',
+            superpowers_executing_plans: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/900',
+            summary: 'Done',
+          },
         });
 
       const promptDispatcher = new TaskDispatcher(
@@ -4134,91 +3690,6 @@ describe('TaskDispatcher', () => {
       expect(resumeLog).toContain('[prompt]');
       expect(resumeLog).toContain('Resume prompt:');
       vi.useRealTimers();
-    });
-  });
-
-  describe('buildAgentContractGuidance', () => {
-    it('returns planning guidance', () => {
-      const internal = dispatcher as unknown as {
-        buildAgentContractGuidance: (phase: CompletionAgentType) => string;
-      };
-      const guidance = internal.buildAgentContractGuidance('planning');
-
-      expect(guidance).toContain('`Outcome` line');
-      expect(guidance).toContain('planned');
-      expect(guidance).toContain('unclear');
-      expect(guidance).toContain('Linear issue');
-      expect(guidance).toContain('Linear URL');
-    });
-
-    it('returns execution guidance', () => {
-      const internal = dispatcher as unknown as {
-        buildAgentContractGuidance: (phase: CompletionAgentType) => string;
-      };
-      const guidance = internal.buildAgentContractGuidance('execution');
-
-      expect(guidance).toContain('`PR` line');
-      expect(guidance).toContain('CI evidence');
-      expect(guidance).toContain('pnpm run ci:tracked successful');
-      expect(guidance).toContain('Review iterations');
-      expect(guidance).toContain('digits only');
-    });
-
-    it('returns pr-comment guidance for pr-comment', () => {
-      const internal = dispatcher as unknown as {
-        buildAgentContractGuidance: (phase: CompletionAgentType) => string;
-      };
-      const guidance = internal.buildAgentContractGuidance('pull_request');
-
-      expect(guidance).toContain('`PR` line');
-      expect(guidance).toContain('CI evidence');
-      expect(guidance).toContain('pnpm run ci:tracked successful');
-      expect(guidance).toContain('Comment replied');
-      expect(guidance).toContain('`yes` or `no`');
-      expect(guidance).toContain('Tracking comment');
-      expect(guidance).toContain('`updated` or `not_applicable`');
-    });
-  });
-
-  describe('buildAgentFinalTemplate', () => {
-    it('returns planning template', () => {
-      const internal = dispatcher as unknown as {
-        buildAgentFinalTemplate: (phase: CompletionAgentType) => string;
-      };
-      const template = internal.buildAgentFinalTemplate('planning');
-
-      expect(template).toContain('PLANNING_AGENT_FINAL:');
-      expect(template).toContain('Outcome: planned');
-      expect(template).toContain('superpowers_writing_plans_used: 1');
-      expect(template).toContain('Original issue:');
-    });
-
-    it('returns execution template', () => {
-      const internal = dispatcher as unknown as {
-        buildAgentFinalTemplate: (phase: CompletionAgentType) => string;
-      };
-      const template = internal.buildAgentFinalTemplate('execution');
-
-      expect(template).toContain('EXECUTION_AGENT_FINAL:');
-      expect(template).toContain('PR: https://github.com/');
-      expect(template).toContain('CI evidence: pnpm run ci:tracked successful');
-      expect(template).toContain('Review iterations:');
-      expect(template).toContain('Linear issue:');
-      expect(template).toContain('linear.app');
-    });
-
-    it('returns pr-comment template for pr-comment', () => {
-      const internal = dispatcher as unknown as {
-        buildAgentFinalTemplate: (phase: CompletionAgentType) => string;
-      };
-      const template = internal.buildAgentFinalTemplate('pull_request');
-
-      expect(template).toContain('PULL_REQUEST_AGENT_FINAL:');
-      expect(template).toContain('PR: https://github.com/');
-      expect(template).toContain('CI evidence: pnpm run ci:tracked successful');
-      expect(template).toContain('Comment replied:');
-      expect(template).toContain('Tracking comment: updated');
-      expect(template).toContain('Linear issue:');
     });
   });
 

@@ -1199,9 +1199,6 @@ importers:
       firebase:
         specifier: ^11.9.0
         version: 11.10.0
-      framer-motion:
-        specifier: ^12.34.3
-        version: 12.34.3(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1
@@ -1284,6 +1281,9 @@ importers:
       autoprefixer:
         specifier: ^10.4.22
         version: 10.4.23(postcss@8.5.6)
+      framer-motion:
+        specifier: ^12.34.3
+        version: 12.34.3(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
