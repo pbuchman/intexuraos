@@ -13,6 +13,7 @@ import { verifyGitHubSignature } from '../../infra/github-webhook-auth.js';
 import { loadConfig } from '../../config.js';
 import { loadGitHubWebhookAgentConfig } from '../../config/githubWebhookAgentConfig.js';
 import { processGitHubWebhookEvent, type ProcessEventDeps } from '../../domain/githubWebhookAgent/processEvent.js';
+import { groupWebhookEvent } from '../../domain/githubWebhookAgent/eventFamilies.js';
 import {
   parseGitHubWebhookEvent,
   shouldProcessRepository,
@@ -484,6 +485,8 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         const agentDeps: ProcessEventDeps = {
           logger,
           config: agentConfig,
+          // TODO(INT-644–648): Wire real action tools for dispatch/notification/marker.
+          // Placeholder tools ensure no side effects until Phase 2 tool wiring.
           executorDeps: {
             getToolForAction: () => ({
               execute: (): Promise<{ ok: true }> => Promise.resolve({ ok: true }),
@@ -492,25 +495,33 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
             isActionCompleted: (): Promise<boolean> => Promise.resolve(false),
             markActionCompleted: (): Promise<void> => Promise.resolve(),
           },
-          classifyEventGroup: (eventType: string): 'comment' | 'pull_request' | 'github_action_result' | 'other' => {
-            if (eventType === 'issue_comment' || eventType === 'pull_request_review' || eventType === 'pull_request_review_comment') return 'comment';
-            if (eventType === 'pull_request') return 'pull_request';
-            if (eventType === 'check_run' || eventType === 'check_suite' || eventType === 'workflow_run') return 'github_action_result';
-            return 'other';
-          },
+          classifyEventGroup: groupWebhookEvent,
           isSenderAllowed: (senderLogin: string) => isAllowedSender({
             ...savedEvent,
             senderLogin,
           }),
-          isUserMapped: () => !!getServices().userLookupService,
+          isUserMapped: (senderLogin: string) => {
+            const service = getServices().userLookupService;
+            if (service === undefined) return false;
+            // Synchronous check: verify the sender can be resolved.
+            // For Phase 1, we check service existence + sender is in allowed list.
+            // Full async resolution happens in createTaskForPR at dispatch time.
+            return isAllowedSender({ ...savedEvent, senderLogin });
+          },
           hasExistingTask: async (repository: string, prNumber: number) => {
             const taskResult = await getServices().codeTaskRepo.findByPR(repository, prNumber);
             return taskResult.ok && taskResult.value !== null;
           },
-          saveRunRecord: (record): Promise<void> => {
-            logger.info({ runId: record.runId, outcome: record.outcome }, 'Webhook agent run recorded');
-            return Promise.resolve();
+          saveRunRecord: async (record): Promise<void> => {
+            const result = await getServices().webhookAgentRunsRepo.upsert(record);
+            if (!result.ok) {
+              logger.warn({ runId: record.runId, error: result.error }, 'Failed to persist webhook agent run record');
+            } else {
+              logger.info({ runId: record.runId, outcome: record.outcome }, 'Webhook agent run recorded');
+            }
           },
+          // TODO(INT-644–648): Wire real repair/conflict deps with Firestore dedup + branch protection checks.
+          // Stubs return false (no duplicates, no protected branches) until Phase 2.
           repairDeps: {
             isRepairDuplicate: (): boolean => false,
             isProtectedBranch: (): boolean => false,

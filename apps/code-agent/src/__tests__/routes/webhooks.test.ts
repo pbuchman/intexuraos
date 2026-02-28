@@ -210,6 +210,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      webhookAgentRunsRepo: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -232,6 +233,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      webhookAgentRunsRepo: import('../../infra/firestore/githubWebhookAgentRunsRepository.js').GithubWebhookAgentRunsRepository;
     });
 
     app = await buildServer();
@@ -2796,6 +2798,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      webhookAgentRunsRepo: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -2818,6 +2821,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      webhookAgentRunsRepo: import('../../infra/firestore/githubWebhookAgentRunsRepository.js').GithubWebhookAgentRunsRepository;
     });
 
     app = await buildServer();
@@ -3134,6 +3138,7 @@ describe('POST /internal/logs', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      webhookAgentRunsRepo: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -3156,6 +3161,7 @@ describe('POST /internal/logs', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      webhookAgentRunsRepo: import('../../infra/firestore/githubWebhookAgentRunsRepository.js').GithubWebhookAgentRunsRepository;
     });
 
     app = await buildServer();
@@ -3694,6 +3700,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      webhookAgentRunsRepo: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -3716,6 +3723,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      webhookAgentRunsRepo: import('../../infra/firestore/githubWebhookAgentRunsRepository.js').GithubWebhookAgentRunsRepository;
     });
 
     app = await buildServer();

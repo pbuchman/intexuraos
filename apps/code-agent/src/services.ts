@@ -44,6 +44,8 @@ import type { TurnMetricsRepository } from './domain/repositories/turnMetricsRep
 import { createFirestoreTurnMetricsRepository } from './infra/repositories/firestoreTurnMetricsRepository.js';
 import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
+import type { GithubWebhookAgentRunsRepository } from './infra/firestore/githubWebhookAgentRunsRepository.js';
+import { createGithubWebhookAgentRunsRepository } from './infra/firestore/githubWebhookAgentRunsRepository.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -68,6 +70,7 @@ export interface ServiceContainer {
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   turnMetricsRepo: TurnMetricsRepository;
+  webhookAgentRunsRepo: GithubWebhookAgentRunsRepository;
 }
 
 // Configuration required to initialize services
@@ -279,6 +282,7 @@ export function initServices(config: ServiceConfig): void {
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
+    webhookAgentRunsRepo: createGithubWebhookAgentRunsRepository({ logger }),
   };
 }
 

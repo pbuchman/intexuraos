@@ -50,6 +50,9 @@ function buildRulesDecision(
   };
 
   const ruleResult = evaluateWebhookActionabilityRules(ruleInput);
+  // TODO(INT-631): When planner is wired (Phase 2), invoke it for 'uncertain' results
+  // instead of treating them as actionable. Currently safe because execute mode uses
+  // placeholder tools that no-op. See planner.ts / plannerPrompt.ts for LLM integration.
   const isActionable = ruleResult.actionability !== 'non_actionable';
 
   return {
@@ -83,7 +86,14 @@ export async function processGitHubWebhookEvent(
   const eventGroup = deps.classifyEventGroup(event.eventType, event.action);
   const senderAllowed = deps.isSenderAllowed(event.senderLogin);
   const userMapped = deps.isUserMapped(event.senderLogin);
-  const existingTask = await deps.hasExistingTask(event.repository, event.pullRequestNumber);
+
+  let existingTask: boolean;
+  try {
+    existingTask = await deps.hasExistingTask(event.repository, event.pullRequestNumber);
+  } catch (error: unknown) {
+    logger.error({ error, eventId: event.id }, 'Failed to check existing task for webhook event');
+    existingTask = false;
+  }
 
   let decision: WebhookAgentDecision;
 
@@ -153,7 +163,9 @@ export async function processGitHubWebhookEvent(
     ? 'observe' as const
     : config.notifyOnly
       ? 'notify' as const
-      : 'execute' as const;
+      : !config.executeComments
+        ? 'notify' as const
+        : 'execute' as const;
 
   logger.info(
     { runId, eventGroup, actionability: decision.actionability, mode, eventId: event.id },
@@ -174,7 +186,11 @@ export async function processGitHubWebhookEvent(
       outcome: 'noop',
     };
 
-    await deps.saveRunRecord(record);
+    try {
+      await deps.saveRunRecord(record);
+    } catch (error: unknown) {
+      logger.error({ error, runId }, 'Failed to save observe-mode run record');
+    }
     return { handled: true, mode: 'observe', runId, outcome: 'noop' };
   }
 
@@ -193,7 +209,11 @@ export async function processGitHubWebhookEvent(
       ...(!validation.valid && { error: validation.errors.map((e) => e.message).join('; ') }),
     };
 
-    await deps.saveRunRecord(record);
+    try {
+      await deps.saveRunRecord(record);
+    } catch (error: unknown) {
+      logger.error({ error, runId }, 'Failed to save notify-mode run record');
+    }
     return { handled: true, mode, runId, outcome: record.outcome };
   }
 
@@ -215,7 +235,11 @@ export async function processGitHubWebhookEvent(
     ...(executionResult.error !== undefined && { error: executionResult.error }),
   };
 
-  await deps.saveRunRecord(record);
+  try {
+    await deps.saveRunRecord(record);
+  } catch (error: unknown) {
+    logger.error({ error, runId }, 'Failed to save execute-mode run record');
+  }
 
   return {
     handled: true,

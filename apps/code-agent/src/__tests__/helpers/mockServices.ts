@@ -27,6 +27,7 @@ import { createUserLookupService } from '../../infra/services/userLookupServiceI
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestore/gitHubPRSummariesRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { createGithubWebhookAgentRunsRepository } from '../../infra/firestore/githubWebhookAgentRunsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
 
@@ -164,6 +165,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       firestore: fakeFirestore,
       logger,
     }),
+    webhookAgentRunsRepo: createGithubWebhookAgentRunsRepository({ logger }),
   };
 
   setServices(container);

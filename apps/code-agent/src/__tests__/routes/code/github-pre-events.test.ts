@@ -199,6 +199,7 @@ describe('GET /code/github-pr-events', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      webhookAgentRunsRepo: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -221,6 +222,7 @@ describe('GET /code/github-pr-events', () => {
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      webhookAgentRunsRepo: import('../../../infra/firestore/githubWebhookAgentRunsRepository.js').GithubWebhookAgentRunsRepository;
     });
 
     server = await buildServer();

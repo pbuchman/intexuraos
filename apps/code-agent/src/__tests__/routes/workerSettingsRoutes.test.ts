@@ -163,6 +163,7 @@ describe('Worker Settings Routes', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      webhookAgentRunsRepo: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();

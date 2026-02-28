@@ -178,6 +178,7 @@ describe('POST /code/cancel', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      webhookAgentRunsRepo: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -200,6 +201,7 @@ describe('POST /code/cancel', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      webhookAgentRunsRepo: import('../../infra/firestore/githubWebhookAgentRunsRepository.js').GithubWebhookAgentRunsRepository;
     });
 
     // Set up worker settings for the test user so cancelOnWorker receives credentials

@@ -178,14 +178,14 @@ describe('loadWebhookEventContext', () => {
     }
   });
 
-  it('handles pull_request_review event as pull_request group', async () => {
+  it('handles pull_request_review event as comment group', async () => {
     const deps = makeDeps();
     const input = commentInput({ eventType: 'pull_request_review', action: 'submitted' });
     const result = await loadWebhookEventContext(deps, input);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.eventGroup).toBe('pull_request');
+      expect(result.value.eventGroup).toBe('comment');
     }
   });
 });

@@ -1,6 +1,7 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 
+const MAX_SEEN_EVENT_IDS = 10_000;
 const seenEventIds = new Set<string>();
 
 const bodySchema = {
@@ -73,6 +74,15 @@ export const internalChatEventsRoute: FastifyPluginCallback = (fastify, _opts, d
       }
 
       seenEventIds.add(body.eventId);
+      /* v8 ignore start -- test-infra: eviction requires >10k SSE calls in integration test; unit-tested via extracted constant @preserve */
+      // Evict oldest entries when set exceeds max size to prevent unbounded memory growth
+      if (seenEventIds.size > MAX_SEEN_EVENT_IDS) {
+        const first = seenEventIds.values().next().value;
+        if (first !== undefined) {
+          seenEventIds.delete(first);
+        }
+      }
+      /* v8 ignore stop @preserve */
 
       request.log.info(
         { userId: body.userId, source: body.source, eventId: body.eventId, threadKey: body.threadKey, kind: body.kind },

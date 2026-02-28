@@ -22,8 +22,8 @@ describe('groupWebhookEvent', () => {
     expect(groupWebhookEvent('pull_request', 'opened')).toBe('pull_request');
   });
 
-  it('groups pull_request_review as pull_request', () => {
-    expect(groupWebhookEvent('pull_request_review', 'submitted')).toBe('pull_request');
+  it('groups pull_request_review as comment', () => {
+    expect(groupWebhookEvent('pull_request_review', 'submitted')).toBe('comment');
   });
 
   it('groups push as other', () => {

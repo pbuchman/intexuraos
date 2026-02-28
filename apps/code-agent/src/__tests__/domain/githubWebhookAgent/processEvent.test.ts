@@ -140,6 +140,7 @@ describe('processGitHubWebhookEvent', () => {
           enabled: true,
           observeOnly: false,
           notifyOnly: false,
+          executeComments: true,
         }),
         executorDeps: {
           getToolForAction: () => ({
@@ -176,6 +177,7 @@ describe('processGitHubWebhookEvent', () => {
           enabled: true,
           observeOnly: false,
           notifyOnly: false,
+          executeComments: true,
         }),
         executorDeps: {
           getToolForAction: () => ({
@@ -301,7 +303,7 @@ describe('processGitHubWebhookEvent', () => {
 
       const deps = makeDeps({
         logger: mockLogger,
-        config: makeConfig({ enabled: true, observeOnly: false, notifyOnly: false }),
+        config: makeConfig({ enabled: true, observeOnly: false, notifyOnly: false, executeComments: true }),
         isUserMapped: (): boolean => false,
         saveRunRecord,
       });
@@ -477,12 +479,90 @@ describe('processGitHubWebhookEvent', () => {
     });
   });
 
+  describe('executeComments gate', () => {
+    it('falls back to notify mode when executeComments is false', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+      const executeTool = vi.fn();
+
+      const deps = makeDeps({
+        config: makeConfig({
+          enabled: true,
+          observeOnly: false,
+          notifyOnly: false,
+          executeComments: false,
+        }),
+        executorDeps: {
+          getToolForAction: () => ({
+            execute: executeTool,
+            idempotencyKey: (step: { actionId: string }): string => step.actionId,
+          }),
+          isActionCompleted: (): Promise<boolean> => Promise.resolve(false),
+          markActionCompleted: (): Promise<void> => Promise.resolve(),
+        },
+        saveRunRecord,
+      });
+
+      const result = await processGitHubWebhookEvent(deps, makeEvent());
+
+      expect(result.handled).toBe(true);
+      expect(result.mode).toBe('notify');
+      expect(executeTool).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('error handling', () => {
+    it('defaults existingTask to false when hasExistingTask throws', async () => {
+      const saveRunRecord = vi.fn().mockResolvedValue(undefined);
+
+      const deps = makeDeps({
+        config: makeConfig({ enabled: true, observeOnly: true }),
+        hasExistingTask: () => Promise.reject(new Error('Firestore unavailable')),
+        saveRunRecord,
+      });
+
+      const result = await processGitHubWebhookEvent(deps, makeEvent());
+
+      expect(result.handled).toBe(true);
+      expect(result.mode).toBe('observe');
+      // Decision should still be made (defaulting existingTask to false)
+      const savedRecord = saveRunRecord.mock.calls[0]?.[0] as {
+        decision: { decision: { kind: string } };
+      } | undefined;
+      expect(savedRecord?.decision.decision.kind).toBe('create_pr_comment_task');
+    });
+
+    it('handles saveRunRecord failure gracefully', async () => {
+      const saveRunRecord = vi.fn().mockRejectedValue(new Error('Write failed'));
+      const mockLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      } as unknown as Logger;
+
+      const deps = makeDeps({
+        logger: mockLogger,
+        config: makeConfig({ enabled: true, observeOnly: true }),
+        saveRunRecord,
+      });
+
+      const result = await processGitHubWebhookEvent(deps, makeEvent());
+
+      expect(result.handled).toBe(true);
+      expect(result.mode).toBe('observe');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.any(Error) }),
+        'Failed to save observe-mode run record'
+      );
+    });
+  });
+
   describe('non-actionable events', () => {
     it('produces noop plan for non-actionable events', async () => {
       const saveRunRecord = vi.fn().mockResolvedValue(undefined);
 
       const deps = makeDeps({
-        config: makeConfig({ enabled: true, observeOnly: false, notifyOnly: false }),
+        config: makeConfig({ enabled: true, observeOnly: false, notifyOnly: false, executeComments: true }),
         isSenderAllowed: (): boolean => false,
         saveRunRecord,
       });

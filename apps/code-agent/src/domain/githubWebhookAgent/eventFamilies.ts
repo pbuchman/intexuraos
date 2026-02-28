@@ -16,7 +16,7 @@ interface EventGroupMapping {
 
 const EVENT_GROUP_MAPPINGS: readonly EventGroupMapping[] = [
   { eventType: 'pull_request', group: 'pull_request' },
-  { eventType: 'pull_request_review', group: 'pull_request' },
+  { eventType: 'pull_request_review', group: 'comment' },
   { eventType: 'pull_request_review_comment', group: 'comment' },
   { eventType: 'issue_comment', group: 'comment' },
   { eventType: 'push', group: 'other' },
