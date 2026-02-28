@@ -11,6 +11,8 @@ import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import { verifyGitHubSignature } from '../../infra/github-webhook-auth.js';
 import { loadConfig } from '../../config.js';
+import { loadGitHubWebhookAgentConfig } from '../../config/githubWebhookAgentConfig.js';
+import { processGitHubWebhookEvent, type ProcessEventDeps } from '../../domain/githubWebhookAgent/processEvent.js';
 import {
   parseGitHubWebhookEvent,
   shouldProcessRepository,
@@ -474,6 +476,46 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         },
         'GitHub PR event saved'
       );
+
+      // GitHubWebhookAgent handoff (fire-and-forget)
+      const agentConfig = loadGitHubWebhookAgentConfig();
+      if (agentConfig.enabled) {
+        const agentDeps: ProcessEventDeps = {
+          logger,
+          config: agentConfig,
+          executorDeps: {
+            getToolForAction: () => ({
+              execute: (): Promise<{ ok: true }> => Promise.resolve({ ok: true }),
+              idempotencyKey: (step: { actionId: string }): string => step.actionId,
+            }),
+            isActionCompleted: (): Promise<boolean> => Promise.resolve(false),
+            markActionCompleted: (): Promise<void> => Promise.resolve(),
+          },
+          classifyEventGroup: (eventType: string): 'comment' | 'pull_request' | 'github_action_result' | 'other' => {
+            if (eventType === 'issue_comment' || eventType === 'pull_request_review' || eventType === 'pull_request_review_comment') return 'comment';
+            if (eventType === 'pull_request') return 'pull_request';
+            if (eventType === 'check_run' || eventType === 'check_suite' || eventType === 'workflow_run') return 'github_action_result';
+            return 'other';
+          },
+          isSenderAllowed: (senderLogin: string) => isAllowedSender({
+            ...savedEvent,
+            senderLogin,
+          }),
+          isUserMapped: () => !!getServices().userLookupService,
+          hasExistingTask: async (repository: string, prNumber: number) => {
+            const taskResult = await getServices().codeTaskRepo.findByPR(repository, prNumber);
+            return taskResult.ok && taskResult.value !== null;
+          },
+          saveRunRecord: (record): Promise<void> => {
+            logger.info({ runId: record.runId, outcome: record.outcome }, 'Webhook agent run recorded');
+            return Promise.resolve();
+          },
+        };
+
+        void processGitHubWebhookEvent(agentDeps, savedEvent).catch((error: unknown) => {
+          logger.error({ error }, 'Webhook agent processing failed');
+        });
+      }
 
       const isEditedByAllowedBot =
         parsedEvent.eventType === 'issue_comment' &&
