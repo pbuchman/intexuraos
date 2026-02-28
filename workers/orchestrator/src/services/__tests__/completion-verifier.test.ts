@@ -177,6 +177,7 @@ describe('buildPlanningPrompt', () => {
       'LLM agent delivers its summary in one of the last assistant messages'
     );
     expect(prompt).toContain('Sample Linear URL format');
+    expect(prompt).toContain('Sample PR URL format');
   });
 });
 

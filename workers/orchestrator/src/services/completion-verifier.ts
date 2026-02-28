@@ -101,6 +101,7 @@ function sharedPreamble(): string[] {
     '- The LLM agent delivers its summary in one of the last assistant messages.',
     '- superpowers_writing_plans: "used" only if the agent explicitly claims it invoked the writing-plans superpowers skill.',
     '- Sample Linear URL format: https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration',
+    '- Sample PR URL format: https://github.com/pbuchman/intexuraos/pull/944',
     '',
   ];
 }
