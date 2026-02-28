@@ -59,7 +59,10 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
     }
 
     // Handle Fastify-specific errors
-    if (fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+    if (
+      fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
+      fastifyError.code === 'FST_ERR_CTP_EMPTY_JSON_BODY'
+    ) {
       reply.status(400);
       await fastifyReply.fail('INVALID_REQUEST', 'Invalid JSON body');
       return;

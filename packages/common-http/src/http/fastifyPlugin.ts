@@ -28,6 +28,27 @@ const intexuraPlugin: FastifyPluginCallback = (
   _opts: Record<string, unknown>,
   done: (err?: Error) => void
 ): void => {
+  // Override the default JSON parser to accept empty bodies (defaulting to null).
+  // Fastify's built-in parser throws FST_ERR_CTP_EMPTY_JSON_BODY on empty body
+  // with Content-Type: application/json, which breaks bodyless POST endpoints
+  // (e.g. cron triggers). Routes that require a body use schema validation.
+  fastify.removeContentTypeParser('application/json');
+  fastify.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_request: FastifyRequest, body: string, parseComplete: (err: Error | null, result?: unknown) => void): void => {
+      if (body === '') {
+        parseComplete(null, null);
+        return;
+      }
+      try {
+        parseComplete(null, JSON.parse(body));
+      } catch (error) {
+        parseComplete(error as Error);
+      }
+    }
+  );
+
   fastify.addHook(
     'onRequest',
     (request: FastifyRequest, _reply: FastifyReply, hookDone: (err?: Error) => void): void => {
