@@ -9,8 +9,9 @@ import {
   submitCodeTask,
   cancelCodeTask,
   getWorkersStatus,
-} from '../codeAgentApi';
-import type { CodeTask, ListCodeTasksResponse, WorkersStatusResponse } from '../../types';
+  deleteCodeTask,
+} from '../codeAgentApi.js';
+import type { CodeTask, ListCodeTasksResponse, WorkersStatusResponse } from '../../types/index.js';
 
 vi.mock('../apiClient.js', () => ({
   apiRequest: vi.fn(),
@@ -262,6 +263,22 @@ describe('codeAgentApi', () => {
         }
       );
       expect(result).toEqual(mockResponse);
+    });
+  });
+
+  describe('deleteCodeTask', () => {
+    it('calls DELETE on /code/tasks/:taskId', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      vi.mocked(apiRequest).mockResolvedValue({ deleted: true });
+
+      await deleteCodeTask(mockAccessToken, 'task-123');
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/tasks/task-123',
+        mockAccessToken,
+        { method: 'DELETE' }
+      );
     });
   });
 
