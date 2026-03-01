@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Send,
   StopCircle,
+  Trash2,
   WifiOff,
   XCircle,
 } from 'lucide-react';
@@ -129,6 +130,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
     cancelling, cancelError, retrying, retryError,
     sending, sendError, messageStatus,
     implementing, implementError, startImplementation,
+    deleting, deleteError, deleteTask, clearDeleteError,
     cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
@@ -137,6 +139,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
   const [selectedWorkerType, setSelectedWorkerType] = useState<WorkerType>('auto');
   const [showRetryDropdown, setShowRetryDropdown] = useState(false);
   const [showImplementDropdown, setShowImplementDropdown] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Set default worker type from task when it loads
   useEffect(() => {
@@ -166,6 +169,22 @@ export function CodeTaskViewPage(): React.JSX.Element {
       // startImplementation already sets implementError state
     }
   }, [startImplementation, navigate]);
+
+  const handleDelete = useCallback(async (): Promise<void> => {
+    try {
+      await deleteTask();
+      void navigate('/code-tasks');
+    } catch {
+      // deleteTask already sets deleteError state
+    }
+  }, [deleteTask, navigate]);
+
+  // Reset delete confirmation state when the task is no longer in a retryable status
+  useEffect(() => {
+    if (task !== null && task.status !== 'failed' && task.status !== 'cancelled' && task.status !== 'interrupted') {
+      setShowDeleteConfirm(false);
+    }
+  }, [task?.status]);
 
   if (loading) {
     return (
@@ -254,6 +273,12 @@ export function CodeTaskViewPage(): React.JSX.Element {
         showDropdown={showRetryDropdown}
         onToggleDropdown={(): void => { setShowRetryDropdown(!showRetryDropdown); }}
         onSelectWorkerType={(type): void => { void handleRetryWithWorkerType(type); }}
+        deleting={deleting}
+        deleteError={deleteError}
+        showDeleteConfirm={showDeleteConfirm}
+        onShowDeleteConfirm={(): void => { setShowDeleteConfirm(true); }}
+        onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); clearDeleteError(); }}
+        onConfirmDelete={(): void => { void handleDelete(); }}
       />
     </Layout>
   );
@@ -389,6 +414,8 @@ function TaskActions({
   isActive, cancelling, cancelError, onCancel,
   isRetryable, retrying, retryError,
   selectedWorkerType, showDropdown, onToggleDropdown, onSelectWorkerType,
+  deleting, deleteError, showDeleteConfirm,
+  onShowDeleteConfirm, onCancelDeleteConfirm, onConfirmDelete,
 }: {
   isActive: boolean;
   cancelling: boolean;
@@ -401,8 +428,14 @@ function TaskActions({
   showDropdown: boolean;
   onToggleDropdown: () => void;
   onSelectWorkerType: (type: WorkerType) => void;
+  deleting: boolean;
+  deleteError: string | null;
+  showDeleteConfirm: boolean;
+  onShowDeleteConfirm: () => void;
+  onCancelDeleteConfirm: () => void;
+  onConfirmDelete: () => void;
 }): React.JSX.Element | null {
-  if (!isActive && !isRetryable && cancelError === null && retryError === null) return null;
+  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null) return null;
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -421,7 +454,7 @@ function TaskActions({
         <div className="relative">
           <Button
             onClick={(): void => { onToggleDropdown(); }}
-            disabled={retrying}
+            disabled={retrying || deleting}
             isLoading={retrying}
             loadingText="Retrying..."
           >
@@ -447,11 +480,53 @@ function TaskActions({
           )}
         </div>
       ) : null}
+      {isRetryable ? (
+        !showDeleteConfirm ? (
+          <Button
+            variant="ghost"
+            onClick={onShowDeleteConfirm}
+            disabled={deleting || retrying}
+            className="text-slate-600 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
+          >
+            <Trash2 className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Delete</span>
+          </Button>
+        ) : (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-900/30">
+            <p className="mb-3 text-sm text-red-800 dark:text-red-400">
+              Delete this task permanently?
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={onConfirmDelete}
+                disabled={deleting}
+                isLoading={deleting}
+                loadingText="Deleting..."
+              >
+                Delete
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onCancelDeleteConfirm}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )
+      ) : null}
       {cancelError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{cancelError}</p>
       ) : null}
       {retryError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{retryError}</p>
+      ) : null}
+      {deleteError !== null ? (
+        <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>
       ) : null}
     </div>
   );

@@ -26,11 +26,13 @@ vi.mock('../../context/index.js', () => ({
 
 const mockListCodeTasks = vi.fn();
 const mockSubmitCodeTask = vi.fn();
+const mockDeleteCodeTask = vi.fn();
 const mockGetWorkersStatus = vi.fn();
 
 vi.mock('../../services/codeAgentApi.js', () => ({
   listCodeTasks: (...args: unknown[]): unknown => mockListCodeTasks(...args),
   submitCodeTask: (...args: unknown[]): unknown => mockSubmitCodeTask(...args),
+  deleteCodeTask: (...args: unknown[]): unknown => mockDeleteCodeTask(...args),
   getWorkersStatus: (...args: unknown[]): unknown => mockGetWorkersStatus(...args),
 }));
 
@@ -171,6 +173,50 @@ describe('useCodeTasks hooks', () => {
 
       expect(mockSubmitCodeTask).toHaveBeenCalledWith('test-token', { prompt: 'Build feature' });
       expect(taskId).toBe('new-task');
+    });
+
+    it('deletes a task and removes it from the list', async () => {
+      mockListCodeTasks.mockResolvedValue({
+        tasks: [mockTask],
+        nextCursor: undefined,
+      });
+      mockDeleteCodeTask.mockResolvedValue(undefined);
+
+      const { result } = renderHook(() => useCodeTasks());
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.deleteTask('task-123');
+      });
+
+      expect(mockDeleteCodeTask).toHaveBeenCalledWith('test-token', 'task-123');
+      expect(result.current.tasks).toHaveLength(0);
+    });
+
+    it('propagates deleteTask errors', async () => {
+      mockListCodeTasks.mockResolvedValue({
+        tasks: [mockTask],
+        nextCursor: undefined,
+      });
+      mockDeleteCodeTask.mockRejectedValue(new Error('Delete failed'));
+
+      const { result } = renderHook(() => useCodeTasks());
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      await expect(
+        act(async () => {
+          await result.current.deleteTask('task-123');
+        })
+      ).rejects.toThrow('Delete failed');
+
+      // Task should remain in list since delete failed
+      expect(result.current.tasks).toHaveLength(1);
     });
 
     it('refreshes list', async () => {
