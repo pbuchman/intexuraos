@@ -16,6 +16,7 @@ import {
   retryCodeTask as retryCodeTaskApi,
   sendTaskMessage as sendTaskMessageApi,
   startImplementation as startImplementationApi,
+  deleteCodeTask as deleteCodeTaskApi,
 } from '@/services/codeAgentApi';
 import { ApiError } from '@/services/apiClient';
 import type { CodeTask, CodeTaskStatus, CodeTaskWorkerType, RetryCodeTaskRequest } from '@/types';
@@ -48,10 +49,13 @@ export interface TaskViewState {
   messageStatus: MessageStatus;
   implementing: boolean;
   implementError: string | null;
+  deleting: boolean;
+  deleteError: string | null;
   cancelTask: () => Promise<void>;
   retryTask: (workerType?: string, additionalContext?: string) => Promise<string>;
   sendMessage: (message: string) => Promise<void>;
   startImplementation: (workerType?: string) => Promise<string>;
+  deleteTask: () => Promise<void>;
 }
 
 const ACTIVE_STATUSES: CodeTaskStatus[] = ['dispatched', 'running', 'queued'];
@@ -79,6 +83,8 @@ export function useTaskView(taskId: string): TaskViewState {
   const [messageStatus, setMessageStatus] = useState<MessageStatus>('idle');
   const [implementing, setImplementing] = useState(false);
   const [implementError, setImplementError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [listenerHealthy, setListenerHealthy] = useState(false);
 
   const isMountedRef = useRef(true);
@@ -402,6 +408,25 @@ export function useTaskView(taskId: string): TaskViewState {
     }
   }, [task]);
 
+  const deleteTask = useCallback(async (): Promise<void> => {
+    if (task === null) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const token = await getAccessTokenRef.current();
+      await deleteCodeTaskApi(token, task.id);
+    } catch (err) {
+      if (isMountedRef.current) {
+        setDeleteError(getErrorMessage(err, 'Failed to delete task'));
+      }
+      throw err;
+    } finally {
+      if (isMountedRef.current) {
+        setDeleting(false);
+      }
+    }
+  }, [task]);
+
   return {
     task,
     logs,
@@ -417,9 +442,12 @@ export function useTaskView(taskId: string): TaskViewState {
     messageStatus,
     implementing,
     implementError,
+    deleting,
+    deleteError,
     cancelTask,
     retryTask,
     sendMessage,
     startImplementation,
+    deleteTask,
   };
 }
