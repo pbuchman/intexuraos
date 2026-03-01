@@ -133,7 +133,7 @@ export function Header(): React.JSX.Element {
           <img
             src="/branding/logo-primary-dark.png"
             alt="IntexuraOS"
-            className="h-10 block dark:hidden"
+            className="h-10 w-auto shrink-0 object-contain block dark:hidden"
             onError={(e): void => {
               e.currentTarget.style.display = 'none';
             }}
@@ -142,7 +142,7 @@ export function Header(): React.JSX.Element {
           <img
             src="/branding/logo-primary-light.png"
             alt="IntexuraOS"
-            className="h-10 hidden dark:block"
+            className="h-10 w-auto shrink-0 object-contain hidden dark:block"
             onError={(e): void => {
               e.currentTarget.style.display = 'none';
             }}
