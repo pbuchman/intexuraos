@@ -62,6 +62,18 @@ Skipping this step or outputting it after changes have begun is a protocol viola
 **SIMPLE task:** Edit the issue description only. No subtasks, no plan doc, no PR.
 - BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text. This preserves the original context.
 
+**These are NOT complex tasks (negative examples):**
+- **Fix CSS property on a single UI component** — One file, one property change. No logic, no branching, no domain impact. The correct value is obvious from the bug.
+- **Fix missing UI element visibility in a page component** — Single user-facing bug with clear expected behavior. All changes stay within one service boundary, touching only the view layer and its hooks.
+- **Add a use case and repository method within one service** — One new domain use case with one new repository query, following existing patterns. No cross-service coordination.
+- **Fix a misconfigured server option that silently drops logs** — A config value is wrong. The fix is changing it. No design decision needed.
+- **Update prompt text and pass a field that already exists upstream** — Changing string content and threading a field through an existing data path. No new abstractions or data flow.
+- **Handle a missing value edge case in existing control flow** — Adds a guard for a null value using a pattern already used elsewhere in the same file. No new services or models.
+- **Add validation rules to an existing adapter** — Extends an existing validator with additional checks. Same interface, same patterns, same service.
+- **Add a constraint to an existing schema field** — One schema field gets a max length, one prompt gets updated wording. Mechanical change.
+
+Note: The volume of test code does NOT influence complexity. A task with 500 lines of tests and 10 lines of implementation is still simple if the implementation is straightforward.
+
 **COMPLEX task (all three together or none):**
 1. BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text.
 2. Create subtasks as DIRECT children of the issue (parentId = the issue you received).
