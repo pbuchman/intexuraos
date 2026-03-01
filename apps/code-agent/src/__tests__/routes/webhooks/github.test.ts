@@ -78,6 +78,7 @@ describe('POST /webhooks/github', () => {
       findByPullRequest: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
       findByRepository: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
       findAll: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
+      findReviewComments: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
     };
 
     // Create mock codeTaskRepo for processPRCommentForTask
