@@ -72,6 +72,7 @@ const HOST_GID = os.userInfo().gid;
 const HOST_USER_STRING = `${String(HOST_UID)}:${String(HOST_GID)}`;
 const DOCKER_PROVIDER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const FORENSICS_SECCOMP_PROFILE_FILENAME = 'claude-worker-forensics-seccomp.json';
+const EXEC_INSPECT_POLL_INTERVAL_MS = 5_000;
 
 export class DockerProvider implements IsolationProvider {
   private readonly docker: Docker;
@@ -1285,25 +1286,53 @@ export class DockerProvider implements IsolationProvider {
     execInstance: Docker.Exec,
     execStream: NodeJS.ReadableStream
   ): Promise<number> {
-    await new Promise<void>((resolve, reject) => {
-      const resolveOnce = (): void => {
-        resolve();
+    return await new Promise<number>((resolve) => {
+      let resolved = false;
+
+      const resolveWith = (exitCode: number): void => {
+        if (resolved) return;
+        resolved = true;
+        clearInterval(pollTimer);
+        resolve(exitCode);
       };
-      execStream.on('end', resolveOnce);
-      execStream.on('close', resolveOnce);
-      execStream.on('error', (error: unknown) => {
-        reject(error instanceof Error ? error : new Error(String(error)));
+
+      // Primary path: stream closes naturally
+      const onStreamEnd = (): void => {
+        execInstance
+          .inspect()
+          .then((info) => {
+            resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
+          })
+          .catch(() => {
+            resolveWith(1);
+          });
+      };
+      execStream.on('end', onStreamEnd);
+      execStream.on('close', onStreamEnd);
+      execStream.on('error', () => {
+        resolveWith(1);
       });
       execStream.resume();
-    });
 
-    try {
-      const info = await execInstance.inspect();
-      return typeof info.ExitCode === 'number' ? info.ExitCode : 1;
-    } catch (error) {
-      this.logger.warn({ taskId, error }, 'Failed to inspect exec completion state');
-      return 1;
-    }
+      // Fallback: poll exec inspect for orphaned-fd cases
+      const pollTimer = setInterval(() => {
+        execInstance
+          .inspect()
+          .then((info) => {
+            if (!info.Running) {
+              this.logger.info(
+                { taskId },
+                'Exec process exited but stream still open — resolving via inspect fallback'
+              );
+              resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
+            }
+          })
+          .catch(() => {
+            // Inspect failed — exec may have been removed; treat as exit
+            resolveWith(1);
+          });
+      }, EXEC_INSPECT_POLL_INTERVAL_MS);
+    });
   }
   /* v8 ignore stop @preserve */
 }
