@@ -809,6 +809,35 @@ describe('submitToExecutionAgent', () => {
       );
     });
 
+    it('passes planning PR info to dispatch when original task has result with branch and planning_pr_url', async () => {
+      setupHappyPathMocks({
+        result: {
+          branch: 'plan/my-feature',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/42',
+        },
+      });
+
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          planningPrBranch: 'plan/my-feature',
+          planningPrUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        })
+      );
+    });
+
+    it('omits planning PR fields from dispatch when original task has no result', async () => {
+      setupHappyPathMocks();
+
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      const dispatchCall = mockTaskDispatcher.dispatch.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      expect(dispatchCall).toBeDefined();
+      expect(dispatchCall?.['planningPrBranch']).toBeUndefined();
+      expect(dispatchCall?.['planningPrUrl']).toBeUndefined();
+    });
+
     it('sends WhatsApp notification after successful dispatch', async () => {
       setupHappyPathMocks();
 

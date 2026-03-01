@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { exec, type ChildProcess } from 'node:child_process';
-import { TaskDispatcher, type IsolationConfig } from '../services/task-dispatcher.js';
+import { TaskDispatcher, type IsolationConfig, parsePrUrl } from '../services/task-dispatcher.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { StatePersistence } from '../services/state-persistence.js';
 import type { WorktreeManager } from '../services/worktree-manager.js';
@@ -463,6 +463,83 @@ describe('TaskDispatcher', () => {
       const task = await dispatcher.getTask('test-task-branch-stored');
       expect(task).not.toBeNull();
       expect(task?.baseBranch).toBe('custom-branch');
+    });
+  });
+
+  describe('planning branch merge on execution tasks', () => {
+    it('should merge planning branch for execution tasks with planningPrBranch', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-merge-plan',
+        workerType: 'auto',
+        prompt: 'Implement the plan',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        planningPrBranch: 'plan/my-feature',
+        planningPrUrl: 'https://github.com/org/repo/pull/42',
+      };
+
+      const mergeSpy = vi.fn(async () => ({ ok: true as const, value: undefined }));
+      (mockWorktreeManager as unknown as Record<string, unknown>)['mergePlanningBranch'] = mergeSpy;
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(mergeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ ok: true }),
+        'plan/my-feature'
+      );
+    });
+
+    it('should skip merge for tasks without planningPrBranch', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-no-merge',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      const mergeSpy = vi.fn(async () => ({ ok: true as const, value: undefined }));
+      (mockWorktreeManager as unknown as Record<string, unknown>)['mergePlanningBranch'] = mergeSpy;
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(mergeSpy).not.toHaveBeenCalled();
+    });
+
+    it('should proceed even when merge fails', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-merge-fail',
+        workerType: 'auto',
+        prompt: 'Implement the plan',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        planningPrBranch: 'plan/conflicting',
+      };
+
+      const mergeSpy = vi.fn(async () => ({
+        ok: false as const,
+        error: 'CONFLICT (content): Merge conflict in file.ts',
+      }));
+      (mockWorktreeManager as unknown as Record<string, unknown>)['mergePlanningBranch'] = mergeSpy;
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(mergeSpy).toHaveBeenCalled();
     });
   });
 
@@ -3845,5 +3922,23 @@ describe('TaskDispatcher', () => {
       }
       expect(dispatcher.getRunningCount()).toBe(0);
     });
+  });
+});
+
+describe('parsePrUrl', () => {
+  it('should parse a standard GitHub PR URL', () => {
+    const result = parsePrUrl('https://github.com/pbuchman/intexuraos/pull/123');
+    expect(result).toEqual({ owner: 'pbuchman', repo: 'intexuraos', number: 123 });
+  });
+
+  it('should parse a GitHub API-style PR URL', () => {
+    const result = parsePrUrl('/repos/pbuchman/intexuraos/pull/456');
+    expect(result).toEqual({ owner: 'pbuchman', repo: 'intexuraos', number: 456 });
+  });
+
+  it('should return undefined for invalid URLs', () => {
+    expect(parsePrUrl('https://example.com/not-a-pr')).toBeUndefined();
+    expect(parsePrUrl('')).toBeUndefined();
+    expect(parsePrUrl('random string')).toBeUndefined();
   });
 });

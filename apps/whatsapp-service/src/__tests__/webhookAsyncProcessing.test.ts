@@ -2633,6 +2633,49 @@ describe('Webhook async processing', () => {
       });
     });
 
+    it('publishes approval reply event for proceed-implementation button', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-proceed-impl';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'proceed-implementation:task-789:nonce1',
+        buttonTitle: '🚀 Implement',
+        replyToWamid: 'wamid.proceed-impl',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(1);
+      expect(approvalEvents[0]).toMatchObject({
+        type: 'action.approval.reply',
+        replyText: 'proceed-implementation',
+        userId: testUserId,
+        actionId: 'task-789',
+        buttonId: 'proceed-implementation:task-789:nonce1',
+        buttonTitle: '🚀 Implement',
+      });
+    });
+
     it('marks event as failed when approval publish fails', async () => {
       const senderPhone = '15551234567';
       const testUserId = 'test-user-button-publish-fail';
