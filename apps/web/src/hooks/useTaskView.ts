@@ -56,6 +56,7 @@ export interface TaskViewState {
   sendMessage: (message: string) => Promise<void>;
   startImplementation: (workerType?: string) => Promise<string>;
   deleteTask: () => Promise<void>;
+  clearDeleteError: () => void;
 }
 
 const ACTIVE_STATUSES: CodeTaskStatus[] = ['dispatched', 'running', 'queued'];
@@ -427,6 +428,10 @@ export function useTaskView(taskId: string): TaskViewState {
     }
   }, [task]);
 
+  const clearDeleteError = useCallback((): void => {
+    setDeleteError(null);
+  }, []);
+
   return {
     task,
     logs,
@@ -449,5 +454,6 @@ export function useTaskView(taskId: string): TaskViewState {
     sendMessage,
     startImplementation,
     deleteTask,
+    clearDeleteError,
   };
 }
