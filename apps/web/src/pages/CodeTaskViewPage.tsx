@@ -130,7 +130,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
     cancelling, cancelError, retrying, retryError,
     sending, sendError, messageStatus,
     implementing, implementError, startImplementation,
-    deleting, deleteError, deleteTask,
+    deleting, deleteError, deleteTask, clearDeleteError,
     cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
@@ -178,6 +178,13 @@ export function CodeTaskViewPage(): React.JSX.Element {
       // deleteTask already sets deleteError state
     }
   }, [deleteTask, navigate]);
+
+  // Reset delete confirmation state when the task is no longer in a retryable status
+  useEffect(() => {
+    if (task !== null && task.status !== 'failed' && task.status !== 'cancelled' && task.status !== 'interrupted') {
+      setShowDeleteConfirm(false);
+    }
+  }, [task?.status]);
 
   if (loading) {
     return (
@@ -270,7 +277,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
         deleteError={deleteError}
         showDeleteConfirm={showDeleteConfirm}
         onShowDeleteConfirm={(): void => { setShowDeleteConfirm(true); }}
-        onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); }}
+        onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); clearDeleteError(); }}
         onConfirmDelete={(): void => { void handleDelete(); }}
       />
     </Layout>
@@ -447,7 +454,7 @@ function TaskActions({
         <div className="relative">
           <Button
             onClick={(): void => { onToggleDropdown(); }}
-            disabled={retrying}
+            disabled={retrying || deleting}
             isLoading={retrying}
             loadingText="Retrying..."
           >
