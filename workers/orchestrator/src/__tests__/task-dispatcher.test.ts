@@ -145,10 +145,7 @@ describe('TaskDispatcher', () => {
 
   // Mock WorktreeManager
   const mockWorktreeManager = {
-    createWorktree: vi.fn(async () => ({
-      ok: true,
-      value: { path: '/tmp/worktrees/test-task' },
-    })),
+    createWorktree: vi.fn(async () => '/tmp/worktrees/test-task'),
     deleteWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
   } as unknown as WorktreeManager;
 
@@ -489,7 +486,7 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(true);
       expect(mergeSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ ok: true }),
+        '/tmp/worktrees/test-merge-plan',
         'plan/my-feature'
       );
     });
@@ -540,6 +537,75 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(true);
       expect(mergeSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('closePlanningPr via finalizeTaskWithResult', () => {
+    it('should skip closing when task has no planningPrUrl', async () => {
+      const task = await dispatcher.getTask('test-task') ?? {
+        taskId: 'close-pr-test-1',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 1,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        repository: 'test/repo',
+        baseBranch: 'development',
+        worktreePath: '/tmp/worktrees/close-pr-test-1',
+        containerId: 'container-close-pr-test-1',
+      } as Task;
+
+      const internal = dispatcher as unknown as {
+        finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
+      };
+
+      await internal.finalizeTaskWithResult(task, 'execution', {});
+
+      expect(mockLogger.info).not.toHaveBeenCalledWith(
+        expect.objectContaining({ prUrl: expect.any(String) }),
+        expect.stringContaining('Planning PR closed')
+      );
+    });
+
+    it('should skip closing for non-execution agent type', async () => {
+      const task: Task = {
+        taskId: 'close-pr-test-2',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 1,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'planning',
+        planningPrUrl: 'https://github.com/org/repo/pull/99',
+        repository: 'test/repo',
+        baseBranch: 'development',
+        worktreePath: '/tmp/worktrees/close-pr-test-2',
+        containerId: 'container-close-pr-test-2',
+      };
+
+      const internal = dispatcher as unknown as {
+        finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
+      };
+
+      await internal.finalizeTaskWithResult(task, 'planning', {});
+
+      expect(mockLogger.info).not.toHaveBeenCalledWith(
+        expect.objectContaining({ prUrl: expect.any(String) }),
+        expect.stringContaining('Planning PR closed')
+      );
     });
   });
 
@@ -3942,3 +4008,4 @@ describe('parsePrUrl', () => {
     expect(parsePrUrl('random string')).toBeUndefined();
   });
 });
+
