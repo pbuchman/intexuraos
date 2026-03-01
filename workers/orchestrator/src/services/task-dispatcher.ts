@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
 import { type Result, type Logger, hasCodeTaskLabel } from '@intexuraos/common-core';
@@ -26,6 +26,7 @@ import {
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const TASK_TIMEOUT_WARNING_MS = 115 * 60 * 1000; // 1h 55m
 const TASK_TIMEOUT_KILL_MS = 120 * 60 * 1000; // 2h
@@ -1116,8 +1117,9 @@ export class TaskDispatcher {
       }
 
       const comment = `Closed automatically — implementation completed in execution task ${taskId}`;
-      await execAsync(
-        `gh pr close ${String(parsed.number)} --repo "${parsed.owner}/${parsed.repo}" --comment "${comment}"`,
+      await execFileAsync(
+        'gh',
+        ['pr', 'close', String(parsed.number), '--repo', `${parsed.owner}/${parsed.repo}`, '--comment', comment],
         { cwd: this.config.worktreeBasePath }
       );
 
