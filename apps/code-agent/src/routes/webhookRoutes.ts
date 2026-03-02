@@ -269,7 +269,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               .map((s) => s.trim())
               .filter((s) => s !== '');
 
-            if (subtaskUrls.length > 0) {
+            if (subtaskUrls.length > 0 && subtaskUrls.length >= originalIssue.childCount) {
               for (const url of subtaskUrls) {
                 const identifier = parseLinearIdentifierFromUrl(url);
                 if (identifier === null) {
@@ -322,9 +322,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 }
               }
             } else {
+              const reason =
+                subtaskUrls.length === 0
+                  ? 'no subtask URLs provided'
+                  : `partial URL extraction (${String(subtaskUrls.length)} URLs < ${String(originalIssue.childCount)} children)`;
               request.log.warn(
-                { taskId, linearIssueId: task.linearIssueId },
-                'Complex planning completed without subtask URLs — falling back to fetchIssueTree'
+                { taskId, linearIssueId: task.linearIssueId, subtaskUrlCount: subtaskUrls.length, childCount: originalIssue.childCount },
+                `Complex planning: ${reason} — falling back to fetchIssueTree`
               );
 
               const treeResult = await linearAgentClient.fetchIssueTree({

@@ -1341,6 +1341,140 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('planned');
     });
 
+    it('complex planned: falls back to fetchIssueTree when URL extraction is partial', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan complex task partial URLs',
+        sanitizedPrompt: 'Plan complex task partial URLs',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
+      const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
+
+      validateIssueSpy.mockReset();
+      // Parent has 3 children but only 1 URL was extracted
+      validateIssueSpy.mockResolvedValueOnce(
+        ok({
+          id: 'original-uuid',
+          identifier: 'INT-123',
+          title: 'Original issue',
+          url: 'https://linear.app/intexuraos/issue/INT-123',
+          labels: [],
+          childCount: 3,
+          parentId: null,
+        })
+      );
+      fetchIssueTreeSpy.mockResolvedValue(
+        ok({
+          root: {
+            id: 'original-uuid',
+            identifier: 'INT-123',
+            url: 'https://linear.app/intexuraos/issue/INT-123',
+            parentId: null,
+            labels: [],
+            assigneeId: null,
+            state: 'In Progress',
+          },
+          descendants: [
+            {
+              id: 'child-1-uuid',
+              identifier: 'INT-200',
+              url: 'https://linear.app/intexuraos/issue/INT-200',
+              parentId: 'original-uuid',
+              labels: [],
+              assigneeId: null,
+              state: 'In Progress',
+            },
+            {
+              id: 'child-2-uuid',
+              identifier: 'INT-201',
+              url: 'https://linear.app/intexuraos/issue/INT-201',
+              parentId: 'original-uuid',
+              labels: [],
+              assigneeId: null,
+              state: 'In Progress',
+            },
+            {
+              id: 'child-3-uuid',
+              identifier: 'INT-202',
+              url: 'https://linear.app/intexuraos/issue/INT-202',
+              parentId: 'original-uuid',
+              labels: [],
+              assigneeId: null,
+              state: 'In Progress',
+            },
+          ],
+        })
+      );
+      fetchIssueTreeSpy.mockClear();
+      updateIssueStateSpy.mockClear();
+      updateIssueMetadataSpy.mockClear();
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Complex plan with partial URL extraction',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '1' as const,
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_is_complex: '1' as const,
+          // Only 1 of 3 subtask URLs extracted by LLM
+          planning_subtask_urls: 'https://linear.app/intexuraos/issue/INT-200/subtask-1',
+          planning_pr_url: '',
+          planning_unclear_clarification: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // fetchIssueTree must be called — partial extraction triggers fallback
+      expect(fetchIssueTreeSpy).toHaveBeenCalledTimes(1);
+      expect(fetchIssueTreeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'original-uuid' })
+      );
+
+      // validateIssue called only once for original issue (no URL-based subtask resolution)
+      expect(validateIssueSpy).toHaveBeenCalledTimes(1);
+
+      // All 3 direct children normalized via tree fallback
+      expect(updateIssueStateSpy).toHaveBeenCalledTimes(4); // 1 parent + 3 children
+      expect(updateIssueMetadataSpy).toHaveBeenCalledTimes(4); // 1 parent + 3 children
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('planned');
+    });
+
     it('simple planned: skips tree validation, marks original todo with code-task label', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
