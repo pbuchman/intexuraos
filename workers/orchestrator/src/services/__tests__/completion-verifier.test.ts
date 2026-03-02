@@ -542,6 +542,97 @@ describe('OrchestratorCompletionVerifier', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // verify — transcript truncation in logger.info
+  // ---------------------------------------------------------------------------
+
+  describe('verify — transcript truncation in log output', () => {
+    const validPlanningResponse = JSON.stringify({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      is_complex: '0',
+      pr_url: '',
+      summary: 'Planned.',
+      unclear_clarification: '',
+    });
+
+    it('truncates transcript to first and last line when >2 non-empty lines', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validPlanningResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      await verifier.verify({
+        taskId: 'task-trunc',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: 'first line\nsecond line\nthird line\nfourth line\nfifth line',
+      });
+      const infoCall = loggerInfo.mock.calls.find(
+        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+      ) as [Record<string, unknown>, string] | undefined;
+      expect(infoCall).toBeDefined();
+      const logged = infoCall?.[0]?.['transcript'] as string;
+      expect(logged).toContain('first line');
+      expect(logged).toContain('fifth line');
+      expect(logged).toContain('3 lines omitted');
+      expect(logged).not.toContain('second line');
+    });
+
+    it('logs full transcript when <=2 non-empty lines', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validPlanningResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      await verifier.verify({
+        taskId: 'task-short',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: 'only one line',
+      });
+      const infoCall = loggerInfo.mock.calls.find(
+        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+      ) as [Record<string, unknown>, string] | undefined;
+      expect(infoCall).toBeDefined();
+      const logged = infoCall?.[0]?.['transcript'] as string;
+      expect(logged).toBe('only one line');
+    });
+
+    it('handles whitespace-only rawLogs with empty fallback', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validPlanningResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      await verifier.verify({
+        taskId: 'task-empty',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: '   \n  \n   ',
+      });
+      const infoCall = loggerInfo.mock.calls.find(
+        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+      ) as [Record<string, unknown>, string] | undefined;
+      expect(infoCall).toBeDefined();
+      const logged = infoCall?.[0]?.['transcript'] as string;
+      expect(logged).toBe('');
+    });
+  });
+
   describe('verify — JSON wrapped in markdown fences', () => {
     it('extracts JSON from surrounding text', async () => {
       const wrappedResponse = `Here is the result:\n${JSON.stringify({
