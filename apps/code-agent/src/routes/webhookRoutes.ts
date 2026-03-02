@@ -10,6 +10,22 @@ import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 
+export const parseLinearIdentifierFromUrl = (url: string): string | null => {
+  const mdMatch = /\[.*?\]\((.*?)\)/.exec(url);
+  const cleanUrl = mdMatch?.[1] ?? url;
+
+  try {
+    const parsed = new URL(cleanUrl);
+    if (parsed.hostname !== 'linear.app') return null;
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const identifier = segments[2];
+    if (segments.length < 3 || segments[1] !== 'issue' || identifier === undefined) return null;
+    return identifier;
+  } catch {
+    return null;
+  }
+};
+
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
   // so Read suppression works even when assistant + tool_result land in different log chunks
@@ -203,22 +219,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const task = taskResult.value;
       const completedAt = new Date();
 
-      const parseLinearIdentifierFromUrl = (url: string): string | null => {
-        // Strip markdown link wrapper: [text](url) -> url
-        const mdMatch = /\[.*?\]\((.*?)\)/.exec(url);
-        const cleanUrl = mdMatch?.[1] ?? url;
-
-        try {
-          const parsed = new URL(cleanUrl);
-          if (parsed.hostname !== 'linear.app') return null;
-          const segments = parsed.pathname.split('/').filter(Boolean);
-          if (segments.length < 3 || segments[1] !== 'issue') return null;
-          return segments[2] ?? null;
-        } catch {
-          return null;
-        }
-      };
-
       const enforcePlanningOutcome = async (
         outcome: 'planned' | 'unclear',
         planningResult: NonNullable<typeof result>,
@@ -303,6 +303,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   issueId: subtask.id,
                   assigneeId: null,
                   removeLabels: ['planned', 'unclear'],
+                  addLabels: ['code-task'],
                 });
                 if (!normalizeMetadata.ok) {
                   return { ok: false, message: `Failed to normalize subtask ${subtask.identifier} metadata: ${normalizeMetadata.error.message}` };
@@ -320,25 +321,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
                 }
               }
-
-              for (const url of subtaskUrls) {
-                const identifier = parseLinearIdentifierFromUrl(url);
-                if (identifier === null) continue;
-                const subtaskValidation = await linearAgentClient.validateIssue({
-                  userId: task.userId,
-                  identifier,
-                });
-                if (!subtaskValidation.ok) continue;
-
-                const stampCodeTask = await linearAgentClient.updateIssueMetadata({
-                  userId: task.userId,
-                  issueId: subtaskValidation.value.id,
-                  addLabels: ['code-task'],
-                });
-                if (!stampCodeTask.ok) {
-                  return { ok: false, message: `Failed to add code-task label to subtask ${identifier}: ${stampCodeTask.error.message}` };
-                }
-              }
             } else {
               request.log.warn(
                 { taskId, linearIssueId: task.linearIssueId },
@@ -353,30 +335,29 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 return { ok: false, message: `Failed to fetch issue tree: ${treeResult.error.message}` };
               }
 
-              const descendants = treeResult.value.descendants;
+              const directChildren = treeResult.value.descendants.filter(
+                (d) => d.parentId === originalIssueUuid
+              );
 
-              for (const descendant of descendants) {
-                if (descendant.parentId !== originalIssueUuid) {
-                  return { ok: false, message: `Subtask ${descendant.identifier} is not a direct child of the input issue — task rejected` };
-                }
-
+              for (const child of directChildren) {
                 const normalizeState = await linearAgentClient.updateIssueState({
                   userId: task.userId,
-                  issueId: descendant.id,
+                  issueId: child.id,
                   state: 'todo',
                 });
                 if (!normalizeState.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${descendant.identifier} state: ${normalizeState.error.message}` };
+                  return { ok: false, message: `Failed to normalize subtask ${child.identifier} state: ${normalizeState.error.message}` };
                 }
 
                 const normalizeMetadata = await linearAgentClient.updateIssueMetadata({
                   userId: task.userId,
-                  issueId: descendant.id,
+                  issueId: child.id,
                   assigneeId: null,
                   removeLabels: ['planned', 'unclear'],
+                  addLabels: ['code-task'],
                 });
                 if (!normalizeMetadata.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${descendant.identifier} metadata: ${normalizeMetadata.error.message}` };
+                  return { ok: false, message: `Failed to normalize subtask ${child.identifier} metadata: ${normalizeMetadata.error.message}` };
                 }
               }
 
@@ -389,17 +370,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 });
                 if (!prComment.ok) {
                   return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
-                }
-              }
-
-              for (const descendant of descendants) {
-                const stampCodeTask = await linearAgentClient.updateIssueMetadata({
-                  userId: task.userId,
-                  issueId: descendant.id,
-                  addLabels: ['code-task'],
-                });
-                if (!stampCodeTask.ok) {
-                  return { ok: false, message: `Failed to add code-task label to subtask ${descendant.identifier}: ${stampCodeTask.error.message}` };
                 }
               }
             }
