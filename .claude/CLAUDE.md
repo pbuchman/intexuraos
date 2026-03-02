@@ -419,7 +419,7 @@ const logger = createAppLogger({ name: 'my-service' });
 **Failure to update all three causes:**
 
 - Missing in Terraform → **Startup probe failure** (22% of build failures)
-- Missing in ecosystem.config.cjs → Local development broken
+- Missing in ecosystem.config.cjs → dev environment broken (home-dev services fail to start)
 - Missing in REQUIRED_ENV → Runtime crash when var accessed
 
 **Patterns:** See `.claude/reference/env-vars-patterns.md`. **CI:** `scripts/verify-env-vars.mjs`.
@@ -431,6 +431,11 @@ const logger = createAppLogger({ name: 'my-service' });
 **CRITICAL:** Hash routing only (`/#/path`) — backend buckets don't support SPA fallback.
 
 **Rules:** TailwindCSS only, `@auth0/auth0-react` for auth, `useApiClient` for API calls, SRP (split at ~150 lines), env vars via `import.meta.env.INTEXURAOS_*`.
+
+**API proxy architecture:**
+
+- **dev** (`pnpm dev` — Vite dev server): Service URLs are `/api/*` relative paths proxied by Vite to `localhost:<port>`.
+- **prod** (`pnpm build` — static bundle on CDN): Service URLs are absolute Cloud Run URLs baked at build time.
 
 ---
 
@@ -571,65 +576,85 @@ All artifacts must be connected:
 
 ## Environments
 
-| Environment | Domain               | Infra                 | Machine                             | Deploy Target            |
-| ----------- | -------------------- | --------------------- | ----------------------------------- | ------------------------ |
-| **local**   | localhost:3000       | PM2                   | Any dev machine (`uname -s`=Darwin) | Direct                   |
-| **dev**     | dev.intexuraos.cloud | PM2, GCP              | home-dev (`uname -n`=home-dev)      | `~/deploy/intexuraos`    |
-| **prod**    | intexuraos.cloud     | Cloud Run / Functions | GCloud                              | CI/CD via GitHub Actions |
+| Environment | Domain               | Infra                 | Machine  | Deploy Target            |
+| ----------- | -------------------- | --------------------- | -------- | ------------------------ |
+| **dev**     | dev.intexuraos.cloud | PM2                   | home-dev | `~/deploy/intexuraos`    |
+| **prod**    | intexuraos.cloud     | Cloud Run / Functions | GCloud   | CI/CD via GitHub Actions |
 
-**How to detect which environment you are on:**
+**⛔ There is NO "local" environment. Only dev and prod exist. If you think about local, STOP - you are wrong.**
 
-| Check              | local                | dev (home-dev)         | prod             |
-| ------------------ | -------------------- | ---------------------- | ---------------- |
-| `uname -s`         | Darwin               | Linux                  | N/A (Cloud Run)  |
-| `uname -n`         | ≠ home-dev           | home-dev               | N/A              |
-| Platform (context) | darwin               | linux                  | N/A              |
-| Logs               | PM2 logs / stdout    | PM2 logs / stdout      | `gcloud logging` |
-| Firestore          | Emulator (port 8101) | Emulator or production | Production       |
+**Environment detection signals:**
 
-**local** = wherever you run code that is NOT prod or dev. No assumptions about specific machine.
+| Signal                           | dev                                      | prod                                |
+| -------------------------------- | ---------------------------------------- | ----------------------------------- |
+| URL (public)                     | `dev.intexuraos.cloud`                   | `intexuraos.cloud` (without `dev.`) |
+| URL (internal)                   | `localhost:*` (service URLs on home-dev) | `*.run.app`                         |
+| User says                        | "dev", "dev environment"                 | "prod", "production", "cloud"       |
+| `uname -n`                       | `home-dev`                               | N/A (Cloud Run)                     |
+| Logs via                         | `pm2 logs <name>`                        | `gcloud logging read`               |
+| `INTEXURAOS_ENVIRONMENT` env var | `dev`                                    | `prod`                              |
 
-**Dev** and **local** both use `pnpm dev` (Vite dev server with proxy). Service URLs are `/api/*` relative paths proxied by Vite.
-**Prod** uses `pnpm build` (static bundle on CDN). Service URLs are absolute Cloud Run URLs baked at build time.
+**Firestore is SHARED between both environments.** Same database, same collections.
+
+**Credentials source of truth:** GCP Secret Manager
+
+- **prod:** Uses secrets directly from Secret Manager
+- **dev:** Syncs secrets + overrides via `.envrc.local`
 
 ### ⛔ Environment Awareness — BEFORE Investigating Any Runtime Issue
 
-**RULE: Identify WHERE you are running before investigating.** Wrong assumptions waste time.
+**RULE: Identify WHERE the issue is happening before investigating.** Wrong assumptions waste time.
 
 ```
-STEP 1: Check `uname -n`. Is it home-dev? If not, am I analyzing prod (gcloud) logs or local?
-STEP 2: If home-dev → everything is co-located. No SSH needed. Direct access.
-STEP 3: If analyzing a failure → check where the failure HAPPENED (prod Cloud Run logs vs local PM2 logs).
-STEP 4: Check service status with the right tool (see below).
+STEP 1: Check the URL/context. Does it contain dev.intexuraos.cloud or localhost? → dev
+STEP 2: Does it contain intexuraos.cloud (no dev.) or *.run.app? → prod
+STEP 3: For code tasks: check Firestore `code_tasks` collection for workerLocation field
+STEP 4: Check service status with the right tool (pm2 for dev, gcloud for prod)
 ```
 
-**On home-dev — all services run on the SAME machine:**
+**On home-dev (dev environment):**
 
-| Component                 | Manager        | Commands                                                         |
-| ------------------------- | -------------- | ---------------------------------------------------------------- |
-| Apps (18 services + web)  | PM2            | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>`            |
-| Orchestrator              | systemd        | `sudo systemctl status/restart intexuraos-orchestrator@pbuchman` |
-| Workers (cloud functions) | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`                   |
+| Component                 | Manager | Commands                                                         |
+| ------------------------- | ------- | ---------------------------------------------------------------- |
+| Apps (18 services + web)  | PM2     | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>`            |
+| Orchestrator              | systemd | `sudo systemctl status/restart intexuraos-orchestrator@pbuchman` |
+| Workers (cloud functions) | Direct  | `pnpm dev` (tsx watch) or `node dist/index.js`                   |
 
-**Orchestrator is NOT in PM2.** It runs under systemd as `intexuraos-orchestrator@pbuchman`, executing compiled `dist/index.js`. Check with `systemctl status`, not `pm2 status`.
+**Orchestrator is NOT in PM2.** Runs under systemd as `intexuraos-orchestrator@pbuchman`, executing compiled `dist/index.js`. Check with `systemctl status`, not `pm2 status`.
 
 **Auto-deploy via webhook handler.** A GitHub webhook at `~/tools/webhook-handler/` receives push events to `development`, detects changed files, and restarts affected services. PM2 services restart via `pm2 restart`; the orchestrator rebuilds (`pnpm --filter orchestrator build`) then restarts via `systemctl restart`. PM2 file watching is disabled (`watch: false`).
 
-**Key port map** (full list in `ecosystem.config.cjs`):
+**Port reference:** See `ecosystem.config.cjs` for the full port map of all dev services.
 
-| Service      | Port |
-| ------------ | ---- |
-| code-agent   | 8128 |
-| chat-agent   | 8129 |
-| web-agent    | 8127 |
-| user-service | 8110 |
+### Development Machines
+
+Code tasks are forwarded from **both dev and prod** to one of two development machines. Both machines serve as task workers:
+
+| Machine      | OS     | `uname -n` | Role                                       | SSH Access               |
+| ------------ | ------ | ---------- | ------------------------------------------ | ------------------------ |
+| **mac-dev**  | Darwin | varies     | Code editing, commits, pushes              | Can SSH to home-dev      |
+| **home-dev** | Linux  | `home-dev` | Runs dev environment, auto-deploys on push | Has dev services running |
+
+**Both use `~/deploy/intexuraos/` as project path (relative to home).**
+
+**Key differences between machines:**
+
+- `home-dev`: Has auto-deploy webhook — pushing to `development` automatically updates and restarts services.
+- `mac-dev`: Runs the project via `pnpm` in `~/deploy/intexuraos/` but has **no auto-hook** — codebase does not update automatically on push.
+- From `mac-dev` you can access both machines: `home-dev` is reachable via SSH; `mac-dev` services run locally.
+
+**When investigating any issue: first determine which machine you are on**, then use the appropriate access method. If you're on `mac-dev` and the issue is on `home-dev`, SSH there.
+
+**home-dev configuration reference:** The repo at `~/personal/pbuchman-dev/` documents all configuration, services, and infrastructure on `home-dev`. It **must be kept up to date** with the real state of services/configs/infra for future recovery. Always consult it when investigating home-dev service issues.
+
+**Code Task Investigation:** For any code task issue, FIRST check the Firestore `code_tasks` document for the task. The `workerLocation` field contains a user-configured string (e.g., `"mac-dev"`, `"office-pc"`) — read whatever value is stored; it is not a fixed hostname.
 
 **Forbidden assumptions:**
 
-- "Platform is darwin therefore home-dev" — WRONG. darwin = local macOS, home-dev is Linux.
-- "This is a prod issue" — verify first by checking where the logs came from.
+- "This is local" — WRONG. There is NO local. Only dev or prod.
+- "Platform is darwin therefore home-dev" — WRONG. darwin = mac-dev, home-dev is Linux.
+- "This is a prod issue" — verify first by checking URL or logs source.
 - "I can't access that service" — on home-dev, you CAN. It's localhost.
-- "Not related to my changes" — if it's on the same machine, investigate it.
 - "We need to restart/deploy" — webhook auto-deploys on push to development. Just push.
 
 ---
