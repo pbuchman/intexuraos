@@ -38,6 +38,8 @@ export const CreateTaskRequestSchema = z.object({
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
   agentType: z.enum(['planning', 'execution', 'pull_request']).optional(),
+  planningPrBranch: z.string().optional(),
+  planningPrUrl: z.string().url().optional(),
 });
 
 // POST /tasks/:id/message request schema

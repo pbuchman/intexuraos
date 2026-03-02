@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { exec, type ChildProcess } from 'node:child_process';
-import { TaskDispatcher, type IsolationConfig } from '../services/task-dispatcher.js';
+import { TaskDispatcher, type IsolationConfig, parsePrUrl } from '../services/task-dispatcher.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { StatePersistence } from '../services/state-persistence.js';
 import type { WorktreeManager } from '../services/worktree-manager.js';
@@ -145,10 +145,7 @@ describe('TaskDispatcher', () => {
 
   // Mock WorktreeManager
   const mockWorktreeManager = {
-    createWorktree: vi.fn(async () => ({
-      ok: true,
-      value: { path: '/tmp/worktrees/test-task' },
-    })),
+    createWorktree: vi.fn(async () => '/tmp/worktrees/test-task'),
     deleteWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
   } as unknown as WorktreeManager;
 
@@ -226,12 +223,11 @@ describe('TaskDispatcher', () => {
   } as unknown as GitHubTokenService;
 
   // Mock Logger
-  /* eslint-disable @typescript-eslint/no-empty-function */
   const mockLogger: Logger = {
-    info(): void {},
-    warn(): void {},
-    error(): void {},
-    debug(): void {},
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   };
 
   type VerifierMockResult = CompletionVerifierVerdict;
@@ -463,6 +459,227 @@ describe('TaskDispatcher', () => {
       const task = await dispatcher.getTask('test-task-branch-stored');
       expect(task).not.toBeNull();
       expect(task?.baseBranch).toBe('custom-branch');
+    });
+  });
+
+  describe('planning branch merge on execution tasks', () => {
+    it('should merge planning branch for execution tasks with planningPrBranch', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-merge-plan',
+        workerType: 'auto',
+        prompt: 'Implement the plan',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        planningPrBranch: 'plan/my-feature',
+        planningPrUrl: 'https://github.com/org/repo/pull/42',
+      };
+
+      const mergeSpy = vi.fn(async () => ({ ok: true as const, value: undefined }));
+      (mockWorktreeManager as unknown as Record<string, unknown>)['mergePlanningBranch'] = mergeSpy;
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(mergeSpy).toHaveBeenCalledWith('/tmp/worktrees/test-task', 'plan/my-feature');
+    });
+
+    it('should skip merge for tasks without planningPrBranch', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-no-merge',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      const mergeSpy = vi.fn(async () => ({ ok: true as const, value: undefined }));
+      (mockWorktreeManager as unknown as Record<string, unknown>)['mergePlanningBranch'] = mergeSpy;
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(mergeSpy).not.toHaveBeenCalled();
+    });
+
+    it('should proceed even when merge fails', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-merge-fail',
+        workerType: 'auto',
+        prompt: 'Implement the plan',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        planningPrBranch: 'plan/conflicting',
+      };
+
+      const mergeSpy = vi.fn(async () => ({
+        ok: false as const,
+        error: 'CONFLICT (content): Merge conflict in file.ts',
+      }));
+      (mockWorktreeManager as unknown as Record<string, unknown>)['mergePlanningBranch'] = mergeSpy;
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(mergeSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('closePlanningPr via finalizeTaskWithResult', () => {
+    it('should skip closing when task has no planningPrUrl', async () => {
+      const task =
+        (await dispatcher.getTask('test-task')) ??
+        ({
+          taskId: 'close-pr-test-1',
+          workerType: 'auto',
+          prompt: 'Test',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          status: 'running',
+          startedAt: new Date().toISOString(),
+          attemptCount: 1,
+          maxAttempts: 1,
+          verificationHistory: [],
+          linearIssueLabels: [],
+          hasChildren: false,
+          agentType: 'execution',
+          repository: 'test/repo',
+          baseBranch: 'development',
+          worktreePath: '/tmp/worktrees/close-pr-test-1',
+          containerId: 'container-close-pr-test-1',
+        } as Task);
+
+      const internal = dispatcher as unknown as {
+        finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
+      };
+
+      await internal.finalizeTaskWithResult(task, 'execution', {});
+
+      expect(mockLogger.info).not.toHaveBeenCalledWith(
+        expect.objectContaining({ prUrl: expect.any(String) }),
+        expect.stringContaining('Planning PR closed')
+      );
+    });
+
+    it('should skip closing for non-execution agent type', async () => {
+      const task: Task = {
+        taskId: 'close-pr-test-2',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 1,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'planning',
+        planningPrUrl: 'https://github.com/org/repo/pull/99',
+        repository: 'test/repo',
+        baseBranch: 'development',
+        worktreePath: '/tmp/worktrees/close-pr-test-2',
+        containerId: 'container-close-pr-test-2',
+      };
+
+      const internal = dispatcher as unknown as {
+        finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
+      };
+
+      await internal.finalizeTaskWithResult(task, 'planning', {});
+
+      expect(mockLogger.info).not.toHaveBeenCalledWith(
+        expect.objectContaining({ prUrl: expect.any(String) }),
+        expect.stringContaining('Planning PR closed')
+      );
+    });
+
+    it('should attempt to close planning PR for execution agent with planningPrUrl', async () => {
+      const task: Task = {
+        taskId: 'close-pr-test-3',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 1,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        planningPrUrl: 'https://github.com/org/repo/pull/42',
+        repository: 'test/repo',
+        baseBranch: 'development',
+        worktreePath: '/tmp/worktrees/close-pr-test-3',
+        containerId: 'container-close-pr-test-3',
+      };
+
+      const internal = dispatcher as unknown as {
+        finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
+      };
+
+      await internal.finalizeTaskWithResult(task, 'execution', {});
+
+      // closePlanningPr was called — gh CLI will fail in test env, so we expect
+      // the best-effort warning log with the parsed PR URL and task ID
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prUrl: 'https://github.com/org/repo/pull/42',
+          taskId: 'close-pr-test-3',
+        }),
+        expect.stringContaining('Failed to close planning PR')
+      );
+    });
+
+    it('should log warning when planningPrUrl is not a valid PR URL', async () => {
+      const task: Task = {
+        taskId: 'close-pr-test-4',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 1,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        planningPrUrl: 'https://example.com/not-a-pr',
+        repository: 'test/repo',
+        baseBranch: 'development',
+        worktreePath: '/tmp/worktrees/close-pr-test-4',
+        containerId: 'container-close-pr-test-4',
+      };
+
+      const internal = dispatcher as unknown as {
+        finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
+      };
+
+      await internal.finalizeTaskWithResult(task, 'execution', {});
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prUrl: 'https://example.com/not-a-pr',
+          taskId: 'close-pr-test-4',
+        }),
+        'Could not parse planning PR URL'
+      );
     });
   });
 
@@ -3845,5 +4062,23 @@ describe('TaskDispatcher', () => {
       }
       expect(dispatcher.getRunningCount()).toBe(0);
     });
+  });
+});
+
+describe('parsePrUrl', () => {
+  it('should parse a standard GitHub PR URL', () => {
+    const result = parsePrUrl('https://github.com/pbuchman/intexuraos/pull/123');
+    expect(result).toEqual({ owner: 'pbuchman', repo: 'intexuraos', number: 123 });
+  });
+
+  it('should parse a GitHub API-style PR URL', () => {
+    const result = parsePrUrl('/repos/pbuchman/intexuraos/pull/456');
+    expect(result).toEqual({ owner: 'pbuchman', repo: 'intexuraos', number: 456 });
+  });
+
+  it('should return undefined for invalid URLs', () => {
+    expect(parsePrUrl('https://example.com/not-a-pr')).toBeUndefined();
+    expect(parsePrUrl('')).toBeUndefined();
+    expect(parsePrUrl('random string')).toBeUndefined();
   });
 });

@@ -783,7 +783,8 @@ async function handleButtonMessage(
   // Validate intent
   // Action approval intents: approve, cancel, convert
   // Code task intents: cancel-task (INT-379), view-task (INT-379)
-  const validIntents = ['approve', 'cancel', 'reject', 'convert', 'cancel-task', 'view-task'];
+  // Execution intents: proceed-implementation (INT-678)
+  const validIntents = ['approve', 'cancel', 'reject', 'convert', 'cancel-task', 'view-task', 'proceed-implementation'];
   /* v8 ignore start -- test-infra: tests only send valid button intents @preserve */
   if (!validIntents.includes(intent ?? '')) {
     request.log.warn(
@@ -824,6 +825,7 @@ async function handleButtonMessage(
       case 'convert': return 'convert';
       case 'cancel-task': return 'cancel-task';
       case 'view-task': return 'view-task';
+      case 'proceed-implementation': return 'proceed-implementation';
       /* v8 ignore start -- ts-type: default unreachable after intent validation above @preserve */
       default: return intentType;
       /* v8 ignore stop @preserve */
