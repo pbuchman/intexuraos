@@ -39,7 +39,6 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
-  'INTEXURAOS_GITHUB_API_TOKEN',
 ];
 
 // In E2E mode, only validate core env vars; others have sensible defaults
