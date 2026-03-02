@@ -70,6 +70,7 @@ export interface TaskResult {
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_linear_url?: string;
   planning_is_complex?: '0' | '1';
+  planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented';

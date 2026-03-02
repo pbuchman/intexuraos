@@ -335,6 +335,9 @@ describe('linearAgentHttpClient', () => {
           identifier: 'INT-123',
           title: 'Test Issue',
           url: 'https://linear.app/intexuraos/issue/INT-123',
+          labels: [],
+          childCount: 0,
+          parentId: null,
         },
       };
 
@@ -354,10 +357,43 @@ describe('linearAgentHttpClient', () => {
         expect(result.value.identifier).toBe('INT-123');
         expect(result.value.title).toBe('Test Issue');
         expect(result.value.url).toBe('https://linear.app/intexuraos/issue/INT-123');
+        expect(result.value.parentId).toBe(null);
         expect(mockLogger.info).toHaveBeenCalledWith(
           { identifier: 'INT-123', issueId: 'issue-123' },
           'Linear issue validated'
         );
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('should include parentId when issue is a subtask', async () => {
+      const mockResponse = {
+        success: true,
+        data: {
+          id: 'issue-456',
+          identifier: 'INT-456',
+          title: 'Subtask Issue',
+          url: 'https://linear.app/intexuraos/issue/INT-456',
+          labels: [],
+          childCount: 0,
+          parentId: 'parent-issue-id',
+        },
+      };
+
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-456/validate')
+        .query({ userId: 'test-user-123' })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, mockResponse);
+
+      const result = await client.validateIssue({
+        userId: 'test-user-123',
+        identifier: 'INT-456',
+      });
+
+      if (result.ok) {
+        expect(result.value.parentId).toBe('parent-issue-id');
       } else {
         expect.fail('Expected successful result');
       }
@@ -443,6 +479,9 @@ describe('linearAgentHttpClient', () => {
             identifier: 'INT-456',
             title: 'Validated Issue',
             url: 'https://linear.app/intexuraos/issue/INT-456',
+            labels: [],
+            childCount: 0,
+            parentId: null,
           },
         });
 
