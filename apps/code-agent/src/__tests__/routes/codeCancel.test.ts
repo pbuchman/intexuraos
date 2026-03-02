@@ -179,6 +179,7 @@ describe('POST /code/cancel', () => {
         logger,
       }),
       userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -202,6 +203,7 @@ describe('POST /code/cancel', () => {
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
       userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
+      gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
     });
 
     // Set up worker settings for the test user so cancelOnWorker receives credentials
