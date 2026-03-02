@@ -292,7 +292,7 @@ function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unkn
       reviewContent,
       '',
       'Instructions:',
-      `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged`,
+      `1. Check PR state: gh pr view ${String(prNumber)} --json state,mergedAt`,
       `2. React with rocket to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=rocket`,
       '3. Read all comments above and understand the full context',
       '4. For questions: investigate codebase, reply with answer',

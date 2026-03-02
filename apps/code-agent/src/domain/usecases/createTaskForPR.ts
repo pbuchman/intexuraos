@@ -95,7 +95,7 @@ function buildTaskPrompt(request: CreateTaskForPRRequest): string {
     '',
     '### Instructions',
     '',
-    `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged,base,title,body`,
+    `1. Check PR state: gh pr view ${String(prNumber)} --json state,mergedAt,baseRefName,title,body`,
     `2. Read the full PR diff: gh pr diff ${String(prNumber)}`,
     '3. Gather ALL PR feedback (all three sources are MANDATORY):',
     `   - PR reviews: gh api /repos/${repository}/pulls/${String(prNumber)}/reviews`,
