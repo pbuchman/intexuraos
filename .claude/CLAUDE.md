@@ -628,12 +628,24 @@ STEP 4: Check service status with the right tool (pm2 for dev, gcloud for prod)
 
 ### Development Machines
 
+Code tasks are forwarded from **both dev and prod** to one of two development machines. Both machines serve as task workers:
+
 | Machine      | OS     | `uname -n` | Role                                       | SSH Access               |
 | ------------ | ------ | ---------- | ------------------------------------------ | ------------------------ |
 | **mac-dev**  | Darwin | varies     | Code editing, commits, pushes              | Can SSH to home-dev      |
 | **home-dev** | Linux  | `home-dev` | Runs dev environment, auto-deploys on push | Has dev services running |
 
 **Both use `~/deploy/intexuraos/` as project path (relative to home).**
+
+**Key differences between machines:**
+
+- `home-dev`: Has auto-deploy webhook — pushing to `development` automatically updates and restarts services.
+- `mac-dev`: Runs the project via `pnpm` in `~/deploy/intexuraos/` but has **no auto-hook** — codebase does not update automatically on push.
+- From `mac-dev` you can access both machines: `home-dev` is reachable via SSH; `mac-dev` services run locally.
+
+**When investigating any issue: first determine which machine you are on**, then use the appropriate access method. If you're on `mac-dev` and the issue is on `home-dev`, SSH there.
+
+**home-dev configuration reference:** The repo at `~/personal/pbuchman-dev/` documents all configuration, services, and infrastructure on `home-dev`. It **must be kept up to date** with the real state of services/configs/infra for future recovery. Always consult it when investigating home-dev service issues.
 
 **Code Task Investigation:** For any code task issue, FIRST check the Firestore `code_tasks` document for the task. The `workerLocation` field contains a user-configured string (e.g., `"mac-dev"`, `"office-pc"`) — read whatever value is stored; it is not a fixed hostname.
 
