@@ -5,6 +5,7 @@ import {
   HookFixtureBuilder,
   expectAllowed,
   expectSoftBlock,
+  expectLogEntry,
 } from './helpers/index.js';
 
 // Use sequential to avoid resource contention issues when running with full CI
@@ -99,6 +100,15 @@ describe.sequential('Claude Hooks - Tool Recommendations', () => {
       expectAllowed(result);
     });
 
+    it('allows pipe grep even with recursive flags', () => {
+      const result = executeHookSync({
+        hookName: 'tool-recommendations',
+        input: HookFixtureBuilder.bash('somecommand | grep -rn "pattern" .'),
+      });
+
+      expectAllowed(result);
+    });
+
     it('allows rg command (the recommended alternative)', () => {
       const result = executeHookSync({
         hookName: 'tool-recommendations',
@@ -106,6 +116,19 @@ describe.sequential('Claude Hooks - Tool Recommendations', () => {
       });
 
       expectAllowed(result);
+    });
+
+    it('logs WARNED entry for grep -r blocks', () => {
+      const result = executeHookSync({
+        hookName: 'tool-recommendations',
+        input: HookFixtureBuilder.bash('grep -r "pattern" src/'),
+      });
+
+      expectLogEntry(result, {
+        level: 'WARNED',
+        hook: 'tool-recommendations',
+        pattern: 'grep-recursive',
+      });
     });
   });
 
@@ -160,6 +183,19 @@ describe.sequential('Claude Hooks - Tool Recommendations', () => {
       });
 
       expectAllowed(result);
+    });
+
+    it('logs WARNED entry for cat file blocks', () => {
+      const result = executeHookSync({
+        hookName: 'tool-recommendations',
+        input: HookFixtureBuilder.bash('cat /tmp/output.log'),
+      });
+
+      expectLogEntry(result, {
+        level: 'WARNED',
+        hook: 'tool-recommendations',
+        pattern: 'cat-file-read',
+      });
     });
   });
 
@@ -225,6 +261,19 @@ describe.sequential('Claude Hooks - Tool Recommendations', () => {
       });
 
       expectAllowed(result);
+    });
+
+    it('logs WARNED entry for find search blocks', () => {
+      const result = executeHookSync({
+        hookName: 'tool-recommendations',
+        input: HookFixtureBuilder.bash('find . -name "*.ts"'),
+      });
+
+      expectLogEntry(result, {
+        level: 'WARNED',
+        hook: 'tool-recommendations',
+        pattern: 'find-search',
+      });
     });
   });
 
