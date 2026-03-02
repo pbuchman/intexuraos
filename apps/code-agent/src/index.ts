@@ -39,6 +39,7 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
+  'INTEXURAOS_USER_SERVICE_URL',
 ];
 
 // In E2E mode, only validate core env vars; others have sensible defaults
@@ -68,7 +69,7 @@ async function main(): Promise<void> {
     linearAgentUrl: config.linearAgentUrl,
     actionsAgentUrl: config.actionsAgentUrl,
     webhookVerifySecret: config.webhookVerifySecret,
-    githubApiToken: config.githubApiToken,
+    userServiceUrl: config.userServiceUrl,
   });
 
   const { firestore, logger } = getServices();

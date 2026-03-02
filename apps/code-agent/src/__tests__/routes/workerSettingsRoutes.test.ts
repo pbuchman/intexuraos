@@ -44,7 +44,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import { ok } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ServiceContainer } from '../../services.js';
-import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 
@@ -163,6 +163,7 @@ describe('Worker Settings Routes', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
     } as ServiceContainer);
 
     app = await buildServer();

@@ -46,6 +46,8 @@ import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSu
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
 import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
 import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+import { createUserServiceClient } from '@intexuraos/internal-clients';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -71,6 +73,7 @@ export interface ServiceContainer {
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   turnMetricsRepo: TurnMetricsRepository;
+  userServiceClient: UserServiceClient;
 }
 
 // Configuration required to initialize services
@@ -83,7 +86,7 @@ export interface ServiceConfig {
   linearAgentUrl: string;
   actionsAgentUrl: string;
   webhookVerifySecret: string;
-  githubApiToken: string;
+  userServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -238,6 +241,19 @@ export function initServices(config: ServiceConfig): void {
         logger: createAppLogger({ name: 'whatsapp-publisher' }),
       });
 
+  const userServiceClient = createUserServiceClient({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger,
+    pricingContext: {
+      getPricing() { throw new Error('code-agent does not use LLM pricing'); },
+      hasPricing() { return false; },
+      validateModels() { throw new Error('code-agent does not use LLM pricing'); },
+      validateAllModels() { throw new Error('code-agent does not use LLM pricing'); },
+      getModelsWithPricing() { return []; },
+    },
+  });
+
   container = {
     firestore,
     logger,
@@ -286,6 +302,7 @@ export function initServices(config: ServiceConfig): void {
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
+    userServiceClient,
   };
 }
 

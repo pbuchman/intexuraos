@@ -48,7 +48,7 @@ import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
-import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 
@@ -210,6 +210,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -232,6 +233,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
     });
 
     app = await buildServer();
@@ -3288,6 +3290,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -3310,6 +3313,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
     });
 
     app = await buildServer();
@@ -3626,6 +3630,7 @@ describe('POST /internal/logs', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -3648,6 +3653,7 @@ describe('POST /internal/logs', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
     });
 
     app = await buildServer();
@@ -4186,6 +4192,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4208,6 +4215,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
     });
 
     app = await buildServer();
