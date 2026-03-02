@@ -63,6 +63,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/intexuraos/issue/INT-100',
       is_complex: '0',
+      subtask_urls: '',
       pr_url: '',
       summary: 'Planned the task.',
       unclear_clarification: '',
@@ -76,6 +77,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'not used',
       linear_url: '',
       is_complex: '0',
+      subtask_urls: '',
       pr_url: '',
       summary: 'Could not plan.',
       unclear_clarification: 'Need more info.',
@@ -89,11 +91,49 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/pbuchman/issue/INT-631',
       is_complex: '1',
+      subtask_urls: '',
       pr_url: 'https://github.com/pbuchman/intexuraos/pull/950',
       summary: 'Planned and created PR.',
       unclear_clarification: '',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts complex task with populated subtask_urls', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-631',
+      is_complex: '1',
+      subtask_urls:
+        'https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two',
+      pr_url: '',
+      summary: 'Planned with subtasks.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.subtask_urls).toBe(
+        'https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two'
+      );
+    }
+  });
+
+  it('accepts simple task with empty subtask_urls', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'not used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-640',
+      is_complex: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'Simple task planned.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.subtask_urls).toBe('');
+    }
   });
 
   it('rejects invalid outcome', () => {
@@ -102,6 +142,7 @@ describe('PLANNING_SCHEMA', () => {
       superpowers_writing_plans: 'used',
       linear_url: '',
       is_complex: '0',
+      subtask_urls: '',
       pr_url: '',
       summary: 'x',
       unclear_clarification: '',
@@ -169,6 +210,7 @@ describe('buildPlanningPrompt', () => {
     expect(prompt).toContain('superpowers_writing_plans');
     expect(prompt).toContain('linear_url');
     expect(prompt).toContain('is_complex');
+    expect(prompt).toContain('subtask_urls');
     expect(prompt).toContain('pr_url');
     expect(prompt).toContain('unclear_clarification');
     expect(prompt).toContain('line1\nline2');
@@ -294,6 +336,7 @@ describe('OrchestratorCompletionVerifier', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/intexuraos/issue/INT-100',
       is_complex: '0',
+      subtask_urls: '',
       pr_url: '',
       summary: 'The agent planned successfully.',
       unclear_clarification: '',
@@ -324,6 +367,7 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_writing_plans: 'used',
         linear_url: 'https://linear.app/intexuraos/issue/INT-100',
         is_complex: '0',
+        subtask_urls: '',
         pr_url: '',
         summary: 'The agent planned successfully.',
         unclear_clarification: '',
@@ -344,6 +388,7 @@ describe('OrchestratorCompletionVerifier', () => {
             superpowers_writing_plans: 'not used',
             linear_url: '',
             is_complex: '0',
+            subtask_urls: '',
             pr_url: '',
             summary: 'Could not plan.',
             unclear_clarification: 'Need info about auth approach.',
@@ -552,6 +597,7 @@ describe('OrchestratorCompletionVerifier', () => {
       superpowers_writing_plans: 'used',
       linear_url: 'https://linear.app/intexuraos/issue/INT-100',
       is_complex: '0',
+      subtask_urls: '',
       pr_url: '',
       summary: 'Planned.',
       unclear_clarification: '',
@@ -640,6 +686,7 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_writing_plans: 'used',
         linear_url: 'https://linear.app/intexuraos/issue/INT-50',
         is_complex: '0',
+        subtask_urls: '',
         pr_url: '',
         summary: 'Planned.',
         unclear_clarification: '',

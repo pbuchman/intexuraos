@@ -91,6 +91,23 @@ describe('validateIssue', () => {
         expect(result.value.identifier).toBe('INT-123');
         expect(result.value.title).toBe('Test Issue');
         expect(result.value.url).toBe('https://linear.app/team/issue/INT-123');
+        expect(result.value.parentId).toBe(null);
+      }
+    });
+
+    it('includes parentId when issue is a subtask', async () => {
+      const issue = createIssueWithTeam({ parentId: 'parent-issue-456' });
+      fakeLinearClient.seedIssueWithTeam(issue);
+
+      const result = await validateIssue(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        logger: fakeLogger,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.parentId).toBe('parent-issue-456');
       }
     });
 

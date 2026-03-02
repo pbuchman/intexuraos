@@ -129,6 +129,7 @@ describe('submitToExecutionAgent', () => {
         url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
         labels: ['code-task'],
         childCount: 0,
+        parentId: null,
       })
     );
     // First update = optimistic lock (sets implementationTaskId)
@@ -395,6 +396,7 @@ describe('submitToExecutionAgent', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['unclear'],
           childCount: 0,
+          parentId: null,
         })
       );
 
@@ -428,6 +430,7 @@ describe('submitToExecutionAgent', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature'],
           childCount: 0,
+          parentId: null,
         })
       );
 
@@ -462,6 +465,7 @@ describe('submitToExecutionAgent', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
       // Lock update fails
@@ -501,6 +505,7 @@ describe('submitToExecutionAgent', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
       // Optimistic lock succeeds
@@ -931,6 +936,7 @@ describe('submitToExecutionAgent', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
