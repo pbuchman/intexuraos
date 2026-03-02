@@ -439,6 +439,7 @@ describe('POST /internal/code/process', () => {
         url: 'https://linear.app/intexuraos/INT-123',
         labels: [],
         childCount: 0,
+        parentId: null,
       },
     });
 
@@ -553,6 +554,7 @@ describe('POST /internal/code/process', () => {
         url: 'https://linear.app/intexuraos/INT-ACTIVE',
         labels: [],
         childCount: 0,
+        parentId: null,
       },
     });
 
