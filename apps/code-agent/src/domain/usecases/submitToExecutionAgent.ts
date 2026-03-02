@@ -372,6 +372,8 @@ export async function submitToExecutionAgent(
     /* v8 ignore start -- ts-type: nullish coalescing on narrowed union field @preserve */
     agentType: executionTask.agentType ?? 'execution',
     /* v8 ignore stop @preserve */
+    ...(originalTask.result?.branch !== undefined && { planningPrBranch: originalTask.result.branch }),
+    ...(originalTask.result?.planning_pr_url !== undefined && { planningPrUrl: originalTask.result.planning_pr_url }),
   };
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
