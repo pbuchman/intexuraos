@@ -1,62 +1,49 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+/**
+ * Tests for GitHubPRHttpClient.
+ */
+
+import { describe, it, expect, afterEach } from 'vitest';
 import nock from 'nock';
 import { createGitHubPRHttpClient } from '../../../infra/http/gitHubPRHttpClient.js';
-import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
 
-describe('gitHubPRHttpClient', () => {
-  const mockLogger = {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  };
-
-  const token = 'ghp_test-token';
-  let client: GitHubPRClient;
-
-  beforeEach(() => {
+describe('GitHubPRHttpClient', () => {
+  afterEach(() => {
     nock.cleanAll();
-    vi.clearAllMocks();
-    client = createGitHubPRHttpClient({ token, timeoutMs: 5000 }, mockLogger);
   });
 
-  describe('updatePRTitle', () => {
-    it('updates PR title successfully', async () => {
-      nock('https://api.github.com')
-        .patch('/repos/pbuchman/intexuraos/pulls/42', { title: '[INT-100] Fix auth bug' })
-        .matchHeader('Authorization', `Bearer ${token}`)
-        .matchHeader('Accept', 'application/vnd.github+json')
-        .reply(200, { id: 1, title: '[INT-100] Fix auth bug' });
+  const client = createGitHubPRHttpClient({ timeoutMs: 5000 });
 
-      const result = await client.updatePRTitle('pbuchman', 'intexuraos', 42, '[INT-100] Fix auth bug');
+  describe('updatePRTitle', () => {
+    it('successfully updates a PR title', async () => {
+      nock('https://api.github.com')
+        .patch('/repos/owner/repo/pulls/42', { title: 'INT-123: new title' })
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, { id: 1, title: 'INT-123: new title' });
+
+      const result = await client.updatePRTitle('test-token', 'owner', 'repo', 42, 'INT-123: new title');
 
       expect(result.ok).toBe(true);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        { owner: 'pbuchman', repo: 'intexuraos', prNumber: 42 },
-        'PR title updated'
-      );
     });
 
     it('returns UNAUTHORIZED on 401', async () => {
       nock('https://api.github.com')
-        .patch('/repos/pbuchman/intexuraos/pulls/42')
-        .reply(401, 'Bad credentials');
+        .patch('/repos/owner/repo/pulls/42')
+        .reply(401, { message: 'Bad credentials' });
 
-      const result = await client.updatePRTitle('pbuchman', 'intexuraos', 42, '[INT-100] Fix auth bug');
+      const result = await client.updatePRTitle('bad-token', 'owner', 'repo', 42, 'title');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('UNAUTHORIZED');
-        expect(result.error.message).toContain('Bad credentials');
       }
     });
 
     it('returns UNAUTHORIZED on 403', async () => {
       nock('https://api.github.com')
-        .patch('/repos/pbuchman/intexuraos/pulls/42')
-        .reply(403, 'Forbidden');
+        .patch('/repos/owner/repo/pulls/42')
+        .reply(403, { message: 'Forbidden' });
 
-      const result = await client.updatePRTitle('pbuchman', 'intexuraos', 42, '[INT-100] Fix auth bug');
+      const result = await client.updatePRTitle('token', 'owner', 'repo', 42, 'title');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -66,10 +53,10 @@ describe('gitHubPRHttpClient', () => {
 
     it('returns NOT_FOUND on 404', async () => {
       nock('https://api.github.com')
-        .patch('/repos/pbuchman/intexuraos/pulls/999')
-        .reply(404, 'Not Found');
+        .patch('/repos/owner/repo/pulls/999')
+        .reply(404, { message: 'Not Found' });
 
-      const result = await client.updatePRTitle('pbuchman', 'intexuraos', 999, '[INT-100] Fix auth bug');
+      const result = await client.updatePRTitle('token', 'owner', 'repo', 999, 'title');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -77,60 +64,42 @@ describe('gitHubPRHttpClient', () => {
       }
     });
 
-    it('returns UNAVAILABLE on 500', async () => {
+    it('returns RATE_LIMITED on 429', async () => {
       nock('https://api.github.com')
-        .patch('/repos/pbuchman/intexuraos/pulls/42')
-        .reply(500, 'Internal Server Error');
+        .patch('/repos/owner/repo/pulls/42')
+        .reply(429, { message: 'rate limit exceeded' });
 
-      const result = await client.updatePRTitle('pbuchman', 'intexuraos', 42, '[INT-100] Fix auth bug');
+      const result = await client.updatePRTitle('token', 'owner', 'repo', 42, 'title');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.code).toBe('RATE_LIMITED');
       }
     });
 
-    it('returns UNKNOWN on network error', async () => {
+    it('returns API_ERROR on other status codes', async () => {
       nock('https://api.github.com')
-        .patch('/repos/pbuchman/intexuraos/pulls/42')
-        .replyWithError('Connection refused');
+        .patch('/repos/owner/repo/pulls/42')
+        .reply(500, { message: 'Internal Server Error' });
 
-      const result = await client.updatePRTitle('pbuchman', 'intexuraos', 42, '[INT-100] Fix auth bug');
+      const result = await client.updatePRTitle('token', 'owner', 'repo', 42, 'title');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('UNKNOWN');
-        expect(result.error.message).toContain('Connection refused');
+        expect(result.error.code).toBe('API_ERROR');
       }
     });
 
-    it('returns UNAVAILABLE on timeout', async () => {
-      const shortTimeoutClient = createGitHubPRHttpClient({ token, timeoutMs: 50 }, mockLogger);
-
+    it('returns NETWORK_ERROR on fetch failure', async () => {
       nock('https://api.github.com')
-        .patch('/repos/pbuchman/intexuraos/pulls/42')
-        .delayConnection(200)
-        .reply(200, {});
+        .patch('/repos/owner/repo/pulls/42')
+        .replyWithError('connection refused');
 
-      const result = await shortTimeoutClient.updatePRTitle('pbuchman', 'intexuraos', 42, '[INT-100] Fix auth bug');
+      const result = await client.updatePRTitle('token', 'owner', 'repo', 42, 'title');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('UNAVAILABLE');
-        expect(result.error.message).toContain('timed out');
-      }
-    });
-
-    it('returns UNKNOWN on 422 (unprocessable)', async () => {
-      nock('https://api.github.com')
-        .patch('/repos/pbuchman/intexuraos/pulls/42')
-        .reply(422, 'Validation Failed');
-
-      const result = await client.updatePRTitle('pbuchman', 'intexuraos', 42, '[INT-100] Fix auth bug');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.code).toBe('NETWORK_ERROR');
       }
     });
   });
