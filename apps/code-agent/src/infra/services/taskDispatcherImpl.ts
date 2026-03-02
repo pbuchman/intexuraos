@@ -171,7 +171,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     timestamp: number,
     workers: WorkerConfigWithCredentials[]
   ): Promise<Result<DispatchResult, DispatchError>> {
-    let allCapacityRelated = true;
+    let sawCapacity503 = false;
+    let sawExplicitRejection = false;
 
     for (const worker of workers) {
       // Generate nonce for replay protection
@@ -187,7 +188,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           { taskId: taskRequest.taskId, workerLocation: worker.location },
           'Failed to sign dispatch request'
         );
-        allCapacityRelated = false;
+        sawExplicitRejection = true;
         continue;
       }
 
@@ -218,7 +219,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           { taskId: taskRequest.taskId, workerLocation: worker.location, reason: workerResponse.reason },
           'Worker rejected task'
         );
-        allCapacityRelated = false;
+        sawExplicitRejection = true;
         continue;
       } catch (error) {
         this.logger.error(
@@ -227,12 +228,12 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         );
 
         if (error instanceof Error && error.message.includes('503')) {
+          sawCapacity503 = true;
           continue;
         }
 
-        // 502/504 are infrastructure errors, not capacity — don't treat as retryable capacity
+        // 502/504 are infrastructure errors — neutral (don't affect capacity decision)
         if (error instanceof Error && (error.message.includes('502') || error.message.includes('504'))) {
-          allCapacityRelated = false;
           continue;
         }
 
@@ -243,11 +244,12 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       }
     }
 
-    // INT-619: Distinguish capacity-related failures from other failures
-    if (allCapacityRelated) {
+    // INT-619/INT-624: Distinguish capacity-related failures from other failures.
+    // Infrastructure errors (502/504) are neutral — they don't count for or against capacity.
+    if (sawCapacity503 && !sawExplicitRejection) {
       return err({
         code: 'at_capacity',
-        message: 'All workers are busy (returned 503)',
+        message: 'All available workers are busy (returned 503)',
       });
     }
 
