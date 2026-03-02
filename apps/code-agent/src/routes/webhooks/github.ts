@@ -21,10 +21,17 @@ import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import type { Logger } from 'pino';
 
-const ALLOWED_BOTS = new Set([
+export const ALLOWED_BOTS = new Set([
   'claude[bot]',
   'chatgpt-codex-connector[bot]',
 ]);
+
+export function resolveLoginForTaskCreation(senderLogin: string, repository: string): string {
+  if (!ALLOWED_BOTS.has(senderLogin)) return senderLogin;
+  const slashIndex = repository.indexOf('/');
+  if (slashIndex <= 0) return senderLogin;
+  return repository.slice(0, slashIndex);
+}
 
 /**
  * Check if a sender is allowed to trigger dispatch.
@@ -135,7 +142,7 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           repository: event.repository,
           prNumber: event.pullRequestNumber,
           ...(event.title !== null && { prTitle: event.title }),
-          senderLogin: event.senderLogin,
+          senderLogin: resolveLoginForTaskCreation(event.senderLogin, event.repository),
           comment: event.body ?? '',
           eventId: event.id,
         }
