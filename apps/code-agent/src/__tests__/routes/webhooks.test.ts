@@ -14,6 +14,7 @@ vi.mock('jose', () => ({
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../server.js';
+import { parseLinearIdentifierFromUrl } from '../../routes/webhookRoutes.js';
 import { getServices, resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
@@ -56,6 +57,28 @@ import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/f
 vi.mock('@intexuraos/internal-clients', async () => ({
   fetchWithAuth: vi.fn(),
 }));
+
+describe('parseLinearIdentifierFromUrl', () => {
+  it('extracts identifier from valid Linear URL', () => {
+    expect(parseLinearIdentifierFromUrl('https://linear.app/intexuraos/issue/INT-200/subtask-title')).toBe('INT-200');
+  });
+
+  it('returns null for non-linear.app hostname', () => {
+    expect(parseLinearIdentifierFromUrl('https://github.com/intexuraos/issue/INT-200')).toBeNull();
+  });
+
+  it('returns null for Linear URL without issue path', () => {
+    expect(parseLinearIdentifierFromUrl('https://linear.app/intexuraos/settings')).toBeNull();
+  });
+
+  it('returns null for malformed non-URL input', () => {
+    expect(parseLinearIdentifierFromUrl('not-a-url')).toBeNull();
+  });
+
+  it('extracts URL from markdown link wrapper', () => {
+    expect(parseLinearIdentifierFromUrl('[Subtask](https://linear.app/intexuraos/issue/INT-300/title)')).toBe('INT-300');
+  });
+});
 
 describe('POST /internal/webhooks/task-complete', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -735,8 +758,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
       // Original + 2 children normalized to todo
       expect(updateIssueStateSpy).toHaveBeenCalledTimes(3);
-      // Original labels + 2 children normalize metadata + 2 children stamp code-task
-      expect(updateIssueMetadataSpy).toHaveBeenCalledTimes(5);
+      // Original labels + 2 children (normalize + stamp in single call)
+      expect(updateIssueMetadataSpy).toHaveBeenCalledTimes(3);
       // PR comment on issue
       expect(addCommentSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -838,7 +861,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
     });
 
-    it('complex planned: fails when subtask is not a direct child of original', async () => {
+    it('complex planned: skips non-direct children in fallback path', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Plan with non-direct children',
@@ -926,14 +949,13 @@ describe('POST /internal/webhooks/task-complete', () => {
         payload,
       });
 
-      // Enforcement failure returns 200 to orchestrator but saves task as failed
+      // Fallback filters to direct children only — grandchild is skipped, not rejected
       expect(response.statusCode).toBe(200);
 
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('failed');
-      expect(getResult.value.error?.message).toContain('not a direct child');
+      expect(getResult.value.status).toBe('planned');
     });
 
     it('complex planned: no PR comment when planning_pr_url is empty', async () => {
@@ -1092,28 +1114,6 @@ describe('POST /internal/webhooks/task-complete', () => {
             childCount: 0,
             parentId: 'original-uuid',
           })
-        )
-        .mockResolvedValueOnce(
-          ok({
-            id: 'child-1-uuid',
-            identifier: 'INT-200',
-            title: 'Subtask 1',
-            url: 'https://linear.app/intexuraos/issue/INT-200',
-            labels: [],
-            childCount: 0,
-            parentId: 'original-uuid',
-          })
-        )
-        .mockResolvedValueOnce(
-          ok({
-            id: 'child-2-uuid',
-            identifier: 'INT-201',
-            title: 'Subtask 2',
-            url: 'https://linear.app/intexuraos/issue/INT-201',
-            labels: [],
-            childCount: 0,
-            parentId: 'original-uuid',
-          })
         );
       fetchIssueTreeSpy.mockClear();
       updateIssueStateSpy.mockClear();
@@ -1151,8 +1151,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       // fetchIssueTree must NOT be called — URL-based path was used
       expect(fetchIssueTreeSpy).not.toHaveBeenCalled();
 
-      // validateIssue called: 1 for original + 2 for subtask normalize + 2 for subtask stamp = 5 total
-      expect(validateIssueSpy).toHaveBeenCalledTimes(5);
+      // validateIssue called: 1 for original + 2 for subtasks = 3 total (single pass)
+      expect(validateIssueSpy).toHaveBeenCalledTimes(3);
 
       // Both subtasks normalized to todo
       expect(updateIssueStateSpy).toHaveBeenCalledWith(
@@ -1162,18 +1162,90 @@ describe('POST /internal/webhooks/task-complete', () => {
         expect.objectContaining({ issueId: 'child-2-uuid', state: 'todo' })
       );
 
-      // Both subtasks stamped with code-task label
+      // Both subtasks normalized + stamped with code-task in single call
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-1-uuid', addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-1-uuid', removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-2-uuid', addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-2-uuid', removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
       );
 
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.status).toBe('planned');
+    });
+
+    it('complex planned: rejects malformed subtask URLs', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan with malformed URLs',
+        sanitizedPrompt: 'Plan with malformed URLs',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+
+      validateIssueSpy.mockReset();
+      validateIssueSpy.mockResolvedValueOnce(
+        ok({
+          id: 'original-uuid',
+          identifier: 'INT-123',
+          title: 'Original issue',
+          url: 'https://linear.app/intexuraos/issue/INT-123',
+          labels: [],
+          childCount: 2,
+          parentId: null,
+        })
+      );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Complex plan with bad URLs',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '1' as const,
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_is_complex: '1' as const,
+          planning_subtask_urls: 'not-a-url,https://linear.app/intexuraos/issue/INT-200/subtask-1',
+          planning_pr_url: '',
+          planning_unclear_clarification: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.message).toContain('Invalid subtask URL');
     });
 
     it('complex planned: falls back to fetchIssueTree when subtask URLs empty', async () => {
