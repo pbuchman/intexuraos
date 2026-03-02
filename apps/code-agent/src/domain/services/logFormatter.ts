@@ -250,12 +250,18 @@ function truncate(s: string, max: number): string {
 function summarizeJsonContent(content: string): string | undefined {
   if (content.length < 200) return undefined; // Short JSON is fine as-is
 
-  let obj: Record<string, unknown>;
+  let parsed: unknown;
   try {
-    obj = JSON.parse(content) as Record<string, unknown>;
+    parsed = JSON.parse(content) as unknown;
   } catch {
     return undefined; // Not JSON, let existing handling deal with it
   }
+
+  if (Array.isArray(parsed)) {
+    return summarizeJsonArray(parsed as Record<string, unknown>[], content.length);
+  }
+
+  const obj = parsed as Record<string, unknown>;
 
   // GitHub PR data (gh pr view --json)
   if ('state' in obj && 'title' in obj && 'headRefName' in obj) {
@@ -284,6 +290,53 @@ function summarizeJsonContent(content: string): string | undefined {
   return `{${String(keys.length)} keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', ...' : ''}} [${String(content.length)} chars]`;
 }
 
+function extractPrNumberFromUrl(url: string): string {
+  const match = /\/pulls\/(\d+)/.exec(url);
+  return match !== null ? String(match[1]) : '';
+}
+
+function summarizeJsonArray(arr: Record<string, unknown>[], totalLength: number): string | undefined {
+  /* v8 ignore start -- ts-type: empty arrays are always < 200 chars, filtered by caller before reaching here @preserve */
+  if (arr.length === 0) return undefined;
+  /* v8 ignore stop @preserve */
+
+  const first = arr[0];
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; arr[0] always exists when length > 0 @preserve */
+  if (first === undefined) return undefined;
+  /* v8 ignore stop @preserve */
+
+  // PR reviews: have state + pull_request_url
+  if ('state' in first && 'pull_request_url' in first) {
+    const prUrl = typeof first['pull_request_url'] === 'string' ? first['pull_request_url'] : '';
+    const prNum = extractPrNumberFromUrl(prUrl);
+    const prRef = prNum !== '' ? ` on #${prNum}` : '';
+    const state = typeof first['state'] === 'string' ? `: ${first['state']}` : '';
+    const user = typeof (first['user'] as Record<string, unknown> | undefined)?.['login'] === 'string'
+      ? ` by ${String((first['user'] as Record<string, unknown>)['login'])}`
+      : '';
+    return `[${String(arr.length)} PR review${arr.length > 1 ? 's' : ''}${prRef}${state}${user}]`;
+  }
+
+  // Review comments: have diff_hunk + path
+  if ('diff_hunk' in first && 'path' in first) {
+    const prUrl = typeof first['pull_request_url'] === 'string' ? first['pull_request_url'] : '';
+    const prNum = extractPrNumberFromUrl(prUrl);
+    const prRef = prNum !== '' ? ` on #${prNum}` : '';
+    return `[${String(arr.length)} review comment${arr.length > 1 ? 's' : ''}${prRef}]`;
+  }
+
+  // Issue comments: have html_url + id + body
+  if ('html_url' in first && 'id' in first && 'body' in first) {
+    const url = typeof first['html_url'] === 'string' ? first['html_url'] : '';
+    const issueMatch = /\/(?:issues|pull)\/(\d+)/.exec(url);
+    const prRef = issueMatch !== null ? ` on #${String(issueMatch[1])}` : '';
+    return `[${String(arr.length)} comment${arr.length > 1 ? 's' : ''}${prRef}]`;
+  }
+
+  // Generic array fallback
+  return `[${String(arr.length)} item${arr.length > 1 ? 's' : ''}] [${String(totalLength)} chars]`;
+}
+
 function formatToolResult(content: string, isError: boolean, toolName?: string): string {
   const trimmed = stripSystemReminders(content).trim();
   if (trimmed === '') return '';
@@ -292,7 +345,7 @@ function formatToolResult(content: string, isError: boolean, toolName?: string):
   const prefix = isError ? '  \u2717 ' : '  \u2192 ';
 
   // Summarize JSON tool results (gh pr view, gh api, etc.)
-  if (!isError && trimmed.startsWith('{')) {
+  if (!isError && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
     const summary = summarizeJsonContent(trimmed);
     if (summary !== undefined) return `${prefix}${summary}`;
   }

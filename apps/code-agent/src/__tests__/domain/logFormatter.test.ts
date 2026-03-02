@@ -1209,6 +1209,195 @@ describe('formatLogChunk', () => {
       expect(result[0]?.text).toBe('  \u2192 Created comment ');
     });
 
+    it('JSON array of PR reviews is summarized', () => {
+      const reviewArray = JSON.stringify([
+        {
+          id: 3874849122,
+          user: { login: 'chatgpt-codex-connector[bot]' },
+          body: 'Codex Review: here are some suggestions for improvement that are quite detailed and thorough and exceed the two hundred character threshold.',
+          state: 'COMMENTED',
+          html_url: 'https://github.com/org/repo/pull/976#pullrequestreview-3874849122',
+          pull_request_url: 'https://api.github.com/repos/org/repo/pulls/976',
+          submitted_at: '2026-03-02T08:56:54Z',
+        },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: reviewArray });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [1 PR review on #976: COMMENTED by chatgpt-codex-connector[bot]]');
+    });
+
+    it('JSON array of review comments is summarized', () => {
+      const commentsArray = JSON.stringify([
+        {
+          id: 2871235997,
+          path: 'src/routes/webhookRoutes.ts',
+          diff_hunk: '@@ -262,64 +264,113 @@',
+          body: 'This branch treats any non-empty list as authoritative but that list can be incomplete and the validation is therefore insufficient for production use.',
+          user: { login: 'chatgpt-codex-connector[bot]' },
+          pull_request_url: 'https://api.github.com/repos/org/repo/pulls/976',
+        },
+        {
+          id: 2871235998,
+          path: 'src/services.ts',
+          diff_hunk: '@@ -10,5 +10,8 @@',
+          body: 'Missing null check here which could cause a runtime crash in production environments when the service container is not fully initialized.',
+          user: { login: 'chatgpt-codex-connector[bot]' },
+          pull_request_url: 'https://api.github.com/repos/org/repo/pulls/976',
+        },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: commentsArray });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [2 review comments on #976]');
+    });
+
+    it('JSON array of issue comments is summarized', () => {
+      const issueComments = JSON.stringify([
+        {
+          html_url: 'https://github.com/org/repo/pull/976#issuecomment-3982981848',
+          id: 3982981848,
+          body: 'INT-681 linkback comment that is long enough to need summarization and exceeds the two hundred character limit we have set in the formatter.',
+          user: { login: 'linear[bot]' },
+        },
+        {
+          html_url: 'https://github.com/org/repo/pull/976#issuecomment-3982996013',
+          id: 3982996013,
+          body: '@codex review this PR please and provide feedback on the implementation quality and test coverage that needs more attention in this area.',
+          user: { login: 'pbuchman' },
+        },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: issueComments });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [2 comments on #976]');
+    });
+
+    it('JSON empty array passes through unchanged', () => {
+      const json = JSON.stringify({ type: 'tool_result', content: '[]' });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 []');
+    });
+
+    it('JSON array without recognizable structure shows count and element keys', () => {
+      const genericArray = JSON.stringify([
+        { foo: 'bar', baz: 'x'.repeat(100) },
+        { foo: 'qux', baz: 'y'.repeat(100) },
+        { foo: 'quux', baz: 'z'.repeat(100) },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: genericArray });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe(`  \u2192 [3 items] [${String(genericArray.length)} chars]`);
+    });
+
+    it('JSON array of multiple PR reviews pluralizes', () => {
+      const reviews = JSON.stringify([
+        {
+          id: 1,
+          user: { login: 'bot1' },
+          body: 'Review 1 that is long enough to matter for the summarization threshold requirement of two hundred characters in total content length.',
+          state: 'APPROVED',
+          html_url: 'https://github.com/org/repo/pull/100#pullrequestreview-1',
+          pull_request_url: 'https://api.github.com/repos/org/repo/pulls/100',
+        },
+        {
+          id: 2,
+          user: { login: 'bot2' },
+          body: 'Review 2',
+          state: 'CHANGES_REQUESTED',
+          html_url: 'https://github.com/org/repo/pull/100#pullrequestreview-2',
+          pull_request_url: 'https://api.github.com/repos/org/repo/pulls/100',
+        },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: reviews });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [2 PR reviews on #100: APPROVED by bot1]');
+    });
+
+    it('JSON array PR review with non-string fields falls back gracefully', () => {
+      const reviews = JSON.stringify([
+        {
+          state: 123,
+          pull_request_url: true,
+          user: null,
+          body: 'x'.repeat(200),
+        },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: reviews });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [1 PR review]');
+    });
+
+    it('JSON array single review comment is singular', () => {
+      const comments = JSON.stringify([
+        {
+          id: 1,
+          path: 'src/index.ts',
+          diff_hunk: '@@ -1,5 +1,8 @@',
+          body: 'Single comment that is detailed enough to exceed the two hundred character minimum length threshold for summarization to kick in properly.',
+          user: { login: 'bot' },
+        },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: comments });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [1 review comment]');
+    });
+
+    it('JSON array single issue comment is singular', () => {
+      const comments = JSON.stringify([
+        {
+          html_url: 'https://github.com/org/repo/pull/42#issuecomment-123',
+          id: 123,
+          body: 'Single issue comment that is detailed enough to exceed the two hundred character minimum length threshold for summarization to kick in properly.',
+          user: { login: 'someone' },
+        },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: comments });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [1 comment on #42]');
+    });
+
+    it('JSON array issue comment with non-string html_url falls back gracefully', () => {
+      const comments = JSON.stringify([
+        {
+          html_url: 12345,
+          id: 99,
+          body: 'Comment with non-string html_url that is detailed enough to exceed the two hundred character minimum length threshold for summarization to kick in and produce a summary.',
+          user: { login: 'bot' },
+        },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: comments });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [1 comment]');
+    });
+
+    it('JSON array issue comment without PR number in URL', () => {
+      const comments = JSON.stringify([
+        {
+          html_url: 'https://github.com/org/repo/comments/99',
+          id: 99,
+          body: 'Comment on something without a standard issue or pull URL pattern that would allow us to extract a PR or issue number from it.',
+          user: { login: 'bot' },
+        },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: comments });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [1 comment]');
+    });
+
+    it('JSON array single generic item is singular', () => {
+      const items = JSON.stringify([
+        { foo: 'bar', baz: 'x'.repeat(200) },
+      ]);
+      const json = JSON.stringify({ type: 'tool_result', content: items });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe(`  \u2192 [1 item] [${String(items.length)} chars]`);
+    });
+
+    it('short JSON array (<200 chars) passes through unchanged', () => {
+      const shortArray = JSON.stringify([{ id: 1 }, { id: 2 }]);
+      const json = JSON.stringify({ type: 'tool_result', content: shortArray });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe(`  \u2192 ${shortArray}`);
+    });
+
     it('gh api comment without issue number in URL', () => {
       const commentData = JSON.stringify({
         html_url: 'https://github.com/org/repo/comments/123456',
