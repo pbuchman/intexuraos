@@ -23,6 +23,7 @@ export interface Config {
   orchestratorSecret: string;
   serviceUrl: string;
   githubWebhookSecret: string;
+  userServiceUrl: string;
   // Auth0 JWT validation
   auth0Audience: string;
   auth0Issuer: string;
@@ -48,6 +49,7 @@ export function loadConfig(): Config {
   const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
   const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
   const githubWebhookSecret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] ?? '';
+  const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
 
   return {
     port,
@@ -63,6 +65,7 @@ export function loadConfig(): Config {
     serviceUrl,
     tokenEncryptionKey,
     githubWebhookSecret,
+    userServiceUrl,
     auth0Audience,
     auth0Issuer,
     auth0JwksUri,

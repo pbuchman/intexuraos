@@ -37,7 +37,7 @@ export interface OAuthTokenResult {
 /**
  * Supported OAuth providers.
  */
-export type OAuthProvider = 'google';
+export type OAuthProvider = 'google' | 'github';
 
 /**
  * Error from user service operations.
@@ -65,4 +65,7 @@ export interface UserServiceClient {
     userId: string,
     provider: OAuthProvider
   ): Promise<Result<OAuthTokenResult, UserServiceError>>;
+  resolveGitHubUsername(
+    gitHubUsername: string
+  ): Promise<Result<{ userId: string } | null, UserServiceError>>;
 }

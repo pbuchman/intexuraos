@@ -129,6 +129,8 @@ describe('POST /webhooks/github', () => {
       gitHubPREventRepo: mockEventRepo,
       gitHubPRSummaryRepo: mockSummaryRepo,
       turnMetricsRepo: {} as never,
+      userServiceClient: {} as never,
+      gitHubPRClient: {} as never,
     };
 
     setServices(mockServices);

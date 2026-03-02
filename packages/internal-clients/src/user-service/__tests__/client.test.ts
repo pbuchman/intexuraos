@@ -1097,5 +1097,109 @@ describe('createUserServiceClient', () => {
         expect.fail('Expected error result');
       }
     });
+
+    it('works with github provider', async () => {
+      const mockToken = {
+        accessToken: 'gho_abc123...',
+        email: 'user@example.com',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/oauth/github/token')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockToken });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken('user123', 'github');
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockToken);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+  });
+
+  describe('resolveGitHubUsername', () => {
+    it('returns userId on success', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/by-github-username/octocat')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: { userId: 'auth0|user123' } });
+
+      const client = createUserServiceClient(config);
+      const result = await client.resolveGitHubUsername('octocat');
+
+      if (result.ok) {
+        expect(result.value).toEqual({ userId: 'auth0|user123' });
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('returns null (ok(null)) when username not found (404)', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/by-github-username/unknown-user')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(404);
+
+      const client = createUserServiceClient(config);
+      const result = await client.resolveGitHubUsername('unknown-user');
+
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      } else {
+        expect.fail('Expected ok(null) result');
+      }
+    });
+
+    it('returns API_ERROR on non-404 HTTP error', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/by-github-username/octocat')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(500);
+
+      const client = createUserServiceClient(config);
+      const result = await client.resolveGitHubUsername('octocat');
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toBe('HTTP 500');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/by-github-username/octocat')
+        .replyWithError('ECONNREFUSED');
+
+      const client = createUserServiceClient(config);
+      const result = await client.resolveGitHubUsername('octocat');
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+        expect(result.error.message).toContain('ECONNREFUSED');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('URL encodes username with special characters', async () => {
+      nock('http://localhost:3000')
+        .get(`/internal/users/by-github-username/${encodeURIComponent('user name')}`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: { userId: 'auth0|user123' } });
+
+      const client = createUserServiceClient(config);
+      const result = await client.resolveGitHubUsername('user name');
+
+      if (result.ok) {
+        expect(result.value).toEqual({ userId: 'auth0|user123' });
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
   });
 });

@@ -38,6 +38,10 @@ import type {
   GoogleTokenResponse,
   GoogleUserInfo,
 } from '../domain/oauth/ports/GoogleOAuthClient.js';
+import type {
+  GitHubOAuthClient,
+  GitHubTokenResponse,
+} from '../domain/oauth/ports/GitHubOAuthClient.js';
 
 /**
  * Fake Auth token repository for testing.
@@ -570,6 +574,7 @@ export class FakeOAuthConnectionRepository implements OAuthConnectionRepository 
   private shouldFailGetPublic = false;
   private shouldFailUpdate = false;
   private shouldFailDelete = false;
+  private shouldFailFindByProviderEmail = false;
 
   setFailNextSave(fail: boolean): void {
     this.shouldFailSave = fail;
@@ -589,6 +594,10 @@ export class FakeOAuthConnectionRepository implements OAuthConnectionRepository 
 
   setFailNextDelete(fail: boolean): void {
     this.shouldFailDelete = fail;
+  }
+
+  setFailNextFindByProviderEmail(fail: boolean): void {
+    this.shouldFailFindByProviderEmail = fail;
   }
 
   setConnection(userId: string, provider: OAuthProvider, connection: OAuthConnection): void {
@@ -697,6 +706,24 @@ export class FakeOAuthConnectionRepository implements OAuthConnectionRepository 
     }
     this.connections.delete(`${userId}:${provider}`);
     return Promise.resolve(ok(undefined));
+  }
+
+  findByProviderEmail(
+    provider: OAuthProvider,
+    email: string
+  ): Promise<Result<OAuthConnection | null, OAuthError>> {
+    if (this.shouldFailFindByProviderEmail) {
+      this.shouldFailFindByProviderEmail = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated findByProviderEmail failure' })
+      );
+    }
+    for (const connection of this.connections.values()) {
+      if (connection.provider === provider && connection.email === email) {
+        return Promise.resolve(ok(connection));
+      }
+    }
+    return Promise.resolve(ok(null));
   }
 
   getStoredConnection(userId: string, provider: OAuthProvider): OAuthConnection | undefined {
@@ -823,6 +850,89 @@ export class FakeGoogleOAuthClient implements GoogleOAuthClient {
       );
     }
     return Promise.resolve(ok({ email: this.userEmail, verified: true }));
+  }
+
+  revokeToken(_token: string): Promise<Result<void, OAuthError>> {
+    if (this.shouldFailRevoke) {
+      this.shouldFailRevoke = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Revoke failed' })
+      );
+    }
+    return Promise.resolve(ok(undefined));
+  }
+}
+
+/**
+ * Fake GitHub OAuth Client for testing.
+ */
+export class FakeGitHubOAuthClient implements GitHubOAuthClient {
+  private shouldFailExchange = false;
+  private shouldFailUserInfo = false;
+  private shouldFailRevoke = false;
+  private exchangeError: OAuthError | null = null;
+  private username = 'test-github-user';
+  private lastGeneratedState: string | null = null;
+  private lastGeneratedRedirectUri: string | null = null;
+
+  setFailNextExchange(fail: boolean, error?: OAuthError): void {
+    this.shouldFailExchange = fail;
+    this.exchangeError = error ?? null;
+  }
+
+  setFailNextUserInfo(fail: boolean): void {
+    this.shouldFailUserInfo = fail;
+  }
+
+  setFailNextRevoke(fail: boolean): void {
+    this.shouldFailRevoke = fail;
+  }
+
+  setUsername(username: string): void {
+    this.username = username;
+  }
+
+  getLastGeneratedState(): string | null {
+    return this.lastGeneratedState;
+  }
+
+  getLastGeneratedRedirectUri(): string | null {
+    return this.lastGeneratedRedirectUri;
+  }
+
+  generateAuthUrl(state: string, redirectUri: string): string {
+    this.lastGeneratedState = state;
+    this.lastGeneratedRedirectUri = redirectUri;
+    return `https://github.com/login/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  }
+
+  exchangeCode(
+    _code: string,
+    _redirectUri: string
+  ): Promise<Result<GitHubTokenResponse, OAuthError>> {
+    if (this.shouldFailExchange) {
+      this.shouldFailExchange = false;
+      return Promise.resolve(
+        err(this.exchangeError ?? { code: 'TOKEN_EXCHANGE_FAILED', message: 'Exchange failed' })
+      );
+    }
+    return Promise.resolve(
+      ok({
+        accessToken: 'fake-github-access-token',
+        tokenType: 'bearer',
+        scope: 'repo,read:user',
+      })
+    );
+  }
+
+  getUserInfo(_accessToken: string): Promise<Result<{ username: string; email: string | null }, OAuthError>> {
+    if (this.shouldFailUserInfo) {
+      this.shouldFailUserInfo = false;
+      return Promise.resolve(
+        err({ code: 'TOKEN_EXCHANGE_FAILED', message: 'Failed to get user info' })
+      );
+    }
+    return Promise.resolve(ok({ username: this.username, email: null }));
   }
 
   revokeToken(_token: string): Promise<Result<void, OAuthError>> {

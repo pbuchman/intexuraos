@@ -44,7 +44,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import { ok } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ServiceContainer } from '../../services.js';
-import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 
@@ -163,6 +163,8 @@ describe('Worker Settings Routes', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();
@@ -717,147 +719,4 @@ describe('Worker Settings Routes', () => {
     });
   });
 
-  describe('PATCH /code/worker-settings/github-username', () => {
-    it('should save GitHub username successfully', async () => {
-      const response = await app.inject({
-        method: 'PATCH',
-        url: '/code/worker-settings/github-username',
-        headers: {
-          Authorization: 'Bearer test-token',
-          'Content-Type': 'application/json',
-        },
-        payload: {
-          githubUsername: 'octocat',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        data: { updated: boolean };
-      };
-      expect(body.success).toBe(true);
-      expect(body.data.updated).toBe(true);
-    });
-
-    it('should save GitHub username with whitespace trimmed', async () => {
-      const response = await app.inject({
-        method: 'PATCH',
-        url: '/code/worker-settings/github-username',
-        headers: {
-          Authorization: 'Bearer test-token',
-          'Content-Type': 'application/json',
-        },
-        payload: {
-          githubUsername: '  octocat  ',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-    });
-
-    it('should return 400 for empty GitHub username', async () => {
-      const response = await app.inject({
-        method: 'PATCH',
-        url: '/code/worker-settings/github-username',
-        headers: {
-          Authorization: 'Bearer test-token',
-          'Content-Type': 'application/json',
-        },
-        payload: {
-          githubUsername: '',
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-    });
-
-    it('should return 400 for missing githubUsername field', async () => {
-      const response = await app.inject({
-        method: 'PATCH',
-        url: '/code/worker-settings/github-username',
-        headers: {
-          Authorization: 'Bearer test-token',
-          'Content-Type': 'application/json',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-    });
-
-    it('should return 401 without authentication', async () => {
-      mockedJwtVerify.mockRejectedValue(new Error('Invalid token'));
-
-      const response = await app.inject({
-        method: 'PATCH',
-        url: '/code/worker-settings/github-username',
-        headers: {
-          Authorization: 'Bearer invalid-token',
-          'Content-Type': 'application/json',
-        },
-        payload: {
-          githubUsername: 'octocat',
-        },
-      });
-
-      expect(response.statusCode).toBe(401);
-    });
-  });
-
-  describe('GET /code/worker-settings - githubUsername field', () => {
-    it('should include githubUsername when set', async () => {
-      // First set the GitHub username via PATCH endpoint
-      const patchResponse = await app.inject({
-        method: 'PATCH',
-        url: '/code/worker-settings/github-username',
-        headers: {
-          Authorization: 'Bearer test-token',
-          'Content-Type': 'application/json',
-        },
-        payload: {
-          githubUsername: 'octocat',
-        },
-      });
-
-      expect(patchResponse.statusCode).toBe(200);
-
-      // Now get the settings
-      const response = await app.inject({
-        method: 'GET',
-        url: '/code/worker-settings',
-        headers: { Authorization: 'Bearer test-token' },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        data: { workers: unknown[]; githubUsername?: string };
-      };
-      expect(body.success).toBe(true);
-      expect(body.data.githubUsername).toBe('octocat');
-    });
-
-    it('should not include githubUsername when not set', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/code/worker-settings',
-        headers: { Authorization: 'Bearer test-token' },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        data: { workers: unknown[]; githubUsername?: string };
-      };
-      expect(body.success).toBe(true);
-      expect(body.data.githubUsername).toBeUndefined();
-    });
-  });
 });

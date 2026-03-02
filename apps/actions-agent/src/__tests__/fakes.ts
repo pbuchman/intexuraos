@@ -1238,6 +1238,10 @@ export class FakeUserServiceClient implements UserServiceClient {
       message: 'OAuth not configured in fake',
     });
   }
+
+  async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, UserServiceError>> {
+    return ok(null);
+  }
 }
 
 // Fake HandleApprovalReplyUseCase

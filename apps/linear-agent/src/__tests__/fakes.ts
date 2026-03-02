@@ -749,6 +749,10 @@ export class FakeUserServiceClient implements UserServiceClient {
     if (error !== undefined) this.failError = error;
   }
 
+  async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, UserServiceError>> {
+    return ok(null);
+  }
+
   reset(): void {
     this.llmClient = new FakeLlmGenerateClient();
     this.shouldFail = false;

@@ -28,6 +28,7 @@ import {
   DataInsightsPage,
   DataSourceFormPage,
   DataSourcesListPage,
+  GitHubConnectionPage,
   GoogleCalendarConnectionPage,
   HomePage,
   InboxPage,
@@ -169,6 +170,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <GoogleCalendarConnectionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/github"
+        element={
+          <ProtectedRoute>
+            <GitHubConnectionPage />
           </ProtectedRoute>
         }
       />
