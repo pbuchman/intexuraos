@@ -1094,6 +1094,17 @@ export class TaskDispatcher {
     return base;
   }
 
+  private enrichResultForResumedTask(
+    task: Task,
+    result: TaskResult | undefined // @allow-undefined-type -- function parameter, not optional property
+  ): TaskResult | undefined {
+    if (result === undefined) return undefined;
+    if (task.agentType === 'execution' && task.linearIssueId !== undefined) {
+      result.execution_linear_issue_url = `https://linear.app/intexuraos/issue/${task.linearIssueId}`;
+    }
+    return result;
+  }
+
   private async finalizeTaskWithResult(
     task: Task,
     agentType: CompletionAgentType,
@@ -1257,8 +1268,9 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       delete task.resumedAfterSuccess;
+      const enrichedErrorResult = this.enrichResultForResumedTask(task, result);
       await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
+        ...(enrichedErrorResult !== undefined && { result: enrichedErrorResult }),
         error,
       });
       return;
@@ -1302,8 +1314,10 @@ export class TaskDispatcher {
     await this.flushTaskLogs(task.taskId);
     await this.collectTurnMetrics(task, attempt);
     delete task.resumedAfterSuccess;
+
+    const enrichedResult = this.enrichResultForResumedTask(task, result);
     await this.finalizeTask(task, 'completed', {
-      ...(result !== undefined && { result }),
+      ...(enrichedResult !== undefined && { result: enrichedResult }),
     });
   }
 
