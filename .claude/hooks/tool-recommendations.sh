@@ -36,7 +36,9 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Check for standalone grep with recursive flags (not piped, not git grep)
-if echo "$COMMAND" | grep -qE '(^|[;&|]\s*)grep\s+(-[a-zA-Z]*r[a-zA-Z]*\s|--recursive)'; then
+# Exclude piped usage: "| grep -r" should be allowed since it's filtering output
+if echo "$COMMAND" | grep -qE '(^|[;&]\s*)grep\s+(-[a-zA-Z]*r[a-zA-Z]*\s|--recursive)' && \
+   ! echo "$COMMAND" | grep -qE '\|\s*grep\s'; then
 
     log_warned "$HOOK_NAME" "grep-recursive" "-" \
         "Using grep with recursive flags for code search" \
