@@ -4,7 +4,7 @@
  * Test Requirements:
  * 1. Returns task_not_found when task doesn't exist
  * 2. Returns invalid_status for cancelled task
- * 3. Returns invalid_status for dispatched task
+ * 3. Queues message locally for dispatched task (stores in pendingUserMessages, no worker contact)
  * 4. Queues message for running task (writes log line, forwards to worker, returns { action: 'queued' })
  * 5. Resumes completed task with message (writes log line, forwards to worker, returns { action: 'resumed' })
  * 6. Returns worker_not_configured when no workers are configured
@@ -209,20 +209,97 @@ describe('sendTaskMessage', () => {
       );
     });
 
-    it('should return invalid_status for dispatched task', async () => {
+    it('should queue message locally for dispatched task without contacting worker', async () => {
       const dispatchedTask = createMockTask({ status: 'dispatched' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(dispatchedTask));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
 
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('invalid_status');
-        expect(result.error.message).toContain('dispatched');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('queued');
       }
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId, status: 'dispatched' }),
+
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { pendingUserMessages: [message] });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId, action: 'queued', status: 'dispatched' }),
         expect.any(String)
+      );
+    });
+
+    it('should append to existing pendingUserMessages for dispatched task', async () => {
+      const dispatchedTask = createMockTask({
+        status: 'dispatched',
+        pendingUserMessages: ['First message'],
+      });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(dispatchedTask));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, {
+        pendingUserMessages: ['First message', message],
+      });
+    });
+
+    it('should succeed for dispatched task even if log line write fails', async () => {
+      const dispatchedTask = createMockTask({ status: 'dispatched' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(dispatchedTask));
+      mockLogLineRepo.storeBatch.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('queued');
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId }),
+        expect.stringContaining('Failed to store user message log line')
+      );
+    });
+
+    it('should succeed for dispatched task even if pendingUserMessages update fails', async () => {
+      const dispatchedTask = createMockTask({ status: 'dispatched' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(dispatchedTask));
+      mockLogLineRepo.storeBatch
+        .mockResolvedValueOnce(ok(undefined))
+        .mockResolvedValueOnce(ok(undefined));
+      mockCodeTaskRepo.update.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
+      );
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId }),
+        expect.stringContaining('Failed to update pending user messages')
+      );
+    });
+
+    it('should succeed for dispatched task even if status log line write fails', async () => {
+      const dispatchedTask = createMockTask({ status: 'dispatched' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(dispatchedTask));
+      mockLogLineRepo.storeBatch
+        .mockResolvedValueOnce(ok(undefined))
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId }),
+        expect.stringContaining('Failed to write status log line')
       );
     });
   });
