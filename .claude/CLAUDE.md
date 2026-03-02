@@ -419,7 +419,7 @@ const logger = createAppLogger({ name: 'my-service' });
 **Failure to update all three causes:**
 
 - Missing in Terraform → **Startup probe failure** (22% of build failures)
-- Missing in ecosystem.config.cjs → Local development broken
+- Missing in ecosystem.config.cjs → dev environment broken (home-dev services fail to start)
 - Missing in REQUIRED_ENV → Runtime crash when var accessed
 
 **Patterns:** See `.claude/reference/env-vars-patterns.md`. **CI:** `scripts/verify-env-vars.mjs`.
@@ -585,14 +585,14 @@ All artifacts must be connected:
 
 **Environment detection signals:**
 
-| Signal                           | dev                                               | prod                                |
-| -------------------------------- | ------------------------------------------------- | ----------------------------------- |
-| URL contains                     | `dev.intexuraos.cloud`                            | `intexuraos.cloud` (without `dev.`) |
-| URL contains                     | `localhost:*` (internal service URLs on home-dev) | `*.run.app`                         |
-| User says                        | "dev", "dev environment"                          | "prod", "production", "cloud"       |
-| `uname -n`                       | `home-dev`                                        | N/A (Cloud Run)                     |
-| Logs via                         | `pm2 logs <name>`                                 | `gcloud logging read`               |
-| `INTEXURAOS_ENVIRONMENT` env var | `dev`                                             | `prod`                              |
+| Signal                           | dev                                      | prod                                |
+| -------------------------------- | ---------------------------------------- | ----------------------------------- |
+| URL (public)                     | `dev.intexuraos.cloud`                   | `intexuraos.cloud` (without `dev.`) |
+| URL (internal)                   | `localhost:*` (service URLs on home-dev) | `*.run.app`                         |
+| User says                        | "dev", "dev environment"                 | "prod", "production", "cloud"       |
+| `uname -n`                       | `home-dev`                               | N/A (Cloud Run)                     |
+| Logs via                         | `pm2 logs <name>`                        | `gcloud logging read`               |
+| `INTEXURAOS_ENVIRONMENT` env var | `dev`                                    | `prod`                              |
 
 **Firestore is SHARED between both environments.** Same database, same collections.
 
@@ -624,16 +624,18 @@ STEP 4: Check service status with the right tool (pm2 for dev, gcloud for prod)
 
 **Auto-deploy via webhook handler.** A GitHub webhook at `~/tools/webhook-handler/` receives push events to `development`, detects changed files, and restarts affected services. PM2 services restart via `pm2 restart`; the orchestrator rebuilds (`pnpm --filter orchestrator build`) then restarts via `systemctl restart`. PM2 file watching is disabled (`watch: false`).
 
+**Port reference:** See `ecosystem.config.cjs` for the full port map of all dev services.
+
 ### Development Machines
 
-| Machine      | OS     | Role                                       | SSH Access               |
-| ------------ | ------ | ------------------------------------------ | ------------------------ |
-| **mac-dev**  | Darwin | Code editing, commits, pushes              | Can SSH to home-dev      |
-| **home-dev** | Linux  | Runs dev environment, auto-deploys on push | Has dev services running |
+| Machine      | OS     | `uname -n` | Role                                       | SSH Access               |
+| ------------ | ------ | ---------- | ------------------------------------------ | ------------------------ |
+| **mac-dev**  | Darwin | varies     | Code editing, commits, pushes              | Can SSH to home-dev      |
+| **home-dev** | Linux  | `home-dev` | Runs dev environment, auto-deploys on push | Has dev services running |
 
 **Both use `~/deploy/intexuraos/` as project path (relative to home).**
 
-**Code Task Investigation:** For any code task issue, FIRST check the Firestore `code_tasks` document for the task. The `workerLocation` field contains a user-configured string (e.g., `"home-mac"`, `"office-pc"`) — read whatever value is stored; it is not a fixed hostname.
+**Code Task Investigation:** For any code task issue, FIRST check the Firestore `code_tasks` document for the task. The `workerLocation` field contains a user-configured string (e.g., `"mac-dev"`, `"office-pc"`) — read whatever value is stored; it is not a fixed hostname.
 
 **Forbidden assumptions:**
 
