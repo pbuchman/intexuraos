@@ -248,6 +248,14 @@ ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''
 
 Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.
 
+VIOLATION EXAMPLE — do NOT do this:
+1. POST /issues/{pr_number}/comments → creates comment (ID 123)
+2. ... do work ...
+3. POST /issues/{pr_number}/comments → creates SECOND comment ← WRONG
+4. PATCH /issues/comments/123 → updates original
+
+Step 3 is forbidden. You must ONLY use PATCH on the original comment ID. Never call POST a second time.
+
 gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="..."
 
 The initial comment must contain:
@@ -261,7 +269,8 @@ Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE th
 - Outcome: commits pushed / no changes needed / etc.
 ${taskUrl !== undefined ? `- Link to the task console: [View task](${taskUrl})` : ''}
 
-Use: gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="..."
+Use ONLY this method — do NOT post a new comment:
+gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="..."
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
@@ -273,7 +282,9 @@ PULL_REQUEST_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Comment replied: <yes|no>
+- Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: <updated|not_applicable>
+- Total PR comments posted: <must be exactly 1>
 - Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
 \`\`\`
 
@@ -314,7 +325,15 @@ All three are MANDATORY. Skipping any source means missing feedback.
 
 ### Tracking Comment (MANDATORY when activated)
 
-Your FIRST action must be to post a tracking comment on the PR:
+Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.
+
+VIOLATION EXAMPLE — do NOT do this:
+1. POST /issues/{pr_number}/comments → creates comment (ID 123)
+2. ... do work ...
+3. POST /issues/{pr_number}/comments → creates SECOND comment ← WRONG
+4. PATCH /issues/comments/123 → updates original
+
+Step 3 is forbidden. You must ONLY use PATCH on the original comment ID. Never call POST a second time.
 
 \`\`\`
 gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="..."
@@ -331,7 +350,8 @@ Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE th
 - Outcome: commits pushed / no changes needed / etc.
 ${taskUrl !== undefined ? `- Link to the task console: [View task](${taskUrl})` : ''}
 
-Use: \`gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="..."\`
+Use ONLY this method — do NOT post a new comment:
+\`gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="..."\`
 
 ### Completion Block Override
 
@@ -343,7 +363,9 @@ PULL_REQUEST_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Comment replied: <yes|no>
+- Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: <updated|not_applicable>
+- Total PR comments posted: <must be exactly 1>
 - Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
 \`\`\`
 
