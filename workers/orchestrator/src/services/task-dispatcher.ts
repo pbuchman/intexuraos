@@ -230,7 +230,10 @@ export class TaskDispatcher {
           );
         }
       } else if (request.agentType === 'execution') {
-        this.logger.info({ taskId }, 'No planning branch to merge — dispatched without planningPrBranch');
+        this.logger.info(
+          { taskId },
+          'No planning branch to merge — dispatched without planningPrBranch'
+        );
       }
 
       const workerTypeConfig = WORKER_TYPES[request.workerType as WorkerType];
