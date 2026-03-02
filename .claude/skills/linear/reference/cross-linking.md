@@ -18,15 +18,20 @@ All issues must be linked between systems for full traceability.
 
 ### Required Conditions
 
-1. **Branch name MUST contain Linear issue ID**
+Any **single** method is sufficient for Linear to auto-link a PR:
+
+1. **Branch name contains Linear issue ID**
    - ✅ `fix/INT-123`
    - ✅ `feature/INT-44-add-tests`
-   - ❌ `fix/coverage-web-agent`
 
-2. **PR title MUST contain Linear issue ID**
+2. **PR title contains Linear issue ID**
    - ✅ `[INT-123] Fix auth`
    - ✅ `INT-44: Add tests`
-   - ❌ `Fix auth bug`
+
+3. **PR description contains magic words**
+   - ✅ `Fixes INT-123` / `Closes INT-123`
+
+Using **any one** of these is enough — they work independently. Using multiple is fine but not required.
 
 ### What Happens When Conditions Are Met
 
@@ -83,7 +88,7 @@ Include these in every PR:
 
 Adding PR URL as a comment only adds text — it doesn't create the attachment relationship.
 
-The GitHub integration requires the issue ID in **both** branch name **AND** PR title to establish the bidirectional link that shows the PR in Linear's UI.
+The GitHub integration establishes the bidirectional link when the issue ID appears in **any** of: branch name, PR title, or PR description (magic words). Any single method is sufficient.
 
 ## Example: Proper vs Improper Linking
 

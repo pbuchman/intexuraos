@@ -18,6 +18,7 @@ import {
   type CreateTaskForPRDeps,
 } from '../../../domain/usecases/createTaskForPR.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
+import type { GitHubPRClient as GitHubPRClientType } from '../../../domain/ports/gitHubPRClient.js';
 
 describe('createTaskForPR', () => {
   let mockLogger: Logger;
@@ -34,6 +35,9 @@ describe('createTaskForPR', () => {
   };
   let mockTaskDispatcher: {
     dispatch: ReturnType<typeof vi.fn>;
+  };
+  let mockGitHubPRClient: {
+    updatePRTitle: ReturnType<typeof vi.fn>;
   };
   let mockFirestore: {
     runTransaction: ReturnType<typeof vi.fn>;
@@ -82,7 +86,7 @@ describe('createTaskForPR', () => {
     updatedAt: Timestamp.now(),
   };
 
-  function createDeps(): CreateTaskForPRDeps {
+  function createDeps(overrides: { gitHubPRClient?: CreateTaskForPRDeps['gitHubPRClient'] } = {}): CreateTaskForPRDeps {
     return {
       logger: mockLogger,
       codeTaskRepo: mockCodeTaskRepo as unknown as CreateTaskForPRDeps['codeTaskRepo'],
@@ -91,6 +95,7 @@ describe('createTaskForPR', () => {
       taskDispatcher: mockTaskDispatcher as unknown as CreateTaskForPRDeps['taskDispatcher'],
       orchestratorSecret: 'test-orchestrator-secret',
       serviceUrl: 'https://code-agent.test.local',
+      ...(overrides.gitHubPRClient !== undefined && { gitHubPRClient: overrides.gitHubPRClient }),
       firestore: mockFirestore as unknown as CreateTaskForPRDeps['firestore'],
     };
   }
@@ -132,6 +137,10 @@ describe('createTaskForPR', () => {
 
     mockTaskDispatcher = {
       dispatch: vi.fn(),
+    };
+
+    mockGitHubPRClient = {
+      updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
     };
 
     mockTransaction = {
@@ -695,6 +704,138 @@ describe('createTaskForPR', () => {
         throw new Error('Expected error result');
       }
       expect(result.error.code).toBe('task_creation_failed');
+    });
+  });
+
+  describe('PR title update', () => {
+    function setupNewTaskMocks(linearIssueId?: string): void {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockTransaction.get.mockResolvedValue({
+        exists: false,
+        data: () => undefined,
+      });
+
+      mockLinearIssueService.ensureIssueExists.mockResolvedValue({
+        linearIssueId,
+        linearIssueTitle: 'Test Issue',
+        linearIssueUrl: linearIssueId !== undefined ? `https://linear.app/intexuraos/issue/${linearIssueId}` : undefined,
+        linearFallback: linearIssueId === undefined,
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      });
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({ ...mockExistingTask, id: 'task_new' })
+      );
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' })
+      );
+
+      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
+    }
+
+    it('updates PR title when new Linear issue created', async () => {
+      setupNewTaskMocks('INT-200');
+
+      await createTaskForPR(
+        createDeps({ gitHubPRClient: mockGitHubPRClient as unknown as GitHubPRClientType }),
+        createRequest({ prTitle: 'Fix auth bug' })
+      );
+
+      expect(mockGitHubPRClient.updatePRTitle).toHaveBeenCalledWith(
+        'pbuchman', 'intexuraos', prNumber, '[INT-200] Fix auth bug'
+      );
+    });
+
+    it('skips title update when INT-XXX already in title (existingLinearIssueId set)', async () => {
+      setupNewTaskMocks('INT-500');
+
+      await createTaskForPR(
+        createDeps({ gitHubPRClient: mockGitHubPRClient as unknown as GitHubPRClientType }),
+        createRequest({ prTitle: '[INT-500] Fix auth bug' })
+      );
+
+      expect(mockGitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+    });
+
+    it('skips title update when Linear fell back (linearIssueId undefined)', async () => {
+      setupNewTaskMocks(undefined);
+
+      await createTaskForPR(
+        createDeps({ gitHubPRClient: mockGitHubPRClient as unknown as GitHubPRClientType }),
+        createRequest({ prTitle: 'Fix auth bug' })
+      );
+
+      expect(mockGitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+    });
+
+    it('skips title update when gitHubPRClient is undefined', async () => {
+      setupNewTaskMocks('INT-200');
+
+      await createTaskForPR(
+        createDeps(),
+        createRequest({ prTitle: 'Fix auth bug' })
+      );
+
+      // No gitHubPRClient provided, so no call
+      expect(mockGitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+    });
+
+    it('skips title update when prTitle is undefined', async () => {
+      setupNewTaskMocks('INT-200');
+
+      await createTaskForPR(
+        createDeps({ gitHubPRClient: mockGitHubPRClient as unknown as GitHubPRClientType }),
+        createRequest()
+      );
+
+      expect(mockGitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+    });
+
+    it('skips title update when repository has no slash (invalid owner/repo)', async () => {
+      setupNewTaskMocks('INT-200');
+
+      const result = await createTaskForPR(
+        createDeps({ gitHubPRClient: mockGitHubPRClient as unknown as GitHubPRClientType }),
+        {
+          repository: 'no-slash-repo',
+          prNumber,
+          prTitle: 'Fix auth bug',
+          senderLogin,
+          comment,
+          eventId,
+        }
+      );
+
+      if (!result.ok) {
+        throw new Error('Expected success result: ' + result.error.message);
+      }
+      expect(mockGitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+    });
+
+    it('still creates task when title update fails', async () => {
+      setupNewTaskMocks('INT-200');
+      mockGitHubPRClient.updatePRTitle.mockResolvedValue(
+        err({ code: 'UNAUTHORIZED', message: 'Bad credentials' })
+      );
+
+      const result = await createTaskForPR(
+        createDeps({ gitHubPRClient: mockGitHubPRClient as unknown as GitHubPRClientType }),
+        createRequest({ prTitle: 'Fix auth bug' })
+      );
+
+      if (!result.ok) {
+        throw new Error('Expected success result: ' + result.error.message);
+      }
+      expect(result.value.taskId).toBeDefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ prNumber, linearIssueId: 'INT-200' }),
+        'Failed to update PR title with Linear issue ID (best-effort)'
+      );
     });
   });
 });

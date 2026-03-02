@@ -16,6 +16,7 @@ import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTa
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
+import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
 
@@ -55,6 +56,7 @@ export interface CreateTaskForPRDeps {
   taskDispatcher: TaskDispatcherService;
   orchestratorSecret: string;
   serviceUrl: string;
+  gitHubPRClient?: GitHubPRClient;
   firestore: {
     runTransaction: <T>(fn: (transaction: FirebaseFirestore.Transaction) => Promise<T>) => Promise<T>;
     doc: (path: string) => FirebaseFirestore.DocumentReference;
@@ -296,6 +298,26 @@ export async function createTaskForPR(
 
   // For new tasks, we have webhookSecret and linearResult
   const { taskId, webhookSecret, linearResult } = txValue;
+
+  // Best-effort: prepend [INT-XXX] to PR title for Linear auto-linking
+  if (
+    existingLinearIssueId === undefined &&
+    linearResult.linearIssueId !== undefined &&
+    deps.gitHubPRClient !== undefined &&
+    request.prTitle !== undefined
+  ) {
+    const [owner, repo] = repository.split('/');
+    if (owner !== undefined && repo !== undefined) {
+      const newTitle = `[${linearResult.linearIssueId}] ${request.prTitle}`;
+      const titleResult = await deps.gitHubPRClient.updatePRTitle(owner, repo, prNumber, newTitle);
+      if (!titleResult.ok) {
+        logger.warn(
+          { error: titleResult.error, prNumber, linearIssueId: linearResult.linearIssueId },
+          'Failed to update PR title with Linear issue ID (best-effort)'
+        );
+      }
+    }
+  }
 
   // Always include pr-comment for PR-comment-originated tasks so the orchestrator
   // routes to buildPRCommentPrompt. When INT-XXX exists, merge the issue's real
