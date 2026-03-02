@@ -784,9 +784,18 @@ export class TaskDispatcher {
     }
     this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     this.appendOrchestratorTaskLog(task.taskId, `━━━ Verification Trace ━━━`);
+    const transcriptLines = verification.trace.transcript
+      .split('\n')
+      .filter((l) => l.trim() !== '');
+    const firstLine = transcriptLines[0] ?? '';
+    const lastLine = transcriptLines[transcriptLines.length - 1] ?? '';
+    const transcriptSummary =
+      transcriptLines.length <= 2
+        ? transcriptLines.join('\n')
+        : `${firstLine}\n  ... (${String(transcriptLines.length - 2)} lines omitted) ...\n${lastLine}`;
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `📋 Transcript (last 50 lines):\n${verification.trace.transcript}`
+      `📋 Transcript (first + last):\n${transcriptSummary}`
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
