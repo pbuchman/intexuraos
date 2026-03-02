@@ -300,11 +300,11 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
     },
 
     async resolveGitHubUsername(
-      username: string
+      gitHubUsername: string
     ): Promise<Result<{ userId: string } | null, UserServiceError>> {
       try {
         const response = await fetch(
-          `${config.baseUrl}/internal/users/by-github-username/${encodeURIComponent(username)}`,
+          `${config.baseUrl}/internal/users/by-github-username/${encodeURIComponent(gitHubUsername)}`,
           { headers: { 'X-Internal-Auth': config.internalAuthToken } }
         );
         if (response.status === 404) return ok(null);
