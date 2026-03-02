@@ -17,7 +17,6 @@ import {
 } from '../../infra/github-event-parser.js';
 import { sendTaskMessage } from '../../domain/usecases/sendTaskMessage.js';
 import { createTaskForPR } from '../../domain/usecases/createTaskForPR.js';
-import { enrichReviewWithComments, formatEnrichedReview } from '../../domain/usecases/enrichReviewWithComments.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import type { Logger } from 'pino';
@@ -57,16 +56,6 @@ function isAllowedSender(event: GitHubPREvent): boolean {
   return false;
 }
 
-const SKIP_PREFIXES = ['@claude', '@codex', '@ignore'];
-
-const SKIP_PREFIX_MAX_LENGTH = Math.max(...SKIP_PREFIXES.map(p => p.length));
-
-export function shouldSkipComment(body: string | null): boolean {
-  if (body === null || body === '') return false;
-  const head = body.trimStart().slice(0, SKIP_PREFIX_MAX_LENGTH).toLowerCase();
-  return SKIP_PREFIXES.some(prefix => head.startsWith(prefix));
-}
-
 /**
  * Dispatch a PR comment to the task that owns this PR via sendTaskMessage.
  * Fire-and-forget — webhook returns immediately.
@@ -82,36 +71,7 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
       return;
     }
 
-    /* v8 ignore start -- test-infra: fire-and-forget skip-prefix check, only reachable via dispatchPRCommentToTask which is not testable via route integration tests @preserve */
-    if (shouldSkipComment(event.body)) {
-      logger.debug(
-        { senderLogin: event.senderLogin, repository: event.repository, prNumber: event.pullRequestNumber, bodyPrefix: event.body?.slice(0, 20) },
-        'Comment starts with skip prefix, skipping dispatch'
-      );
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
     const services = getServices();
-
-    /* v8 ignore start -- test-infra: fire-and-forget enrichment path, only reachable via pull_request_review dispatch which is not testable via route integration tests @preserve */
-    let enrichedComment = event.body ?? '';
-    if (event.eventType === 'pull_request_review') {
-      const reviewId = extractReviewId(event.payload);
-      if (reviewId !== null) {
-        const enrichResult = await enrichReviewWithComments(
-          { logger, gitHubPREventRepo: services.gitHubPREventRepo },
-          { repository: event.repository, pullRequestNumber: event.pullRequestNumber, reviewId, reviewBody: event.body }
-        );
-        if (enrichResult.ok) {
-          enrichedComment = formatEnrichedReview(enrichResult.value); // @allow-result-access -- narrowed by enrichResult.ok
-        } else {
-          logger.warn({ error: enrichResult.error, reviewId, repository: event.repository, prNumber: event.pullRequestNumber }, 'Review enrichment failed, using raw body'); // @allow-result-access -- narrowed by !enrichResult.ok
-        }
-      }
-    }
-    /* v8 ignore stop @preserve */
-
     const taskResult = await services.codeTaskRepo.findByPR(event.repository, event.pullRequestNumber);
 
     /* v8 ignore start -- upstream: Firestore error path in fire-and-forget dispatch @preserve */
@@ -128,8 +88,8 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
 
     /* v8 ignore start -- test-infra: fire-and-forget dispatch path, null-task branch not reachable via route integration tests @preserve */
     if (task === null) {
-      // UserLookupService not configured - skip task creation
-      if (!services.userLookupService) {
+      // UserLookupService not configured — skip task creation
+      if (services.userLookupService === undefined) {
         logger.warn(
           { repository: event.repository, prNumber: event.pullRequestNumber },
           'UserLookupService not configured, skipping task creation'
@@ -146,8 +106,9 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           linearIssueService: services.linearIssueService,
           taskDispatcher: services.taskDispatcher,
           orchestratorSecret: loadConfig().orchestratorSecret,
-          serviceUrl: loadConfig().serviceUrl,
-          ...(services.gitHubPRClient !== undefined && { gitHubPRClient: services.gitHubPRClient }),
+          serviceUrl: process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud',
+          gitHubPRClient: services.gitHubPRClient,
+          userServiceClient: services.userServiceClient,
           firestore: services.firestore,
         },
         {
@@ -155,75 +116,21 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           prNumber: event.pullRequestNumber,
           ...(event.title !== null && { prTitle: event.title }),
           senderLogin: event.senderLogin,
-          comment: enrichedComment,
+          comment: event.body ?? '',
           eventId: event.id,
         }
       );
 
       if (!createResult.ok) {
-        // Route comment to existing task if dedup found one
-        if (createResult.error.existingTaskId !== undefined) {
-          const existingTaskId = createResult.error.existingTaskId;
-          const existingTaskResult = await services.codeTaskRepo.findById(existingTaskId);
-
-          if (existingTaskResult.ok) {
-            const existingTask = existingTaskResult.value; // @allow-result-access -- narrowed by existingTaskResult.ok above
-            const payload = event.payload as Record<string, unknown> | undefined;
-            const message = buildDispatchMessage(event, payload, enrichedComment);
-
-            const sendResult = await sendTaskMessage(
-              {
-                logger: services.logger,
-                codeTaskRepo: services.codeTaskRepo,
-                logLineRepo: services.logLineRepo,
-                taskDispatcher: services.taskDispatcher,
-                workerSettingsRepo: services.workerSettingsRepo,
-                statusMirrorService: services.statusMirrorService,
-                whatsappNotifier: services.whatsappNotifier,
-              },
-              { taskId: existingTaskId, userId: existingTask.userId, message }
-            );
-
-            if (sendResult.ok) {
-              const updateResult = await services.codeTaskRepo.update(existingTaskId, { prNumber: event.pullRequestNumber });
-              if (updateResult.ok) {
-                logger.info(
-                  { taskId: existingTaskId, prNumber: event.pullRequestNumber },
-                  'Routed PR comment to existing task (dedup ACTIVE_TASK_EXISTS)'
-                );
-              } else {
-                logger.warn(
-                  { taskId: existingTaskId, prNumber: event.pullRequestNumber, error: updateResult.error },
-                  'Routed PR comment but failed to persist prNumber — future comments may not auto-route'
-                );
-              }
-            } else {
-              logger.error(
-                { taskId: existingTaskId, error: sendResult.error, prNumber: event.pullRequestNumber },
-                'Failed to route PR comment to existing task'
-              );
-            }
-            return;
-          }
-
-          logger.error(
-            { existingTaskId, errorCode: existingTaskResult.error.code, error: existingTaskResult.error },
-            existingTaskResult.error.code === 'NOT_FOUND'
-              ? 'Existing task not found for comment routing (possible race condition — task may have been deleted)'
-              : 'Failed to fetch existing task for comment routing (Firestore error)'
-          );
-        }
-
         logger.error(
           { repository: event.repository, prNumber: event.pullRequestNumber, error: createResult.error },
           'Failed to create task from PR comment'
         );
-        // TODO: INT-618 Post failure comment to GitHub PR when GitHub write client is available
         return;
       }
 
       logger.info(
-        { taskId: createResult.value.taskId, repository: event.repository, prNumber: event.pullRequestNumber },
+        { taskId: createResult.value.taskId, repository: event.repository, prNumber: event.pullRequestNumber }, // @allow-result-access -- narrowed by !createResult.ok above
         'Created new task from PR comment'
       );
       return;
@@ -231,7 +138,7 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
     /* v8 ignore stop @preserve */
 
     const payload = event.payload as Record<string, unknown> | undefined;
-    const message = buildDispatchMessage(event, payload, enrichedComment);
+    const message = buildDispatchMessage(event, payload);
 
     const sendResult = await sendTaskMessage(
       {
@@ -270,15 +177,6 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
 }
 
 /* v8 ignore start -- test-infra: fire-and-forget helpers only reachable when findByPR returns a task, not testable via route integration tests @preserve */
-function extractReviewId(payload: unknown): number | null {
-  if (typeof payload !== 'object' || payload === null) return null;
-  const p = payload as Record<string, unknown>;
-  const review = p['review'] as Record<string, unknown> | undefined;
-  if (review === undefined) return null;
-  const id = review['id'];
-  return typeof id === 'number' ? id : null;
-}
-
 function extractId(payload: Record<string, unknown> | undefined, key: string): string {
   if (payload === undefined) return 'unknown';
   const obj = payload[key] as Record<string, unknown> | undefined;
@@ -297,29 +195,30 @@ function extractReviewState(payload: Record<string, unknown> | undefined): strin
 /* v8 ignore stop @preserve */
 
 /* v8 ignore start -- test-infra: fire-and-forget message builder only reachable when findByPR returns a task @preserve */
-function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unknown> | undefined, enrichedBody?: string): string {
+function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unknown> | undefined): string {
   const { repository, pullRequestNumber: prNumber, senderLogin, body } = event;
 
   if (event.eventType === 'pull_request_review') {
     const reviewId = extractId(payload, 'review');
     const reviewState = extractReviewState(payload);
-    const reviewContent = enrichedBody ?? event.body ?? '(empty)';
     return [
       `[PR Review] New review on PR #${String(prNumber)} in ${repository}`,
       `From: @${senderLogin}`,
       `Review ID: ${reviewId}`,
       `Review state: ${reviewState}`,
       '',
-      reviewContent,
+      'Review body:',
+      body ?? '(empty)',
       '',
       'Instructions:',
-      `1. Check PR state: gh pr view ${String(prNumber)} --json state,mergedAt`,
-      `2. React with rocket to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=rocket`,
-      '3. Read all comments above and understand the full context',
-      '4. For questions: investigate codebase, reply with answer',
-      '5. For fix requests: make changes, commit, reply with reasoning',
-      `6. Reply to each comment: gh api /repos/${repository}/pulls/${String(prNumber)}/comments -f body="..." -F in_reply_to={id}`,
-      '7. If review body exists, react with rocket and reply to the review as well',
+      `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged`,
+      `2. Fetch inline comments for this review: gh api /repos/${repository}/pulls/${String(prNumber)}/reviews/${reviewId}/comments`,
+      '3. React with rocket to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=rocket',
+      '4. Read all comments and understand the full context',
+      '5. For questions: investigate codebase, reply with answer',
+      '6. For fix requests: make changes, commit, reply with reasoning',
+      '7. Reply to each comment: gh api /repos/${repository}/pulls/${prNumber}/comments -f body="..." -F in_reply_to={id}',
+      '8. If review body exists, react with rocket and reply to the review as well',
     ].join('\n');
   }
 

@@ -8,6 +8,7 @@
  * - Resolves GitHub username to userId via UserLookupService
  * - Transaction guard prevents duplicate task creation from concurrent comments
  * - Auto-creates Linear issue from PR title
+ * - Fetches per-user GitHub OAuth token to update PR title
  * - Builds task prompt with PR context and resume-style preamble
  */
 
@@ -17,6 +18,7 @@ import type { UserLookupService } from '../ports/userLookupService.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
+import type { UserServiceClient, OAuthProvider } from '@intexuraos/internal-clients';
 import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
 
@@ -56,7 +58,8 @@ export interface CreateTaskForPRDeps {
   taskDispatcher: TaskDispatcherService;
   orchestratorSecret: string;
   serviceUrl: string;
-  gitHubPRClient?: GitHubPRClient;
+  gitHubPRClient: GitHubPRClient;
+  userServiceClient: UserServiceClient;
   firestore: {
     runTransaction: <T>(fn: (transaction: FirebaseFirestore.Transaction) => Promise<T>) => Promise<T>;
     doc: (path: string) => FirebaseFirestore.DocumentReference;
@@ -84,17 +87,6 @@ function buildTaskPrompt(request: CreateTaskForPRRequest): string {
     'The commenter said:',
     comment,
     '',
-    '### Behavioral Requirements (MANDATORY)',
-    '',
-    '**Code Review Requests:**',
-    'If the user asks for a code review, you MUST use the `/requesting-code-review` skill.',
-    'This is mandatory and non-negotiable.',
-    '',
-    '**Clarification Requests:**',
-    'If the user asks for clarification on your approach or decisions, you MUST provide',
-    'DETAILED reasoning. Do NOT blindly agree with feedback. Explain your technical rationale,',
-    'cite evidence from the codebase, and defend your approach when appropriate.',
-    '',
     '### Instructions',
     '',
     `1. Check PR state: gh pr view ${String(prNumber)} --json state,mergedAt,baseRefName,title,body`,
@@ -105,7 +97,7 @@ function buildTaskPrompt(request: CreateTaskForPRRequest): string {
     `   - Issue comments: gh api /repos/${repository}/issues/${String(prNumber)}/comments`,
     '4. Understand the full context of the PR and the comment',
     '5. If actionable: investigate the codebase, implement the requested changes',
-    '6. Run pnpm run ci:tracked — must pass before pushing',
+    '6. Run pnpm run ci:tracked -- must pass before pushing',
     '7. Commit and push your changes to the existing PR branch',
     `8. Reply to the comment: gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
   );
@@ -120,6 +112,30 @@ function generateWebhookSecret(sharedSecret: string, taskId: string): string {
 }
 
 /**
+ * Fetch per-user GitHub OAuth token for PR title update.
+ * Returns null if token is not available (best-effort).
+ */
+async function fetchGitHubToken(
+  userServiceClient: UserServiceClient,
+  userId: string,
+  logger: Logger
+): Promise<string | null> {
+  // Cast 'github' as OAuthProvider — Stream B adds 'github' to the union type.
+  // Until merged, this cast is required for forward compatibility.
+  const tokenResult = await userServiceClient.getOAuthToken(userId, 'github' as OAuthProvider);
+
+  if (!tokenResult.ok) {
+    logger.debug(
+      { userId, errorCode: tokenResult.error.code },
+      'GitHub OAuth token not available for user (best-effort)'
+    );
+    return null;
+  }
+
+  return tokenResult.value.accessToken; // @allow-result-access -- narrowed by !tokenResult.ok above
+}
+
+/**
  * Create a code task from a PR comment.
  *
  * This use case:
@@ -127,7 +143,8 @@ function generateWebhookSecret(sharedSecret: string, taskId: string): string {
  * 2. Uses Firestore transaction to prevent race conditions
  * 3. Checks if task already exists (transaction guard)
  * 4. Creates new task if not
- * 5. Returns task ID for dispatch
+ * 5. Fetches per-user GitHub token and updates PR title (best-effort)
+ * 6. Dispatches task to worker
  */
 export async function createTaskForPR(
   deps: CreateTaskForPRDeps,
@@ -142,28 +159,25 @@ export async function createTaskForPR(
   );
 
   // Step 1: Resolve GitHub username to userId
-  const userResult = await userLookupService.resolveUserFromGitHubUsername(senderLogin);
+  const userResult = await userLookupService.resolveByGitHubUsername(senderLogin);
 
   if (!userResult.ok) {
-    logger.error(
-      { senderLogin, error: userResult.error },
-      'Failed to resolve GitHub username'
-    );
+    const errorCode = userResult.error.code;
+    if (errorCode === 'NO_ENABLED_WORKER') {
+      logger.warn({ senderLogin, error: userResult.error }, 'No enabled worker for user');
+      return err({
+        code: 'no_workers_configured',
+        message: userResult.error.message,
+      });
+    }
+    logger.warn({ senderLogin, error: userResult.error }, 'Failed to resolve GitHub username');
     return err({
-      code: 'user_not_found',
+      code: errorCode === 'INTERNAL_ERROR' ? 'internal_error' : 'user_not_found',
       message: userResult.error.message,
     });
   }
 
-  if (userResult.value === null) {
-    logger.warn({ senderLogin }, 'No user found for GitHub username');
-    return err({
-      code: 'user_not_found',
-      message: `No worker settings found for GitHub user: ${senderLogin}`,
-    });
-  }
-
-  const { userId, worker } = userResult.value;
+  const { userId, worker } = userResult.value; // @allow-result-access -- narrowed by !userResult.ok above
   logger.debug({ userId, senderLogin }, 'Resolved GitHub username to user');
 
   // Step 2: Use transaction with document-level lock to prevent race conditions
@@ -242,7 +256,6 @@ export async function createTaskForPR(
         actionId: `pr-comment/${repository}/${String(prNumber)}/${eventId}`,
         approvalEventId: eventId,
         prNumber,
-        agentType: 'pull_request',
         linearIssueTitle: linearResult.linearIssueTitle,
         webhookSecret,
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
@@ -289,7 +302,7 @@ export async function createTaskForPR(
     return err(transactionResult.error);
   }
 
-  const txValue = transactionResult.value;
+  const txValue = transactionResult.value; // @allow-result-access -- narrowed by !transactionResult.ok above
 
   // If task already existed, just return the ID
   if (!txValue.isNew) {
@@ -300,21 +313,24 @@ export async function createTaskForPR(
   const { taskId, webhookSecret, linearResult } = txValue;
 
   // Best-effort: prepend [INT-XXX] to PR title for Linear auto-linking
+  // Uses per-user GitHub OAuth token instead of static API token
   if (
     existingLinearIssueId === undefined &&
     linearResult.linearIssueId !== undefined &&
-    deps.gitHubPRClient !== undefined &&
     request.prTitle !== undefined
   ) {
     const [owner, repo] = repository.split('/');
     if (owner !== undefined && repo !== undefined) {
-      const newTitle = `[${linearResult.linearIssueId}] ${request.prTitle}`;
-      const titleResult = await deps.gitHubPRClient.updatePRTitle(owner, repo, prNumber, newTitle);
-      if (!titleResult.ok) {
-        logger.warn(
-          { error: titleResult.error, prNumber, linearIssueId: linearResult.linearIssueId },
-          'Failed to update PR title with Linear issue ID (best-effort)'
-        );
+      const githubToken = await fetchGitHubToken(deps.userServiceClient, userId, logger);
+      if (githubToken !== null) {
+        const newTitle = `[${linearResult.linearIssueId}] ${request.prTitle}`;
+        const titleResult = await deps.gitHubPRClient.updatePRTitle(githubToken, owner, repo, prNumber, newTitle);
+        if (!titleResult.ok) {
+          logger.warn(
+            { error: titleResult.error, prNumber, linearIssueId: linearResult.linearIssueId },
+            'Failed to update PR title with Linear issue ID (best-effort)'
+          );
+        }
       }
     }
   }
@@ -355,9 +371,6 @@ export async function createTaskForPR(
     workerCredentials,
     linearIssueLabels: dispatchLabels,
     hasChildren: linearResult.hasChildren,
-    /* v8 ignore start -- ts-type: ternary branch for phase determination @preserve */
-    agentType: 'pull_request',
-    /* v8 ignore stop @preserve */
     ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
   });
 
@@ -376,11 +389,11 @@ export async function createTaskForPR(
 
   // Update task with worker location
   await codeTaskRepo.update(taskId, {
-    workerLocation: dispatchResult.value.workerLocation,
+    workerLocation: dispatchResult.value.workerLocation, // @allow-result-access -- narrowed by !dispatchResult.ok above
   });
 
   logger.info(
-    { taskId, userId, repository, prNumber, workerLocation: dispatchResult.value.workerLocation },
+    { taskId, userId, repository, prNumber, workerLocation: dispatchResult.value.workerLocation }, // @allow-result-access -- narrowed by !dispatchResult.ok above
     'Created and dispatched new task from PR comment'
   );
 

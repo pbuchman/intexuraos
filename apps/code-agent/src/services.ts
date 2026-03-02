@@ -48,6 +48,9 @@ import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
 import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
+import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
+import type { UserLookupService } from './domain/ports/userLookupService.js';
+import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -74,6 +77,8 @@ export interface ServiceContainer {
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   turnMetricsRepo: TurnMetricsRepository;
   userServiceClient: UserServiceClient;
+  gitHubPRClient: GitHubPRClient;
+  userLookupService?: UserLookupService;
 }
 
 // Configuration required to initialize services
@@ -303,6 +308,8 @@ export function initServices(config: ServiceConfig): void {
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
     userServiceClient,
+    gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 10000 }),
+    // userLookupService: wired when Stream B merges (adds resolveGitHubUsername to UserServiceClient)
   };
 }
 

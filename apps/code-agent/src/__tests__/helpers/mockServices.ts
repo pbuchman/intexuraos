@@ -30,6 +30,7 @@ import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/f
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
+import { createGitHubPRHttpClient } from '../../infra/http/gitHubPRHttpClient.js';
 
 /**
  * Mock UserServiceClient that returns empty results.
@@ -185,6 +186,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
     }),
     userServiceClient: mockUserServiceClient,
+    gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
   };
 
   setServices(container);
