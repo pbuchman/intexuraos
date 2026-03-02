@@ -226,6 +226,10 @@ Canonical shape:
 | Comment     | Author | Reason                                                |
 | ----------- | ------ | ----------------------------------------------------- |
 | [view](...) | @user  | Historical thread; no branch-specific action required |
+
+---
+
+**Status:** All comments addressed — good to merge ✅
 ```
 
 ## Data Structures
