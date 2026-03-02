@@ -266,7 +266,14 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         agentType: input.agentType,
         model: this.model,
         promptChars: prompt.length,
-        transcript,
+        transcript: ((): string => {
+          const tLines = transcript.split('\n').filter((l) => l.trim() !== '');
+          const first = tLines[0] ?? '';
+          const last = tLines[tLines.length - 1] ?? '';
+          return tLines.length <= 2
+            ? tLines.join('\n')
+            : `${first}\n  ... (${String(tLines.length - 2)} lines omitted) ...\n${last}`;
+        })(),
       },
       'Gemini completion verifier request'
     );
