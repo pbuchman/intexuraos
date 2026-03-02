@@ -216,6 +216,8 @@ export class TaskDispatcher {
         return;
       }
 
+      this.logForwarder.registerTask(taskId, request.webhookSecret);
+
       if (request.agentType === 'execution' && request.planningPrBranch !== undefined) {
         const mergeResult = await this.worktreeManager.mergePlanningBranch(
           worktreePath,
@@ -227,9 +229,9 @@ export class TaskDispatcher {
             'Failed to merge planning branch — proceeding without plan files'
           );
         }
+      } else if (request.agentType === 'execution') {
+        this.logger.info({ taskId }, 'No planning branch to merge — dispatched without planningPrBranch');
       }
-
-      this.logForwarder.registerTask(taskId, request.webhookSecret);
 
       const workerTypeConfig = WORKER_TYPES[request.workerType as WorkerType];
       if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
