@@ -44,6 +44,8 @@ import type { TurnMetricsRepository } from './domain/repositories/turnMetricsRep
 import { createFirestoreTurnMetricsRepository } from './infra/repositories/firestoreTurnMetricsRepository.js';
 import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
+import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
+import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -65,6 +67,7 @@ export interface ServiceContainer {
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
   userLookupService?: UserLookupService;
+  gitHubPRClient?: GitHubPRClient;
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   turnMetricsRepo: TurnMetricsRepository;
@@ -80,6 +83,7 @@ export interface ServiceConfig {
   linearAgentUrl: string;
   actionsAgentUrl: string;
   webhookVerifySecret: string;
+  githubApiToken: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -275,6 +279,9 @@ export function initServices(config: ServiceConfig): void {
     userLookupService: createUserLookupService({
       workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
       logger,
+    }),
+    ...(config.githubApiToken.length > 0 && {
+      gitHubPRClient: createGitHubPRHttpClient({ token: config.githubApiToken, timeoutMs: 10000 }, logger),
     }),
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
