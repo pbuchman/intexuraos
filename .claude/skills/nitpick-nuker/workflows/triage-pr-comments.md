@@ -164,6 +164,7 @@ gh pr checks "$PR_NUMBER" --json name,state | jq -r '.[] | "\(.name): \(.state)"
 Before building the summary JSON, generate a savage one-liner roast about the PR code.
 
 **Rules for the roast:**
+
 - One sentence, max 150 characters
 - Savage and brutally honest, but ultimately funny — think code roast, not personal attack
 - Reference something specific from the PR: a pattern you saw, the number of nitpicks, the quality of the code, or a funny observation from the review
@@ -171,6 +172,7 @@ Before building the summary JSON, generate a savage one-liner roast about the PR
 - Escape double quotes for JSON safety
 
 Store the result in `$ROAST_LINE`. Example roasts:
+
 - "I've seen better error handling in a fortune cookie."
 - "This code has more unnecessary comments than a YouTube section."
 - "5 nitpicks in 200 lines — that's a nitpick every 40 lines, which is honestly impressive."
