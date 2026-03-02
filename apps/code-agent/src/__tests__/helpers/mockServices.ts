@@ -13,7 +13,7 @@ import { createTaskDispatcherService } from '../../infra/services/taskDispatcher
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -29,6 +29,26 @@ import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestor
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+
+/**
+ * Mock UserServiceClient that returns empty results.
+ * code-agent only uses getOAuthToken, so other methods are stubs.
+ */
+export const mockUserServiceClient: UserServiceClient = {
+  async getApiKeys() {
+    return ok({});
+  },
+  async getLlmClient() {
+    return err({ code: 'NO_API_KEY', message: 'mock' }) as never;
+  },
+  async reportLlmSuccess() {
+    return;
+  },
+  async getOAuthToken() {
+    return err({ code: 'CONNECTION_NOT_FOUND', message: 'No OAuth connection' });
+  },
+};
 
 /**
  * Mock worker health probe that always returns healthy status.
@@ -164,6 +184,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       firestore: fakeFirestore,
       logger,
     }),
+    userServiceClient: mockUserServiceClient,
   };
 
   setServices(container);

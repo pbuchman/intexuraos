@@ -21,7 +21,7 @@ import type { Logger } from 'pino';
 import { ok } from '@intexuraos/common-core';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../../infra/firestore/gitHubPRSummariesRepository.js';
-import { mockWorkerHealthProbe } from '../../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockUserServiceClient } from '../../helpers/mockServices.js';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../../infra/repositories/firestoreLogLineRepository.js';
@@ -171,6 +171,7 @@ describe('GET /code/github-pr-summaries', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -193,6 +194,7 @@ describe('GET /code/github-pr-summaries', () => {
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
     });
 
     server = await buildServer();
