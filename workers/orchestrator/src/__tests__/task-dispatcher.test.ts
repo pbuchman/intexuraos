@@ -223,12 +223,11 @@ describe('TaskDispatcher', () => {
   } as unknown as GitHubTokenService;
 
   // Mock Logger
-  /* eslint-disable @typescript-eslint/no-empty-function */
   const mockLogger: Logger = {
-    info(): void {},
-    warn(): void {},
-    error(): void {},
-    debug(): void {},
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   };
 
   type VerifierMockResult = CompletionVerifierVerdict;
@@ -485,10 +484,7 @@ describe('TaskDispatcher', () => {
       await flushAsync();
 
       expect(result.ok).toBe(true);
-      expect(mergeSpy).toHaveBeenCalledWith(
-        '/tmp/worktrees/test-merge-plan',
-        'plan/my-feature'
-      );
+      expect(mergeSpy).toHaveBeenCalledWith('/tmp/worktrees/test-task', 'plan/my-feature');
     });
 
     it('should skip merge for tasks without planningPrBranch', async () => {
@@ -542,25 +538,27 @@ describe('TaskDispatcher', () => {
 
   describe('closePlanningPr via finalizeTaskWithResult', () => {
     it('should skip closing when task has no planningPrUrl', async () => {
-      const task = await dispatcher.getTask('test-task') ?? {
-        taskId: 'close-pr-test-1',
-        workerType: 'auto',
-        prompt: 'Test',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        status: 'running',
-        startedAt: new Date().toISOString(),
-        attemptCount: 1,
-        maxAttempts: 1,
-        verificationHistory: [],
-        linearIssueLabels: [],
-        hasChildren: false,
-        agentType: 'execution',
-        repository: 'test/repo',
-        baseBranch: 'development',
-        worktreePath: '/tmp/worktrees/close-pr-test-1',
-        containerId: 'container-close-pr-test-1',
-      } as Task;
+      const task =
+        (await dispatcher.getTask('test-task')) ??
+        ({
+          taskId: 'close-pr-test-1',
+          workerType: 'auto',
+          prompt: 'Test',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          status: 'running',
+          startedAt: new Date().toISOString(),
+          attemptCount: 1,
+          maxAttempts: 1,
+          verificationHistory: [],
+          linearIssueLabels: [],
+          hasChildren: false,
+          agentType: 'execution',
+          repository: 'test/repo',
+          baseBranch: 'development',
+          worktreePath: '/tmp/worktrees/close-pr-test-1',
+          containerId: 'container-close-pr-test-1',
+        } as Task);
 
       const internal = dispatcher as unknown as {
         finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
@@ -605,6 +603,82 @@ describe('TaskDispatcher', () => {
       expect(mockLogger.info).not.toHaveBeenCalledWith(
         expect.objectContaining({ prUrl: expect.any(String) }),
         expect.stringContaining('Planning PR closed')
+      );
+    });
+
+    it('should attempt to close planning PR for execution agent with planningPrUrl', async () => {
+      const task: Task = {
+        taskId: 'close-pr-test-3',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 1,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        planningPrUrl: 'https://github.com/org/repo/pull/42',
+        repository: 'test/repo',
+        baseBranch: 'development',
+        worktreePath: '/tmp/worktrees/close-pr-test-3',
+        containerId: 'container-close-pr-test-3',
+      };
+
+      const internal = dispatcher as unknown as {
+        finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
+      };
+
+      await internal.finalizeTaskWithResult(task, 'execution', {});
+
+      // closePlanningPr was called — gh CLI will fail in test env, so we expect
+      // the best-effort warning log with the parsed PR URL and task ID
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prUrl: 'https://github.com/org/repo/pull/42',
+          taskId: 'close-pr-test-3',
+        }),
+        expect.stringContaining('Failed to close planning PR')
+      );
+    });
+
+    it('should log warning when planningPrUrl is not a valid PR URL', async () => {
+      const task: Task = {
+        taskId: 'close-pr-test-4',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: 1,
+        verificationHistory: [],
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+        planningPrUrl: 'https://example.com/not-a-pr',
+        repository: 'test/repo',
+        baseBranch: 'development',
+        worktreePath: '/tmp/worktrees/close-pr-test-4',
+        containerId: 'container-close-pr-test-4',
+      };
+
+      const internal = dispatcher as unknown as {
+        finalizeTaskWithResult: (t: Task, agentType: string, result: TaskResult) => Promise<void>;
+      };
+
+      await internal.finalizeTaskWithResult(task, 'execution', {});
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prUrl: 'https://example.com/not-a-pr',
+          taskId: 'close-pr-test-4',
+        }),
+        'Could not parse planning PR URL'
       );
     });
   });
@@ -4008,4 +4082,3 @@ describe('parsePrUrl', () => {
     expect(parsePrUrl('random string')).toBeUndefined();
   });
 });
-
