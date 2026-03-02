@@ -1,9 +1,9 @@
 /**
- * Tests for OAuth connection routes:
- * - POST /oauth/connections/google/initiate
- * - GET /oauth/connections/google/callback
- * - GET /oauth/connections/google/status
- * - DELETE /oauth/connections/google
+ * Tests for GitHub OAuth connection routes:
+ * - POST /oauth/connections/github/initiate
+ * - GET /oauth/connections/github/callback
+ * - GET /oauth/connections/github/status
+ * - DELETE /oauth/connections/github
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -15,7 +15,7 @@ import { resetServices, setServices } from '../services.js';
 import {
   FakeAuthTokenRepository,
   FakeOAuthConnectionRepository,
-  FakeGoogleOAuthClient,
+  FakeGitHubOAuthClient,
   FakeUserSettingsRepository,
 } from './fakes.js';
 import { OAuthProviders } from '../domain/oauth/index.js';
@@ -25,7 +25,7 @@ const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
 const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 const INTEXURAOS_WEB_APP_URL = 'http://localhost:5173';
 
-describe('OAuth Connection Routes', () => {
+describe('GitHub OAuth Connection Routes', () => {
   let app: FastifyInstance;
   let jwksServer: FastifyInstance;
   let jwksUrl: string;
@@ -35,7 +35,7 @@ describe('OAuth Connection Routes', () => {
   let fakeAuthTokenRepo: FakeAuthTokenRepository;
   let fakeSettingsRepo: FakeUserSettingsRepository;
   let fakeOAuthRepo: FakeOAuthConnectionRepository;
-  let fakeGoogleOAuthClient: FakeGoogleOAuthClient;
+  let fakeGitHubOAuthClient: FakeGitHubOAuthClient;
 
   async function createJwt(userId: string): Promise<string> {
     const jwt = await new jose.SignJWT({ sub: userId })
@@ -85,15 +85,15 @@ describe('OAuth Connection Routes', () => {
     fakeAuthTokenRepo = new FakeAuthTokenRepository();
     fakeSettingsRepo = new FakeUserSettingsRepository();
     fakeOAuthRepo = new FakeOAuthConnectionRepository();
-    fakeGoogleOAuthClient = new FakeGoogleOAuthClient();
+    fakeGitHubOAuthClient = new FakeGitHubOAuthClient();
 
     setServices({
       authTokenRepository: fakeAuthTokenRepo,
       userSettingsRepository: fakeSettingsRepo,
       oauthConnectionRepository: fakeOAuthRepo,
       auth0Client: null,
-      googleOAuthClient: fakeGoogleOAuthClient,
-      gitHubOAuthClient: null,
+      googleOAuthClient: null,
+      gitHubOAuthClient: fakeGitHubOAuthClient,
       encryptor: null,
       llmValidator: null,
     });
@@ -105,25 +105,25 @@ describe('OAuth Connection Routes', () => {
     delete process.env['INTEXURAOS_WEB_APP_URL'];
   });
 
-  describe('POST /oauth/connections/google/initiate', () => {
+  describe('POST /oauth/connections/github/initiate', () => {
     it('returns 401 when not authenticated', async () => {
       app = await buildServer();
 
       const response = await app.inject({
         method: 'POST',
-        url: '/oauth/connections/google/initiate',
+        url: '/oauth/connections/github/initiate',
       });
 
       expect(response.statusCode).toBe(401);
     });
 
-    it('returns authorization URL when authenticated', async () => {
+    it('returns authorization URL when authenticated', { timeout: 20000 }, async () => {
       app = await buildServer();
-      const token = await createJwt('user-123');
+      const token = await createJwt('auth0|user-123');
 
       const response = await app.inject({
         method: 'POST',
-        url: '/oauth/connections/google/initiate',
+        url: '/oauth/connections/github/initiate',
         headers: {
           authorization: `Bearer ${token}`,
           'x-forwarded-proto': 'https',
@@ -134,10 +134,10 @@ describe('OAuth Connection Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
       expect(body.success).toBe(true);
-      expect(body.data.authorizationUrl).toContain('https://accounts.google.com/o/oauth2/v2/auth');
+      expect(body.data.authorizationUrl).toContain('https://github.com/login/oauth/authorize');
     });
 
-    it('returns 503 when Google OAuth is not configured', async () => {
+    it('returns 503 when GitHub OAuth is not configured', { timeout: 20000 }, async () => {
       setServices({
         authTokenRepository: fakeAuthTokenRepo,
         userSettingsRepository: fakeSettingsRepo,
@@ -150,11 +150,11 @@ describe('OAuth Connection Routes', () => {
       });
 
       app = await buildServer();
-      const token = await createJwt('user-123');
+      const token = await createJwt('auth0|user-123');
 
       const response = await app.inject({
         method: 'POST',
-        url: '/oauth/connections/google/initiate',
+        url: '/oauth/connections/github/initiate',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -165,57 +165,14 @@ describe('OAuth Connection Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
     });
-
-    it('uses default protocol and host when forwarded headers are missing', async () => {
-      app = await buildServer();
-      const token = await createJwt('user-123');
-
-      // Request without x-forwarded-proto and x-forwarded-host headers
-      // This exercises the nullish coalescing at lines 85-86
-      const response = await app.inject({
-        method: 'POST',
-        url: '/oauth/connections/google/initiate',
-        headers: {
-          authorization: `Bearer ${token}`,
-          // No x-forwarded-proto, no x-forwarded-host
-          host: 'api.example.com',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
-      expect(body.success).toBe(true);
-      expect(body.data.authorizationUrl).toContain('https://accounts.google.com/o/oauth2/v2/auth');
-    });
-
-    it('uses fallback localhost when both forwarded headers and host header are missing', async () => {
-      app = await buildServer();
-      const token = await createJwt('user-123');
-
-      // Request without any headers that provide protocol/host info
-      const response = await app.inject({
-        method: 'POST',
-        url: '/oauth/connections/google/initiate',
-        headers: {
-          authorization: `Bearer ${token}`,
-          // No x-forwarded-proto, no x-forwarded-host, no host header
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
-      expect(body.success).toBe(true);
-      // The generateAuthUrl should still work with localhost fallback
-      expect(body.data.authorizationUrl).toContain('https://accounts.google.com/o/oauth2/v2/auth');
-    });
   });
 
-  describe('GET /oauth/connections/google/callback', () => {
+  describe('GET /oauth/connections/github/callback', () => {
     function createValidState(userId: string): string {
       const statePayload = {
         userId,
-        provider: OAuthProviders.GOOGLE,
-        redirectUri: 'https://api.example.com/oauth/connections/google/callback',
+        provider: OAuthProviders.GITHUB,
+        redirectUri: 'https://api.example.com/oauth/connections/github/callback',
         createdAt: Date.now(),
         nonce: 'test-nonce',
       };
@@ -227,11 +184,12 @@ describe('OAuth Connection Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/oauth/connections/google/callback?error=access_denied',
+        url: '/oauth/connections/github/callback?error=access_denied',
       });
 
       expect(response.statusCode).toBe(302);
       expect(response.headers.location).toContain('oauth_error=access_denied');
+      expect(response.headers.location).toContain('/#/settings/github');
     });
 
     it('redirects with error when code is missing', async () => {
@@ -239,7 +197,7 @@ describe('OAuth Connection Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/oauth/connections/google/callback?state=some-state',
+        url: '/oauth/connections/github/callback?state=some-state',
       });
 
       expect(response.statusCode).toBe(302);
@@ -252,14 +210,14 @@ describe('OAuth Connection Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/oauth/connections/google/callback?code=some-code',
+        url: '/oauth/connections/github/callback?code=some-code',
       });
 
       expect(response.statusCode).toBe(302);
       expect(response.headers.location).toContain('oauth_error=');
     });
 
-    it('redirects with error when Google OAuth is not configured', async () => {
+    it('redirects with error when GitHub OAuth is not configured', async () => {
       setServices({
         authTokenRepository: fakeAuthTokenRepo,
         userSettingsRepository: fakeSettingsRepo,
@@ -272,47 +230,38 @@ describe('OAuth Connection Routes', () => {
       });
 
       app = await buildServer();
-      const state = createValidState('user-123');
+      const state = createValidState('auth0|user-123');
 
       const response = await app.inject({
         method: 'GET',
-        url: `/oauth/connections/google/callback?code=auth-code&state=${state}`,
+        url: `/oauth/connections/github/callback?code=some-code&state=${state}`,
       });
 
       expect(response.statusCode).toBe(302);
       expect(response.headers.location).toContain('oauth_error=');
-      expect(response.headers.location).toContain('not%20configured');
+      expect(response.headers.location).toContain('GitHub%20OAuth%20is%20not%20configured');
     });
 
-    it('redirects with success when exchange succeeds', async () => {
+    it('redirects with success when code exchange succeeds', async () => {
       app = await buildServer();
-      const state = createValidState('user-123');
+      const userId = 'auth0|user-123';
+      const state = createValidState(userId);
 
       const response = await app.inject({
         method: 'GET',
-        url: `/oauth/connections/google/callback?code=auth-code&state=${state}`,
+        url: `/oauth/connections/github/callback?code=valid-code&state=${state}`,
       });
 
       expect(response.statusCode).toBe(302);
       expect(response.headers.location).toContain('oauth_success=true');
+      expect(response.headers.location).toContain('/#/settings/github');
 
-      const connection = fakeOAuthRepo.getStoredConnection('user-123', 'google');
-      expect(connection).toBeDefined();
-      expect(connection?.email).toBe('test@example.com');
-    });
-
-    it('redirects with error when exchange fails', async () => {
-      fakeGoogleOAuthClient.setFailNextExchange(true);
-      app = await buildServer();
-      const state = createValidState('user-123');
-
-      const response = await app.inject({
-        method: 'GET',
-        url: `/oauth/connections/google/callback?code=auth-code&state=${state}`,
-      });
-
-      expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('oauth_error=');
+      // Verify the connection was stored with username in email field
+      const stored = fakeOAuthRepo.getStoredConnection(userId, OAuthProviders.GITHUB);
+      expect(stored).toBeDefined();
+      expect(stored?.email).toBe('test-github-user');
+      expect(stored?.tokens.refreshToken).toBe('');
+      expect(stored?.tokens.expiresAt).toBe('9999-12-31T00:00:00.000Z');
     });
 
     it('redirects with error when state is invalid', async () => {
@@ -320,29 +269,28 @@ describe('OAuth Connection Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/oauth/connections/google/callback?code=auth-code&state=invalid-state',
+        url: '/oauth/connections/github/callback?code=some-code&state=invalid-state',
       });
 
       expect(response.statusCode).toBe(302);
       expect(response.headers.location).toContain('oauth_error=');
-      expect(response.headers.location).toContain('Invalid%20OAuth%20state');
+      expect(response.headers.location).toContain('Invalid%20OAuth%20state%20parameter');
     });
 
     it('redirects with error when state is expired', async () => {
-      const statePayload = {
-        userId: 'user-123',
-        provider: OAuthProviders.GOOGLE,
-        redirectUri: 'https://api.example.com/oauth/connections/google/callback',
+      app = await buildServer();
+      const expiredStatePayload = {
+        userId: 'auth0|user-123',
+        provider: OAuthProviders.GITHUB,
+        redirectUri: 'https://api.example.com/oauth/connections/github/callback',
         createdAt: Date.now() - 15 * 60 * 1000, // 15 minutes ago
         nonce: 'test-nonce',
       };
-      const expiredState = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
-
-      app = await buildServer();
+      const expiredState = Buffer.from(JSON.stringify(expiredStatePayload)).toString('base64url');
 
       const response = await app.inject({
         method: 'GET',
-        url: `/oauth/connections/google/callback?code=auth-code&state=${expiredState}`,
+        url: `/oauth/connections/github/callback?code=some-code&state=${expiredState}`,
       });
 
       expect(response.statusCode).toBe(302);
@@ -350,14 +298,28 @@ describe('OAuth Connection Routes', () => {
       expect(response.headers.location).toContain('expired');
     });
 
-    it('redirects with error when user info fetch fails', async () => {
-      fakeGoogleOAuthClient.setFailNextUserInfo(true);
+    it('redirects with error when token exchange fails', async () => {
+      fakeGitHubOAuthClient.setFailNextExchange(true);
       app = await buildServer();
-      const state = createValidState('user-123');
+      const state = createValidState('auth0|user-123');
 
       const response = await app.inject({
         method: 'GET',
-        url: `/oauth/connections/google/callback?code=auth-code&state=${state}`,
+        url: `/oauth/connections/github/callback?code=some-code&state=${state}`,
+      });
+
+      expect(response.statusCode).toBe(302);
+      expect(response.headers.location).toContain('oauth_error=');
+    });
+
+    it('redirects with error when user info fetch fails', async () => {
+      fakeGitHubOAuthClient.setFailNextUserInfo(true);
+      app = await buildServer();
+      const state = createValidState('auth0|user-123');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/oauth/connections/github/callback?code=some-code&state=${state}`,
       });
 
       expect(response.statusCode).toBe(302);
@@ -367,11 +329,11 @@ describe('OAuth Connection Routes', () => {
     it('redirects with error when save fails', async () => {
       fakeOAuthRepo.setFailNextSave(true);
       app = await buildServer();
-      const state = createValidState('user-123');
+      const state = createValidState('auth0|user-123');
 
       const response = await app.inject({
         method: 'GET',
-        url: `/oauth/connections/google/callback?code=auth-code&state=${state}`,
+        url: `/oauth/connections/github/callback?code=some-code&state=${state}`,
       });
 
       expect(response.statusCode).toBe(302);
@@ -379,51 +341,49 @@ describe('OAuth Connection Routes', () => {
     });
   });
 
-  describe('GET /oauth/connections/google/status', () => {
+  describe('GET /oauth/connections/github/status', () => {
     it('returns 401 when not authenticated', async () => {
       app = await buildServer();
 
       const response = await app.inject({
         method: 'GET',
-        url: '/oauth/connections/google/status',
+        url: '/oauth/connections/github/status',
       });
 
       expect(response.statusCode).toBe(401);
     });
 
-    it('returns connected=false when no connection exists', async () => {
+    it('returns not connected when no connection exists', { timeout: 20000 }, async () => {
       app = await buildServer();
-      const token = await createJwt('user-123');
+      const token = await createJwt('auth0|user-no-github');
 
       const response = await app.inject({
         method: 'GET',
-        url: '/oauth/connections/google/status',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
+        url: '/oauth/connections/github/status',
+        headers: { authorization: `Bearer ${token}` },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { connected: boolean; email: string | null };
+        data: { connected: boolean; username: string | null };
       };
       expect(body.success).toBe(true);
       expect(body.data.connected).toBe(false);
-      expect(body.data.email).toBeNull();
+      expect(body.data.username).toBeNull();
     });
 
-    it('returns connected=true with details when connection exists', async () => {
-      const userId = 'user-123';
-      fakeOAuthRepo.setConnection(userId, 'google', {
+    it('returns connected when connection exists', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-with-github';
+      fakeOAuthRepo.setConnection(userId, OAuthProviders.GITHUB, {
         userId,
-        provider: OAuthProviders.GOOGLE,
-        email: 'user@example.com',
+        provider: OAuthProviders.GITHUB,
+        email: 'octocat',
         tokens: {
-          accessToken: 'access-token',
-          refreshToken: 'refresh-token',
-          expiresAt: new Date(Date.now() + 3600000).toISOString(),
-          scope: 'calendar.readonly profile',
+          accessToken: 'fake-access-token',
+          refreshToken: '',
+          expiresAt: '9999-12-31T00:00:00.000Z',
+          scope: 'repo read:user',
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -434,59 +394,51 @@ describe('OAuth Connection Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/oauth/connections/google/status',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
+        url: '/oauth/connections/github/status',
+        headers: { authorization: `Bearer ${token}` },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: {
-          connected: boolean;
-          email: string;
-          scopes: string[];
-          createdAt: string;
-          updatedAt: string;
-        };
+        data: { connected: boolean; username: string; scopes: string[] };
       };
       expect(body.success).toBe(true);
       expect(body.data.connected).toBe(true);
-      expect(body.data.email).toBe('user@example.com');
-      expect(body.data.scopes).toContain('calendar.readonly');
+      expect(body.data.username).toBe('octocat');
     });
 
-    it('returns error when repository fails', async () => {
+    it('returns 500 when repository fails', { timeout: 20000 }, async () => {
       fakeOAuthRepo.setFailNextGetPublic(true);
       app = await buildServer();
-      const token = await createJwt('user-123');
+      const token = await createJwt('auth0|user-error');
 
       const response = await app.inject({
         method: 'GET',
-        url: '/oauth/connections/google/status',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
+        url: '/oauth/connections/github/status',
+        headers: { authorization: `Bearer ${token}` },
       });
 
       expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
-  describe('DELETE /oauth/connections/google', () => {
+  describe('DELETE /oauth/connections/github', () => {
     it('returns 401 when not authenticated', async () => {
       app = await buildServer();
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/oauth/connections/google',
+        url: '/oauth/connections/github',
       });
 
       expect(response.statusCode).toBe(401);
     });
 
-    it('returns 503 when Google OAuth is not configured', async () => {
+    it('returns 503 when GitHub OAuth is not configured', { timeout: 20000 }, async () => {
       setServices({
         authTokenRepository: fakeAuthTokenRepo,
         userSettingsRepository: fakeSettingsRepo,
@@ -499,30 +451,31 @@ describe('OAuth Connection Routes', () => {
       });
 
       app = await buildServer();
-      const token = await createJwt('user-123');
+      const token = await createJwt('auth0|user-123');
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/oauth/connections/google',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
+        url: '/oauth/connections/github',
+        headers: { authorization: `Bearer ${token}` },
       });
 
       expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
     });
 
-    it('disconnects successfully', async () => {
-      const userId = 'user-123';
-      fakeOAuthRepo.setConnection(userId, 'google', {
+    it('disconnects successfully when connection exists', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-to-disconnect';
+      fakeOAuthRepo.setConnection(userId, OAuthProviders.GITHUB, {
         userId,
-        provider: OAuthProviders.GOOGLE,
-        email: 'user@example.com',
+        provider: OAuthProviders.GITHUB,
+        email: 'octocat',
         tokens: {
-          accessToken: 'access-token',
-          refreshToken: 'refresh-token',
-          expiresAt: new Date(Date.now() + 3600000).toISOString(),
-          scope: 'calendar.readonly',
+          accessToken: 'fake-access-token',
+          refreshToken: '',
+          expiresAt: '9999-12-31T00:00:00.000Z',
+          scope: 'repo read:user',
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -533,117 +486,93 @@ describe('OAuth Connection Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/oauth/connections/google',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: Record<string, never> };
-      expect(body.success).toBe(true);
-      expect(body.data).toEqual({});
-
-      const connection = fakeOAuthRepo.getStoredConnection(userId, 'google');
-      expect(connection).toBeUndefined();
-    });
-
-    it('succeeds even when revoke fails', async () => {
-      const userId = 'user-123';
-      fakeOAuthRepo.setConnection(userId, 'google', {
-        userId,
-        provider: OAuthProviders.GOOGLE,
-        email: 'user@example.com',
-        tokens: {
-          accessToken: 'access-token',
-          refreshToken: 'refresh-token',
-          expiresAt: new Date(Date.now() + 3600000).toISOString(),
-          scope: 'calendar.readonly',
-        },
-        createdAt: '2025-01-01T00:00:00.000Z',
-        updatedAt: '2025-01-01T00:00:00.000Z',
-      });
-      fakeGoogleOAuthClient.setFailNextRevoke(true);
-
-      app = await buildServer();
-      const token = await createJwt(userId);
-
-      const response = await app.inject({
-        method: 'DELETE',
-        url: '/oauth/connections/google',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const connection = fakeOAuthRepo.getStoredConnection(userId, 'google');
-      expect(connection).toBeUndefined();
-    });
-
-    it('returns error when delete fails', async () => {
-      const userId = 'user-123';
-      fakeOAuthRepo.setConnection(userId, 'google', {
-        userId,
-        provider: OAuthProviders.GOOGLE,
-        email: 'user@example.com',
-        tokens: {
-          accessToken: 'access-token',
-          refreshToken: 'refresh-token',
-          expiresAt: new Date(Date.now() + 3600000).toISOString(),
-          scope: 'calendar.readonly',
-        },
-        createdAt: '2025-01-01T00:00:00.000Z',
-        updatedAt: '2025-01-01T00:00:00.000Z',
-      });
-      fakeOAuthRepo.setFailNextDelete(true);
-
-      app = await buildServer();
-      const token = await createJwt(userId);
-
-      const response = await app.inject({
-        method: 'DELETE',
-        url: '/oauth/connections/google',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-      });
-
-      expect(response.statusCode).toBe(500);
-    });
-
-    it('returns error when getConnection fails', async () => {
-      fakeOAuthRepo.setFailNextGet(true);
-
-      app = await buildServer();
-      const token = await createJwt('user-123');
-
-      const response = await app.inject({
-        method: 'DELETE',
-        url: '/oauth/connections/google',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-      });
-
-      expect(response.statusCode).toBe(500);
-    });
-
-    it('succeeds even when no connection exists (no-op)', async () => {
-      app = await buildServer();
-      const token = await createJwt('user-no-connection');
-
-      const response = await app.inject({
-        method: 'DELETE',
-        url: '/oauth/connections/google',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
+        url: '/oauth/connections/github',
+        headers: { authorization: `Bearer ${token}` },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
+
+      // Verify the connection was removed
+      const stored = fakeOAuthRepo.getStoredConnection(userId, OAuthProviders.GITHUB);
+      expect(stored).toBeUndefined();
+    });
+
+    it('disconnects successfully when no connection exists (revoke skipped)', { timeout: 20000 }, async () => {
+      app = await buildServer();
+      const token = await createJwt('auth0|user-no-connection');
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/oauth/connections/github',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('still disconnects when token revoke fails (best-effort)', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-revoke-fail';
+      fakeOAuthRepo.setConnection(userId, OAuthProviders.GITHUB, {
+        userId,
+        provider: OAuthProviders.GITHUB,
+        email: 'octocat',
+        tokens: {
+          accessToken: 'fake-access-token',
+          refreshToken: '',
+          expiresAt: '9999-12-31T00:00:00.000Z',
+          scope: 'repo read:user',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeGitHubOAuthClient.setFailNextRevoke(true);
+
+      app = await buildServer();
+      const token = await createJwt(userId);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/oauth/connections/github',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('returns 500 when get connection fails', { timeout: 20000 }, async () => {
+      fakeOAuthRepo.setFailNextGet(true);
+      app = await buildServer();
+      const token = await createJwt('auth0|user-error');
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/oauth/connections/github',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when delete connection fails', { timeout: 20000 }, async () => {
+      fakeOAuthRepo.setFailNextDelete(true);
+      app = await buildServer();
+      const token = await createJwt('auth0|user-delete-fail');
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/oauth/connections/github',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 });

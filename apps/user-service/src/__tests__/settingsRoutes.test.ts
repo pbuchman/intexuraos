@@ -87,6 +87,7 @@ describe('Settings Routes', () => {
       llmValidator: null,
       oauthConnectionRepository: new FakeOAuthConnectionRepository(),
       googleOAuthClient: null,
+      gitHubOAuthClient: null,
     });
   });
 
