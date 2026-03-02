@@ -20,4 +20,4 @@ ${SKIPPED_ROWS}
 
 ---
 
-_😄 reactions added to all processed comments_
+**Status:** ${STATUS_LINE}

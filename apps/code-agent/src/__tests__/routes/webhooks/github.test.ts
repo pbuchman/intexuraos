@@ -23,6 +23,7 @@ import type { GitHubPREventRepository } from '../../../domain/repositories/gitHu
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
+import { shouldSkipComment } from '../../../routes/webhooks/github.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
@@ -1457,5 +1458,52 @@ describe('POST /webhooks/github', () => {
       await new Promise((resolve) => { setTimeout(resolve, 50); });
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('shouldSkipComment', () => {
+  it('returns true for @claude prefix', () => {
+    expect(shouldSkipComment('@claude please review this PR')).toBe(true);
+  });
+
+  it('returns true for @codex prefix', () => {
+    expect(shouldSkipComment('@codex fix this issue')).toBe(true);
+  });
+
+  it('returns true for @ignore prefix', () => {
+    expect(shouldSkipComment('@ignore this comment')).toBe(true);
+  });
+
+  it('returns true with leading whitespace', () => {
+    expect(shouldSkipComment('  @claude review')).toBe(true);
+    expect(shouldSkipComment('\t@codex fix')).toBe(true);
+    expect(shouldSkipComment('\n@ignore skip')).toBe(true);
+  });
+
+  it('returns true case-insensitive', () => {
+    expect(shouldSkipComment('@Claude review this')).toBe(true);
+    expect(shouldSkipComment('@CODEX fix this')).toBe(true);
+    expect(shouldSkipComment('@IGNORE this')).toBe(true);
+  });
+
+  it('returns true for prefix variations like @codex-review', () => {
+    expect(shouldSkipComment('@codex-review check types')).toBe(true);
+    expect(shouldSkipComment('@claude-code please help')).toBe(true);
+  });
+
+  it('returns false for @claude mid-body', () => {
+    expect(shouldSkipComment('Hey @claude can you check this?')).toBe(false);
+  });
+
+  it('returns false for null body', () => {
+    expect(shouldSkipComment(null)).toBe(false);
+  });
+
+  it('returns false for empty string body', () => {
+    expect(shouldSkipComment('')).toBe(false);
+  });
+
+  it('returns false for normal comment', () => {
+    expect(shouldSkipComment('This looks good to me!')).toBe(false);
   });
 });
