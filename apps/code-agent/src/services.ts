@@ -125,6 +125,7 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         url: `https://linear.app/intexura/issue/${request.identifier}`,
         labels: [],
         childCount: 0,
+        parentId: null,
       }));
     },
     generateTitle(request): ReturnType<LinearAgentClient['generateTitle']> {

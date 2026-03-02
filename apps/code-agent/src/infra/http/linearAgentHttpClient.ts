@@ -203,6 +203,7 @@ export function createLinearAgentHttpClient(
             url: string;
             labels: string[];
             childCount: number;
+            parentId?: string | null;
           };
         };
 
@@ -222,6 +223,7 @@ export function createLinearAgentHttpClient(
           url: body.data.url,
           labels: body.data.labels,
           childCount: body.data.childCount,
+          parentId: body.data.parentId ?? null,
         });
       } catch (error) {
         /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */

@@ -41,6 +41,8 @@ export interface ValidatedIssue {
   labels: string[];
   /** Number of child issues */
   childCount: number;
+  /** Parent issue UUID (null for top-level issues) */
+  parentId: string | null;
 }
 
 export interface GenerateTitleRequest {
