@@ -98,6 +98,7 @@ describe('Firebase Routes', () => {
       llmValidator: null,
       oauthConnectionRepository: new FakeOAuthConnectionRepository(),
       googleOAuthClient: null,
+      gitHubOAuthClient: null,
     });
   });
 

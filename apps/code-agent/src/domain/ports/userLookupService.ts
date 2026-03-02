@@ -1,29 +1,36 @@
 /**
- * Port for GitHub username to user resolution.
+ * Port for resolving GitHub usernames to IntexuraOS user + worker config.
  *
- * Resolves GitHub usernames from PR comments to userId and worker credentials
- * for dispatching tasks.
+ * Used by the GitHub webhook flow to determine which user owns a PR
+ * and which worker to dispatch to.
  */
 
 import type { Result } from '@intexuraos/common-core';
 import type { WorkerConfig } from '../models/workerSettings.js';
 
-export interface UserLookupError {
-  code: 'not_found' | 'internal_error';
-  message: string;
-}
-
-export interface ResolvedUser {
+/**
+ * Result of resolving a GitHub username.
+ */
+export interface UserLookupResult {
   userId: string;
   worker: WorkerConfig;
 }
 
+export interface UserLookupError {
+  code: 'USER_NOT_FOUND' | 'NO_ENABLED_WORKER' | 'INTERNAL_ERROR';
+  message: string;
+}
+
 export interface UserLookupService {
   /**
-   * Resolve a GitHub username to userId and worker config for dispatch.
-   * Returns null if no user is found with that GitHub username or no enabled workers.
+   * Resolve a GitHub username to a userId and first enabled worker.
+   *
+   * Flow:
+   * 1. Call user-service to resolve GitHub username -> userId
+   * 2. Fetch worker settings for that userId
+   * 3. Return first enabled worker
    */
-  resolveUserFromGitHubUsername(
+  resolveByGitHubUsername(
     githubUsername: string
-  ): Promise<Result<ResolvedUser | null, UserLookupError>>;
+  ): Promise<Result<UserLookupResult, UserLookupError>>;
 }

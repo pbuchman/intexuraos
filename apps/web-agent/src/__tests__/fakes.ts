@@ -197,6 +197,10 @@ export class FakeUserServiceClient implements UserServiceClient {
     });
   }
 
+  async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, UserServiceError>> {
+    return ok(null);
+  }
+
   setLlmClient(client: LlmGenerateClient): void {
     this.llmClient = client;
   }

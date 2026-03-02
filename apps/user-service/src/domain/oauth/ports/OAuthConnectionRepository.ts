@@ -40,4 +40,9 @@ export interface OAuthConnectionRepository {
     userId: string,
     provider: OAuthProvider
   ): Promise<Result<void, OAuthError>>;
+
+  findByProviderEmail(
+    provider: OAuthProvider,
+    email: string
+  ): Promise<Result<OAuthConnection | null, OAuthError>>;
 }

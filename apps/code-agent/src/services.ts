@@ -44,6 +44,11 @@ import type { TurnMetricsRepository } from './domain/repositories/turnMetricsRep
 import { createFirestoreTurnMetricsRepository } from './infra/repositories/firestoreTurnMetricsRepository.js';
 import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
+import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
+import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+import { createUserServiceClient } from '@intexuraos/internal-clients';
+import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -64,10 +69,12 @@ export interface ServiceContainer {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
-  userLookupService?: UserLookupService;
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   turnMetricsRepo: TurnMetricsRepository;
+  userServiceClient: UserServiceClient;
+  gitHubPRClient: GitHubPRClient;
+  userLookupService?: UserLookupService;
 }
 
 // Configuration required to initialize services
@@ -80,6 +87,7 @@ export interface ServiceConfig {
   linearAgentUrl: string;
   actionsAgentUrl: string;
   webhookVerifySecret: string;
+  userServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -234,6 +242,19 @@ export function initServices(config: ServiceConfig): void {
         logger: createAppLogger({ name: 'whatsapp-publisher' }),
       });
 
+  const userServiceClient = createUserServiceClient({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger,
+    pricingContext: {
+      getPricing() { throw new Error('code-agent does not use LLM pricing'); },
+      hasPricing() { return false; },
+      validateModels() { throw new Error('code-agent does not use LLM pricing'); },
+      validateAllModels() { throw new Error('code-agent does not use LLM pricing'); },
+      getModelsWithPricing() { return []; },
+    },
+  });
+
   container = {
     firestore,
     logger,
@@ -272,13 +293,16 @@ export function initServices(config: ServiceConfig): void {
     metricsClient,
     workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
     workerHealthProbe: createWorkerHealthProbe(),
-    userLookupService: createUserLookupService({
-      workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
-      logger,
-    }),
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
+    userServiceClient,
+    gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 10000 }),
+    userLookupService: createUserLookupService({
+      gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient, logger }),
+      workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
+      logger,
+    }),
   };
 }
 

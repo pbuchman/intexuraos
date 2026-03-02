@@ -27,3 +27,22 @@ export {
   type DisconnectProviderDeps,
   disconnectProvider,
 } from './disconnectProvider.js';
+
+export {
+  type InitiateGitHubOAuthFlowInput,
+  type InitiateGitHubOAuthFlowResult,
+  type InitiateGitHubOAuthFlowDeps,
+  initiateGitHubOAuthFlow,
+} from './initiateGitHubOAuthFlow.js';
+
+export {
+  type ExchangeGitHubOAuthCodeInput,
+  type ExchangeGitHubOAuthCodeDeps,
+  exchangeGitHubOAuthCode,
+} from './exchangeGitHubOAuthCode.js';
+
+export {
+  type DisconnectGitHubProviderInput,
+  type DisconnectGitHubProviderDeps,
+  disconnectGitHubProvider,
+} from './disconnectGitHubProvider.js';

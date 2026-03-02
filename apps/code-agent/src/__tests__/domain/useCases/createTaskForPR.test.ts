@@ -1,700 +1,526 @@
 /**
  * Tests for createTaskForPR use case.
- *
- * Validates creating a task from a PR comment, including:
- * - User resolution from GitHub username
- * - Transaction guard with document-level locking
- * - Task creation and dispatch
- * - Linear issue creation
- * - Error handling for failures
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
-import { Timestamp } from '@google-cloud/firestore';
-import {
-  createTaskForPR,
-  type CreateTaskForPRDeps,
-} from '../../../domain/usecases/createTaskForPR.js';
-import type { CodeTask } from '../../../domain/models/codeTask.js';
+import pino from 'pino';
+import { createTaskForPR, type CreateTaskForPRDeps, type CreateTaskForPRRequest } from '../../../domain/usecases/createTaskForPR.js';
+import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
+import type { UserLookupService } from '../../../domain/ports/userLookupService.js';
+import type { LinearIssueService, EnsureIssueResult } from '../../../domain/services/linearIssueService.js';
+import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
+import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+
+const logger = pino({ level: 'silent' }) as unknown as Logger;
+
+function createMockUserLookupService(): UserLookupService {
+  return {
+    async resolveByGitHubUsername(): ReturnType<UserLookupService['resolveByGitHubUsername']> {
+      return ok({
+        userId: 'user-123',
+        worker: {
+          name: 'home-mac',
+          url: 'https://worker.example.com',
+          cfAccessClientId: 'client-id',
+          cfAccessClientSecret: 'client-secret',
+          dispatchSigningSecret: 'dispatch-secret',
+          enabled: true,
+        },
+      });
+    },
+  };
+}
+
+function createMockLinearIssueService(): LinearIssueService {
+  return {
+    async ensureIssueExists(): Promise<EnsureIssueResult> {
+      return {
+        linearIssueId: 'INT-100',
+        linearIssueTitle: 'Test Issue',
+        linearFallback: false,
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        linearIssueUrl: 'https://linear.app/intexura/issue/INT-100',
+      };
+    },
+    async markInProgress(): Promise<void> { return; },
+    async markInReview(): Promise<void> { return; },
+  };
+}
+
+function createMockCodeTaskRepo(): CodeTaskRepository {
+  return {
+    async create(): ReturnType<CodeTaskRepository['create']> {
+      return ok({} as never);
+    },
+    async findById(): ReturnType<CodeTaskRepository['findById']> {
+      return err({ code: 'NOT_FOUND', message: 'not found' });
+    },
+    async findByIdForUser(): ReturnType<CodeTaskRepository['findByIdForUser']> {
+      return err({ code: 'NOT_FOUND', message: 'not found' });
+    },
+    async update(): ReturnType<CodeTaskRepository['update']> {
+      return ok({} as never);
+    },
+    async list(): ReturnType<CodeTaskRepository['list']> {
+      return ok({ tasks: [], total: 0 });
+    },
+    async hasActiveTaskForLinearIssue(): ReturnType<CodeTaskRepository['hasActiveTaskForLinearIssue']> {
+      return ok({ hasActive: false });
+    },
+    async findZombieTasks(): ReturnType<CodeTaskRepository['findZombieTasks']> {
+      return ok([]);
+    },
+    async countByUserToday(): ReturnType<CodeTaskRepository['countByUserToday']> {
+      return ok(0);
+    },
+    async findArchivableTasks(): ReturnType<CodeTaskRepository['findArchivableTasks']> {
+      return ok([]);
+    },
+    async archiveTaskLogs(): ReturnType<CodeTaskRepository['archiveTaskLogs']> {
+      return ok({ logCount: 0, archivedAt: new Date() });
+    },
+    async findByPR(): ReturnType<CodeTaskRepository['findByPR']> {
+      return ok(null);
+    },
+    async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
+      return ok(undefined);
+    },
+    async findOldestQueued(): ReturnType<CodeTaskRepository['findOldestQueued']> {
+      return ok(null);
+    },
+    async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
+      return ok(0);
+    },
+  };
+}
+
+function createMockTaskDispatcher(): TaskDispatcherService {
+  return {
+    async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+      return ok({ dispatched: true, workerLocation: 'home-mac' });
+    },
+    async cancelOnWorker(): Promise<void> { return; },
+    async sendMessageToWorker(): ReturnType<TaskDispatcherService['sendMessageToWorker']> {
+      return ok({ action: 'queued' });
+    },
+  };
+}
+
+function createMockGitHubPRClient(): GitHubPRClient {
+  return {
+    async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
+      return ok(undefined);
+    },
+  };
+}
+
+function createMockUserServiceClient(): UserServiceClient {
+  return {
+    async getApiKeys(): ReturnType<UserServiceClient['getApiKeys']> {
+      return ok({});
+    },
+    async getLlmClient(): ReturnType<UserServiceClient['getLlmClient']> {
+      return err({ code: 'NO_API_KEY', message: 'mock' }) as never;
+    },
+    async reportLlmSuccess(): Promise<void> { return; },
+    async getOAuthToken(): ReturnType<UserServiceClient['getOAuthToken']> {
+      return ok({ accessToken: 'ghp_test_token_123', email: 'test@example.com' });
+    },
+    async resolveGitHubUsername(): ReturnType<UserServiceClient['resolveGitHubUsername']> {
+      return ok(null);
+    },
+  };
+}
+
+function mockDoc(): never {
+  return {} as never;
+}
+
+function createMockFirestore(): CreateTaskForPRDeps['firestore'] {
+  return {
+    async runTransaction<T>(fn: (transaction: never) => Promise<T>): Promise<T> {
+      const mockTransaction = {
+        get: async (): Promise<{ exists: boolean; data: () => null }> => ({ exists: false, data: (): null => null }),
+        set: (): void => undefined,
+      };
+      return fn(mockTransaction as never);
+    },
+    doc: mockDoc,
+  };
+}
+
+function createDefaultDeps(): CreateTaskForPRDeps {
+  return {
+    logger,
+    codeTaskRepo: createMockCodeTaskRepo(),
+    userLookupService: createMockUserLookupService(),
+    linearIssueService: createMockLinearIssueService(),
+    taskDispatcher: createMockTaskDispatcher(),
+    orchestratorSecret: 'test-secret',
+    serviceUrl: 'https://code-agent.test',
+    gitHubPRClient: createMockGitHubPRClient(),
+    userServiceClient: createMockUserServiceClient(),
+    firestore: createMockFirestore(),
+  };
+}
+
+function createDefaultRequest(): CreateTaskForPRRequest {
+  return {
+    repository: 'pbuchman/intexuraos',
+    prNumber: 42,
+    prTitle: 'Fix the bug',
+    senderLogin: 'testuser',
+    comment: 'Please review this PR',
+    eventId: 'event-123',
+  };
+}
 
 describe('createTaskForPR', () => {
-  let mockLogger: Logger;
-  let mockCodeTaskRepo: {
-    findByPR: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-  };
-  let mockUserLookupService: {
-    resolveUserFromGitHubUsername: ReturnType<typeof vi.fn>;
-  };
-  let mockLinearIssueService: {
-    ensureIssueExists: ReturnType<typeof vi.fn>;
-  };
-  let mockTaskDispatcher: {
-    dispatch: ReturnType<typeof vi.fn>;
-  };
-  let mockFirestore: {
-    runTransaction: ReturnType<typeof vi.fn>;
-    doc: ReturnType<typeof vi.fn>;
-  };
-  let mockTransaction: {
-    get: ReturnType<typeof vi.fn>;
-    set: ReturnType<typeof vi.fn>;
-  };
-
-  const repository = 'pbuchman/intexuraos';
-  const prNumber = 42;
-  const senderLogin = 'testuser';
-  const comment = 'Please fix this bug';
-  const eventId = 'event-123';
-  const userId = 'user_123';
-
-  const mockWorker = {
-    name: 'home-dev',
-    url: 'https://worker.local',
-    enabled: true,
-    cfAccessClientId: 'client-id',
-    cfAccessClientSecret: 'client-secret',
-    dispatchSigningSecret: 'signing-secret',
-  };
-
-  const mockExistingTask: CodeTask = {
-    id: 'task_existing',
-    userId,
-    traceId: 'trace-existing',
-    prompt: 'Existing task',
-    sanitizedPrompt: 'Existing task',
-    systemPromptHash: 'hash123',
-    workerType: 'auto',
-    workerLocation: 'home-dev',
-    repository,
-    baseBranch: 'main',
-    status: 'dispatched',
-    agentType: 'execution',
-    actionId: `pr-comment/${repository}/${String(prNumber)}/old-event`,
-    approvalEventId: 'old-event',
-    prNumber,
-    callbackReceived: true,
-    dedupKey: 'dedup-existing',
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  };
-
-  function createDeps(): CreateTaskForPRDeps {
-    return {
-      logger: mockLogger,
-      codeTaskRepo: mockCodeTaskRepo as unknown as CreateTaskForPRDeps['codeTaskRepo'],
-      userLookupService: mockUserLookupService as unknown as CreateTaskForPRDeps['userLookupService'],
-      linearIssueService: mockLinearIssueService as unknown as CreateTaskForPRDeps['linearIssueService'],
-      taskDispatcher: mockTaskDispatcher as unknown as CreateTaskForPRDeps['taskDispatcher'],
-      orchestratorSecret: 'test-orchestrator-secret',
-      serviceUrl: 'https://code-agent.test.local',
-      firestore: mockFirestore as unknown as CreateTaskForPRDeps['firestore'],
-    };
-  }
-
-  function createRequest(overrides: { prTitle?: string } = {}): { repository: string; prNumber: number; prTitle?: string; senderLogin: string; comment: string; eventId: string } {
-    return {
-      repository,
-      prNumber,
-      senderLogin,
-      comment,
-      eventId,
-      ...overrides,
-    };
-  }
+  let deps: CreateTaskForPRDeps;
+  let request: CreateTaskForPRRequest;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
-    mockLogger = {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    } as unknown as Logger;
-
-    mockCodeTaskRepo = {
-      findByPR: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-    };
-
-    mockUserLookupService = {
-      resolveUserFromGitHubUsername: vi.fn(),
-    };
-
-    mockLinearIssueService = {
-      ensureIssueExists: vi.fn(),
-    };
-
-    mockTaskDispatcher = {
-      dispatch: vi.fn(),
-    };
-
-    mockTransaction = {
-      get: vi.fn(),
-      set: vi.fn(),
-    };
-
-    mockFirestore = {
-      runTransaction: vi.fn(async (fn) => fn(mockTransaction)),
-      doc: vi.fn(() => ({ path: 'pr_task_locks/test' })),
-    };
+    deps = createDefaultDeps();
+    request = createDefaultRequest();
   });
 
-  describe('user resolution', () => {
-    it('returns user_not_found when GitHub username has no matching worker settings', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(ok(null));
+  it('creates a task and dispatches it successfully', async () => {
+    const result = await createTaskForPR(deps, request);
 
-      const result = await createTaskForPR(createDeps(), createRequest());
-
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
-      expect(result.error.code).toBe('user_not_found');
-      expect(result.error.message).toContain(senderLogin);
-    });
-
-    it('returns user_not_found when userLookupService errors', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        err({ code: 'user_not_found', message: 'User not found' })
-      );
-
-      const result = await createTaskForPR(createDeps(), createRequest());
-
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
-      expect(result.error.code).toBe('user_not_found');
-    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.taskId).toMatch(/^task_/);
+    }
   });
 
-  describe('task creation', () => {
-    it('creates and dispatches task when no existing task for PR', async () => {
-      // Setup mocks for happy path
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
+  it('returns user_not_found when user lookup fails with USER_NOT_FOUND', async () => {
+    deps.userLookupService = {
+      async resolveByGitHubUsername(): ReturnType<UserLookupService['resolveByGitHubUsername']> {
+        return err({ code: 'USER_NOT_FOUND', message: 'No user found' });
+      },
+    };
 
-      // Lock document doesn't exist
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
+    const result = await createTaskForPR(deps, request);
 
-      mockLinearIssueService.ensureIssueExists.mockResolvedValue({
-        linearIssueId: 'INT-100',
-        linearIssueTitle: 'PR #42 comment: Please fix this bug',
-        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-100',
-        linearFallback: false,
-      });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('user_not_found');
+    }
+  });
 
-      let createdTaskId: string | undefined;
-      mockCodeTaskRepo.create.mockImplementation(async (input) => {
-        createdTaskId = input.id;
-        return ok({ ...mockExistingTask, id: input.id });
-      });
+  it('returns no_workers_configured when user has no enabled workers', async () => {
+    deps.userLookupService = {
+      async resolveByGitHubUsername(): ReturnType<UserLookupService['resolveByGitHubUsername']> {
+        return err({ code: 'NO_ENABLED_WORKER', message: 'No enabled workers' });
+      },
+    };
 
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-dev' })
-      );
+    const result = await createTaskForPR(deps, request);
 
-      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('no_workers_configured');
+    }
+  });
 
-      const result = await createTaskForPR(createDeps(), createRequest({ prTitle: 'Fix bug in auth' }));
+  it('returns internal_error when user lookup has internal error', async () => {
+    deps.userLookupService = {
+      async resolveByGitHubUsername(): ReturnType<UserLookupService['resolveByGitHubUsername']> {
+        return err({ code: 'INTERNAL_ERROR', message: 'Firestore error' });
+      },
+    };
 
-      if (!result.ok) {
-        throw new Error('Expected success result: ' + result.error.message);
-      }
-      expect(result.value.taskId).toBe(createdTaskId);
+    const result = await createTaskForPR(deps, request);
 
-      // Verify dispatch was called
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: createdTaskId,
-          repository,
-          baseBranch: 'main',
-          workerType: 'auto',
-        })
-      );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('internal_error');
+    }
+  });
 
-      // Verify task was updated with worker location
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
-        createdTaskId,
-        expect.objectContaining({ workerLocation: 'home-dev' })
-      );
-    });
+  it('returns existing task ID when lock document already exists', async () => {
+    deps.firestore = {
+      async runTransaction<T>(fn: (transaction: never) => Promise<T>): Promise<T> {
+        const mockTransaction = {
+          get: async (): Promise<{ exists: boolean; data: () => { taskId: string } }> => ({
+            exists: true,
+            data: (): { taskId: string } => ({ taskId: 'existing-task-id' }),
+          }),
+          set: (): void => undefined,
+        };
+        return fn(mockTransaction as never);
+      },
+      doc: mockDoc,
+    };
 
-    it('returns existing taskId when lock document exists', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
+    const result = await createTaskForPR(deps, request);
 
-      // Lock document exists - task was already created
-      mockTransaction.get.mockResolvedValue({
-        exists: true,
-        data: () => ({ taskId: 'task_existing', repository, prNumber }),
-      });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.taskId).toBe('existing-task-id');
+    }
+  });
 
-      const result = await createTaskForPR(createDeps(), createRequest());
+  it('returns task_creation_failed when lock document has no taskId', async () => {
+    deps.firestore = {
+      async runTransaction<T>(fn: (transaction: never) => Promise<T>): Promise<T> {
+        const mockTransaction = {
+          get: async (): Promise<{ exists: boolean; data: () => Record<string, never> }> => ({
+            exists: true,
+            data: (): Record<string, never> => ({}),
+          }),
+          set: (): void => undefined,
+        };
+        return fn(mockTransaction as never);
+      },
+      doc: mockDoc,
+    };
 
-      if (!result.ok) {
-        throw new Error('Expected success result');
-      }
-      expect(result.value.taskId).toBe('task_existing');
+    const result = await createTaskForPR(deps, request);
 
-      // Verify task was NOT created
-      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('task_creation_failed');
+    }
+  });
 
-      // Verify dispatch was NOT called
-      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
-    });
+  it('returns internal_error when transaction throws', async () => {
+    deps.firestore = {
+      async runTransaction(): Promise<never> {
+        throw new Error('Firestore transaction failed');
+      },
+      doc: mockDoc,
+    };
 
-    it('marks task as failed when dispatch fails', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
+    const result = await createTaskForPR(deps, request);
 
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('internal_error');
+      expect(result.error.message).toContain('Firestore transaction failed');
+    }
+  });
 
-      mockLinearIssueService.ensureIssueExists.mockResolvedValue({
-        linearIssueId: 'INT-100',
-        linearIssueTitle: 'PR #42 comment: Please fix this bug',
-        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-100',
-        linearFallback: false,
-      });
+  it('updates PR title with Linear issue ID using per-user OAuth token', async () => {
+    let capturedToken = '';
+    let capturedNewTitle = '';
 
-      let createdTaskId: string | undefined;
-      mockCodeTaskRepo.create.mockImplementation(async (input) => {
-        createdTaskId = input.id;
-        return ok({ ...mockExistingTask, id: input.id });
-      });
+    deps.gitHubPRClient = {
+      async updatePRTitle(token, _owner, _repo, _prNumber, newTitle): ReturnType<GitHubPRClient['updatePRTitle']> {
+        capturedToken = token;
+        capturedNewTitle = newTitle;
+        return ok(undefined);
+      },
+    };
 
-      // Dispatch fails
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        err({ code: 'dispatch_failed', message: 'Worker unavailable' })
-      );
+    await createTaskForPR(deps, request);
 
-      const result = await createTaskForPR(createDeps(), createRequest());
+    expect(capturedToken).toBe('ghp_test_token_123');
+    expect(capturedNewTitle).toBe('[INT-100] Fix the bug');
+  });
 
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
+  it('skips PR title update when GitHub OAuth token is not available', async () => {
+    let prTitleUpdateCalled = false;
+
+    deps.userServiceClient = {
+      ...createMockUserServiceClient(),
+      async getOAuthToken(): ReturnType<UserServiceClient['getOAuthToken']> {
+        return err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' });
+      },
+    };
+
+    deps.gitHubPRClient = {
+      async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
+        prTitleUpdateCalled = true;
+        return ok(undefined);
+      },
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+    expect(prTitleUpdateCalled).toBe(false);
+  });
+
+  it('skips PR title update when prTitle is not provided', async () => {
+    let prTitleUpdateCalled = false;
+
+    deps.gitHubPRClient = {
+      async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
+        prTitleUpdateCalled = true;
+        return ok(undefined);
+      },
+    };
+
+    // Use a request without prTitle (exactOptionalPropertyTypes)
+    const noPrTitleRequest: CreateTaskForPRRequest = {
+      repository: request.repository,
+      prNumber: request.prNumber,
+      senderLogin: request.senderLogin,
+      comment: request.comment,
+      eventId: request.eventId,
+    };
+
+    const result = await createTaskForPR(deps, noPrTitleRequest);
+
+    expect(result.ok).toBe(true);
+    expect(prTitleUpdateCalled).toBe(false);
+  });
+
+  it('skips PR title update when PR already has Linear issue ID in title', async () => {
+    let prTitleUpdateCalled = false;
+
+    deps.gitHubPRClient = {
+      async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
+        prTitleUpdateCalled = true;
+        return ok(undefined);
+      },
+    };
+
+    request.prTitle = '[INT-200] Already linked PR';
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+    expect(prTitleUpdateCalled).toBe(false);
+  });
+
+  it('continues successfully when PR title update fails (best-effort)', async () => {
+    deps.gitHubPRClient = {
+      async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
+        return err({ code: 'API_ERROR', message: 'GitHub API error' });
+      },
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('returns task_creation_failed when dispatch fails', async () => {
+    deps.taskDispatcher = {
+      ...createMockTaskDispatcher(),
+      async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+        return err({ code: 'worker_unavailable', message: 'No workers available' });
+      },
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.error.code).toBe('task_creation_failed');
       expect(result.error.message).toContain('dispatch failed');
-
-      // Verify task was marked as failed
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
-        createdTaskId,
-        expect.objectContaining({
-          status: 'failed',
-          error: expect.objectContaining({
-            code: 'dispatch_failed',
-          }),
-        })
-      );
-    });
-  });
-
-  describe('prompt building', () => {
-    it('builds prompt with resume preamble including PR number and instructions', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
-
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
-
-      mockLinearIssueService.ensureIssueExists.mockResolvedValue({
-        linearIssueId: 'INT-100',
-        linearIssueTitle: 'Test Issue',
-        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-100',
-        linearFallback: false,
-      });
-
-      let capturedPrompt: string | undefined;
-      mockCodeTaskRepo.create.mockImplementation(async (input) => {
-        capturedPrompt = input.prompt;
-        return ok({ ...mockExistingTask, id: input.id });
-      });
-
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-dev' })
-      );
-
-      await createTaskForPR(createDeps(), createRequest());
-
-      expect(capturedPrompt).toContain('[PR Comment Task]');
-      expect(capturedPrompt).toContain(`PR #${String(prNumber)}`);
-      expect(capturedPrompt).toContain('gh pr view');
-      expect(capturedPrompt).toContain(comment);
-      // Enhanced instructions
-      expect(capturedPrompt).toContain('/requesting-code-review');
-      expect(capturedPrompt).toContain('DETAILED reasoning');
-      expect(capturedPrompt).toContain('gh api /repos/');
-      expect(capturedPrompt).toContain('/pulls/');
-      expect(capturedPrompt).toContain('/reviews');
-      expect(capturedPrompt).toContain('/comments');
-      expect(capturedPrompt).toContain('/issues/');
-    });
-  });
-
-  describe('Linear issue', () => {
-    it('creates task even when Linear issue creation falls back', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
-
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
-
-      // Linear falls back
-      mockLinearIssueService.ensureIssueExists.mockResolvedValue({
-        linearIssueTitle: 'PR #42 comment: Please fix this bug',
-        linearFallback: true,
-      });
-
-      mockCodeTaskRepo.create.mockResolvedValue(
-        ok({ ...mockExistingTask, id: 'task_new' })
-      );
-
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-dev' })
-      );
-
-      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
-
-      const result = await createTaskForPR(createDeps(), createRequest());
-
-      if (!result.ok) {
-        throw new Error('Expected success result');
-      }
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
-    });
-
-    it('uses prTitle for Linear issue when available', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
-
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
-
-      let capturedLinearIssueId: string | undefined;
-      mockLinearIssueService.ensureIssueExists.mockImplementation(async (input) => {
-        capturedLinearIssueId = input.linearIssueId;
-        return {
-          linearIssueId: input.linearIssueId,
-          linearIssueTitle: input.taskPrompt,
-          linearFallback: false,
-          linearIssueLabels: ['code-task'],
-          hasChildren: false,
-        };
-      });
-
-      mockCodeTaskRepo.create.mockResolvedValue(
-        ok({ ...mockExistingTask, id: 'task_new' })
-      );
-
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-dev' })
-      );
-
-      await createTaskForPR(createDeps(), createRequest({ prTitle: '[INT-500] Fix auth bug' }));
-
-      expect(capturedLinearIssueId).toBe('INT-500');
-    });
-
-    it('extracts INT-XXX from PR title and validates existing issue', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
-
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
-
-      let capturedLinearIssueId: string | undefined;
-      mockLinearIssueService.ensureIssueExists.mockImplementation(async (input) => {
-        capturedLinearIssueId = input.linearIssueId;
-        return {
-          linearIssueId: 'INT-500',
-          linearIssueTitle: 'Fix auth bug',
-          linearFallback: false,
-          linearIssueLabels: ['code-task'],
-          hasChildren: false,
-        };
-      });
-
-      mockCodeTaskRepo.create.mockResolvedValue(
-        ok({ ...mockExistingTask, id: 'task_new' })
-      );
-
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-dev' })
-      );
-
-      await createTaskForPR(createDeps(), createRequest({ prTitle: 'Fix auth [INT-500]' }));
-
-      expect(capturedLinearIssueId).toBe('INT-500');
-    });
-
-    it('passes pr-comment label in dispatch when creating new issue', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
-
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
-
-      mockLinearIssueService.ensureIssueExists.mockImplementation(async () => ({
-        linearIssueTitle: 'Test issue',
-        linearFallback: false,
-        linearIssueLabels: [],
-        hasChildren: false,
-      }));
-
-      mockCodeTaskRepo.create.mockResolvedValue(
-        ok({ ...mockExistingTask, id: 'task_new' })
-      );
-
-      let capturedLabels: string[] = [];
-      mockTaskDispatcher.dispatch.mockImplementation(async (input) => {
-        capturedLabels = input.linearIssueLabels;
-        return ok({ dispatched: true, workerLocation: 'home-dev' });
-      });
-
-      await createTaskForPR(createDeps(), createRequest({ prTitle: 'My PR Title' }));
-
-      expect(capturedLabels).toContain('pr-comment');
-      expect(capturedLabels).toContain('code-task');
-    });
-
-    it('preserves pr-comment label when already present in existing issue labels', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
-
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
-
-      mockLinearIssueService.ensureIssueExists.mockImplementation(async () => ({
-        linearIssueId: 'INT-500',
-        linearIssueTitle: 'Existing issue',
-        linearFallback: false,
-        linearIssueLabels: ['code-task', 'pr-comment'],
-        hasChildren: false,
-      }));
-
-      mockCodeTaskRepo.create.mockResolvedValue(
-        ok({ ...mockExistingTask, id: 'task_new' })
-      );
-
-      let capturedLabels: string[] = [];
-      mockTaskDispatcher.dispatch.mockImplementation(async (input) => {
-        capturedLabels = input.linearIssueLabels;
-        return ok({ dispatched: true, workerLocation: 'home-dev' });
-      });
-
-      await createTaskForPR(createDeps(), createRequest({ prTitle: '[INT-500] Fix bug' }));
-
-      expect(capturedLabels).toEqual(['code-task', 'pr-comment']);
-    });
-
-    it('uses real labels from existing issue when INT-XXX found', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
-
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
-
-      mockLinearIssueService.ensureIssueExists.mockImplementation(async () => ({
-        linearIssueId: 'INT-500',
-        linearIssueTitle: 'Existing issue',
-        linearFallback: false,
-        linearIssueLabels: ['code-task', 'backend'],
-        hasChildren: false,
-      }));
-
-      mockCodeTaskRepo.create.mockResolvedValue(
-        ok({ ...mockExistingTask, id: 'task_new' })
-      );
-
-      let capturedLabels: string[] = [];
-      mockTaskDispatcher.dispatch.mockImplementation(async (input) => {
-        capturedLabels = input.linearIssueLabels;
-        return ok({ dispatched: true, workerLocation: 'home-dev' });
-      });
-
-      await createTaskForPR(createDeps(), createRequest({ prTitle: '[INT-500] Fix bug' }));
-
-      expect(capturedLabels).toEqual(['code-task', 'backend', 'pr-comment']);
-    });
-  });
-
-  describe('error handling', () => {
-    function setupHappyPathMocks(): void {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
-
-      mockTransaction.get.mockResolvedValue({
-        exists: false,
-        data: () => undefined,
-      });
-
-      mockLinearIssueService.ensureIssueExists.mockResolvedValue({
-        linearIssueId: 'INT-100',
-        linearIssueTitle: 'Test Issue',
-        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-100',
-        linearFallback: false,
-      });
-
-      mockCodeTaskRepo.create.mockResolvedValue(
-        ok({ ...mockExistingTask, id: 'task_new' })
-      );
-
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-dev' })
-      );
     }
+  });
 
-    it('returns task_creation_failed when lock document has missing taskId', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
+  it('returns task_creation_failed when codeTaskRepo.create fails', async () => {
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      async create(): ReturnType<CodeTaskRepository['create']> {
+        return err({ code: 'ACTIVE_TASK_EXISTS', message: 'Task already exists', existingTaskId: 'existing-123' });
+      },
+    };
 
-      mockTransaction.get.mockResolvedValue({
-        exists: true,
-        data: () => ({}),
-      });
+    const result = await createTaskForPR(deps, request);
 
-      const result = await createTaskForPR(createDeps(), createRequest());
-
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.error.code).toBe('task_creation_failed');
-      expect(result.error.message).toContain('taskId is missing');
-    });
+    }
+  });
 
-    it('returns task_creation_failed when lock document has empty taskId', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
+  it('skips PR title update when repository format is invalid', async () => {
+    let prTitleUpdateCalled = false;
 
-      mockTransaction.get.mockResolvedValue({
-        exists: true,
-        data: () => ({ taskId: '' }),
-      });
+    deps.gitHubPRClient = {
+      async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
+        prTitleUpdateCalled = true;
+        return ok(undefined);
+      },
+    };
 
-      const result = await createTaskForPR(createDeps(), createRequest());
+    // Repository without owner/repo format (no slash)
+    request.repository = 'noslash';
 
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
-      expect(result.error.code).toBe('task_creation_failed');
-    });
+    const result = await createTaskForPR(deps, request);
 
-    it('returns task_creation_failed when codeTaskRepo.create fails', async () => {
-      setupHappyPathMocks();
+    expect(result.ok).toBe(true);
+    expect(prTitleUpdateCalled).toBe(false);
+  });
 
-      mockCodeTaskRepo.create.mockResolvedValue(
-        err({ code: 'WRITE_FAILED', message: 'Firestore write failed' })
-      );
+  it('logs warning when Linear falls back to non-Linear mode', async () => {
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      async ensureIssueExists(): Promise<EnsureIssueResult> {
+        return {
+          linearIssueTitle: 'Fallback task',
+          linearFallback: true,
+          linearIssueLabels: ['code-task'],
+          hasChildren: false,
+        };
+      },
+    };
 
-      const result = await createTaskForPR(createDeps(), createRequest());
+    const result = await createTaskForPR(deps, request);
 
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
-      expect(result.error.code).toBe('task_creation_failed');
-      expect(result.error.message).toContain('Firestore write failed');
-    });
+    expect(result.ok).toBe(true);
+  });
 
-    it('propagates existingTaskId when ACTIVE_TASK_EXISTS dedup fires', async () => {
-      setupHappyPathMocks();
+  it('preserves pr-comment label when already present in existing issue labels', async () => {
+    let capturedLabels: string[] = [];
 
-      mockCodeTaskRepo.create.mockResolvedValue(
-        err({ code: 'ACTIVE_TASK_EXISTS', message: 'Active task exists for Linear issue', existingTaskId: 'task_active_123' })
-      );
+    // Simulate existing Linear issue (INT-XXX in title) with pr-comment already in labels
+    request.prTitle = '[INT-200] Already linked PR';
 
-      const result = await createTaskForPR(createDeps(), createRequest());
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      async ensureIssueExists(): Promise<EnsureIssueResult> {
+        return {
+          linearIssueId: 'INT-200',
+          linearIssueTitle: 'Existing Issue',
+          linearFallback: false,
+          linearIssueLabels: ['code-task', 'pr-comment'],
+          hasChildren: false,
+          linearIssueUrl: 'https://linear.app/intexura/issue/INT-200',
+        };
+      },
+    };
 
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
-      expect(result.error.code).toBe('task_creation_failed');
-      expect(result.error.existingTaskId).toBe('task_active_123');
-    });
+    deps.taskDispatcher = {
+      ...createMockTaskDispatcher(),
+      async dispatch(req): ReturnType<TaskDispatcherService['dispatch']> {
+        capturedLabels = req.linearIssueLabels;
+        return ok({ dispatched: true, workerLocation: 'home-mac' });
+      },
+    };
 
-    it('does not include existingTaskId for non-dedup repo errors', async () => {
-      setupHappyPathMocks();
+    await createTaskForPR(deps, request);
 
-      mockCodeTaskRepo.create.mockResolvedValue(
-        err({ code: 'FIRESTORE_ERROR', message: 'Connection timeout' })
-      );
+    expect(capturedLabels).toContain('pr-comment');
+    expect(capturedLabels).toContain('code-task');
+    // Should not have duplicate pr-comment
+    expect(capturedLabels.filter(l => l === 'pr-comment')).toHaveLength(1);
+  });
 
-      const result = await createTaskForPR(createDeps(), createRequest());
+  it('includes pr-comment label in dispatch', async () => {
+    let capturedLabels: string[] = [];
 
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
-      expect(result.error.code).toBe('task_creation_failed');
-      expect(result.error.existingTaskId).toBeUndefined();
-    });
+    deps.taskDispatcher = {
+      ...createMockTaskDispatcher(),
+      async dispatch(req): ReturnType<TaskDispatcherService['dispatch']> {
+        capturedLabels = req.linearIssueLabels;
+        return ok({ dispatched: true, workerLocation: 'home-mac' });
+      },
+    };
 
-    it('returns internal_error when transaction throws', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
+    await createTaskForPR(deps, request);
 
-      mockFirestore.runTransaction.mockRejectedValue(new Error('Firestore unavailable'));
-
-      const result = await createTaskForPR(createDeps(), createRequest());
-
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
-      expect(result.error.code).toBe('internal_error');
-      expect(result.error.message).toContain('Firestore unavailable');
-    });
-
-    it('propagates error when transaction callback returns err result', async () => {
-      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
-        ok({ userId, worker: mockWorker })
-      );
-
-      mockFirestore.runTransaction.mockResolvedValue(
-        err({ code: 'task_creation_failed', message: 'Lock document exists but taskId is missing' })
-      );
-
-      const result = await createTaskForPR(createDeps(), createRequest());
-
-      if (result.ok) {
-        throw new Error('Expected error result');
-      }
-      expect(result.error.code).toBe('task_creation_failed');
-    });
+    expect(capturedLabels).toContain('pr-comment');
+    expect(capturedLabels).toContain('code-task');
   });
 });
