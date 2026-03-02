@@ -156,6 +156,10 @@ COMMENT_BODY="${COMMENT_BODY//\$\{SKIPPED_COUNT\}/$SKIPPED_COUNT}"
 COMMENT_BODY="${COMMENT_BODY//\$\{FIXED_ROWS\}/$FIXED_ROWS}"
 COMMENT_BODY="${COMMENT_BODY//\$\{SKIPPED_ROWS\}/$SKIPPED_ROWS}"
 
+# Strip blank lines between table separator and data rows.
+# Prettier inserts blank lines after | --- | which breaks GitHub table rendering.
+COMMENT_BODY=$(echo "$COMMENT_BODY" | sed -E '/^\| -+ \|.*\|$/{ N; s/\n$//; }')
+
 # Post comment to PR via file to preserve markdown newlines exactly.
 COMMENT_TMP_FILE="$(mktemp /tmp/nitpick-summary-comment.XXXXXX.md)"
 trap 'rm -f "$COMMENT_TMP_FILE"' EXIT
