@@ -1119,7 +1119,15 @@ export class TaskDispatcher {
       const comment = `Closed automatically — implementation completed in execution task ${taskId}`;
       await execFileAsync(
         'gh',
-        ['pr', 'close', String(parsed.number), '--repo', `${parsed.owner}/${parsed.repo}`, '--comment', comment],
+        [
+          'pr',
+          'close',
+          String(parsed.number),
+          '--repo',
+          `${parsed.owner}/${parsed.repo}`,
+          '--comment',
+          comment,
+        ],
         { cwd: this.config.worktreeBasePath }
       );
 
