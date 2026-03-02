@@ -432,6 +432,11 @@ const logger = createAppLogger({ name: 'my-service' });
 
 **Rules:** TailwindCSS only, `@auth0/auth0-react` for auth, `useApiClient` for API calls, SRP (split at ~150 lines), env vars via `import.meta.env.INTEXURAOS_*`.
 
+**API proxy architecture:**
+
+- **dev** (`pnpm dev` — Vite dev server): Service URLs are `/api/*` relative paths proxied by Vite to `localhost:<port>`.
+- **prod** (`pnpm build` — static bundle on CDN): Service URLs are absolute Cloud Run URLs baked at build time.
+
 ---
 
 # [W] WORKFLOW — Git, CI, Deploy
@@ -580,18 +585,19 @@ All artifacts must be connected:
 
 **Environment detection signals:**
 
-| Signal                           | dev                      | prod                                |
-| -------------------------------- | ------------------------ | ----------------------------------- |
-| URL contains                     | `dev.intexuraos.cloud`   | `intexuraos.cloud` (without `dev.`) |
-| URL contains                     | `localhost:*`            | `*.run.app`                         |
-| User says                        | "dev", "dev environment" | "prod", "production", "cloud"       |
-| `uname -n`                       | `home-dev`               | N/A (Cloud Run)                     |
-| Logs via                         | `pm2 logs <name>`        | `gcloud logging read`               |
-| `INTEXURAOS_ENVIRONMENT` env var | `dev`                    | `prod`                              |
+| Signal                           | dev                                               | prod                                |
+| -------------------------------- | ------------------------------------------------- | ----------------------------------- |
+| URL contains                     | `dev.intexuraos.cloud`                            | `intexuraos.cloud` (without `dev.`) |
+| URL contains                     | `localhost:*` (internal service URLs on home-dev) | `*.run.app`                         |
+| User says                        | "dev", "dev environment"                          | "prod", "production", "cloud"       |
+| `uname -n`                       | `home-dev`                                        | N/A (Cloud Run)                     |
+| Logs via                         | `pm2 logs <name>`                                 | `gcloud logging read`               |
+| `INTEXURAOS_ENVIRONMENT` env var | `dev`                                             | `prod`                              |
 
 **Firestore is SHARED between both environments.** Same database, same collections.
 
 **Credentials source of truth:** GCP Secret Manager
+
 - **prod:** Uses secrets directly from Secret Manager
 - **dev:** Syncs secrets + overrides via `.envrc.local`
 
@@ -620,14 +626,14 @@ STEP 4: Check service status with the right tool (pm2 for dev, gcloud for prod)
 
 ### Development Machines
 
-| Machine      | OS     | Role                                       | SSH Access              |
-| ------------ | ------ | ------------------------------------------ | ----------------------- |
-| **mac-dev**  | Darwin | Code editing, commits, pushes              | Can SSH to home-dev     |
+| Machine      | OS     | Role                                       | SSH Access               |
+| ------------ | ------ | ------------------------------------------ | ------------------------ |
+| **mac-dev**  | Darwin | Code editing, commits, pushes              | Can SSH to home-dev      |
 | **home-dev** | Linux  | Runs dev environment, auto-deploys on push | Has dev services running |
 
 **Both use `~/deploy/intexuraos/` as project path (relative to home).**
 
-**Code Task Investigation:** For any code task issue, FIRST check the Firestore `code_tasks` document for the task. The `workerLocation` field shows which machine the orchestrator ran on (home-dev or mac-dev).
+**Code Task Investigation:** For any code task issue, FIRST check the Firestore `code_tasks` document for the task. The `workerLocation` field contains a user-configured string (e.g., `"home-mac"`, `"office-pc"`) — read whatever value is stored; it is not a fixed hostname.
 
 **Forbidden assumptions:**
 
