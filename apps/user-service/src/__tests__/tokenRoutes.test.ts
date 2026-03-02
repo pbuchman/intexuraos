@@ -118,6 +118,7 @@ describe('Token Refresh Routes', () => {
           llmValidator: null,
           oauthConnectionRepository: new FakeOAuthConnectionRepository(),
           googleOAuthClient: null,
+          gitHubOAuthClient: null,
         });
 
         app = await buildServer();
@@ -152,6 +153,7 @@ describe('Token Refresh Routes', () => {
           llmValidator: null,
           oauthConnectionRepository: new FakeOAuthConnectionRepository(),
           googleOAuthClient: null,
+          gitHubOAuthClient: null,
         });
       });
 
@@ -205,6 +207,7 @@ describe('Token Refresh Routes', () => {
           llmValidator: null,
           oauthConnectionRepository: new FakeOAuthConnectionRepository(),
           googleOAuthClient: null,
+          gitHubOAuthClient: null,
         });
       });
 
@@ -262,6 +265,7 @@ describe('Token Refresh Routes', () => {
           llmValidator: null,
           oauthConnectionRepository: new FakeOAuthConnectionRepository(),
           googleOAuthClient: null,
+          gitHubOAuthClient: null,
         });
 
         // Store a refresh token for tests
@@ -359,6 +363,7 @@ describe('Token Refresh Routes', () => {
           llmValidator: null,
           oauthConnectionRepository: new FakeOAuthConnectionRepository(),
           googleOAuthClient: null,
+          gitHubOAuthClient: null,
         });
 
         // Store a refresh token for tests

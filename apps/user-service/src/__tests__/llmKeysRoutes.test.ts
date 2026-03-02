@@ -96,6 +96,7 @@ describe('LLM Keys Routes', () => {
       llmValidator: fakeLlmValidator,
       oauthConnectionRepository: new FakeOAuthConnectionRepository(),
       googleOAuthClient: null,
+      gitHubOAuthClient: null,
     });
   });
 
@@ -427,6 +428,7 @@ describe('LLM Keys Routes', () => {
         llmValidator: null,
         oauthConnectionRepository: new FakeOAuthConnectionRepository(),
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
       });
 
       app = await buildServer();
@@ -919,6 +921,7 @@ describe('LLM Keys Routes', () => {
         llmValidator: null,
         oauthConnectionRepository: new FakeOAuthConnectionRepository(),
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
       });
 
       app = await buildServer();
@@ -963,6 +966,7 @@ describe('LLM Keys Routes', () => {
         llmValidator: null,
         oauthConnectionRepository: new FakeOAuthConnectionRepository(),
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
       });
 
       app = await buildServer();

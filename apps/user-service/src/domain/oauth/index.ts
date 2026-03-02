@@ -3,7 +3,7 @@
  *
  * Provides:
  * - models/    Domain entities (OAuthConnection, OAuthError)
- * - ports/     Interfaces for external dependencies (OAuthConnectionRepository, GoogleOAuthClient)
+ * - ports/     Interfaces for external dependencies (OAuthConnectionRepository, GoogleOAuthClient, GitHubOAuthClient)
  * - usecases/  Business logic (initiateOAuthFlow, exchangeOAuthCode, getValidAccessToken, disconnectProvider)
  */
 
@@ -25,6 +25,11 @@ export type {
   GoogleTokenResponse,
   GoogleUserInfo,
 } from './ports/GoogleOAuthClient.js';
+export type {
+  GitHubOAuthClient,
+  GitHubTokenResponse,
+  GitHubUserInfo,
+} from './ports/GitHubOAuthClient.js';
 
 // Usecases
 export {
@@ -42,4 +47,14 @@ export {
   type DisconnectProviderInput,
   type DisconnectProviderDeps,
   disconnectProvider,
+  type InitiateGitHubOAuthFlowInput,
+  type InitiateGitHubOAuthFlowResult,
+  type InitiateGitHubOAuthFlowDeps,
+  initiateGitHubOAuthFlow,
+  type ExchangeGitHubOAuthCodeInput,
+  type ExchangeGitHubOAuthCodeDeps,
+  exchangeGitHubOAuthCode,
+  type DisconnectGitHubProviderInput,
+  type DisconnectGitHubProviderDeps,
+  disconnectGitHubProvider,
 } from './usecases/index.js';
