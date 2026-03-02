@@ -69,8 +69,6 @@ const COMMON_OPTIONAL_ENV = new Set([
   // Queue config (optional — have sensible defaults: maxSize=10, ttlMinutes=30)
   'INTEXURAOS_QUEUE_MAX_SIZE',
   'INTEXURAOS_QUEUE_TTL_MINUTES',
-  // GitHub API token (optional — best-effort PR title update for Linear auto-linking)
-  'INTEXURAOS_GITHUB_API_TOKEN',
 ]);
 
 /**
