@@ -23,7 +23,7 @@ import type { GitHubPREventRepository } from '../../../domain/repositories/gitHu
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
-import { shouldSkipComment } from '../../../routes/webhooks/github.js';
+import { shouldSkipComment, resolveLoginForTaskCreation } from '../../../routes/webhooks/github.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
@@ -1507,5 +1507,23 @@ describe('shouldSkipComment', () => {
 
   it('returns false for normal comment', () => {
     expect(shouldSkipComment('This looks good to me!')).toBe(false);
+  });
+});
+
+describe('resolveLoginForTaskCreation', () => {
+  it('returns senderLogin unchanged for non-bot usernames', () => {
+    expect(resolveLoginForTaskCreation('pbuchman', 'pbuchman/intexuraos')).toBe('pbuchman');
+  });
+
+  it('returns repo owner for claude[bot]', () => {
+    expect(resolveLoginForTaskCreation('claude[bot]', 'pbuchman/intexuraos')).toBe('pbuchman');
+  });
+
+  it('returns repo owner for chatgpt-codex-connector[bot]', () => {
+    expect(resolveLoginForTaskCreation('chatgpt-codex-connector[bot]', 'pbuchman/intexuraos')).toBe('pbuchman');
+  });
+
+  it('returns bot username as fallback when repository has no slash', () => {
+    expect(resolveLoginForTaskCreation('claude[bot]', 'intexuraos')).toBe('claude[bot]');
   });
 });
