@@ -3626,6 +3626,57 @@ describe('TaskDispatcher', () => {
       expect(finalTask?.status).toBe('completed');
       expect(finalTask?.resumedAfterSuccess).toBeUndefined();
     });
+
+    it('enriches result with execution_linear_issue_url for execution tasks', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-execution-enrich-test',
+        workerType: 'auto',
+        prompt: 'Test execution enrichment on resumed task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearIssueId: 'INT-677',
+        agentType: 'execution',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'feature/int-677',
+        commits: 3,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/967',
+        summary: 'Execution completed',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-execution-enrich-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('resumed-execution-enrich-test');
+      expect(finalTask?.status).toBe('completed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              prUrl: 'https://github.com/pbuchman/intexuraos/pull/967',
+              execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-677',
+            }),
+          }),
+        })
+      );
+    });
   });
 
   describe('activity heartbeat', () => {
