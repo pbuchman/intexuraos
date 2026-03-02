@@ -2774,6 +2774,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
             url: 'https://linear.app/intexuraos/issue/INT-100',
             labels: ['code-task'],
             childCount: 0,
+            parentId: null,
           }),
         updateIssueState: async () => ok({}),
         addComment: async () => ok({}),
