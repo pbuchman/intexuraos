@@ -22,6 +22,7 @@ export default defineConfig({
       'e2e/**',
       '.claude/hooks/__tests__/**',
       '**/e2e-container.test.ts',
+      '.claude/worktrees/**',
     ],
     // Setup file to mock Firebase and suppress logging (use absolute path)
     setupFiles: [path.resolve(__dirname, './vitest.setup.ts')],

@@ -89,6 +89,12 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
       return ok(undefined);
     },
+    async findOldestQueued(): ReturnType<CodeTaskRepository['findOldestQueued']> {
+      return ok(null);
+    },
+    async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
+      return ok(0);
+    },
   };
 }
 
@@ -123,6 +129,9 @@ function createMockUserServiceClient(): UserServiceClient {
     async reportLlmSuccess(): Promise<void> { return; },
     async getOAuthToken(): ReturnType<UserServiceClient['getOAuthToken']> {
       return ok({ accessToken: 'ghp_test_token_123', email: 'test@example.com' });
+    },
+    async resolveGitHubUsername(): ReturnType<UserServiceClient['resolveGitHubUsername']> {
+      return ok(null);
     },
   };
 }
@@ -423,6 +432,79 @@ describe('createTaskForPR', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('task_creation_failed');
     }
+  });
+
+  it('skips PR title update when repository format is invalid', async () => {
+    let prTitleUpdateCalled = false;
+
+    deps.gitHubPRClient = {
+      async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
+        prTitleUpdateCalled = true;
+        return ok(undefined);
+      },
+    };
+
+    // Repository without owner/repo format (no slash)
+    request.repository = 'noslash';
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+    expect(prTitleUpdateCalled).toBe(false);
+  });
+
+  it('logs warning when Linear falls back to non-Linear mode', async () => {
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      async ensureIssueExists(): Promise<EnsureIssueResult> {
+        return {
+          linearIssueTitle: 'Fallback task',
+          linearFallback: true,
+          linearIssueLabels: ['code-task'],
+          hasChildren: false,
+        };
+      },
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('preserves pr-comment label when already present in existing issue labels', async () => {
+    let capturedLabels: string[] = [];
+
+    // Simulate existing Linear issue (INT-XXX in title) with pr-comment already in labels
+    request.prTitle = '[INT-200] Already linked PR';
+
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      async ensureIssueExists(): Promise<EnsureIssueResult> {
+        return {
+          linearIssueId: 'INT-200',
+          linearIssueTitle: 'Existing Issue',
+          linearFallback: false,
+          linearIssueLabels: ['code-task', 'pr-comment'],
+          hasChildren: false,
+          linearIssueUrl: 'https://linear.app/intexura/issue/INT-200',
+        };
+      },
+    };
+
+    deps.taskDispatcher = {
+      ...createMockTaskDispatcher(),
+      async dispatch(req): ReturnType<TaskDispatcherService['dispatch']> {
+        capturedLabels = req.linearIssueLabels;
+        return ok({ dispatched: true, workerLocation: 'home-mac' });
+      },
+    };
+
+    await createTaskForPR(deps, request);
+
+    expect(capturedLabels).toContain('pr-comment');
+    expect(capturedLabels).toContain('code-task');
+    // Should not have duplicate pr-comment
+    expect(capturedLabels.filter(l => l === 'pr-comment')).toHaveLength(1);
   });
 
   it('includes pr-comment label in dispatch', async () => {

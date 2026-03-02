@@ -78,6 +78,10 @@ export class FakeUserServiceClient implements UserServiceClient {
   async reportLlmSuccess(_userId: string, _provider: import('@intexuraos/llm-contract').LlmProvider): Promise<void> {
     // Best effort - silently ignore in tests
   }
+
+  async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, import('@intexuraos/internal-clients').UserServiceError>> {
+    return ok(null);
+  }
 }
 
 export class FakeGoogleCalendarClient implements GoogleCalendarClient {
