@@ -24,6 +24,7 @@ import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import { createUserLookupService } from '../../infra/services/userLookupServiceImpl.js';
+import { createGitHubUsernameResolver } from '../../infra/services/gitHubUsernameResolverImpl.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestore/gitHubPRSummariesRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
@@ -48,6 +49,9 @@ export const mockUserServiceClient: UserServiceClient = {
   },
   async getOAuthToken() {
     return err({ code: 'CONNECTION_NOT_FOUND', message: 'No OAuth connection' });
+  },
+  async resolveGitHubUsername() {
+    return ok(null);
   },
 };
 
@@ -168,6 +172,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
     }),
     userLookupService: createUserLookupService({
+      gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient: mockUserServiceClient, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore,
         logger,

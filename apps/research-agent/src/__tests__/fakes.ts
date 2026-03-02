@@ -265,6 +265,10 @@ export class FakeUserServiceClient implements UserServiceClient {
     });
   }
 
+  async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, UserServiceError>> {
+    return ok(null);
+  }
+
   // Test helpers
   setApiKeys(userId: string, keys: DecryptedApiKeys): void {
     this.apiKeys.set(userId, keys);

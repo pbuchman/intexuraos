@@ -50,6 +50,8 @@ function createMockRepo(): WorkerSettingsRepository {
     updateTestResult: async (): ReturnType<WorkerSettingsRepository['updateTestResult']> => ok(undefined),
     getHealthStatuses: async (): ReturnType<WorkerSettingsRepository['getHealthStatuses']> => ok(null),
     updateHealthStatus: async (): ReturnType<WorkerSettingsRepository['updateHealthStatus']> => ok(undefined),
+    findByGitHubUsername: async (): ReturnType<WorkerSettingsRepository['findByGitHubUsername']> => ok(null),
+    updateGitHubUsername: async (): ReturnType<WorkerSettingsRepository['updateGitHubUsername']> => ok(undefined),
   };
 }
 

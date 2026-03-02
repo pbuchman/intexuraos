@@ -56,6 +56,16 @@ function isAllowedSender(event: GitHubPREvent): boolean {
   return false;
 }
 
+const SKIP_PREFIXES = ['@claude', '@codex', '@ignore'];
+
+const SKIP_PREFIX_MAX_LENGTH = Math.max(...SKIP_PREFIXES.map(p => p.length));
+
+export function shouldSkipComment(body: string | null): boolean {
+  if (body === null || body === '') return false;
+  const head = body.trimStart().slice(0, SKIP_PREFIX_MAX_LENGTH).toLowerCase();
+  return SKIP_PREFIXES.some(prefix => head.startsWith(prefix));
+}
+
 /**
  * Dispatch a PR comment to the task that owns this PR via sendTaskMessage.
  * Fire-and-forget — webhook returns immediately.
@@ -70,6 +80,16 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
       );
       return;
     }
+
+    /* v8 ignore start -- test-infra: fire-and-forget skip-prefix check, only reachable via dispatchPRCommentToTask which is not testable via route integration tests @preserve */
+    if (shouldSkipComment(event.body)) {
+      logger.debug(
+        { senderLogin: event.senderLogin, repository: event.repository, prNumber: event.pullRequestNumber, bodyPrefix: event.body?.slice(0, 20) },
+        'Comment starts with skip prefix, skipping dispatch'
+      );
+      return;
+    }
+    /* v8 ignore stop @preserve */
 
     const services = getServices();
     const taskResult = await services.codeTaskRepo.findByPR(event.repository, event.pullRequestNumber);
