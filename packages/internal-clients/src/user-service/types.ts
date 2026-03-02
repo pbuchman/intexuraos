@@ -66,6 +66,6 @@ export interface UserServiceClient {
     provider: OAuthProvider
   ): Promise<Result<OAuthTokenResult, UserServiceError>>;
   resolveGitHubUsername(
-    username: string
+    gitHubUsername: string
   ): Promise<Result<{ userId: string } | null, UserServiceError>>;
 }
