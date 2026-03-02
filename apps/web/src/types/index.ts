@@ -828,6 +828,17 @@ export interface GoogleCalendarInitiateResponse {
 }
 
 /**
+ * GitHub connection status from user-service
+ */
+export interface GitHubConnectionStatus {
+  connected: boolean;
+  username?: string;
+  scopes?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
  * Monthly cost breakdown for LLM usage
  */
 export interface MonthlyCost {
