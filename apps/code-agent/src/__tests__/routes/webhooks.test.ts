@@ -131,6 +131,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         url: 'https://linear.app/intexuraos/issue/INT-123',
         labels: [],
         childCount: 0,
+        parentId: null,
       })
     );
     vi.spyOn(linearAgentClient, 'fetchIssueTree').mockResolvedValue(
@@ -586,6 +587,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '1' as const,
           planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '1' as const,
+          planning_subtask_urls: '',
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
@@ -650,6 +652,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           url: 'https://linear.app/intexuraos/issue/INT-123',
           labels: [],
           childCount: 2,
+          parentId: null,
         })
       );
       fetchIssueTreeSpy.mockResolvedValue(
@@ -698,6 +701,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '1' as const,
           planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '1' as const,
+          planning_subtask_urls: '',
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
@@ -775,6 +779,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           url: 'https://linear.app/intexuraos/issue/INT-123',
           labels: [],
           childCount: 1,
+          parentId: null,
         })
       );
       fetchIssueTreeSpy.mockResolvedValue(
@@ -811,6 +816,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '1' as const,
           planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '1' as const,
+          planning_subtask_urls: '',
           planning_pr_url: '',
           planning_unclear_clarification: '',
         },
@@ -865,6 +871,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           url: 'https://linear.app/intexuraos/issue/INT-123',
           labels: [],
           childCount: 1,
+          parentId: null,
         })
       );
       fetchIssueTreeSpy.mockResolvedValue(
@@ -901,6 +908,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '1' as const,
           planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '1' as const,
+          planning_subtask_urls: '',
           planning_pr_url: '',
           planning_unclear_clarification: '',
         },
@@ -962,6 +970,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           url: 'https://linear.app/intexuraos/issue/INT-123',
           labels: [],
           childCount: 1,
+          parentId: null,
         })
       );
       fetchIssueTreeSpy.mockResolvedValue(
@@ -999,6 +1008,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           planning_superpowers_writing_plans_used: '1' as const,
           planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '1' as const,
+          planning_subtask_urls: '',
           planning_pr_url: '',
           planning_unclear_clarification: '',
         },
@@ -1020,6 +1030,243 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
       // No PR comment should be added
       expect(addCommentSpy).not.toHaveBeenCalled();
+    });
+
+    it('complex planned: normalizes subtasks via URL-based resolution', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan complex task via URLs',
+        sanitizedPrompt: 'Plan complex task via URLs',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
+      const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
+
+      validateIssueSpy.mockReset();
+      validateIssueSpy
+        .mockResolvedValueOnce(
+          ok({
+            id: 'original-uuid',
+            identifier: 'INT-123',
+            title: 'Original issue',
+            url: 'https://linear.app/intexuraos/issue/INT-123',
+            labels: [],
+            childCount: 2,
+            parentId: null,
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'child-1-uuid',
+            identifier: 'INT-200',
+            title: 'Subtask 1',
+            url: 'https://linear.app/intexuraos/issue/INT-200',
+            labels: [],
+            childCount: 0,
+            parentId: 'original-uuid',
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'child-2-uuid',
+            identifier: 'INT-201',
+            title: 'Subtask 2',
+            url: 'https://linear.app/intexuraos/issue/INT-201',
+            labels: [],
+            childCount: 0,
+            parentId: 'original-uuid',
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'child-1-uuid',
+            identifier: 'INT-200',
+            title: 'Subtask 1',
+            url: 'https://linear.app/intexuraos/issue/INT-200',
+            labels: [],
+            childCount: 0,
+            parentId: 'original-uuid',
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'child-2-uuid',
+            identifier: 'INT-201',
+            title: 'Subtask 2',
+            url: 'https://linear.app/intexuraos/issue/INT-201',
+            labels: [],
+            childCount: 0,
+            parentId: 'original-uuid',
+          })
+        );
+      fetchIssueTreeSpy.mockClear();
+      updateIssueStateSpy.mockClear();
+      updateIssueMetadataSpy.mockClear();
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Complex plan with URL-based subtasks',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '1' as const,
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_is_complex: '1' as const,
+          planning_subtask_urls: 'https://linear.app/intexuraos/issue/INT-200/subtask-1,https://linear.app/intexuraos/issue/INT-201/subtask-2',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+          planning_unclear_clarification: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // fetchIssueTree must NOT be called — URL-based path was used
+      expect(fetchIssueTreeSpy).not.toHaveBeenCalled();
+
+      // validateIssue called: 1 for original + 2 for subtask normalize + 2 for subtask stamp = 5 total
+      expect(validateIssueSpy).toHaveBeenCalledTimes(5);
+
+      // Both subtasks normalized to todo
+      expect(updateIssueStateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-1-uuid', state: 'todo' })
+      );
+      expect(updateIssueStateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-2-uuid', state: 'todo' })
+      );
+
+      // Both subtasks stamped with code-task label
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-1-uuid', addLabels: ['code-task'] })
+      );
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-2-uuid', addLabels: ['code-task'] })
+      );
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('planned');
+    });
+
+    it('complex planned: falls back to fetchIssueTree when subtask URLs empty', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan complex task tree fallback',
+        sanitizedPrompt: 'Plan complex task tree fallback',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+
+      validateIssueSpy.mockReset();
+      validateIssueSpy.mockResolvedValueOnce(
+        ok({
+          id: 'original-uuid',
+          identifier: 'INT-123',
+          title: 'Original issue',
+          url: 'https://linear.app/intexuraos/issue/INT-123',
+          labels: [],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      fetchIssueTreeSpy.mockResolvedValue(
+        ok({
+          root: {
+            id: 'original-uuid',
+            identifier: 'INT-123',
+            url: 'https://linear.app/intexuraos/issue/INT-123',
+            parentId: null,
+            labels: [],
+            assigneeId: null,
+            state: 'In Progress',
+          },
+          descendants: [],
+        })
+      );
+      fetchIssueTreeSpy.mockClear();
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Complex plan without URLs',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '1' as const,
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_is_complex: '1' as const,
+          planning_subtask_urls: '',
+          planning_pr_url: '',
+          planning_unclear_clarification: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // fetchIssueTree must be called — fallback path
+      expect(fetchIssueTreeSpy).toHaveBeenCalledTimes(1);
+      expect(fetchIssueTreeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'original-uuid' })
+      );
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('planned');
     });
 
     it('simple planned: skips tree validation, marks original todo with code-task label', async () => {
@@ -1058,6 +1305,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           url: 'https://linear.app/intexuraos/issue/INT-123',
           labels: [],
           childCount: 0,
+          parentId: null,
         })
       );
       fetchIssueTreeSpy.mockClear();
@@ -1163,6 +1411,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           url: 'https://linear.app/intexuraos/issue/INT-123',
           labels: [],
           childCount: 0,
+          parentId: null,
         })
       );
       updateIssueStateSpy.mockReset();
@@ -1240,6 +1489,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           url: 'https://linear.app/intexuraos/issue/INT-123',
           labels: [],
           childCount: 0,
+          parentId: null,
         })
       );
       updateIssueStateSpy.mockReset();
@@ -1323,6 +1573,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             url: 'https://linear.app/intexuraos/issue/INT-123',
             labels: ['code-task'],
             childCount: 0,
+            parentId: null,
           })
         )
         .mockResolvedValueOnce(
@@ -1333,6 +1584,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             url: 'https://linear.app/intexuraos/issue/INT-123',
             labels: ['code-task'],
             childCount: 0,
+            parentId: null,
           })
         );
       addCommentSpy.mockClear();
@@ -1419,6 +1671,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           url: 'https://linear.app/intexuraos/issue/INT-123',
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
 
@@ -1492,6 +1745,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             url: 'https://linear.app/intexuraos/issue/INT-123',
             labels: ['code-task'],
             childCount: 0,
+            parentId: null,
           })
         )
         .mockResolvedValueOnce(
@@ -1502,6 +1756,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             url: 'https://linear.app/intexuraos/issue/INT-999',
             labels: ['code-task'],
             childCount: 0,
+            parentId: null,
           })
         );
       addCommentSpy.mockClear();
@@ -1790,6 +2045,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           url: 'https://linear.app/intexuraos/issue/INT-456',
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
       addCommentSpy.mockClear();

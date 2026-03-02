@@ -312,6 +312,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
@@ -377,6 +378,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
 
@@ -408,6 +410,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
 
@@ -439,6 +442,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
 
@@ -479,6 +483,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
 
@@ -740,6 +745,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(
@@ -811,6 +817,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
@@ -882,6 +889,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
@@ -951,6 +959,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
