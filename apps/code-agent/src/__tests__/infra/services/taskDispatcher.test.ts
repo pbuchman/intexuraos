@@ -599,6 +599,144 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
+    it('returns at_capacity when one worker returns 503 and other returns 502', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // home-mac returns 503 (at capacity)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+      // cloud-vm returns 502 (infrastructure error — neutral)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 502, json: async () => ({}) } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('at_capacity');
+      }
+    });
+
+    it('returns at_capacity when one worker returns 503 and other returns 504', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // home-mac returns 503
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+      // cloud-vm returns 504 (gateway timeout — neutral)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 504, json: async () => ({}) } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('at_capacity');
+      }
+    });
+
+    it('returns worker_unavailable when 503 mixed with explicit rejection', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // home-mac returns 503 (at capacity)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+      // cloud-vm returns 200 but rejects the task
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'rejected', reason: 'Worker overloaded' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_unavailable');
+      }
+    });
+
+    it('returns worker_unavailable when HMAC failure mixed with 503', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // Use credentials where first worker has empty signing secret (HMAC fail)
+      // and second worker returns 503
+      const mixedCredentials: DispatchWorkerCredentials = {
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: '', // Will cause HMAC failure
+          },
+          {
+            name: 'cloud-vm',
+            url: 'https://cc-vm.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-dispatch-secret',
+          },
+        ],
+      };
+
+      // cloud-vm returns 503
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: mixedCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_unavailable');
+      }
+    });
+
     it('includes linearIssueId when provided', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
