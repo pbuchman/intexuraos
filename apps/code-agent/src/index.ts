@@ -69,6 +69,8 @@ async function main(): Promise<void> {
     linearAgentUrl: config.linearAgentUrl,
     actionsAgentUrl: config.actionsAgentUrl,
     webhookVerifySecret: config.webhookVerifySecret,
+    orchestratorSecret: config.orchestratorSecret,
+    serviceUrl: config.serviceUrl,
     userServiceUrl: config.userServiceUrl,
   });
 

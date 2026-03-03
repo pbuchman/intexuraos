@@ -236,6 +236,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       }),
       userServiceClient: mockUserServiceClient,
       gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -260,6 +262,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
       userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     app = await buildServer();
@@ -3756,6 +3760,8 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       }),
       userServiceClient: mockUserServiceClient,
       gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -3780,6 +3786,8 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
       userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     app = await buildServer();
@@ -4098,6 +4106,8 @@ describe('POST /internal/logs', () => {
       }),
       userServiceClient: mockUserServiceClient,
       gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4122,6 +4132,8 @@ describe('POST /internal/logs', () => {
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
       userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     app = await buildServer();
@@ -4662,6 +4674,8 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       }),
       userServiceClient: mockUserServiceClient,
       gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4686,6 +4700,8 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
       userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     app = await buildServer();

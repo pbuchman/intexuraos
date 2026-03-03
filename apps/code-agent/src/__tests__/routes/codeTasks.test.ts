@@ -173,6 +173,8 @@ describe('GET /code/tasks endpoints', () => {
       }),
       userServiceClient: mockUserServiceClient,
       gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -197,6 +199,8 @@ describe('GET /code/tasks endpoints', () => {
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
       userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     app = await buildServer();

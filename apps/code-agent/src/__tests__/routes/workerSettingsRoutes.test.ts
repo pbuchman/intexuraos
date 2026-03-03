@@ -165,6 +165,8 @@ describe('Worker Settings Routes', () => {
       }),
       userServiceClient: mockUserServiceClient,
       gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();
