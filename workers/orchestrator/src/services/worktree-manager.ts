@@ -61,6 +61,11 @@ export class WorktreeManager {
         existsSync(this.config.settingsLocalTemplatePath)
       ) {
         await this.copySettingsLocal(worktreePath);
+      } else if (this.config.settingsLocalTemplatePath !== undefined) {
+        this.logger.warn(
+          { templatePath: this.config.settingsLocalTemplatePath },
+          'settings.local.json template path configured but file not found on disk'
+        );
       }
 
       this.logger.info({ taskId, worktreePath }, 'Worktree created');
