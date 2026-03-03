@@ -1522,6 +1522,89 @@ describe('formatLogChunk', () => {
     });
   });
 
+  describe('diff tool result summarization', () => {
+    function toolResult(content: string): string {
+      return JSON.stringify({ type: 'tool_result', content });
+    }
+
+    function makeDiff(files: { path: string; added: number; removed: number; newFile?: boolean; deleted?: boolean }[]): string {
+      return files.map((f) => {
+        const minusLine = f.newFile === true ? '--- /dev/null' : `--- a/${f.path}`;
+        const plusLine = f.deleted === true ? '+++ /dev/null' : `+++ b/${f.path}`;
+        const additions = Array.from({ length: f.added }, (_, i) => `+added line ${String(i)}`).join('\n');
+        const removals = Array.from({ length: f.removed }, (_, i) => `-removed line ${String(i)}`).join('\n');
+        return `diff --git a/${f.path} b/${f.path}\nindex 1234567..abcdefg 100644\n${minusLine}\n${plusLine}\n@@ -1,${String(f.removed)} +1,${String(f.added)} @@\n${removals}\n${additions}`;
+      }).join('\n');
+    }
+
+    it('summarizes a single file diff', () => {
+      const diff = makeDiff([{ path: 'src/index.ts', added: 5, removed: 2 }]);
+      const result = formatLogChunk(toolResult(diff), 0, ts());
+      expect(result[0]?.text).toContain('diff: 1 file changed (+5, -2)');
+      expect(result[0]?.text).toContain('M src/index.ts (+5, -2)');
+    });
+
+    it('summarizes a multi-file diff', () => {
+      const diff = makeDiff([
+        { path: 'src/a.ts', added: 3, removed: 1 },
+        { path: 'src/b.ts', added: 2, removed: 4 },
+        { path: 'src/c.ts', added: 0, removed: 1 },
+      ]);
+      const result = formatLogChunk(toolResult(diff), 0, ts());
+      expect(result[0]?.text).toContain('diff: 3 files changed (+5, -6)');
+      expect(result[0]?.text).toContain('M src/a.ts (+3, -1)');
+      expect(result[0]?.text).toContain('M src/b.ts (+2, -4)');
+      expect(result[0]?.text).toContain('M src/c.ts (-1)');
+    });
+
+    it('detects new file with --- /dev/null', () => {
+      const diff = makeDiff([{ path: 'src/new.ts', added: 10, removed: 0, newFile: true }]);
+      const result = formatLogChunk(toolResult(diff), 0, ts());
+      expect(result[0]?.text).toContain('A src/new.ts (+10)');
+    });
+
+    it('detects deleted file with +++ /dev/null', () => {
+      const diff = makeDiff([{ path: 'src/old.ts', added: 0, removed: 8, deleted: true }]);
+      const result = formatLogChunk(toolResult(diff), 0, ts());
+      expect(result[0]?.text).toContain('D src/old.ts (-8)');
+    });
+
+    it('summarizes even short diffs', () => {
+      const diff = 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-old\n+new';
+      const result = formatLogChunk(toolResult(diff), 0, ts());
+      expect(result[0]?.text).toContain('diff: 1 file changed (+1, -1)');
+      expect(result[0]?.text).toContain('M x.ts (+1, -1)');
+    });
+
+    it('shortens paths with more than 6 segments', () => {
+      const longPath = 'apps/linear-agent/src/__tests__/domain/services/fullSyncUseCase.test.ts';
+      const diff = makeDiff([{ path: longPath, added: 1, removed: 1 }]);
+      const result = formatLogChunk(toolResult(diff), 0, ts());
+      expect(result[0]?.text).toContain('apps/linear-agent/src/__tests__/.../fullSyncUseCase.test.ts');
+    });
+
+    it('falls through when diff --git line is malformed', () => {
+      const content = 'diff --git malformed line without paths';
+      const result = formatLogChunk(toolResult(content), 0, ts());
+      expect(result[0]?.text).toContain('diff --git malformed');
+      expect(result[0]?.text).not.toContain('files changed');
+    });
+
+    it('skips non-diff lines after malformed diff header', () => {
+      const diff = 'diff --git malformed\norphan line\ndiff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-old\n+new';
+      const result = formatLogChunk(toolResult(diff), 0, ts());
+      expect(result[0]?.text).toContain('diff: 1 file changed (+1, -1)');
+      expect(result[0]?.text).not.toContain('orphan');
+    });
+
+    it('shows file with no additions or removals', () => {
+      const content = 'diff --git a/src/file.ts b/src/file.ts\nold mode 100644\nnew mode 100755\n--- a/src/file.ts\n+++ b/src/file.ts';
+      const result = formatLogChunk(toolResult(content), 0, ts());
+      expect(result[0]?.text).toContain('diff: 1 file changed (+0, -0)');
+      expect(result[0]?.text).toMatch(/M src\/file\.ts$/m);
+    });
+  });
+
   describe('tool result truncation', () => {
     function toolResult(content: string): string {
       return JSON.stringify({ type: 'tool_result', content });

@@ -1694,12 +1694,16 @@ export class TaskDispatcher {
     const status = (info['status'] as string | undefined) ?? 'unknown';
     const rateLimitType = (info['rateLimitType'] as string | undefined) ?? '';
     const resetsAt = info['resetsAt'] as number | undefined;
+    const overageStatus = info['overageStatus'] as string | undefined;
+    const overageDisabledReason = info['overageDisabledReason'] as string | undefined;
 
-    const typePart = rateLimitType !== '' ? ` ${rateLimitType}` : '';
-    const resetPart =
-      resetsAt !== undefined ? ` resets=${new Date(resetsAt * 1000).toISOString()}` : '';
+    const parts = [`[rate-limit] status=${status}`];
+    if (rateLimitType !== '') parts.push(`type=${rateLimitType}`);
+    if (resetsAt !== undefined) parts.push(`resets=${new Date(resetsAt * 1000).toISOString()}`);
+    if (overageStatus !== undefined) parts.push(`overage=${overageStatus}`);
+    if (overageDisabledReason !== undefined) parts.push(`reason=${overageDisabledReason}`);
 
-    return `[rate-limit] ${status}${typePart}${resetPart}`;
+    return parts.join(' ');
   }
 
   private formatInitMessage(obj: Record<string, unknown>): string {
