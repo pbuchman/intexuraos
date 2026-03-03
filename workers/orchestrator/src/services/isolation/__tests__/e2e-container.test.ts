@@ -150,6 +150,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
         SENTRY_AUTH_TOKEN: 'test-sentry',
         ZAI_API_KEY: 'test-zai',
         MINIMAX_API_KEY: 'test-minimax',
+        DASHSCOPE_API_KEY: 'test-dashscope',
       },
       gcpSaKeyPath: path.join(testSecretsPath, 'gcp-sa.json'),
       githubAppKeyPath: '',

@@ -159,6 +159,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     ZAI_API_KEY: 'test-zai-key',
     MINIMAX_API_KEY: 'test-minimax-key',
+    DASHSCOPE_API_KEY: 'test-dashscope-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
   githubAppKeyPath: '/test/github-key.pem',
