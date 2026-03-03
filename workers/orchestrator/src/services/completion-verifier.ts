@@ -61,6 +61,7 @@ export interface PullRequestAgentData {
 export interface CompletionVerifier {
   verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict>;
   describe(): { enabled: boolean; provider?: string; model?: string };
+  extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined>;
 }
 
 export interface CompletionVerifierConfig {
@@ -93,6 +94,10 @@ export const PULL_REQUEST_SCHEMA = z.object({
   summary: z.string(),
 });
 
+export const RESUME_SUMMARY_SCHEMA = z.object({
+  summary: z.string(),
+});
+
 const VERIFIER_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
   [LlmModels.Gemini25Flash]: {
     inputPricePerMillion: 0.3,
@@ -103,6 +108,10 @@ const VERIFIER_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
 
 export function getLast50Lines(rawLogs: string): string {
   return stripDockerHeaders(rawLogs).split('\n').slice(-50).join('\n');
+}
+
+export function getLast20Lines(rawLogs: string): string {
+  return stripDockerHeaders(rawLogs).split('\n').slice(-20).join('\n');
 }
 
 function sharedPreamble(): string[] {
@@ -179,6 +188,28 @@ export function buildPullRequestPrompt(transcript: string): string {
     '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","comments_replied":"yes","summary":"The pull request agent addressed 3 review comments on PR #901. Code changes were pushed and CI passed. All reviewer feedback was resolved."}',
     '',
     'Transcript (last 50 lines):',
+    transcript,
+  ].join('\n');
+}
+
+export function buildResumeSummaryPrompt(transcript: string): string {
+  return [
+    'You are summarizing the output of a resumed Claude coding session.',
+    'Analyze the transcript below and extract a brief summary of what was accomplished.',
+    'Return ONLY a JSON object with a single field, no markdown fences.',
+    '',
+    'Rules:',
+    '- Find the summary Claude stated directly in the last assistant messages.',
+    '- If no explicit summary exists, write 2-3 sentences describing the last completed action.',
+    '- Keep it concise and factual.',
+    '',
+    'Field:',
+    '- summary: 2-3 sentence summary of what Claude accomplished in this resumed session',
+    '',
+    'Example valid response:',
+    '{"summary":"Claude fixed the authentication bug by updating the token refresh logic. CI passed after the fix."}',
+    '',
+    'Transcript (last 20 lines):',
     transcript,
   ].join('\n');
 }
@@ -374,6 +405,44 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       agentData,
       trace: { transcript, prompt, response: generated.value.content },
     };
+  }
+
+  async extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined> {
+    const transcript = getLast20Lines(rawLogs);
+    const prompt = buildResumeSummaryPrompt(transcript);
+
+    const generated = await this.llmClient.generate(prompt);
+    if (!generated.ok) {
+      this.logger.error(
+        { taskId, errorCode: generated.error.code },
+        'extractResumeSummary: LLM generate failed'
+      );
+      return undefined;
+    }
+
+    let rawJson: unknown;
+    try {
+      rawJson = extractAndParseJson(generated.value.content);
+    } catch (error) {
+      this.logger.error(
+        { taskId, error: getErrorMessage(error) },
+        'extractResumeSummary: JSON parse failed'
+      );
+      return undefined;
+    }
+
+    const parseResult = RESUME_SUMMARY_SCHEMA.safeParse(rawJson);
+    if (!parseResult.success) {
+      this.logger.error({ taskId }, 'extractResumeSummary: Zod validation failed');
+      return undefined;
+    }
+
+    const { summary } = parseResult.data;
+    this.logger.info(
+      { taskId, summaryLength: summary.length },
+      'extractResumeSummary: summary extracted'
+    );
+    return summary;
   }
 
   private createLlmClient(config: CompletionVerifierConfig): LlmGenerateClient {

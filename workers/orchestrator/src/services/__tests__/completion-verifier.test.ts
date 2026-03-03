@@ -15,10 +15,13 @@ const {
   PLANNING_SCHEMA,
   EXECUTION_SCHEMA,
   PULL_REQUEST_SCHEMA,
+  RESUME_SUMMARY_SCHEMA,
   buildPlanningPrompt,
   buildExecutionPrompt,
   buildPullRequestPrompt,
+  buildResumeSummaryPrompt,
   getLast50Lines,
+  getLast20Lines,
 } = await import('../completion-verifier.js');
 
 const loggerInfo = vi.fn();
@@ -714,5 +717,146 @@ describe('OrchestratorCompletionVerifier', () => {
         response: wrappedResponse,
       });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getLast20Lines
+// ---------------------------------------------------------------------------
+
+describe('getLast20Lines', () => {
+  it('returns last 20 lines from raw logs', () => {
+    const lines = Array.from({ length: 50 }, (_, i) => `line-${String(i + 1)}`);
+    const result = getLast20Lines(lines.join('\n'));
+    const resultLines = result.split('\n');
+    expect(resultLines).toHaveLength(20);
+    expect(resultLines[0]).toBe('line-31');
+    expect(resultLines[19]).toBe('line-50');
+  });
+
+  it('returns all lines when fewer than 20', () => {
+    const result = getLast20Lines('a\nb\nc');
+    expect(result).toBe('a\nb\nc');
+  });
+
+  it('returns empty string for empty input', () => {
+    const result = getLast20Lines('');
+    expect(result).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RESUME_SUMMARY_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('RESUME_SUMMARY_SCHEMA', () => {
+  it('accepts valid summary', () => {
+    const result = RESUME_SUMMARY_SCHEMA.safeParse({ summary: 'Updated the auth flow.' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing summary field', () => {
+    const result = RESUME_SUMMARY_SCHEMA.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-string summary', () => {
+    const result = RESUME_SUMMARY_SCHEMA.safeParse({ summary: 42 });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildResumeSummaryPrompt
+// ---------------------------------------------------------------------------
+
+describe('buildResumeSummaryPrompt', () => {
+  it('includes the transcript in the prompt', () => {
+    const prompt = buildResumeSummaryPrompt('some log output');
+    expect(prompt).toContain('some log output');
+  });
+
+  it('instructs Gemini to extract a summary field as JSON', () => {
+    const prompt = buildResumeSummaryPrompt('log');
+    expect(prompt).toContain('summary');
+    expect(prompt).toContain('JSON');
+  });
+
+  it('mentions the last assistant messages as the source', () => {
+    const prompt = buildResumeSummaryPrompt('log');
+    expect(prompt).toContain('assistant');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractResumeSummary
+// ---------------------------------------------------------------------------
+
+describe('OrchestratorCompletionVerifier.extractResumeSummary', () => {
+  it('returns summary string on success', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({ summary: 'Updated the auth flow and fixed the redirect.' }),
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
+      },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.extractResumeSummary('task-1', 'some raw logs');
+    expect(result).toBe('Updated the auth flow and fixed the redirect.');
+  });
+
+  it('returns undefined when LLM generate fails', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'GENERATION_FAILED', message: 'API error' },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.extractResumeSummary('task-1', 'some raw logs');
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined when JSON cannot be parsed', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: 'not json at all',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
+      },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.extractResumeSummary('task-1', 'some raw logs');
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined when Zod validation fails (missing summary field)', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({ wrong_field: 'value' }),
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
+      },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.extractResumeSummary('task-1', 'some raw logs');
+    expect(result).toBeUndefined();
+  });
+
+  it('uses last 20 lines of logs as transcript', async () => {
+    const lines = Array.from({ length: 30 }, (_, i) => `line-${String(i + 1)}`);
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({ summary: 'Done.' }),
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
+      },
+    });
+    const verifier = createVerifier();
+    await verifier.extractResumeSummary('task-1', lines.join('\n'));
+
+    const calledPrompt = generateMock.mock.calls[0]?.[0] as string;
+    expect(calledPrompt).toContain('line-11');
+    expect(calledPrompt).toContain('line-30');
+    expect(calledPrompt).not.toContain('line-10');
   });
 });

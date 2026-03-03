@@ -260,6 +260,7 @@ describe('TaskDispatcher', () => {
         provider: 'gemini',
         model: 'gemini-2.5-flash',
       }),
+      extractResumeSummary: vi.fn().mockResolvedValue(undefined),
     },
   };
 
@@ -2211,6 +2212,7 @@ describe('TaskDispatcher', () => {
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
           },
         }
       );
@@ -2304,6 +2306,7 @@ describe('TaskDispatcher', () => {
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
           },
         }
       );
@@ -2405,6 +2408,7 @@ describe('TaskDispatcher', () => {
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
           },
         }
       );
@@ -2547,6 +2551,7 @@ describe('TaskDispatcher', () => {
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
           },
         }
       );
@@ -2610,6 +2615,7 @@ describe('TaskDispatcher', () => {
               trace: dummyTrace,
             }),
             describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
           },
         }
       );
@@ -2676,6 +2682,7 @@ describe('TaskDispatcher', () => {
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
           },
         }
       );
@@ -2961,6 +2968,7 @@ describe('TaskDispatcher', () => {
               trace: dummyTrace,
             }),
             describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
           },
         }
       );
@@ -3683,6 +3691,126 @@ describe('TaskDispatcher', () => {
         })
       );
     });
+
+    it('sends resumedCompletion: true in webhook payload on success', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-completion-flag-test',
+        workerType: 'auto',
+        prompt: 'Test resumed completion flag in webhook',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-completion-flag-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            resumedCompletion: true,
+          }),
+        })
+      );
+    });
+
+    it('calls extractResumeSummary and attaches summary to result on success', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.extractResumeSummary).mockResolvedValueOnce(
+        'Claude updated the token refresh logic and CI passed.'
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-gemini-summary-test',
+        workerType: 'auto',
+        prompt: 'Test Gemini summary on resumed task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'fix/token-refresh',
+        commits: 2,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/988',
+        summary: 'Original PR summary',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-gemini-summary-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(singleAttemptCompletionControl.verifier.extractResumeSummary).toHaveBeenCalledWith(
+        'resumed-gemini-summary-test',
+        expect.any(String)
+      );
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            resumedCompletion: true,
+            result: expect.objectContaining({
+              summary: 'Claude updated the token refresh logic and CI passed.',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('does not send resumedCompletion in webhook payload on failure', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-failure-no-flag-test',
+        workerType: 'auto',
+        prompt: 'Test no resumedCompletion flag on failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onComplete).toBeDefined();
+      onComplete?.(1);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-failure-no-flag-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const webhookCall = vi.mocked(mockWebhookClient.send).mock.calls.at(-1);
+      expect(webhookCall?.[0]?.payload).not.toHaveProperty('resumedCompletion');
+    });
   });
 
   describe('activity heartbeat', () => {
@@ -3935,6 +4063,7 @@ describe('TaskDispatcher', () => {
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
           },
         }
       );
