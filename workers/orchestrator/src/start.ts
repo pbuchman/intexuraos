@@ -423,32 +423,6 @@ async function bootstrap(): Promise<void> {
   // Ensure repository is cloned and up-to-date
   await ensureRepository(repoUrl, repoPath, logger);
 
-  // Sync secrets to a container-mountable envrc file
-  const containerEnvrcPath = join(orchestratorDir, 'container.envrc');
-  const syncScript = join(repoPath, 'scripts', 'sync-secrets.sh');
-  if (existsSync(syncScript)) {
-    try {
-      execSync(
-        `bash "${syncScript}" dev --output "${containerEnvrcPath}" --project-id "${projectId}"`,
-        {
-          encoding: 'utf-8',
-          timeout: EXEC_TIMEOUT_MS,
-          env: { ...process.env, GOOGLE_APPLICATION_CREDENTIALS: gcpSaKeyPath },
-        }
-      );
-      logger.info({ path: containerEnvrcPath }, 'Container envrc synced from GCP');
-    } catch (syncError: unknown) {
-      // Non-fatal: containers can still work with Docker -e flags
-      const msg = syncError instanceof Error ? syncError.message : String(syncError);
-      logger.warn(
-        { error: msg, path: containerEnvrcPath },
-        'Failed to sync container envrc (non-fatal)'
-      );
-    }
-  } else {
-    logger.warn({ scriptPath: syncScript }, 'sync-secrets.sh not found in repository');
-  }
-
   // Create services
   const statePersistence = new StatePersistence(config.stateFilePath, logger);
 
@@ -543,7 +517,6 @@ async function bootstrap(): Promise<void> {
       sharedCredsPath,
       forensicsMode: workerForensicsMode,
       forensicsBasePath: workerForensicsBasePath,
-      containerEnvrcPath,
       ...(gitUserName !== undefined ? { gitUserName } : {}),
       ...(gitUserEmail !== undefined ? { gitUserEmail } : {}),
     },
