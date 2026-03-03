@@ -50,6 +50,14 @@ export function createFormatterState(): FormatterState {
 }
 
 const SYSTEM_REMINDER_BLOCK = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
+const DIFF_HEADER_RE = /^diff --git a\/(.+?) b\/(.+)$/;
+
+interface DiffFileStats {
+  path: string;
+  added: number;
+  removed: number;
+  changeType: 'A' | 'D' | 'M';
+}
 
 export function formatLogChunk(
   raw: string,
@@ -349,6 +357,80 @@ function summarizeJsonArray(content: string): string | undefined {
   return `[${String(arr.length)} items${typeHint}]`;
 }
 
+function summarizeDiff(text: string): string | undefined {
+  const lines = text.split('\n');
+
+  const files: DiffFileStats[] = [];
+  let current: DiffFileStats | undefined;
+  let totalAdded = 0;
+  let totalRemoved = 0;
+
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      const match = DIFF_HEADER_RE.exec(line);
+      if (match?.[2] !== undefined) {
+        current = { path: match[2], added: 0, removed: 0, changeType: 'M' };
+        files.push(current);
+      }
+      continue;
+    }
+
+    if (current === undefined) continue;
+
+    if (line.startsWith('--- ')) {
+      if (line === '--- /dev/null') {
+        current.changeType = 'A';
+      }
+      continue;
+    }
+
+    if (line.startsWith('+++ ')) {
+      if (line === '+++ /dev/null') {
+        current.changeType = 'D';
+      }
+      continue;
+    }
+
+    if (line.startsWith('+')) {
+      current.added++;
+      totalAdded++;
+    } else if (line.startsWith('-')) {
+      current.removed++;
+      totalRemoved++;
+    }
+  }
+
+  if (files.length === 0) return undefined;
+
+  const fileWord = files.length === 1 ? 'file' : 'files';
+  const header = `diff: ${String(files.length)} ${fileWord} changed (+${String(totalAdded)}, -${String(totalRemoved)})`;
+
+  const fileLines = files.map((f) => {
+    const shortPath = shortenPath(f.path);
+    const stats = formatFileStats(f.added, f.removed);
+    return `      ${f.changeType} ${shortPath}${stats}`;
+  });
+
+  return [header, ...fileLines].join('\n');
+}
+
+function shortenPath(p: string): string {
+  const parts = p.split('/');
+  if (parts.length <= 6) return p;
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, parts.length > 6 guaranteed @preserve */
+  const file = parts[parts.length - 1] ?? '';
+  /* v8 ignore stop @preserve */
+  return [...parts.slice(0, 4), '...', file].join('/');
+}
+
+function formatFileStats(added: number, removed: number): string {
+  const parts: string[] = [];
+  if (added > 0) parts.push(`+${String(added)}`);
+  if (removed > 0) parts.push(`-${String(removed)}`);
+  if (parts.length === 0) return '';
+  return ` (${parts.join(', ')})`;
+}
+
 function formatToolResult(content: string, isError: boolean, toolName?: string): string {
   const trimmed = stripSystemReminders(content).trim();
   if (trimmed === '') return '';
@@ -364,6 +446,11 @@ function formatToolResult(content: string, isError: boolean, toolName?: string):
 
   if (!isError && trimmed.startsWith('[')) {
     const summary = summarizeJsonArray(trimmed);
+    if (summary !== undefined) return `${prefix}${summary}`;
+  }
+
+  if (!isError && trimmed.startsWith('diff --git ')) {
+    const summary = summarizeDiff(trimmed);
     if (summary !== undefined) return `${prefix}${summary}`;
   }
 
