@@ -50,6 +50,7 @@ export function createFormatterState(): FormatterState {
 }
 
 const SYSTEM_REMINDER_BLOCK = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
+const TOOL_USE_ERROR_BLOCK = /<tool_use_error>([\s\S]*?)<\/tool_use_error>/gi;
 const DIFF_HEADER_RE = /^diff --git a\/(.+?) b\/(.+)$/;
 
 interface DiffFileStats {
@@ -432,7 +433,7 @@ function formatFileStats(added: number, removed: number): string {
 }
 
 function formatToolResult(content: string, isError: boolean, toolName?: string): string {
-  const trimmed = stripSystemReminders(content).trim();
+  const trimmed = stripSystemReminders(content).replace(TOOL_USE_ERROR_BLOCK, '$1').trim();
   if (trimmed === '') return '';
   if (toolName === 'Read' && !isError) return '';
 

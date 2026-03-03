@@ -434,6 +434,17 @@ describe('formatLogChunk', () => {
       const result = formatLogChunk(json, 0, ts());
       expect(result[0]?.text).toBe('  \u2192 line 1\n    line 2');
     });
+
+    it('strips tool_use_error tags from tool_result content', () => {
+      const json = JSON.stringify({
+        type: 'tool_result',
+        content: '<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>',
+        is_error: true
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2717 File has not been read yet. Read it first before writing to it.');
+      expect(result[0]?.text).not.toContain('<tool_use_error>');
+    });
   });
 
   describe('user messages (tool results)', () => {
