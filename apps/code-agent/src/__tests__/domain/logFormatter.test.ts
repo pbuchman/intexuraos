@@ -1315,4 +1315,230 @@ describe('formatLogChunk', () => {
       expect(result[0]?.text).toBe('[tool] Bash: npm test');
     });
   });
+
+  describe('JSON array tool result summarization', () => {
+    function toolResult(content: string, isError = false): string {
+      return JSON.stringify({ type: 'tool_result', content, ...(isError ? { is_error: true } : {}) });
+    }
+
+    it('PR reviews array (1 item) shows singular form', () => {
+      const reviews = JSON.stringify([{
+        submitted_at: '2026-01-01T00:00:00Z',
+        state: 'COMMENTED',
+        html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-1',
+        user: { login: 'chatgpt-codex-connector[bot]' },
+        body: 'x'.repeat(200),
+      }]);
+      const result = formatLogChunk(toolResult(reviews), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 PR review: chatgpt-codex-connector[bot] COMMENTED');
+    });
+
+    it('PR reviews array (2 items) shows plural form', () => {
+      const review = {
+        submitted_at: '2026-01-01T00:00:00Z',
+        state: 'APPROVED',
+        html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-2',
+        user: { login: 'reviewer' },
+        body: 'x'.repeat(50),
+      };
+      const reviews = JSON.stringify([review, { ...review, html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-3' }]);
+      const result = formatLogChunk(toolResult(reviews), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 2 PR reviews: reviewer APPROVED');
+    });
+
+    it('review comments array (1 item) shows path and line', () => {
+      const comments = JSON.stringify([{
+        pull_request_review_id: 12345,
+        path: 'apps/code-agent/src/routes/webhookRoutes.ts',
+        line: 273,
+        body: 'x'.repeat(200),
+        user: { login: 'chatgpt-codex-connector[bot]' },
+        html_url: 'https://github.com/org/repo/pull/1#discussion_r1',
+      }]);
+      const result = formatLogChunk(toolResult(comments), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 review comment by chatgpt-codex-connector[bot] on webhookRoutes.ts:273');
+    });
+
+    it('review comments with no line field omits line suffix', () => {
+      const comments = JSON.stringify([{
+        pull_request_review_id: 99,
+        path: 'src/index.ts',
+        body: 'x'.repeat(200),
+        user: { login: 'reviewer' },
+        html_url: 'https://github.com/org/repo/pull/1#discussion_r2',
+      }]);
+      const result = formatLogChunk(toolResult(comments), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 review comment by reviewer on index.ts');
+    });
+
+    it('issue comments (5 items, mixed authors with repeats)', () => {
+      const base = {
+        issue_url: 'https://api.github.com/repos/org/repo/issues/42',
+        html_url: 'https://github.com/org/repo/issues/42#issuecomment-1',
+        body: 'x'.repeat(40),
+      };
+      const comments = JSON.stringify([
+        { ...base, user: { login: 'linear[bot]' } },
+        { ...base, user: { login: 'pbuchman' } },
+        { ...base, user: { login: 'pbuchman' } },
+        { ...base, user: { login: 'pbuchman' } },
+        { ...base, user: { login: 'pbuchman' } },
+      ]);
+      const result = formatLogChunk(toolResult(comments), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 5 issue comments: linear[bot], pbuchman (\u00d74)');
+    });
+
+    it('issue comments (1 item) shows singular form', () => {
+      const comments = JSON.stringify([{
+        issue_url: 'https://api.github.com/repos/org/repo/issues/10',
+        html_url: 'https://github.com/org/repo/issues/10#issuecomment-99',
+        body: 'x'.repeat(200),
+        user: { login: 'alice' },
+      }]);
+      const result = formatLogChunk(toolResult(comments), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 issue comment: alice');
+    });
+
+    it('short array (<200 chars) passes through unchanged', () => {
+      const arr = JSON.stringify([{ id: 1 }]);
+      const result = formatLogChunk(toolResult(arr), 0, ts());
+      expect(result[0]?.text).toBe(`  \u2192 ${arr}`);
+    });
+
+    it('empty array passes through unchanged', () => {
+      const arr = '[]';
+      const result = formatLogChunk(toolResult(arr), 0, ts());
+      expect(result[0]?.text).toBe(`  \u2192 ${arr}`);
+    });
+
+    it('unknown array shape produces generic fallback', () => {
+      const arr = JSON.stringify(
+        Array.from({ length: 3 }, (_, i) => ({ alpha: i, beta: i * 2, gamma: 'x'.repeat(50), delta: true }))
+      );
+      const result = formatLogChunk(toolResult(arr), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [3 items (alpha, beta, gamma)]');
+    });
+
+    it('error result with array content is NOT summarized', () => {
+      const reviews = JSON.stringify([{
+        submitted_at: '2026-01-01T00:00:00Z',
+        state: 'COMMENTED',
+        html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-1',
+        user: { login: 'bot' },
+        body: 'x'.repeat(200),
+      }]);
+      const result = formatLogChunk(toolResult(reviews, true), 0, ts());
+      expect(result[0]?.text).toContain('  \u2717 ');
+      expect(result[0]?.text).not.toContain('PR review');
+    });
+
+    it('invalid JSON starting with [ passes through unchanged', () => {
+      const bad = '[not valid json but long enough to exceed the 200 char threshold' + 'x'.repeat(200);
+      const result = formatLogChunk(toolResult(bad), 0, ts());
+      expect(result[0]?.text).toContain('  \u2192 [not valid json');
+    });
+
+    it('extractLogin returns ? when user field is missing', () => {
+      const reviews = JSON.stringify([{
+        submitted_at: '2026-01-01T00:00:00Z',
+        state: 'APPROVED',
+        html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-1',
+        body: 'x'.repeat(200),
+      }]);
+      const result = formatLogChunk(toolResult(reviews), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 PR review: ? APPROVED');
+    });
+
+    it('extractLogin returns ? when user.login is not a string', () => {
+      const reviews = JSON.stringify([{
+        submitted_at: '2026-01-01T00:00:00Z',
+        state: 'CHANGES_REQUESTED',
+        html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-2',
+        user: { login: 42 },
+        body: 'x'.repeat(200),
+      }]);
+      const result = formatLogChunk(toolResult(reviews), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 PR review: ? CHANGES_REQUESTED');
+    });
+
+    it('PR review with non-string state falls back to ?', () => {
+      const reviews = JSON.stringify([{
+        submitted_at: '2026-01-01T00:00:00Z',
+        state: null,
+        html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-3',
+        user: { login: 'bot' },
+        body: 'x'.repeat(200),
+      }]);
+      const result = formatLogChunk(toolResult(reviews), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 PR review: bot ?');
+    });
+
+    it('review comments (2 items) shows plural form', () => {
+      const comment = {
+        pull_request_review_id: 12345,
+        path: 'src/index.ts',
+        line: 10,
+        body: 'x'.repeat(100),
+        user: { login: 'reviewer' },
+        html_url: 'https://github.com/org/repo/pull/1#discussion_r1',
+      };
+      const comments = JSON.stringify([comment, { ...comment, html_url: 'https://github.com/org/repo/pull/1#discussion_r2' }]);
+      const result = formatLogChunk(toolResult(comments), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 2 review comments by reviewer on index.ts:10');
+    });
+
+    it('review comment with non-string path falls back to ?', () => {
+      const comments = JSON.stringify([{
+        pull_request_review_id: 99,
+        path: 42,
+        body: 'x'.repeat(200),
+        user: { login: 'reviewer' },
+        html_url: 'https://github.com/org/repo/pull/1#discussion_r3',
+      }]);
+      const result = formatLogChunk(toolResult(comments), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 review comment by reviewer on ?');
+    });
+
+    it('array of primitives returns undefined (passes through)', () => {
+      // Array where first element is not an object — exceeds 200 chars
+      const arr = JSON.stringify(Array.from({ length: 30 }, (_, i) => `string-value-${String(i)}-${'x'.repeat(5)}`));
+      const result = formatLogChunk(toolResult(arr), 0, ts());
+      // Should pass through to normal truncation, not summarized
+      expect(result[0]?.text).toContain('  \u2192 ');
+      expect(result[0]?.text).not.toContain(' items');
+    });
+
+    it('array with keyed objects shows typeHint with key names', () => {
+      const arr = JSON.stringify(Array.from({ length: 10 }, () => ({ ['k' + 'x'.repeat(20)]: 'v' })));
+      const result = formatLogChunk(toolResult(arr), 0, ts());
+      expect(result[0]?.text).toMatch(/\[10 items \(/);
+    });
+
+    it('array of empty objects shows no typeHint', () => {
+      // 67 empty objects: [{},{},{},...] = 67*3 + 66 commas + 2 brackets = 269 chars > 200
+      const arr = JSON.stringify(Array.from({ length: 67 }, () => ({})));
+      const result = formatLogChunk(toolResult(arr), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [67 items]');
+    });
+  });
+
+  describe('tool result truncation', () => {
+    function toolResult(content: string): string {
+      return JSON.stringify({ type: 'tool_result', content });
+    }
+
+    it('truncates tool result exceeding char and line thresholds', () => {
+      // Create content > 2048 chars AND > 50 lines (HEAD_LINES=10 + TAIL_LINES=40)
+      const longLines = Array.from({ length: 60 }, (_, i) => `line ${String(i + 1)}: ${'x'.repeat(40)}`);
+      const content = longLines.join('\n');
+      const result = formatLogChunk(toolResult(content), 0, ts());
+      expect(result[0]?.text).toContain('[... 10 lines omitted ...]');
+      // First line should have the prefix
+      expect(result[0]?.text).toMatch(/^ {2}\u2192 line 1:/);
+      // Should contain the tail lines
+      expect(result[0]?.text).toContain('line 60:');
+      // Should NOT contain the omitted middle lines
+      expect(result[0]?.text).not.toContain('line 15:');
+    });
+  });
 });

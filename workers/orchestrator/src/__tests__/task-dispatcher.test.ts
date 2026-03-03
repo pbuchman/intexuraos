@@ -252,6 +252,7 @@ describe('TaskDispatcher', () => {
             pr_url: '',
             summary: 'Task completed',
             unclear_clarification: '',
+            subtask_urls: '',
           },
         })
       ),
