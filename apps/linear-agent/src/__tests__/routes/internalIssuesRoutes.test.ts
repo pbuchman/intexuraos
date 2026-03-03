@@ -357,7 +357,7 @@ describe('internalIssuesRoutes', () => {
       const response = await app.inject({
         method: 'GET',
         url: `/internal/linear/issues/${testIssueIdentifier}`,
-        headers: internalAuthHeader,
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
       });
 
       expect(response.statusCode).toBe(200);
@@ -403,7 +403,7 @@ describe('internalIssuesRoutes', () => {
       const response = await app.inject({
         method: 'GET',
         url: `/internal/linear/issues/ENG-789`,
-        headers: internalAuthHeader,
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
       });
 
       expect(response.statusCode).toBe(200);
@@ -432,7 +432,7 @@ describe('internalIssuesRoutes', () => {
       const response = await app.inject({
         method: 'GET',
         url: '/internal/linear/issues/ENG-999',
-        headers: internalAuthHeader,
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
       });
 
       expect(response.statusCode).toBe(404);
@@ -449,7 +449,7 @@ describe('internalIssuesRoutes', () => {
       const response = await app.inject({
         method: 'GET',
         url: `/internal/linear/issues/${testIssueIdentifier}`,
-        headers: internalAuthHeader,
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
       });
 
       expect(response.statusCode).toBe(502);
@@ -492,7 +492,7 @@ describe('internalIssuesRoutes', () => {
       const response = await app.inject({
         method: 'GET',
         url: `/internal/linear/issues/${testIssueIdentifier}`,
-        headers: internalAuthHeader,
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
       });
 
       expect(response.statusCode).toBe(200);
@@ -504,6 +504,75 @@ describe('internalIssuesRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.commentCount).toBe(2);
       expect(body.data.lastCommentAt).toBe('2024-01-17T14:30:00.000Z');
+    });
+
+    it('should return 401 when X-User-Id is missing', async () => {
+      fakeIssueRepo.seedIssue(testIssue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIssueIdentifier}`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('should return 404 when issue belongs to different user', async () => {
+      fakeIssueRepo.seedIssue(testIssue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIssueIdentifier}`,
+        headers: { ...internalAuthHeader, 'x-user-id': 'other-user-999' },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+  });
+
+  describe('PATCH /internal/linear/issues/:issueId/metadata', () => {
+    it('should return 404 when issue belongs to different user', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'owned-issue-1',
+        identifier: 'ENG-100',
+        title: 'Owned Issue',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-100',
+        userId: testUserId,
+        createdAt: '2024-01-15T10:00:00.000Z',
+        updatedAt: '2024-01-16T12:30:00.000Z',
+        syncedAt: '2024-01-16T12:30:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/owned-issue-1/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': 'other-user-999' },
+        payload: { addLabels: ['bug'] },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
   });
 });

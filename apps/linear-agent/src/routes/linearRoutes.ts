@@ -460,8 +460,8 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info({ userId: user.userId, identifier }, 'Fetching Linear issue');
 
-      // Find issue by identifier
-      const issueResult = await services.issueRepository.findByIdentifier(identifier);
+      // Find issue by identifier, scoped to the authenticated user
+      const issueResult = await services.issueRepository.findByIdentifier(identifier, user.userId);
       if (!issueResult.ok) {
         request.log.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
         return await handleLinearError(issueResult.error, reply);
@@ -469,12 +469,6 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const issue = issueResult.value;
       if (issue === null) {
-        reply.status(404);
-        return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
-      }
-
-      // Check if user owns this issue
-      if (issue.userId !== user.userId) {
         reply.status(404);
         return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
       }
@@ -625,8 +619,8 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info({ userId: user.userId, identifier, limit, offset }, 'Fetching Linear issue comments');
 
-      // Find issue by identifier
-      const issueResult = await services.issueRepository.findByIdentifier(identifier);
+      // Find issue by identifier, scoped to the authenticated user
+      const issueResult = await services.issueRepository.findByIdentifier(identifier, user.userId);
       if (!issueResult.ok) {
         request.log.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
         return await handleLinearError(issueResult.error, reply);
@@ -634,12 +628,6 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const issue = issueResult.value;
       if (issue === null) {
-        reply.status(404);
-        return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
-      }
-
-      // Check if user owns this issue
-      if (issue.userId !== user.userId) {
         reply.status(404);
         return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
       }

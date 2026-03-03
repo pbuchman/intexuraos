@@ -124,6 +124,33 @@ describe('syncSingleIssue', () => {
       }
       expect(issueRepo.count).toBe(0);
     });
+
+    it('only deletes the owning user copy when another user has the same issue', async () => {
+      const otherUserId = 'other-user';
+
+      // Both users have the same issue
+      const createEvent = createTestEvent({ action: 'create' });
+      await syncSingleIssue(createEvent, userId, deps);
+      await syncSingleIssue(createEvent, otherUserId, deps);
+      expect(issueRepo.count).toBe(2);
+
+      // Remove event for the first user only
+      const removeEvent = createTestEvent({ action: 'remove' });
+      const result = await syncSingleIssue(removeEvent, userId, deps);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('deleted');
+      }
+
+      // Only one copy should remain — the other user's
+      expect(issueRepo.count).toBe(1);
+      const otherUserIssues = await issueRepo.listByUserId(otherUserId);
+      expect(otherUserIssues.ok).toBe(true);
+      if (otherUserIssues.ok) {
+        expect(otherUserIssues.value).toHaveLength(1);
+      }
+    });
   });
 
   describe('error handling', () => {

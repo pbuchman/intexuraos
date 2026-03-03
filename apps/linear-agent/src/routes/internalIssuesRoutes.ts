@@ -300,6 +300,12 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
       const syncedIssue = issueResult.value;
 
+      // Ownership check: return 404 (not 403) to prevent information leakage
+      if (syncedIssue.userId !== userId) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
+      }
+
       const apiKeyResult = await services.connectionRepository.getApiKey(userId);
       if (!apiKeyResult.ok) return await handleLinearError(apiKeyResult.error, reply);
       if (apiKeyResult.value === null) {
@@ -604,14 +610,20 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
       const { identifier } = request.params;
       const services = getServices();
       const logger = request.log as unknown as Logger;
 
-      logger.info({ identifier }, 'internal/getLinearIssue: fetching issue');
+      logger.info({ identifier, userId }, 'internal/getLinearIssue: fetching issue');
 
-      // Find issue by identifier
-      const issueResult = await services.issueRepository.findByIdentifier(identifier);
+      // Find issue by identifier, scoped to the requesting user
+      const issueResult = await services.issueRepository.findByIdentifier(identifier, userId);
       if (!issueResult.ok) {
         logger.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
         reply.status(500);
