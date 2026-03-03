@@ -174,6 +174,8 @@ describe('POST /code/submit', () => {
       }),
       userServiceClient: mockUserServiceClient,
       gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -198,6 +200,8 @@ describe('POST /code/submit', () => {
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
       userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     // Set up worker settings for the test user

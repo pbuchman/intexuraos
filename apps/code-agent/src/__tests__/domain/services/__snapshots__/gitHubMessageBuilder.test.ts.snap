@@ -1,0 +1,93 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GitHubMessageBuilder > Snapshot Tests > matches snapshot for edited bot review 1`] = `
+"GitHub Pull Request Review
+Repository: test/repo
+PR #123
+Sender: test-user
+Review ID: unknown
+Review State: unknown
+
+This is an edited bot review
+
+---
+
+**Task Information**
+- Task ID: task-123
+- User ID: user-456
+
+**Instructions**
+Use the following commands to interact with this task:
+- \`/task status\` - Check current task status
+- \`/task assign\` - Assign task to yourself
+- \`/task complete\` - Mark task as completed
+- \`/task help\` - Get help with task commands"
+`;
+
+exports[`GitHubMessageBuilder > Snapshot Tests > matches snapshot for generic event 1`] = `
+"GitHub Event: unknown_event
+Repository: test/repo
+PR #123
+Sender: test-user
+
+This is a generic event
+
+---
+
+**Task Information**
+- Task ID: task-123
+- User ID: user-456
+
+**Instructions**
+Use the following commands to interact with this task:
+- \`/task status\` - Check current task status
+- \`/task assign\` - Assign task to yourself
+- \`/task complete\` - Mark task as completed
+- \`/task help\` - Get help with task commands"
+`;
+
+exports[`GitHubMessageBuilder > Snapshot Tests > matches snapshot for issue comment 1`] = `
+"GitHub Issue Comment
+Repository: test/repo
+PR #123
+Sender: test-user
+
+This is an issue comment
+
+---
+
+**Task Information**
+- Task ID: task-123
+- User ID: user-456
+
+**Instructions**
+Use the following commands to interact with this task:
+- \`/task status\` - Check current task status
+- \`/task assign\` - Assign task to yourself
+- \`/task complete\` - Mark task as completed
+- \`/task help\` - Get help with task commands"
+`;
+
+exports[`GitHubMessageBuilder > Snapshot Tests > matches snapshot for pull request review 1`] = `
+"GitHub Pull Request Review
+Repository: test/repo
+PR #123
+Sender: test-user
+Review ID: 456
+Review State: approved
+
+This is a review comment
+
+---
+
+**Task Information**
+- Task ID: task-123
+- User ID: user-456
+
+**Instructions**
+Use the following commands to interact with this task:
+- \`/task status\` - Check current task status
+- \`/task assign\` - Assign task to yourself
+- \`/task complete\` - Mark task as completed
+- \`/task help\` - Get help with task commands"
+`;
