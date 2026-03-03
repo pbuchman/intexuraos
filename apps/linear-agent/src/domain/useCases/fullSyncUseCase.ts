@@ -97,11 +97,11 @@ export async function fullSync(
   }
   /* v8 ignore stop @preserve */
 
-  // Delete issues that no longer exist in Linear
+  // Delete issues that no longer exist in Linear (scoped to this user)
   /* v8 ignore start -- test-infra: delete operation with error logging tested @preserve */
   for (const existingId of existingIssueIds) {
     if (!linearIssueIds.has(existingId)) {
-      const deleteResult = await issueRepo.deleteById(existingId);
+      const deleteResult = await issueRepo.deleteById(existingId, userId);
       if (deleteResult.ok) {
         deleted++;
       } else {
