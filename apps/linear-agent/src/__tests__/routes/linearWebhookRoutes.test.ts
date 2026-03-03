@@ -525,7 +525,7 @@ describe('Linear Webhook Routes', () => {
         expect(response.statusCode).toBe(401);
       });
 
-      it('skips signature validation when issue has empty teamId', async () => {
+      it('rejects comment webhook when issue has empty teamId (cannot validate signature)', async () => {
         issueRepo.seedIssue({
           id: 'issue-uuid-1',
           identifier: 'INT-123',
@@ -558,9 +558,12 @@ describe('Linear Webhook Routes', () => {
           payload: JSON.stringify(payload),
         });
 
+        // Empty teamId now returns "Webhook not configured" instead of bypassing validation
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
         expect(body.success).toBe(true);
+        expect(body.data.message).toBe('Webhook not configured');
+        expect(body.data.action).toBe('ignored');
       });
 
       it('returns 500 when webhook secret lookup fails for comment', async () => {

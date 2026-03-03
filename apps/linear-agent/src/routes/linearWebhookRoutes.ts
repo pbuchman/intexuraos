@@ -274,26 +274,30 @@ async function handleLinearWebhook(
     }
 
     // Validate webhook signature using teamId from the issue
-    if (issue.teamId !== '') {
-      const secretResult = await services.connectionRepository.findWebhookSecretByTeamId(issue.teamId);
-      if (!secretResult.ok) {
-        request.log.error({ error: secretResult.error, teamId: issue.teamId }, 'Failed to lookup webhook secret for comment');
-        reply.status(500);
-        return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
-      }
+    if (issue.teamId === '') {
+      // Issues synced before teamId was added have empty string — cannot validate signature
+      request.log.warn({ issueId: data.issueId, commentId: data.id }, 'Comment webhook skipped: issue has no teamId for signature validation');
+      return await reply.ok({ message: 'Webhook not configured', action: 'ignored' });
+    }
 
-      if (secretResult.value === null) {
-        request.log.warn({ teamId: issue.teamId }, 'Webhook secret not configured for comment');
-        return await reply.ok({ message: 'Webhook not configured', action: 'ignored' });
-      }
+    const secretResult = await services.connectionRepository.findWebhookSecretByTeamId(issue.teamId);
+    if (!secretResult.ok) {
+      request.log.error({ error: secretResult.error, teamId: issue.teamId }, 'Failed to lookup webhook secret for comment');
+      reply.status(500);
+      return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
+    }
 
-      const { webhookSecret } = secretResult.value;
-      const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
-      if (!signatureResult.ok) {
-        request.log.warn({ error: signatureResult.error }, 'Comment webhook signature validation failed');
-        reply.status(401);
-        return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
-      }
+    if (secretResult.value === null) {
+      request.log.warn({ teamId: issue.teamId }, 'Webhook secret not configured for comment');
+      return await reply.ok({ message: 'Webhook not configured', action: 'ignored' });
+    }
+
+    const { webhookSecret } = secretResult.value;
+    const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
+    if (!signatureResult.ok) {
+      request.log.warn({ error: signatureResult.error }, 'Comment webhook signature validation failed');
+      reply.status(401);
+      return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
     }
 
     // Find all users who have this issue synced
