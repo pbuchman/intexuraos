@@ -24,6 +24,8 @@ interface WorkerSecrets {
   LINEAR_API_KEY: string;
   SENTRY_AUTH_TOKEN: string;
   ZAI_API_KEY: string;
+  MINIMAX_API_KEY: string;
+  DASHSCOPE_API_KEY: string;
 }
 
 interface WorkerConfig {
@@ -31,7 +33,7 @@ interface WorkerConfig {
   worktreePath: string;
   prompt: string; // User prompt content (written to secrets/user-prompt.txt)
   systemPrompt: string; // System prompt content (written to secrets/system-prompt.txt)
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
