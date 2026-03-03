@@ -41,7 +41,7 @@ describe('summarizeFirstLast', () => {
     const result = summarizeFirstLast(text);
     expect(result).toContain('alpha');
     expect(result).toContain('gamma');
-    expect(result).toContain('1 lines omitted');
+    expect(result).toContain('1 line omitted');
     expect(result).not.toContain('beta');
   });
 

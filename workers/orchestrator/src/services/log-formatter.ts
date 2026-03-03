@@ -9,7 +9,8 @@ export function summarizeFirstLast(text: string): string {
   const first = lines[0] ?? '';
   const last = lines[lines.length - 1] ?? '';
   /* v8 ignore stop @preserve */
-  return `${first}\n  ... (${String(lines.length - 2)} lines omitted) ...\n${last}`;
+  const omitted = lines.length - 2;
+  return `${first}\n  ... (${String(omitted)} ${omitted === 1 ? 'line' : 'lines'} omitted) ...\n${last}`;
 }
 
 const DOCKER_HEADER_SIZE = 8;
