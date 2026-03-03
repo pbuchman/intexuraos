@@ -291,6 +291,28 @@ if [ -f "/secrets/gcp-sa.json" ]; then
 fi
 
 # ------------------------------------------------------------------------------
+# Sync secrets from GCP Secret Manager (writes /repo/.envrc)
+# ------------------------------------------------------------------------------
+if [ -f "/secrets/gcp-sa.json" ] && [ -f "/repo/scripts/sync-secrets.sh" ]; then
+    SYNC_PROJECT_ID="$(jq -r .project_id /secrets/gcp-sa.json)"
+    echo "[entrypoint] Syncing secrets from GCP Secret Manager (project: ${SYNC_PROJECT_ID})..."
+    if bash /repo/scripts/sync-secrets.sh dev --project-id "${SYNC_PROJECT_ID}"; then
+        echo "[entrypoint] Secret sync complete"
+    else
+        echo "[entrypoint] Secret sync failed (non-fatal, will use existing .envrc if available)"
+    fi
+fi
+
+# ------------------------------------------------------------------------------
+# Load environment variables from .envrc (synced from GCP Secret Manager)
+# ------------------------------------------------------------------------------
+if [ -f "/repo/.envrc" ]; then
+    source /repo/.envrc
+    direnv allow /repo
+    echo "[entrypoint] Loaded environment from /repo/.envrc ($(grep -c '^export ' /repo/.envrc) vars)"
+fi
+
+# ------------------------------------------------------------------------------
 # Set up git identity and GitHub token
 # ------------------------------------------------------------------------------
 setup_git_identity

@@ -14,6 +14,10 @@
       ]
     }
   },
-  "include": ["apps/*/src/__tests__/**/*.ts", "packages/*/src/__tests__/**/*.ts"],
+  "include": [
+    "apps/*/src/__tests__/**/*.ts",
+    "packages/*/src/__tests__/**/*.ts",
+    "workers/*/src/__tests__/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

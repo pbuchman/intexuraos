@@ -284,6 +284,71 @@ function summarizeJsonContent(content: string): string | undefined {
   return `{${String(keys.length)} keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', ...' : ''}} [${String(content.length)} chars]`;
 }
 
+function extractLogin(obj: Record<string, unknown>): string {
+  const user = obj['user'];
+  if (typeof user === 'object' && user !== null) {
+    const login = (user as Record<string, unknown>)['login'];
+    if (typeof login === 'string') return login;
+  }
+  return '?';
+}
+
+function collapseLogins(logins: string[]): string {
+  const counts = new Map<string, number>();
+  for (const l of logins) counts.set(l, (counts.get(l) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([l, n]) => (n > 1 ? `${l} (×${String(n)})` : l))
+    .join(', ');
+}
+
+function summarizeJsonArray(content: string): string | undefined {
+  if (content.length < 200) return undefined;
+
+  let arr: unknown[];
+  try {
+    arr = JSON.parse(content) as unknown[];
+  } catch {
+    return undefined;
+  }
+  /* v8 ignore start -- ts-type: JSON.parse of bracket-prefixed content always produces an array; empty array is <200 chars so filtered earlier @preserve */
+  if (!Array.isArray(arr) || arr.length === 0) return undefined;
+  /* v8 ignore stop @preserve */
+
+  const first = arr[0];
+  if (typeof first !== 'object' || first === null) return undefined;
+  const el = first as Record<string, unknown>;
+  const n = arr.length;
+
+  // PR reviews — gh api .../reviews
+  if ('submitted_at' in el && 'state' in el && 'html_url' in el) {
+    const state = typeof el['state'] === 'string' ? el['state'] : '?';
+    const login = extractLogin(el);
+    return `${String(n)} PR review${n !== 1 ? 's' : ''}: ${login} ${state}`;
+  }
+
+  // PR review comments — gh api .../comments (review-level)
+  if ('pull_request_review_id' in el && 'path' in el) {
+    const login = extractLogin(el);
+    /* v8 ignore start -- ts-type: split('/').pop() on non-empty string always returns a value; ?? fallback is unreachable @preserve */
+    const path = typeof el['path'] === 'string' ? el['path'].split('/').pop() ?? el['path'] : '?';
+    /* v8 ignore stop @preserve */
+    const line = typeof el['line'] === 'number' ? `:${String(el['line'])}` : '';
+    return `${String(n)} review comment${n !== 1 ? 's' : ''} by ${login} on ${path}${line}`;
+  }
+
+  // Issue/PR comments — gh api .../comments (issue-level)
+  if ('issue_url' in el && 'body' in el && 'html_url' in el) {
+    const logins = (arr as Record<string, unknown>[]).map(extractLogin);
+    const summary = collapseLogins(logins);
+    return `${String(n)} issue comment${n !== 1 ? 's' : ''}: ${summary}`;
+  }
+
+  // Generic fallback
+  const keys = Object.keys(el);
+  const typeHint = keys.length > 0 ? ` (${keys.slice(0, 3).join(', ')})` : '';
+  return `[${String(arr.length)} items${typeHint}]`;
+}
+
 function formatToolResult(content: string, isError: boolean, toolName?: string): string {
   const trimmed = stripSystemReminders(content).trim();
   if (trimmed === '') return '';
@@ -294,6 +359,11 @@ function formatToolResult(content: string, isError: boolean, toolName?: string):
   // Summarize JSON tool results (gh pr view, gh api, etc.)
   if (!isError && trimmed.startsWith('{')) {
     const summary = summarizeJsonContent(trimmed);
+    if (summary !== undefined) return `${prefix}${summary}`;
+  }
+
+  if (!isError && trimmed.startsWith('[')) {
+    const summary = summarizeJsonArray(trimmed);
     if (summary !== undefined) return `${prefix}${summary}`;
   }
 
