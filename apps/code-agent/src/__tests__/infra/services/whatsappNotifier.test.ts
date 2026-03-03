@@ -1010,4 +1010,160 @@ describe('WhatsAppNotifier', () => {
       }
     });
   });
+
+  describe('notifyResumedTaskComplete', () => {
+    it('formats message with 🔁 emoji and session-continued prefix', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix token refresh',
+        result: createMockResult({
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/201',
+          summary: 'Claude updated the token refresh logic. CI passed.',
+        }),
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyResumedTaskComplete('user-123', task);
+
+      const publishCall = getPublishSendMessageMock().mock.calls[0];
+      const params = publishCall?.[0] as { userId: string; message: string };
+      expect(params.userId).toBe('user-123');
+      expect(params.message).toContain('🔁');
+      expect(params.message).toContain('Session continued');
+      expect(params.message).toContain('Fix token refresh');
+    });
+
+    it('includes PR URL in message when present', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Update auth flow',
+        result: createMockResult({
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/202',
+          summary: 'Auth flow updated.',
+        }),
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyResumedTaskComplete('user-123', task);
+
+      const publishCall = getPublishSendMessageMock().mock.calls[0];
+      const params = publishCall?.[0] as { message: string };
+      expect(params.message).toContain('https://github.com/pbuchman/intexuraos/pull/202');
+    });
+
+    it('includes summary in message when present', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix bug',
+        result: createMockResult({
+          summary: 'The bug was fixed and tests pass.',
+        }),
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyResumedTaskComplete('user-123', task);
+
+      const publishCall = getPublishSendMessageMock().mock.calls[0];
+      const params = publishCall?.[0] as { message: string };
+      expect(params.message).toContain('The bug was fixed and tests pass.');
+    });
+
+    it('omits summary when result has no summary field', async () => {
+      const resultWithoutSummary: TaskResult = {
+        prUrl: 'https://github.com/test/repo/pull/9',
+        branch: 'fix/login',
+        commits: 1,
+      };
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login',
+        result: resultWithoutSummary,
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyResumedTaskComplete('user-123', task);
+
+      const publishCall = getPublishSendMessageMock().mock.calls[0];
+      const params = publishCall?.[0] as { message: string };
+      expect(params.message).toContain('🔁 Session continued: Fix login');
+      expect(params.message).toContain('PR: https://github.com/test/repo/pull/9');
+    });
+
+    it('falls back to prompt slice when no linearIssueTitle', async () => {
+      const task = createMockTask({
+        prompt: 'Implement the new rate limit feature for all endpoints',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyResumedTaskComplete('user-123', task);
+
+      const publishCall = getPublishSendMessageMock().mock.calls[0];
+      const params = publishCall?.[0] as { message: string };
+      expect(params.message).toContain('Implement the new rate limit feature for all end');
+    });
+
+    it('includes linearFallback warning when set', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix issue',
+        linearFallback: true,
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyResumedTaskComplete('user-123', task);
+
+      const publishCall = getPublishSendMessageMock().mock.calls[0];
+      const params = publishCall?.[0] as { message: string };
+      expect(params.message).toContain('⚠️');
+      expect(params.message).toContain('Linear unavailable');
+    });
+
+    it('does not include buttons (plain message only)', async () => {
+      const task = createMockTask({ linearIssueTitle: 'Fix issue' });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyResumedTaskComplete('user-123', task);
+
+      const publishCall = getPublishSendMessageMock().mock.calls[0];
+      const params = publishCall?.[0] as { buttons?: unknown };
+      expect(params.buttons).toBeUndefined();
+    });
+
+    it('returns ok on success', async () => {
+      const task = createMockTask({ linearIssueTitle: 'Fix issue' });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyResumedTaskComplete('user-123', task);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns err on publish failure', async () => {
+      const task = createMockTask({ linearIssueTitle: 'Fix issue' });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
+      );
+
+      const result = await notifier.notifyResumedTaskComplete('user-123', task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Service unavailable');
+      }
+    });
+  });
 });
