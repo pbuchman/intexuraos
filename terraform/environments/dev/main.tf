@@ -929,6 +929,7 @@ module "whatsapp_service" {
     module.secret_manager,
     module.whatsapp_media_bucket,
     module.pubsub_commands_ingest,
+    google_pubsub_topic.audio_stored,
   ]
 }
 
@@ -1941,13 +1942,6 @@ resource "google_secret_manager_secret_iam_member" "transcription_internal_auth"
 resource "google_project_iam_member" "transcription_eventarc" {
   project = var.project_id
   role    = "roles/eventarc.eventReceiver"
-  member  = "serviceAccount:${google_service_account.transcription_function.email}"
-}
-
-# Grant transcription SA permission to publish to Pub/Sub (for transcription-completed topic)
-resource "google_project_iam_member" "transcription_pubsub_publisher" {
-  project = var.project_id
-  role    = "roles/pubsub.publisher"
   member  = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
