@@ -34,17 +34,24 @@ interface MockResponse extends Response {
   jsonData: unknown;
 }
 
+interface ChainableResponse {
+  statusCode: number;
+  jsonData: unknown;
+  status(code: number): ChainableResponse;
+  json(data: unknown): ChainableResponse;
+}
+
 function createMockResponse(): MockResponse {
-  const res = {
+  const res: ChainableResponse = {
     statusCode: 0,
     jsonData: null as unknown,
-    status(code: number): typeof res {
-      this.statusCode = code;
-      return this;
+    status(code: number): ChainableResponse {
+      res.statusCode = code;
+      return res;
     },
-    json(data: unknown): typeof res {
-      this.jsonData = data;
-      return this;
+    json(data: unknown): ChainableResponse {
+      res.jsonData = data;
+      return res;
     },
   };
   return res as unknown as MockResponse;
