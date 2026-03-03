@@ -169,7 +169,11 @@ async function fetchWithRetry(
   throw new Error('fetchWithRetry: unreachable');
 }
 
-async function validateZaiApiKey(zaiKey: string, suffix: (key: string) => string, logger: pino.Logger): Promise<void> {
+async function validateZaiApiKey(
+  zaiKey: string,
+  suffix: (key: string) => string,
+  logger: pino.Logger
+): Promise<void> {
   const keySuffix = suffix(zaiKey);
   try {
     const resp = await fetchWithRetry('https://api.z.ai/api/anthropic/v1/models', {
@@ -192,7 +196,11 @@ async function validateZaiApiKey(zaiKey: string, suffix: (key: string) => string
   }
 }
 
-async function validateMinimaxApiKey(minimaxKey: string, suffix: (key: string) => string, logger: pino.Logger): Promise<void> {
+async function validateMinimaxApiKey(
+  minimaxKey: string,
+  suffix: (key: string) => string,
+  logger: pino.Logger
+): Promise<void> {
   const keySuffix = suffix(minimaxKey);
   try {
     const resp = await fetchWithRetry('https://api.minimax.io/anthropic/v1/messages', {
@@ -224,22 +232,29 @@ async function validateMinimaxApiKey(minimaxKey: string, suffix: (key: string) =
   }
 }
 
-async function validateDashscopeApiKey(dashscopeKey: string, suffix: (key: string) => string, logger: pino.Logger): Promise<void> {
+async function validateDashscopeApiKey(
+  dashscopeKey: string,
+  suffix: (key: string) => string,
+  logger: pino.Logger
+): Promise<void> {
   const keySuffix = suffix(dashscopeKey);
   try {
-    const resp = await fetchWithRetry('https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': dashscopeKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'qwen3-max-2026-01-23',
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'ping' }],
-      }),
-    });
+    const resp = await fetchWithRetry(
+      'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1/messages',
+      {
+        method: 'POST',
+        headers: {
+          'x-api-key': dashscopeKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'qwen3-max-2026-01-23',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'ping' }],
+        }),
+      }
+    );
     if (resp.ok) {
       logger.info({ apiKey: keySuffix }, 'DASHSCOPE_API_KEY validated successfully');
     } else {

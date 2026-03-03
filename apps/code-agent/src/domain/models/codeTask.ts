@@ -8,8 +8,9 @@ import { Timestamp } from '@google-cloud/firestore';
  * - sonnet: Force Sonnet model
  * - minimax: Use MiniMax M2.5 model
  * - glm: Use Z.ai GLM model
+ * - qwen3max: Use Qwen3 Max model
  */
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
 
 /**
  * Worker location for routing.

@@ -13,7 +13,7 @@ export interface CreateTaskInput {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
   workerLocation: string;
   repository: string;
   baseBranch: string;
