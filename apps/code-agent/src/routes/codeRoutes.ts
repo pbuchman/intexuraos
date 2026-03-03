@@ -145,7 +145,7 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   workerLocation: string;
   repository: string;
   baseBranch: string;
@@ -194,7 +194,7 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   workerLocation: string;
   repository: string;
   baseBranch: string;
@@ -305,7 +305,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       userId: string;
       payload: {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -424,7 +424,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/code/process',
       });
@@ -459,7 +459,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         approvalEventId: string;
         userId: string;
         prompt: string;
-        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -1358,7 +1358,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         systemPromptHash: string;
         repository: string;
         baseBranch: string;
-        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         webhookUrl: string;
         webhookSecret: string;
         linearIssueLabels: string[];

@@ -258,7 +258,7 @@ async function validateWorkerApiKeys(
       ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
       : Promise.resolve(),
     dashscopeKey !== ''
-      ? validateThirdPartyApiKey('qwen3max', dashscopeKey, suffix, logger)
+      ? validateThirdPartyApiKey('qwen3.5-plus', dashscopeKey, suffix, logger)
       : Promise.resolve(),
   ]);
 }

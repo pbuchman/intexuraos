@@ -38,7 +38,7 @@ export interface RetryTaskRequest {
   /** Optional additional context to help with the retry */
   additionalContext?: string;
   /** Optional worker type to use for the retry */
-  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
 }
 
 /**
@@ -312,7 +312,7 @@ ${additionalContext.trim()}
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;
