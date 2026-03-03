@@ -33,7 +33,7 @@ interface WorkerConfig {
   worktreePath: string;
   prompt: string; // User prompt content (written to secrets/user-prompt.txt)
   systemPrompt: string; // System prompt content (written to secrets/system-prompt.txt)
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
