@@ -28,6 +28,7 @@ export interface DockerProviderConfig {
   gitUserEmail?: string;
   forensicsMode: boolean;
   forensicsBasePath: string;
+  containerEnvrcPath?: string;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -671,6 +672,12 @@ export class DockerProvider implements IsolationProvider {
             ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
             /* v8 ignore stop @preserve */
             ...(taskForensicsPath !== null ? [`${taskForensicsPath}:/var/crash:rw`] : []),
+            /* v8 ignore start -- test-infra: envrc mount only present when container.envrc synced at startup @preserve */
+            ...(this.config.containerEnvrcPath !== undefined &&
+            fs.existsSync(this.config.containerEnvrcPath)
+              ? [`${this.config.containerEnvrcPath}:/secrets/envrc:ro`]
+              : []),
+            /* v8 ignore stop @preserve */
           ],
           NetworkMode: this.config.networkName,
           ReadonlyRootfs: false,

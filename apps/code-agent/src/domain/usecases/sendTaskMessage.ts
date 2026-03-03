@@ -91,15 +91,9 @@ export async function sendTaskMessage(
       logger.warn({ taskId, error: queueUpdateResult.error }, 'Failed to update pending user messages');
     }
 
-    const statusLines = [
+    const statusLogResult = await logLineRepo.storeBatch(taskId, [
       { sequence: sequence + 1, text: '[queued] Message queued — task is awaiting orchestrator pickup', timestamp: Timestamp.now() },
-      ...allQueued.map((m, i) => ({
-        sequence: sequence + 2 + i,
-        text: `[queued] ${m}`,
-        timestamp: Timestamp.now(),
-      })),
-    ];
-    const statusLogResult = await logLineRepo.storeBatch(taskId, statusLines);
+    ]);
     if (!statusLogResult.ok) {
       logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
     }
@@ -186,15 +180,9 @@ export async function sendTaskMessage(
       logger.warn({ taskId, error: queueUpdateResult.error }, 'Failed to update pending user messages');
     }
 
-    const statusLines = [
+    const statusLogResult = await logLineRepo.storeBatch(taskId, [
       { sequence: sequence + 1, text: '[queued] Message queued \u2014 will be delivered when current work completes', timestamp: Timestamp.now() },
-      ...allQueued.map((m, i) => ({
-        sequence: sequence + 2 + i,
-        text: `[queued] ${m}`,
-        timestamp: Timestamp.now(),
-      })),
-    ];
-    const statusLogResult = await logLineRepo.storeBatch(taskId, statusLines);
+    ]);
     if (!statusLogResult.ok) {
       logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
     }
