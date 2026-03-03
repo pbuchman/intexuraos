@@ -13,6 +13,7 @@ import type { LinearIssueService, EnsureIssueResult } from '../../../domain/serv
 import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
 import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
 
 const logger = pino({ level: 'silent' }) as unknown as Logger;
 
@@ -110,6 +111,32 @@ function createMockTaskDispatcher(): TaskDispatcherService {
   };
 }
 
+function createMockWhatsAppNotifier(): WhatsAppNotifier {
+  return {
+    async notifyTaskComplete(): ReturnType<WhatsAppNotifier['notifyTaskComplete']> {
+      return ok(undefined);
+    },
+    async notifyTaskFailed(): ReturnType<WhatsAppNotifier['notifyTaskFailed']> {
+      return ok(undefined);
+    },
+    async notifyTaskStarted(): ReturnType<WhatsAppNotifier['notifyTaskStarted']> {
+      return ok(undefined);
+    },
+    async notifyTaskResumed(): ReturnType<WhatsAppNotifier['notifyTaskResumed']> {
+      return ok(undefined);
+    },
+    async notifyDesignComplete(): ReturnType<WhatsAppNotifier['notifyDesignComplete']> {
+      return ok(undefined);
+    },
+    async notifyTaskQueued(): ReturnType<WhatsAppNotifier['notifyTaskQueued']> {
+      return ok(undefined);
+    },
+    async notifyTaskQueueExpired(): ReturnType<WhatsAppNotifier['notifyTaskQueueExpired']> {
+      return ok(undefined);
+    },
+  };
+}
+
 function createMockGitHubPRClient(): GitHubPRClient {
   return {
     async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
@@ -160,6 +187,7 @@ function createDefaultDeps(): CreateTaskForPRDeps {
     userLookupService: createMockUserLookupService(),
     linearIssueService: createMockLinearIssueService(),
     taskDispatcher: createMockTaskDispatcher(),
+    whatsappNotifier: createMockWhatsAppNotifier(),
     orchestratorSecret: 'test-secret',
     serviceUrl: 'https://code-agent.test',
     gitHubPRClient: createMockGitHubPRClient(),
@@ -522,5 +550,86 @@ describe('createTaskForPR', () => {
 
     expect(capturedLabels).toContain('pr-comment');
     expect(capturedLabels).toContain('code-task');
+  });
+
+  describe('queueing fallback (at_capacity)', () => {
+    beforeEach(() => {
+      deps.taskDispatcher = {
+        ...createMockTaskDispatcher(),
+        async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+          return err({ code: 'at_capacity', message: 'All workers are busy' });
+        },
+      };
+    });
+
+    it('queues task when at_capacity and queue has room', async () => {
+      let capturedStatus = '';
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async update(_id: string, data: Record<string, unknown>): ReturnType<CodeTaskRepository['update']> {
+          if (typeof data['status'] === 'string') {
+            capturedStatus = data['status'];
+          }
+          return ok({} as never);
+        },
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.taskId).toMatch(/^task_/);
+      }
+      expect(capturedStatus).toBe('queued');
+    });
+
+    it('returns queue_full when at_capacity and queue is full', async () => {
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
+          return ok(10);
+        },
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+    });
+
+    it('returns queue_full when countQueued fails (fail-closed)', async () => {
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
+          return err({ code: 'FIRESTORE_ERROR', message: 'Firestore error' });
+        },
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+    });
+
+    it('returns internal_error when queue status update fails', async () => {
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async update(): ReturnType<CodeTaskRepository['update']> {
+          return err({ code: 'FIRESTORE_ERROR', message: 'Failed to update' });
+        },
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Failed to queue task');
+      }
+    });
   });
 });
