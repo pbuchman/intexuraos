@@ -179,13 +179,16 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     });
   }
 
-  async findUserIdByTeamId(teamId: string): Promise<Result<string | null, LinearError>> {
+  async findUserIdsByTeamId(teamId: string): Promise<Result<string[], LinearError>> {
     if (this.shouldFailGetConnection) return err(this.failError);
 
+    const userIds: string[] = [];
     for (const [userId, conn] of this.connections.entries()) {
-      if (conn.connected && conn.teamId === teamId) return ok(userId);
+      if (conn.connected && conn.teamId === teamId) {
+        userIds.push(userId);
+      }
     }
-    return ok(null);
+    return ok(userIds);
   }
 
   async findWebhookSecretByTeamId(
@@ -603,6 +606,7 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
   private shouldFailSave = false;
   private shouldFailListByUserId = false;
   private shouldFailDeleteById = false;
+  private saveFailUserIds = new Set<string>();
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
 
   private compositeKey(userId: string, issueId: string): string {
@@ -611,6 +615,7 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
 
   async save(issue: SyncedLinearIssue): Promise<Result<SyncedLinearIssue, LinearError>> {
     if (this.shouldFail || this.shouldFailSave) return err(this.failError);
+    if (this.saveFailUserIds.has(issue.userId)) return err(this.failError);
     this.issues.set(this.compositeKey(issue.userId, issue.id), { ...issue });
     return ok(issue);
   }
@@ -646,6 +651,17 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(undefined);
   }
 
+  async findUserIdsByIssueId(issueId: string): Promise<Result<string[], LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    const userIds: string[] = [];
+    for (const issue of this.issues.values()) {
+      if (issue.id === issueId) {
+        userIds.push(issue.userId);
+      }
+    }
+    return ok(userIds);
+  }
+
   setFailure(fail: boolean, error?: LinearError): void {
     this.shouldFail = fail;
     if (error) this.failError = error;
@@ -666,12 +682,20 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     if (error) this.failError = error;
   }
 
+  /** Make save fail only for specific userIds (for partial fan-out failure testing) */
+  setSaveFailureForUsers(userIds: string[]): void {
+    for (const uid of userIds) {
+      this.saveFailUserIds.add(uid);
+    }
+  }
+
   reset(): void {
     this.issues.clear();
     this.shouldFail = false;
     this.shouldFailSave = false;
     this.shouldFailListByUserId = false;
     this.shouldFailDeleteById = false;
+    this.saveFailUserIds.clear();
   }
 
   seedIssue(issue: SyncedLinearIssue): void {

@@ -13,6 +13,7 @@ import {
   createLinearIssueRepository,
 } from '../../infra/firestore/linearIssueRepository.js';
 import type { SyncedLinearIssue } from '../../domain/index.js';
+import { FakeLinearIssueRepository, createSyncedIssue } from '../fakes.js';
 
 function createTestIssue(overrides: Partial<SyncedLinearIssue> = {}): SyncedLinearIssue {
   return {
@@ -280,5 +281,55 @@ describe('linearIssueRepository', () => {
       expect(repo.listByUserId).toBeDefined();
       expect(repo.deleteById).toBeDefined();
     });
+  });
+});
+
+/**
+ * Tests for LinearIssueRepository.findUserIdsByIssueId behavior.
+ * Uses the fake implementation to validate the contract.
+ */
+describe('LinearIssueRepository.findUserIdsByIssueId', () => {
+  let repo: FakeLinearIssueRepository;
+
+  beforeEach(() => {
+    repo = new FakeLinearIssueRepository();
+  });
+
+  it('returns all userIds who have the issue synced', async () => {
+    repo.seedIssue(createSyncedIssue({ id: 'issue-1', identifier: 'INT-1', userId: 'user-A' }));
+    repo.seedIssue(createSyncedIssue({ id: 'issue-1', identifier: 'INT-1', userId: 'user-B' }));
+
+    const result = await repo.findUserIdsByIssueId('issue-1');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(2);
+    expect(result.value).toContain('user-A');
+    expect(result.value).toContain('user-B');
+  });
+
+  it('returns empty array when no users have the issue', async () => {
+    const result = await repo.findUserIdsByIssueId('nonexistent-issue');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([]);
+  });
+
+  it('does not include users with different issues', async () => {
+    repo.seedIssue(createSyncedIssue({ id: 'issue-1', identifier: 'INT-1', userId: 'user-A' }));
+    repo.seedIssue(createSyncedIssue({ id: 'issue-2', identifier: 'INT-2', userId: 'user-B' }));
+
+    const result = await repo.findUserIdsByIssueId('issue-1');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual(['user-A']);
+  });
+
+  it('returns error when repository is in failure mode', async () => {
+    repo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
+
+    const result = await repo.findUserIdsByIssueId('issue-1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
   });
 });
