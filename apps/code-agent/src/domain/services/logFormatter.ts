@@ -310,7 +310,9 @@ function summarizeJsonArray(content: string): string | undefined {
   } catch {
     return undefined;
   }
+  /* v8 ignore start -- ts-type: JSON.parse of bracket-prefixed content always produces an array; empty array is <200 chars so filtered earlier @preserve */
   if (!Array.isArray(arr) || arr.length === 0) return undefined;
+  /* v8 ignore stop @preserve */
 
   const first = arr[0];
   if (typeof first !== 'object' || first === null) return undefined;
@@ -327,7 +329,9 @@ function summarizeJsonArray(content: string): string | undefined {
   // PR review comments — gh api .../comments (review-level)
   if ('pull_request_review_id' in el && 'path' in el) {
     const login = extractLogin(el);
+    /* v8 ignore start -- ts-type: split('/').pop() on non-empty string always returns a value; ?? fallback is unreachable @preserve */
     const path = typeof el['path'] === 'string' ? el['path'].split('/').pop() ?? el['path'] : '?';
+    /* v8 ignore stop @preserve */
     const line = typeof el['line'] === 'number' ? `:${String(el['line'])}` : '';
     return `${String(n)} review comment${n !== 1 ? 's' : ''} by ${login} on ${path}${line}`;
   }
