@@ -1,10 +1,10 @@
 import type { OrchestratorStatus } from './state.js';
-import type { OAuthState } from '../services/isolation/types.js';
+import type { OAuthState, WorkerType } from '../services/isolation/types.js';
 
 // POST /tasks request
 export interface CreateTaskRequest {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+  workerType: WorkerType;
   prompt: string;
   repository?: string;
   baseBranch?: string;
