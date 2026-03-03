@@ -624,28 +624,22 @@ module "pubsub_whatsapp_webhook_process" {
   ]
 }
 
-# Topic for WhatsApp audio transcription (long-running operations up to 15 min)
-module "pubsub_whatsapp_transcription" {
-  source = "../../modules/pubsub-push"
+# Topic for audio stored events (whatsapp-service → transcription Cloud Function)
+# No push subscription needed — the Cloud Function subscribes via event trigger.
+resource "google_pubsub_topic" "audio_stored" {
+  name    = "intexuraos-audio-stored-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-whatsapp-transcription-${var.environment}"
-  labels         = local.common_labels
+  depends_on = [google_project_service.apis]
+}
 
-  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcribe-audio"
-  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = module.whatsapp_service.service_url
-  ack_deadline_seconds       = 600 # Max allowed by GCP (transcription can take up to 5 min)
-
-  publisher_service_accounts = {
-    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.iam,
-  ]
+# Grant whatsapp-service permission to publish to audio-stored topic
+resource "google_pubsub_topic_iam_member" "whatsapp_publishes_audio_stored" {
+  project = var.project_id
+  topic   = google_pubsub_topic.audio_stored.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${module.iam.service_accounts["whatsapp_service"]}"
 }
 
 # Topic for commands ingest (whatsapp -> commands-agent)
@@ -916,7 +910,6 @@ module "whatsapp_service" {
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
     INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
     INTEXURAOS_WHATSAPP_WABA_ID         = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_WABA_ID"]
-    INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
@@ -925,7 +918,7 @@ module "whatsapp_service" {
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = "intexuraos-whatsapp-media-cleanup-${var.environment}-push"
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC      = module.pubsub_commands_ingest.topic_name
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
-    INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
+    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC         = google_pubsub_topic.audio_stored.name
     INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC       = module.pubsub_approval_reply.topic_name
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC        = "intexuraos-whatsapp-send-${var.environment}"
   })
@@ -1912,6 +1905,60 @@ resource "google_secret_manager_secret_iam_member" "functions_internal_auth_toke
 }
 
 # -----------------------------------------------------------------------------
+# Cloud Functions - Transcription Service Account
+# -----------------------------------------------------------------------------
+
+resource "google_service_account" "transcription_function" {
+  account_id   = "intexuraos-transcription-svc-${var.environment}"
+  display_name = "Transcription Cloud Function Service Account"
+  description  = "Service account for transcription Cloud Function (audio-stored -> transcription-completed)"
+
+  depends_on = [google_project_service.apis]
+}
+
+# Grant transcription SA permission to read from whatsapp media bucket
+resource "google_storage_bucket_iam_member" "transcription_media_reader" {
+  bucket = module.whatsapp_media_bucket.bucket_name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to access Speechmatics secret
+resource "google_secret_manager_secret_iam_member" "transcription_speechmatics" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to access internal auth token secret
+resource "google_secret_manager_secret_iam_member" "transcription_internal_auth" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to receive Eventarc events
+resource "google_project_iam_member" "transcription_eventarc" {
+  project = var.project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to publish to Pub/Sub (for transcription-completed topic)
+resource "google_project_iam_member" "transcription_pubsub_publisher" {
+  project = var.project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to access Sentry DSN secret
+resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# -----------------------------------------------------------------------------
 # Cloud Functions - VM Lifecycle (Start/Stop)
 # -----------------------------------------------------------------------------
 
@@ -2146,6 +2193,86 @@ resource "google_cloud_scheduler_job" "log_cleanup" {
 }
 
 # -----------------------------------------------------------------------------
+# Cloud Functions - Transcription Worker
+# -----------------------------------------------------------------------------
+
+# Topic for transcription completed events (transcription Cloud Function -> whatsapp-service)
+module "pubsub_transcription_completed" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-transcription-completed-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
+  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
+  push_audience              = module.whatsapp_service.service_url
+  ack_deadline_seconds       = 60
+
+  publisher_service_accounts = {
+    transcription_function = google_service_account.transcription_function.email
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.whatsapp_service,
+    google_service_account.transcription_function,
+  ]
+}
+
+module "function_transcription" {
+  source = "../../modules/cloud-function"
+
+  project_id    = var.project_id
+  region        = var.region
+  environment   = var.environment
+  function_name = "intexuraos-transcription-${var.environment}"
+  description   = "Transcribe audio files from WhatsApp using Speechmatics API"
+  entry_point   = "transcribeAudio"
+  runtime       = "nodejs22"
+
+  source_bucket   = google_storage_bucket.cloud_functions_source.name
+  source_object   = "transcription/function.zip"
+  service_account = google_service_account.transcription_function.email
+
+  trigger_type = "pubsub"
+  pubsub_topic = google_pubsub_topic.audio_stored.id
+
+  timeout_seconds    = 540 # 9 minutes - max for Gen2 Cloud Functions
+  available_memory   = "512M"
+  max_instance_count = 10
+
+  env_vars = {
+    INTEXURAOS_ENVIRONMENT                          = var.environment
+    INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
+    INTEXURAOS_USER_SERVICE_URL                     = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
+  }
+
+  secrets = {
+    INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    google_storage_bucket_object.function_placeholder,
+    google_service_account.transcription_function,
+    google_pubsub_topic.audio_stored,
+    module.pubsub_transcription_completed,
+    google_secret_manager_secret_iam_member.transcription_speechmatics,
+    google_secret_manager_secret_iam_member.transcription_internal_auth,
+    google_secret_manager_secret_iam_member.transcription_sentry_dsn,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
 
@@ -2349,5 +2476,20 @@ output "function_log_cleanup_name" {
 output "pubsub_log_cleanup_topic" {
   description = "Pub/Sub topic for log cleanup trigger"
   value       = google_pubsub_topic.log_cleanup.name
+}
+
+output "function_transcription_name" {
+  description = "Transcription Cloud Function name"
+  value       = module.function_transcription.function_name
+}
+
+output "pubsub_audio_stored_topic" {
+  description = "Pub/Sub topic for audio stored events"
+  value       = google_pubsub_topic.audio_stored.name
+}
+
+output "pubsub_transcription_completed_topic" {
+  description = "Pub/Sub topic for transcription completed events"
+  value       = module.pubsub_transcription_completed.topic_name
 }
 
