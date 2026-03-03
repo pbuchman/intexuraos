@@ -86,8 +86,10 @@ Note: The volume of test code does NOT influence complexity. A task with 500 lin
 - Do NOT set labels, state, or assignee on subtasks — the system normalizes these automatically.
 
 **Parallel work breakdown (STRICT REQUIREMENT — NON-NEGOTIABLE):**
+- **MAX 1 SUBTASK PER SERVICE/WORKER/AGENT — NON-NEGOTIABLE.** Service/worker/agent is the boundary for parallel tasks. Never create more than one subtask per service, worker, or agent.
 - Calling subagents during plan execution is NOT optional — it is a strict requirement for the agent executing the plan later.
 - Each subissue MUST have a defined detailed contract with other parts of the system, so it can be executed in parallel by independent agents.
+- Within one task plan, the plan document MUST point out dedicated responsibilities for subagents — what each agent owns and is responsible for.
 - Defining subissues with dependencies between them is a VIOLATION of rules — ALL subissues MUST be executable in parallel, independently.
 - You MUST NOT create any dependencies between issues. The contract on each subissue describes ALL dependencies (types, interfaces, shared schemas) so that each agent can work without waiting on others.
 - Split work by service/package groups. Every subissue must define its input/output boundaries explicitly.
