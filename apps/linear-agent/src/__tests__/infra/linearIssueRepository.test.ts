@@ -80,6 +80,28 @@ describe('linearIssueRepository', () => {
         expect(result.value.syncedAt).toBe('2025-01-04T00:00:00.000Z');
       }
     });
+
+    it('does not overwrite issues from another user with same Linear issue ID', async () => {
+      // Two users connected to the same Linear team see the same issue
+      const userAIssue = createTestIssue({ userId: 'user-A' });
+      const userBIssue = createTestIssue({ userId: 'user-B' });
+
+      await saveLinearIssue(userAIssue);
+      await saveLinearIssue(userBIssue);
+
+      // Both users should have their own copy
+      const userAResult = await listLinearIssuesByUserId('user-A');
+      const userBResult = await listLinearIssuesByUserId('user-B');
+
+      expect(userAResult.ok).toBe(true);
+      expect(userBResult.ok).toBe(true);
+      if (userAResult.ok && userBResult.ok) {
+        expect(userAResult.value).toHaveLength(1);
+        expect(userBResult.value).toHaveLength(1);
+        expect(userAResult.value[0]?.userId).toBe('user-A');
+        expect(userBResult.value[0]?.userId).toBe('user-B');
+      }
+    });
   });
 
   describe('findLinearIssueById', () => {
@@ -140,7 +162,7 @@ describe('linearIssueRepository', () => {
   });
 
   describe('findLinearIssueByIdentifier', () => {
-    it('finds issue by identifier', async () => {
+    it('finds issue by identifier without userId filter', async () => {
       const issue = createTestIssue();
       await saveLinearIssue(issue);
 
@@ -150,6 +172,31 @@ describe('linearIssueRepository', () => {
       if (result.ok) {
         expect(result.value).not.toBeNull();
         expect(result.value?.id).toBe('issue-uuid-1');
+      }
+    });
+
+    it('finds issue by identifier with matching userId', async () => {
+      const issue = createTestIssue();
+      await saveLinearIssue(issue);
+
+      const result = await findLinearIssueByIdentifier('INT-123', 'user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).not.toBeNull();
+        expect(result.value?.id).toBe('issue-uuid-1');
+      }
+    });
+
+    it('returns null when userId does not match', async () => {
+      const issue = createTestIssue();
+      await saveLinearIssue(issue);
+
+      const result = await findLinearIssueByIdentifier('INT-123', 'other-user');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
       }
     });
 
@@ -189,10 +236,10 @@ describe('linearIssueRepository', () => {
   });
 
   describe('deleteLinearIssueById', () => {
-    it('deletes existing issue', async () => {
+    it('deletes existing issue using composite key', async () => {
       await saveLinearIssue(createTestIssue());
 
-      const deleteResult = await deleteLinearIssueById('issue-uuid-1');
+      const deleteResult = await deleteLinearIssueById('issue-uuid-1', 'user-123');
       expect(deleteResult.ok).toBe(true);
 
       const findResult = await findLinearIssueById('issue-uuid-1');
@@ -202,8 +249,23 @@ describe('linearIssueRepository', () => {
       }
     });
 
+    it('does not delete issue when userId does not match', async () => {
+      await saveLinearIssue(createTestIssue());
+
+      // Attempt to delete with wrong userId — should not remove the doc
+      const deleteResult = await deleteLinearIssueById('issue-uuid-1', 'wrong-user');
+      expect(deleteResult.ok).toBe(true);
+
+      // Issue should still exist
+      const findResult = await findLinearIssueById('issue-uuid-1');
+      expect(findResult.ok).toBe(true);
+      if (findResult.ok) {
+        expect(findResult.value).not.toBeNull();
+      }
+    });
+
     it('succeeds even for non-existent issue', async () => {
-      const result = await deleteLinearIssueById('non-existent');
+      const result = await deleteLinearIssueById('non-existent', 'user-123');
       expect(result.ok).toBe(true);
     });
   });

@@ -175,20 +175,20 @@ export interface ProcessedActionRepository {
 
 /** Repository for locally synced Linear issues */
 export interface LinearIssueRepository {
-  /** Save or update a synced issue */
+  /** Save or update a synced issue (uses composite key: userId_issueId) */
   save(issue: SyncedLinearIssue): Promise<Result<SyncedLinearIssue, LinearError>>;
 
-  /** Find issue by Linear UUID */
+  /** Find issue by Linear UUID (field query, not doc key — works without userId) */
   findById(id: string): Promise<Result<SyncedLinearIssue | null, LinearError>>;
 
-  /** Find issue by identifier (e.g., INT-444) */
-  findByIdentifier(identifier: string): Promise<Result<SyncedLinearIssue | null, LinearError>>;
+  /** Find issue by identifier (e.g., INT-444), optionally scoped to a user */
+  findByIdentifier(identifier: string, userId?: string): Promise<Result<SyncedLinearIssue | null, LinearError>>;
 
   /** List all issues for a user */
   listByUserId(userId: string): Promise<Result<SyncedLinearIssue[], LinearError>>;
 
-  /** Delete issue by ID */
-  deleteById(id: string): Promise<Result<void, LinearError>>;
+  /** Delete issue by Linear UUID, scoped to user (uses composite key: userId_issueId) */
+  deleteById(id: string, userId: string): Promise<Result<void, LinearError>>;
 }
 
 /** Error from code-agent HTTP calls */

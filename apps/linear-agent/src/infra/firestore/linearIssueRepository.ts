@@ -1,6 +1,9 @@
 /**
  * Firestore repository for locally synced Linear issues.
  * Owned by linear-agent - stores issues synced via webhooks and full-sync.
+ *
+ * Document keys use composite format: `${userId}_${issueId}` to prevent
+ * cross-user overwrites when multiple users are connected to the same Linear team.
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
@@ -35,12 +38,17 @@ interface SyncedLinearIssueDoc {
 
 const COLLECTION_NAME = 'linear_issues';
 
+/** Build composite document key to prevent cross-user overwrites */
+function compositeKey(userId: string, issueId: string): string {
+  return `${userId}_${issueId}`;
+}
+
 export async function saveLinearIssue(
   issue: SyncedLinearIssue
 ): Promise<Result<SyncedLinearIssue, LinearError>> {
   try {
     const db = getFirestore();
-    const docRef = db.collection(COLLECTION_NAME).doc(issue.id);
+    const docRef = db.collection(COLLECTION_NAME).doc(compositeKey(issue.userId, issue.id));
 
     const doc: SyncedLinearIssueDoc = {
       id: issue.id,
@@ -73,16 +81,28 @@ export async function saveLinearIssue(
   }
 }
 
+/**
+ * Find issue by Linear UUID using a field query (not doc key lookup).
+ * Works without userId — used by webhook comment handler which only has the Linear issue ID.
+ */
 export async function findLinearIssueById(
   id: string
 ): Promise<Result<SyncedLinearIssue | null, LinearError>> {
   try {
     const db = getFirestore();
-    const doc = await db.collection(COLLECTION_NAME).doc(id).get();
-    if (!doc.exists) return ok(null);
+    const snapshot = await db
+      .collection(COLLECTION_NAME)
+      .where('id', '==', id)
+      .limit(1)
+      .get();
 
-    const data = doc.data() as SyncedLinearIssueDoc;
+    if (snapshot.empty) return ok(null);
+
+    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    const data = snapshot.docs[0]?.data() as SyncedLinearIssueDoc | undefined;
+    if (data === undefined) return ok(null);
     return ok(docToIssue(data));
+    /* v8 ignore stop @preserve */
   } catch (error) {
     return err({
       code: 'INTERNAL_ERROR',
@@ -91,16 +111,25 @@ export async function findLinearIssueById(
   }
 }
 
+/**
+ * Find issue by identifier (e.g., INT-123).
+ * When userId is provided, scopes the query to that user to prevent cross-user leaks.
+ */
 export async function findLinearIssueByIdentifier(
-  identifier: string
+  identifier: string,
+  userId?: string
 ): Promise<Result<SyncedLinearIssue | null, LinearError>> {
   try {
     const db = getFirestore();
-    const snapshot = await db
+    let query = db
       .collection(COLLECTION_NAME)
-      .where('identifier', '==', identifier)
-      .limit(1)
-      .get();
+      .where('identifier', '==', identifier);
+
+    if (userId !== undefined) {
+      query = query.where('userId', '==', userId);
+    }
+
+    const snapshot = await query.limit(1).get();
 
     if (snapshot.empty) return ok(null);
 
@@ -137,10 +166,13 @@ export async function listLinearIssuesByUserId(
   }
 }
 
-export async function deleteLinearIssueById(id: string): Promise<Result<void, LinearError>> {
+/**
+ * Delete issue by Linear UUID, scoped to user via composite key.
+ */
+export async function deleteLinearIssueById(id: string, userId: string): Promise<Result<void, LinearError>> {
   try {
     const db = getFirestore();
-    await db.collection(COLLECTION_NAME).doc(id).delete();
+    await db.collection(COLLECTION_NAME).doc(compositeKey(userId, id)).delete();
     return ok(undefined);
   } catch (error) {
     return err({

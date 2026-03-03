@@ -261,6 +261,160 @@ describe('fullSync', () => {
   });
 });
 
+describe('fullSync — multi-user same-team isolation', () => {
+  let issueRepo: FakeLinearIssueRepository;
+  let connectionRepo: FakeLinearConnectionRepository;
+  let linearClient: FakeLinearApiClient;
+  let deps: FullSyncDeps;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-15T12:00:00.000Z'));
+    issueRepo = new FakeLinearIssueRepository();
+    connectionRepo = new FakeLinearConnectionRepository();
+    linearClient = new FakeLinearApiClient();
+    deps = {
+      issueRepo,
+      connectionRepo,
+      linearClient,
+      logger: createFakeLogger(),
+    };
+  });
+
+  it('syncing User A does not overwrite User B issues on the same team', async () => {
+    // Both users connected to the same team
+    connectionRepo.seedConnection({
+      userId: 'user-A',
+      apiKey: 'api-key-a',
+      teamId: 'shared-team',
+      teamName: 'Shared',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+    connectionRepo.seedConnection({
+      userId: 'user-B',
+      apiKey: 'api-key-b',
+      teamId: 'shared-team',
+      teamName: 'Shared',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+
+    // Same issues from the same Linear team
+    linearClient.seedIssue(createTestApiIssue({ id: 'shared-1', identifier: 'INT-1' }));
+    linearClient.seedIssue(createTestApiIssue({ id: 'shared-2', identifier: 'INT-2' }));
+
+    // Sync User B first
+    const resultB = await fullSync('user-B', deps);
+    expect(resultB.ok).toBe(true);
+    if (resultB.ok) {
+      expect(resultB.value.created).toBe(2);
+    }
+
+    // Now sync User A — should NOT overwrite User B's issues
+    const resultA = await fullSync('user-A', deps);
+    expect(resultA.ok).toBe(true);
+    if (resultA.ok) {
+      expect(resultA.value.created).toBe(2);
+    }
+
+    // Verify both users have their own copies
+    const userAIssues = await issueRepo.listByUserId('user-A');
+    const userBIssues = await issueRepo.listByUserId('user-B');
+
+    expect(userAIssues.ok).toBe(true);
+    expect(userBIssues.ok).toBe(true);
+    if (userAIssues.ok && userBIssues.ok) {
+      expect(userAIssues.value).toHaveLength(2);
+      expect(userBIssues.value).toHaveLength(2);
+    }
+  });
+
+  it('stale issue deletion is scoped to the syncing user only', async () => {
+    // Both users connected to the same team
+    connectionRepo.seedConnection({
+      userId: 'user-A',
+      apiKey: 'api-key-a',
+      teamId: 'shared-team',
+      teamName: 'Shared',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+    connectionRepo.seedConnection({
+      userId: 'user-B',
+      apiKey: 'api-key-b',
+      teamId: 'shared-team',
+      teamName: 'Shared',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+
+    // Pre-seed: User A has issues [1,2,3], User B has issues [1,2]
+    issueRepo.seedIssue({
+      id: 'shared-1', identifier: 'INT-1', title: 'Issue 1', description: null,
+      state: 'In Progress', stateType: 'started', priority: 2,
+      assigneeId: null, assigneeName: null, labels: [],
+      url: 'https://linear.app/issue/INT-1', userId: 'user-A',
+      createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z',
+      syncedAt: '2025-01-01T00:00:00.000Z', teamId: 'shared-team', parentId: null,
+    });
+    issueRepo.seedIssue({
+      id: 'shared-2', identifier: 'INT-2', title: 'Issue 2', description: null,
+      state: 'In Progress', stateType: 'started', priority: 2,
+      assigneeId: null, assigneeName: null, labels: [],
+      url: 'https://linear.app/issue/INT-2', userId: 'user-A',
+      createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z',
+      syncedAt: '2025-01-01T00:00:00.000Z', teamId: 'shared-team', parentId: null,
+    });
+    issueRepo.seedIssue({
+      id: 'shared-3', identifier: 'INT-3', title: 'Issue 3', description: null,
+      state: 'In Progress', stateType: 'started', priority: 2,
+      assigneeId: null, assigneeName: null, labels: [],
+      url: 'https://linear.app/issue/INT-3', userId: 'user-A',
+      createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z',
+      syncedAt: '2025-01-01T00:00:00.000Z', teamId: 'shared-team', parentId: null,
+    });
+    issueRepo.seedIssue({
+      id: 'shared-1', identifier: 'INT-1', title: 'Issue 1', description: null,
+      state: 'In Progress', stateType: 'started', priority: 2,
+      assigneeId: null, assigneeName: null, labels: [],
+      url: 'https://linear.app/issue/INT-1', userId: 'user-B',
+      createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z',
+      syncedAt: '2025-01-01T00:00:00.000Z', teamId: 'shared-team', parentId: null,
+    });
+    issueRepo.seedIssue({
+      id: 'shared-2', identifier: 'INT-2', title: 'Issue 2', description: null,
+      state: 'In Progress', stateType: 'started', priority: 2,
+      assigneeId: null, assigneeName: null, labels: [],
+      url: 'https://linear.app/issue/INT-2', userId: 'user-B',
+      createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z',
+      syncedAt: '2025-01-01T00:00:00.000Z', teamId: 'shared-team', parentId: null,
+    });
+
+    // Linear API now only returns issues [1,2] (issue 3 was removed)
+    linearClient.seedIssue(createTestApiIssue({ id: 'shared-1', identifier: 'INT-1' }));
+    linearClient.seedIssue(createTestApiIssue({ id: 'shared-2', identifier: 'INT-2' }));
+
+    // Sync User A — should delete only User A's issue 3, not touch User B
+    const result = await fullSync('user-A', deps);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.deleted).toBe(1);
+    }
+
+    // User B's issues should be completely untouched
+    const userBIssues = await issueRepo.listByUserId('user-B');
+    expect(userBIssues.ok).toBe(true);
+    if (userBIssues.ok) {
+      expect(userBIssues.value).toHaveLength(2);
+    }
+  });
+});
+
 describe('fullSyncAllUsers', () => {
   let issueRepo: FakeLinearIssueRepository;
   let connectionRepo: FakeLinearConnectionRepository;
@@ -302,7 +456,7 @@ describe('fullSyncAllUsers', () => {
     });
   });
 
-  it('syncs all connected users', async () => {
+  it('syncs all connected users with isolated data per user', async () => {
     linearClient.seedIssue({
       id: 'issue-1',
       identifier: 'INT-1',
@@ -340,6 +494,23 @@ describe('fullSyncAllUsers', () => {
     if (result.ok) {
       expect(result.value.userCount).toBe(2);
       expect(result.value.totalIssues).toBe(4); // 2 issues per user (same team returns same issues)
+    }
+
+    // Verify each user has their own isolated copy
+    const user1Issues = await issueRepo.listByUserId('user-1');
+    const user2Issues = await issueRepo.listByUserId('user-2');
+    expect(user1Issues.ok).toBe(true);
+    expect(user2Issues.ok).toBe(true);
+    if (user1Issues.ok && user2Issues.ok) {
+      expect(user1Issues.value).toHaveLength(2);
+      expect(user2Issues.value).toHaveLength(2);
+      // Each user's issues should reference that user's ID
+      for (const issue of user1Issues.value) {
+        expect(issue.userId).toBe('user-1');
+      }
+      for (const issue of user2Issues.value) {
+        expect(issue.userId).toBe('user-2');
+      }
     }
   });
 
