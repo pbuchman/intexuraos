@@ -211,6 +211,21 @@ describe('WorktreeManager', () => {
       expect(existsSync(settingsPath)).toBe(false);
     });
 
+    it('should warn when settings.local.json template path configured but file not found', async () => {
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+      const missingPath = join(tempDir, 'missing-template.json');
+      const WM = await loadWorktreeManager();
+      const manager = new WM({ ...mockConfig, settingsLocalTemplatePath: missingPath }, mockLogger);
+
+      await manager.createWorktree('task-warn-settings', 'feature-branch');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        { templatePath: missingPath },
+        'settings.local.json template path configured but file not found on disk'
+      );
+      warnSpy.mockRestore();
+    });
+
     it('should skip MCP config if template does not exist', async () => {
       const WM = await loadWorktreeManager();
       const manager = new WM(

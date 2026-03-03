@@ -136,6 +136,7 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           serviceUrl: process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud',
           gitHubPRClient: services.gitHubPRClient,
           userServiceClient: services.userServiceClient,
+          whatsappNotifier: services.whatsappNotifier,
           firestore: services.firestore,
         },
         {

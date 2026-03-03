@@ -39,6 +39,7 @@ NON_EXPORTABLE_SECRETS=(
 
 declare -a TERRAFORM_SECRETS=()
 SECRET_MAP_FILE=""
+PARALLEL_TEMP_DIR=""
 
 declare -a EXPORTED_SECRETS=()
 declare -a SKIPPED_NON_EXPORTABLE=()
@@ -55,7 +56,7 @@ declare -a SKIPPED_INPUT=()
 usage() {
   cat <<EOF
 Usage:
-  ${SCRIPT_NAME} [environment] [--add-new] [--project-id <project_id>]
+  ${SCRIPT_NAME} [environment] [--add-new] [--project-id <project_id>] [--output <path>]
 
 Modes:
   default        Non-interactive sync from GCP Secret Manager to .envrc
@@ -67,6 +68,7 @@ Arguments:
 Options:
   --add-new      Prompt for missing secret values (no overwrite flow)
   --project-id   Override GCP project ID
+  --output       Override output file path (default: <repo>/.envrc)
   -h, --help     Show this help
 
 Project ID resolution order:
@@ -84,6 +86,9 @@ fail() {
 cleanup() {
   if [[ -n "${SECRET_MAP_FILE}" && -f "${SECRET_MAP_FILE}" ]]; then
     rm -f "${SECRET_MAP_FILE}"
+  fi
+  if [[ -n "${PARALLEL_TEMP_DIR}" && -d "${PARALLEL_TEMP_DIR}" ]]; then
+    rm -rf "${PARALLEL_TEMP_DIR}"
   fi
 }
 
@@ -109,9 +114,9 @@ extract_terraform_secret_entries() {
   local tf_file="$1"
 
   awk '
-    /module[[:space:]]+"secret_manager"[[:space:]]*{/ { in_module = 1; next }
-    in_module && /secrets[[:space:]]*=[[:space:]]*{/ { in_secrets = 1; next }
-    in_secrets && /^[[:space:]]*}[[:space:]]*$/ { in_secrets = 0; in_module = 0; next }
+    /module[[:space:]]+"secret_manager"[[:space:]]*[{]/ { in_module = 1; next }
+    in_module && /secrets[[:space:]]*=[[:space:]]*[{]/ { in_secrets = 1; next }
+    in_secrets && /^[[:space:]]*[}][[:space:]]*$/ { in_secrets = 0; in_module = 0; next }
     in_secrets {
       # Use quote splitting for macOS awk compatibility (no gawk-only match() array arg).
       quote_count = split($0, parts, "\"")
@@ -163,57 +168,72 @@ get_secret_description() {
   printf '%s' "${description}"
 }
 
-secret_exists() {
-  local secret_name="$1"
-  gcloud secrets describe "${secret_name}" --project="${PROJECT_ID}" --quiet >/dev/null 2>&1
-}
+_run_parallel_fetch() {
+  local secrets_list_file="$1"
 
-secret_has_version() {
-  local secret_name="$1"
-  local listed_versions=""
-  if ! listed_versions="$(
-    gcloud secrets versions list "${secret_name}" \
-      --project="${PROJECT_ID}" \
-      --limit=1 \
-      --format="value(name)" 2>/dev/null
-  )"; then
-    return 2
+  if ! python3 - "${PROJECT_ID}" "${PARALLEL_TEMP_DIR}" "${secrets_list_file}" << 'PYTHON_FETCH'
+import sys, json, base64, ssl, os
+from concurrent.futures import ThreadPoolExecutor
+from urllib.request import Request, urlopen
+from subprocess import check_output
+
+project_id, temp_dir, secrets_file = sys.argv[1], sys.argv[2], sys.argv[3]
+
+ssl_ctx = ssl.create_default_context()
+try:
+    import certifi
+    ssl_ctx.load_verify_locations(certifi.where())
+except ImportError:
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
+
+token = check_output(["gcloud", "auth", "print-access-token"], text=True).strip()
+base_url = f"https://secretmanager.googleapis.com/v1/projects/{project_id}/secrets"
+headers = {"Authorization": f"Bearer {token}"}
+
+existing = set()
+page_url = f"{base_url}?filter=name%3AINTEXURAOS_&pageSize=100"
+while page_url:
+    resp = json.loads(urlopen(Request(page_url, headers=headers), context=ssl_ctx).read())
+    for s in resp.get("secrets", []):
+        existing.add(s["name"].split("/")[-1])
+    nxt = resp.get("nextPageToken")
+    page_url = f"{base_url}?filter=name%3AINTEXURAOS_&pageSize=100&pageToken={nxt}" if nxt else None
+
+with open(os.path.join(temp_dir, "_existing.txt"), "w") as f:
+    f.write("\n".join(sorted(existing)))
+
+with open(secrets_file) as f:
+    to_check = [line.strip() for line in f if line.strip()]
+to_fetch = [s for s in to_check if s in existing]
+
+def fetch(name):
+    url = f"{base_url}/{name}/versions/latest:access"
+    try:
+        data = json.loads(urlopen(Request(url, headers=headers), context=ssl_ctx).read())
+        value = base64.b64decode(data["payload"]["data"]).decode()
+        with open(os.path.join(temp_dir, f"{name}.status"), "w") as sf:
+            sf.write("present")
+        with open(os.path.join(temp_dir, f"{name}.value"), "w") as vf:
+            vf.write(value)
+    except Exception:
+        try:
+            list_url = f"{base_url}/{name}/versions?pageSize=1"
+            list_data = json.loads(urlopen(Request(list_url, headers=headers), context=ssl_ctx).read())
+            status = "missing-version" if not list_data.get("versions") else "unreadable"
+        except Exception:
+            status = "unreadable"
+        with open(os.path.join(temp_dir, f"{name}.status"), "w") as sf:
+            sf.write(status)
+
+with ThreadPoolExecutor(max_workers=20) as pool:
+    list(pool.map(fetch, to_fetch))
+
+print(f"  Listed {len(existing)} secrets, fetched {len(to_fetch)} values")
+PYTHON_FETCH
+  then
+    fail "Parallel fetch failed. Check python3, gcloud auth, and network."
   fi
-
-  if [[ -n "${listed_versions}" ]]; then
-    return 0
-  fi
-
-  return 1
-}
-
-get_secret_status() {
-  local secret_name="$1"
-
-  if ! secret_exists "${secret_name}"; then
-    echo "missing-secret"
-    return 0
-  fi
-
-  if secret_has_version "${secret_name}"; then
-    echo "present"
-    return 0
-  fi
-
-  local version_result=$?
-  if [[ ${version_result} -eq 1 ]]; then
-    echo "missing-version"
-    return 0
-  fi
-
-  echo "unreadable"
-}
-
-read_latest_secret_value() {
-  local secret_name="$1"
-  gcloud secrets versions access latest \
-    --secret="${secret_name}" \
-    --project="${PROJECT_ID}" 2>/dev/null
 }
 
 add_secret_value() {
@@ -238,46 +258,14 @@ append_envrc_footer() {
 
 # === LOCAL OVERRIDES ===
 # Load .envrc.local if exists (for local dev overrides)
-[[ -f .envrc.local ]] && source .envrc.local
+[[ -f .envrc.local ]] && source .envrc.local || true
 EOF
-}
-
-print_sync_progress() {
-  local current="$1"
-  local total="$2"
-
-  if [[ "${total}" -le 0 ]]; then
-    return
-  fi
-
-  if [[ -t 1 ]]; then
-    printf '\rSync progress: %d/%d' "${current}" "${total}"
-    return
-  fi
-
-  if [[ "${current}" -eq 1 || $(( current % 10 )) -eq 0 || "${current}" -eq "${total}" ]]; then
-    echo "Sync progress: ${current}/${total}"
-  fi
-}
-
-finish_sync_progress() {
-  local total="$1"
-
-  if [[ "${total}" -le 0 ]]; then
-    return
-  fi
-
-  if [[ -t 1 ]]; then
-    printf '\rSync progress: %d/%d\n' "${total}" "${total}"
-  fi
 }
 
 sync_and_classify() {
   local secret_name=""
   local secret_status=""
   local secret_value=""
-  local total_secrets=0
-  local processed_secrets=0
 
   EXPORTED_SECRETS=()
   SKIPPED_NON_EXPORTABLE=()
@@ -289,28 +277,48 @@ sync_and_classify() {
 
   write_envrc_header
 
-  total_secrets=${#TERRAFORM_SECRETS[@]}
-  if [[ "${total_secrets}" -gt 0 ]]; then
-    echo "Syncing Terraform-defined secrets..."
+  if [[ ${#TERRAFORM_SECRETS[@]} -eq 0 ]]; then
+    append_envrc_footer
+    return
   fi
 
+  echo "Syncing Terraform-defined secrets..."
+
+  PARALLEL_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sync-secrets-fetch.XXXXXX")"
+  local secrets_list_file="${PARALLEL_TEMP_DIR}/_secrets_list.txt"
+  printf '%s\n' "${TERRAFORM_SECRETS[@]}" > "${secrets_list_file}"
+
+  _run_parallel_fetch "${secrets_list_file}"
+
+  local existing_file="${PARALLEL_TEMP_DIR}/_existing.txt"
+
   for secret_name in "${TERRAFORM_SECRETS[@]}"; do
-    processed_secrets=$((processed_secrets + 1))
-    secret_status="$(get_secret_status "${secret_name}")"
+    if ! grep -qFx "${secret_name}" "${existing_file}" 2>/dev/null; then
+      MISSING_SECRETS+=("${secret_name}")
+      continue
+    fi
+
+    local status_file="${PARALLEL_TEMP_DIR}/${secret_name}.status"
+    local value_file="${PARALLEL_TEMP_DIR}/${secret_name}.value"
+
+    if [[ ! -f "${status_file}" ]]; then
+      UNREADABLE_SECRETS+=("${secret_name}")
+      continue
+    fi
+
+    secret_status="$(cat "${status_file}")"
 
     case "${secret_status}" in
       present)
         if is_non_exportable_secret "${secret_name}"; then
           SKIPPED_NON_EXPORTABLE+=("${secret_name}")
-        elif ! secret_value="$(read_latest_secret_value "${secret_name}")"; then
-          UNREADABLE_SECRETS+=("${secret_name}")
-        else
+        elif [[ -f "${value_file}" ]]; then
+          secret_value="$(cat "${value_file}")"
           printf 'export %s=%q\n' "${secret_name}" "${secret_value}" >> "${ENVRC_FILE}"
           EXPORTED_SECRETS+=("${secret_name}")
+        else
+          UNREADABLE_SECRETS+=("${secret_name}")
         fi
-        ;;
-      missing-secret)
-        MISSING_SECRETS+=("${secret_name}")
         ;;
       missing-version)
         MISSING_VERSIONS+=("${secret_name}")
@@ -324,11 +332,8 @@ sync_and_classify() {
         UNREADABLE_SECRETS+=("${secret_name}")
         ;;
     esac
-
-    print_sync_progress "${processed_secrets}" "${total_secrets}"
   done
 
-  finish_sync_progress "${total_secrets}"
   append_envrc_footer
 }
 
@@ -491,6 +496,16 @@ parse_args() {
         CLI_PROJECT_ID="${1#*=}"
         shift
         ;;
+      --output)
+        shift
+        [[ $# -gt 0 ]] || fail "--output requires a path"
+        ENVRC_FILE="$1"
+        shift
+        ;;
+      --output=*)
+        ENVRC_FILE="${1#*=}"
+        shift
+        ;;
       -h|--help)
         usage
         exit 0
@@ -514,6 +529,7 @@ main() {
   parse_args "$@"
 
   command -v gcloud >/dev/null 2>&1 || fail "gcloud CLI is not installed or not in PATH"
+  command -v python3 >/dev/null 2>&1 || fail "python3 is required for parallel secret fetching"
   resolve_project_id
 
   local tf_file="${REPO_ROOT}/terraform/environments/${ENVIRONMENT}/main.tf"
