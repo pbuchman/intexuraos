@@ -634,6 +634,18 @@ resource "google_pubsub_topic" "audio_stored" {
   depends_on = [google_project_service.apis]
 }
 
+# Dead-letter topic for audio-stored events.
+# Eventarc-triggered Cloud Functions have no built-in DLQ — if the function
+# exhausts its retry budget the message is lost. This topic captures those
+# failures for inspection and replay.
+resource "google_pubsub_topic" "audio_stored_dlq" {
+  name    = "intexuraos-audio-stored-${var.environment}-dlq"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
 # Grant whatsapp-service permission to publish to audio-stored topic
 resource "google_pubsub_topic_iam_member" "whatsapp_publishes_audio_stored" {
   project = var.project_id
@@ -1906,53 +1918,6 @@ resource "google_secret_manager_secret_iam_member" "functions_internal_auth_toke
 }
 
 # -----------------------------------------------------------------------------
-# Cloud Functions - Transcription Service Account
-# -----------------------------------------------------------------------------
-
-resource "google_service_account" "transcription_function" {
-  account_id   = "intexuraos-transcription-svc-${var.environment}"
-  display_name = "Transcription Cloud Function Service Account"
-  description  = "Service account for transcription Cloud Function (audio-stored -> transcription-completed)"
-
-  depends_on = [google_project_service.apis]
-}
-
-# Grant transcription SA permission to read from whatsapp media bucket
-resource "google_storage_bucket_iam_member" "transcription_media_reader" {
-  bucket = module.whatsapp_media_bucket.bucket_name
-  role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${google_service_account.transcription_function.email}"
-}
-
-# Grant transcription SA permission to access Speechmatics secret
-resource "google_secret_manager_secret_iam_member" "transcription_speechmatics" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.transcription_function.email}"
-}
-
-# Grant transcription SA permission to access internal auth token secret
-resource "google_secret_manager_secret_iam_member" "transcription_internal_auth" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.transcription_function.email}"
-}
-
-# Grant transcription SA permission to receive Eventarc events
-resource "google_project_iam_member" "transcription_eventarc" {
-  project = var.project_id
-  role    = "roles/eventarc.eventReceiver"
-  member  = "serviceAccount:${google_service_account.transcription_function.email}"
-}
-
-# Grant transcription SA permission to access Sentry DSN secret
-resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.transcription_function.email}"
-}
-
-# -----------------------------------------------------------------------------
 # Cloud Functions - VM Lifecycle (Start/Stop)
 # -----------------------------------------------------------------------------
 
@@ -2190,6 +2155,49 @@ resource "google_cloud_scheduler_job" "log_cleanup" {
 # Cloud Functions - Transcription Worker
 # -----------------------------------------------------------------------------
 
+resource "google_service_account" "transcription_function" {
+  account_id   = "intexuraos-transcription-fn-${var.environment}"
+  display_name = "Transcription Cloud Function Service Account"
+  description  = "Service account for transcription Cloud Function (audio-stored -> transcription-completed)"
+
+  depends_on = [google_project_service.apis]
+}
+
+# Grant transcription SA permission to read from whatsapp media bucket
+resource "google_storage_bucket_iam_member" "transcription_media_reader" {
+  bucket = module.whatsapp_media_bucket.bucket_name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to access Speechmatics secret
+resource "google_secret_manager_secret_iam_member" "transcription_speechmatics" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to access internal auth token secret
+resource "google_secret_manager_secret_iam_member" "transcription_internal_auth" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to receive Eventarc events
+resource "google_project_iam_member" "transcription_eventarc" {
+  project = var.project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to access Sentry DSN secret
+resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
 # Topic for transcription completed events (transcription Cloud Function -> whatsapp-service)
 module "pubsub_transcription_completed" {
   source = "../../modules/pubsub-push"
@@ -2242,8 +2250,9 @@ module "function_transcription" {
     INTEXURAOS_ENVIRONMENT                          = var.environment
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
-    INTEXURAOS_USER_SERVICE_URL                     = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
+    # User-service URL is needed for internal auth token validation on callback
+    INTEXURAOS_USER_SERVICE_URL      = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_WHATSAPP_MEDIA_BUCKET = module.whatsapp_media_bucket.bucket_name
   }
 
   secrets = {
@@ -2263,6 +2272,8 @@ module "function_transcription" {
     google_secret_manager_secret_iam_member.transcription_speechmatics,
     google_secret_manager_secret_iam_member.transcription_internal_auth,
     google_secret_manager_secret_iam_member.transcription_sentry_dsn,
+    google_storage_bucket_iam_member.transcription_media_reader,
+    google_project_iam_member.transcription_eventarc,
   ]
 }
 
