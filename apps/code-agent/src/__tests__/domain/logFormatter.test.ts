@@ -1437,5 +1437,108 @@ describe('formatLogChunk', () => {
       const result = formatLogChunk(toolResult(bad), 0, ts());
       expect(result[0]?.text).toContain('  \u2192 [not valid json');
     });
+
+    it('extractLogin returns ? when user field is missing', () => {
+      const reviews = JSON.stringify([{
+        submitted_at: '2026-01-01T00:00:00Z',
+        state: 'APPROVED',
+        html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-1',
+        body: 'x'.repeat(200),
+      }]);
+      const result = formatLogChunk(toolResult(reviews), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 PR review: ? APPROVED');
+    });
+
+    it('extractLogin returns ? when user.login is not a string', () => {
+      const reviews = JSON.stringify([{
+        submitted_at: '2026-01-01T00:00:00Z',
+        state: 'CHANGES_REQUESTED',
+        html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-2',
+        user: { login: 42 },
+        body: 'x'.repeat(200),
+      }]);
+      const result = formatLogChunk(toolResult(reviews), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 PR review: ? CHANGES_REQUESTED');
+    });
+
+    it('PR review with non-string state falls back to ?', () => {
+      const reviews = JSON.stringify([{
+        submitted_at: '2026-01-01T00:00:00Z',
+        state: null,
+        html_url: 'https://github.com/org/repo/pull/1#pullrequestreview-3',
+        user: { login: 'bot' },
+        body: 'x'.repeat(200),
+      }]);
+      const result = formatLogChunk(toolResult(reviews), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 PR review: bot ?');
+    });
+
+    it('review comments (2 items) shows plural form', () => {
+      const comment = {
+        pull_request_review_id: 12345,
+        path: 'src/index.ts',
+        line: 10,
+        body: 'x'.repeat(100),
+        user: { login: 'reviewer' },
+        html_url: 'https://github.com/org/repo/pull/1#discussion_r1',
+      };
+      const comments = JSON.stringify([comment, { ...comment, html_url: 'https://github.com/org/repo/pull/1#discussion_r2' }]);
+      const result = formatLogChunk(toolResult(comments), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 2 review comments by reviewer on index.ts:10');
+    });
+
+    it('review comment with non-string path falls back to ?', () => {
+      const comments = JSON.stringify([{
+        pull_request_review_id: 99,
+        path: 42,
+        body: 'x'.repeat(200),
+        user: { login: 'reviewer' },
+        html_url: 'https://github.com/org/repo/pull/1#discussion_r3',
+      }]);
+      const result = formatLogChunk(toolResult(comments), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 1 review comment by reviewer on ?');
+    });
+
+    it('array of primitives returns undefined (passes through)', () => {
+      // Array where first element is not an object — exceeds 200 chars
+      const arr = JSON.stringify(Array.from({ length: 30 }, (_, i) => `string-value-${String(i)}-${'x'.repeat(5)}`));
+      const result = formatLogChunk(toolResult(arr), 0, ts());
+      // Should pass through to normal truncation, not summarized
+      expect(result[0]?.text).toContain('  \u2192 ');
+      expect(result[0]?.text).not.toContain(' items');
+    });
+
+    it('array with keyed objects shows typeHint with key names', () => {
+      const arr = JSON.stringify(Array.from({ length: 10 }, () => ({ ['k' + 'x'.repeat(20)]: 'v' })));
+      const result = formatLogChunk(toolResult(arr), 0, ts());
+      expect(result[0]?.text).toMatch(/\[10 items \(/);
+    });
+
+    it('array of empty objects shows no typeHint', () => {
+      // 67 empty objects: [{},{},{},...] = 67*3 + 66 commas + 2 brackets = 269 chars > 200
+      const arr = JSON.stringify(Array.from({ length: 67 }, () => ({})));
+      const result = formatLogChunk(toolResult(arr), 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 [67 items]');
+    });
+  });
+
+  describe('tool result truncation', () => {
+    function toolResult(content: string): string {
+      return JSON.stringify({ type: 'tool_result', content });
+    }
+
+    it('truncates tool result exceeding char and line thresholds', () => {
+      // Create content > 2048 chars AND > 50 lines (HEAD_LINES=10 + TAIL_LINES=40)
+      const longLines = Array.from({ length: 60 }, (_, i) => `line ${String(i + 1)}: ${'x'.repeat(40)}`);
+      const content = longLines.join('\n');
+      const result = formatLogChunk(toolResult(content), 0, ts());
+      expect(result[0]?.text).toContain('[... 10 lines omitted ...]');
+      // First line should have the prefix
+      expect(result[0]?.text).toMatch(/^ {2}\u2192 line 1:/);
+      // Should contain the tail lines
+      expect(result[0]?.text).toContain('line 60:');
+      // Should NOT contain the omitted middle lines
+      expect(result[0]?.text).not.toContain('line 15:');
+    });
   });
 });
