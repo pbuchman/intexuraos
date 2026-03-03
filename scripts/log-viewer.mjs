@@ -33,22 +33,22 @@ const NAME_MAP = {
   'user-service': 'user',
   'code-age': 'code',
   'code-agent': 'code',
-  'research': 'research',
+  research: 'research',
   'research-agent': 'research',
-  'command': 'commands',
-  'commands': 'commands',
+  command: 'commands',
+  commands: 'commands',
   'commands-agent': 'commands',
   'actions-': 'actions',
-  'actions': 'actions',
+  actions: 'actions',
   'actions-agent': 'actions',
   'todos-ag': 'todos',
   'todos-agent': 'todos',
   'notes-ag': 'notes',
   'notes-agent': 'notes',
-  'bookmark': 'bookmarks',
+  bookmark: 'bookmarks',
   'bookmarks-agent': 'bookmarks',
-  'calenda': 'calendar',
-  'calendar': 'calendar',
+  calenda: 'calendar',
+  calendar: 'calendar',
   'calendar-agent': 'calendar',
   'chat-age': 'chat',
   'chat-agent': 'chat',
@@ -61,7 +61,7 @@ const NAME_MAP = {
   'web-agent': 'web-agent',
   'image-se': 'image',
   'image-service': 'image',
-  'whatsapp': 'whatsapp',
+  whatsapp: 'whatsapp',
   'whatsapp-service': 'whatsapp',
   'notion-s': 'notion',
   'notion-service': 'notion',
@@ -69,7 +69,7 @@ const NAME_MAP = {
   'app-settings-service': 'settings',
   'mobile-n': 'notifs',
   'mobile-notifications-service': 'notifs',
-  'web': 'web',
+  web: 'web',
 };
 
 const NAME_WIDTH = 10;
@@ -144,12 +144,18 @@ function isNoise(message, extras) {
 
 function levelStyle(level) {
   switch (level) {
-    case 'ERROR': return { symbol: '\u2717', color: RED };
-    case 'FATAL': return { symbol: '\u2717', color: RED };
-    case 'WARN':  return { symbol: '\u26a0', color: YELLOW };
-    case 'INFO':  return { symbol: ' ', color: '' };
-    case 'DEBUG': return { symbol: ' ', color: GREY };
-    default:      return { symbol: ' ', color: GREY };
+    case 'ERROR':
+      return { symbol: '\u2717', color: RED };
+    case 'FATAL':
+      return { symbol: '\u2717', color: RED };
+    case 'WARN':
+      return { symbol: '\u26a0', color: YELLOW };
+    case 'INFO':
+      return { symbol: ' ', color: '' };
+    case 'DEBUG':
+      return { symbol: ' ', color: GREY };
+    default:
+      return { symbol: ' ', color: GREY };
   }
 }
 

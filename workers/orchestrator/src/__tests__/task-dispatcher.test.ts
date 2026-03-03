@@ -3137,7 +3137,9 @@ describe('TaskDispatcher', () => {
       onLog(rateLimitJson + '\n');
 
       const formatted = findFormattedChunk('[rate-limit]');
-      expect(formatted).toContain('[rate-limit] allowed five_hour resets=');
+      expect(formatted).toContain('[rate-limit] status=allowed type=five_hour resets=');
+      expect(formatted).toContain('overage=rejected');
+      expect(formatted).toContain('reason=org_level_disabled');
       expect(formatted).not.toContain('uuid');
       expect(formatted).not.toContain('session_id');
     });
@@ -3152,7 +3154,10 @@ describe('TaskDispatcher', () => {
       onLog(rateLimitJson + '\n');
 
       const formatted = findFormattedChunk('[rate-limit]');
-      expect(formatted).toContain('[rate-limit] allowed');
+      expect(formatted).toContain('[rate-limit] status=allowed');
+      expect(formatted).not.toContain('type=');
+      expect(formatted).not.toContain('overage=');
+      expect(formatted).not.toContain('reason=');
     });
 
     it('should pass through unknown JSON types unchanged', async () => {
