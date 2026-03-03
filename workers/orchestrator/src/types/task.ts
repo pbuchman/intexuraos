@@ -1,3 +1,5 @@
+import type { WorkerType } from '../services/isolation/types.js';
+
 export type TaskStatus =
   | 'queued'
   | 'running'
@@ -16,7 +18,7 @@ export interface TaskVerificationRecord {
 
 export interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
+  workerType: WorkerType;
   prompt: string;
   repository: string;
   baseBranch: string;

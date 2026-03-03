@@ -11,7 +11,7 @@ import type { WorktreeManager } from './worktree-manager.js';
 import type { LogForwarder } from './log-forwarder.js';
 import type { WebhookClient } from './webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
-import type { IsolationProvider, WorkerConfig, WorkerType } from './isolation/types.js';
+import type { IsolationProvider, WorkerConfig } from './isolation/types.js';
 import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
@@ -237,7 +237,7 @@ export class TaskDispatcher {
         );
       }
 
-      const workerTypeConfig = WORKER_TYPES[request.workerType as WorkerType];
+      const workerTypeConfig = WORKER_TYPES[request.workerType];
       if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
         const validation = await this.isolation.apiKeyValidator.validate('anthropic');
         if (!validation.valid) {

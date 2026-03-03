@@ -29,6 +29,7 @@ import { CredentialMonitor } from './services/isolation/credential-monitor.js';
 import { CredentialRefresher } from './services/isolation/credential-refresher.js';
 import Docker from 'dockerode';
 import { ApiKeyValidator } from './services/api-key-validator.js';
+import { WORKER_TYPES } from './services/isolation/types.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from './services/task-dispatcher.js';
@@ -169,104 +170,55 @@ async function fetchWithRetry(
   throw new Error('fetchWithRetry: unreachable');
 }
 
-async function validateZaiApiKey(
-  zaiKey: string,
+async function validateThirdPartyApiKey(
+  workerTypeName: string,
+  apiKey: string,
   suffix: (key: string) => string,
   logger: pino.Logger
 ): Promise<void> {
-  const keySuffix = suffix(zaiKey);
-  try {
-    const resp = await fetchWithRetry('https://api.z.ai/api/anthropic/v1/models', {
-      method: 'GET',
-      headers: { 'x-api-key': zaiKey, 'anthropic-version': '2023-06-01' },
-    });
-    if (resp.ok) {
-      logger.info({ apiKey: keySuffix }, 'ZAI_API_KEY validated successfully');
-    } else {
-      logger.error(
-        { status: resp.status, apiKey: keySuffix },
-        'ZAI_API_KEY validation failed — glm tasks will fail'
-      );
-    }
-  } catch (error) {
-    logger.warn(
-      { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
-      'ZAI_API_KEY validation request failed (network issue) — key may still be valid'
-    );
-  }
-}
+  const config = WORKER_TYPES[workerTypeName as keyof typeof WORKER_TYPES];
+  const keyName = config.apiKeyEnvVar;
+  const keySuffix = suffix(apiKey);
 
-async function validateMinimaxApiKey(
-  minimaxKey: string,
-  suffix: (key: string) => string,
-  logger: pino.Logger
-): Promise<void> {
-  const keySuffix = suffix(minimaxKey);
-  try {
-    const resp = await fetchWithRetry('https://api.minimax.io/anthropic/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': minimaxKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'MiniMax-M2.5',
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'ping' }],
-      }),
-    });
-    if (resp.ok) {
-      logger.info({ apiKey: keySuffix }, 'MINIMAX_API_KEY validated successfully');
-    } else {
-      logger.error(
-        { status: resp.status, apiKey: keySuffix },
-        'MINIMAX_API_KEY validation failed — minimax tasks will fail'
-      );
-    }
-  } catch (error) {
-    logger.warn(
-      { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
-      'MINIMAX_API_KEY validation request failed (network issue) — key may still be valid'
-    );
-  }
-}
+  const url =
+    config.model !== undefined
+      ? `${config.apiBaseUrl}/v1/messages`
+      : `${config.apiBaseUrl}/v1/models`;
 
-async function validateDashscopeApiKey(
-  dashscopeKey: string,
-  suffix: (key: string) => string,
-  logger: pino.Logger
-): Promise<void> {
-  const keySuffix = suffix(dashscopeKey);
+  const fetchOptions =
+    config.model !== undefined
+      ? {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: config.model,
+            max_tokens: 1,
+            messages: [{ role: 'user', content: 'ping' }],
+          }),
+        }
+      : {
+          method: 'GET',
+          headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        };
+
   try {
-    const resp = await fetchWithRetry(
-      'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1/messages',
-      {
-        method: 'POST',
-        headers: {
-          'x-api-key': dashscopeKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'qwen3-max-2026-01-23',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'ping' }],
-        }),
-      }
-    );
+    const resp = await fetchWithRetry(url, fetchOptions);
     if (resp.ok) {
-      logger.info({ apiKey: keySuffix }, 'DASHSCOPE_API_KEY validated successfully');
+      logger.info({ apiKey: keySuffix }, `${keyName} validated successfully`);
     } else {
       logger.error(
         { status: resp.status, apiKey: keySuffix },
-        'DASHSCOPE_API_KEY validation failed — qwen3max tasks will fail'
+        `${keyName} validation failed — ${workerTypeName} tasks will fail`
       );
     }
   } catch (error) {
     logger.warn(
       { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
-      'DASHSCOPE_API_KEY validation request failed (network issue) — key may still be valid'
+      `${keyName} validation request failed (network issue) — key may still be valid`
     );
   }
 }
@@ -299,11 +251,15 @@ async function validateWorkerApiKeys(
     );
   }
 
-  // Validate all API keys in parallel (max 10s instead of 30s sequential)
+  // Validate all third-party API keys in parallel
   await Promise.all([
-    zaiKey !== '' ? validateZaiApiKey(zaiKey, suffix, logger) : Promise.resolve(),
-    minimaxKey !== '' ? validateMinimaxApiKey(minimaxKey, suffix, logger) : Promise.resolve(),
-    dashscopeKey !== '' ? validateDashscopeApiKey(dashscopeKey, suffix, logger) : Promise.resolve(),
+    zaiKey !== '' ? validateThirdPartyApiKey('glm', zaiKey, suffix, logger) : Promise.resolve(),
+    minimaxKey !== ''
+      ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
+      : Promise.resolve(),
+    dashscopeKey !== ''
+      ? validateThirdPartyApiKey('qwen3max', dashscopeKey, suffix, logger)
+      : Promise.resolve(),
   ]);
 }
 /* v8 ignore stop @preserve */
