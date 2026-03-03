@@ -191,6 +191,32 @@ export async function deleteLinearIssueById(id: string, userId: string): Promise
   }
 }
 
+/**
+ * Find all userIds who have a specific issue synced (for webhook comment fan-out).
+ */
+export async function findUserIdsByIssueId(
+  issueId: string
+): Promise<Result<string[], LinearError>> {
+  try {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION_NAME)
+      .where('id', '==', issueId)
+      .get();
+
+    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    if (snapshot.empty) return ok([]);
+    const userIds = snapshot.docs.map((doc) => (doc.data() as SyncedLinearIssueDoc).userId);
+    return ok(userIds);
+    /* v8 ignore stop @preserve */
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to find users by issue ID: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
 function docToIssue(data: SyncedLinearIssueDoc): SyncedLinearIssue {
   return {
     id: data.id,
@@ -221,5 +247,6 @@ export function createLinearIssueRepository(): LinearIssueRepository {
     findByIdentifier: findLinearIssueByIdentifier,
     listByUserId: listLinearIssuesByUserId,
     deleteById: deleteLinearIssueById,
+    findUserIdsByIssueId,
   };
 }
