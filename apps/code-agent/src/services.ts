@@ -49,7 +49,7 @@ import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { RepositoryScopeRule, SenderWhitelistRule, SkipPrefixRule, BotReviewEditRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { RepositoryScopeRule, ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, BotReviewEditRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS } from './routes/webhooks/github.js';
@@ -321,6 +321,7 @@ export function initServices(config: ServiceConfig): void {
     userLookupService,
     webhookRules: createWebhookRulesService([
       new RepositoryScopeRule(new Set(['intexuraos/*'])),
+      new ActionableEventRule(ALLOWED_BOTS),
       new SenderWhitelistRule(ALLOWED_BOTS),
       new SkipPrefixRule(['@claude', '@codex', '@ignore']),
       new BotReviewEditRule(ALLOWED_BOTS),
@@ -337,7 +338,7 @@ export function initServices(config: ServiceConfig): void {
       gitHubPRClient,
       userServiceClient,
       firestore,
-      messageBuilder: createWebhookMessageBuilder(),
+      messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
       allowedBots: ALLOWED_BOTS,
       orchestratorSecret: config.orchestratorSecret,
       serviceUrl: config.serviceUrl,

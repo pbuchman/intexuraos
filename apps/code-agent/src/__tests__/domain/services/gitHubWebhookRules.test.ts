@@ -1,6 +1,7 @@
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import {
   RepositoryScopeRule,
+  ActionableEventRule,
   SenderWhitelistRule,
   SkipPrefixRule,
   BotReviewEditRule,
@@ -56,6 +57,94 @@ describe('GitHubWebhookRules', () => {
           repository: 'test-org/test-repo',
           allowedRepositories: ['other-org/other-repo']
         }
+      });
+    });
+  });
+
+  describe('ActionableEventRule', () => {
+    const allowedBots = new Set(['claude[bot]']);
+
+    it('should dispatch issue_comment + created', () => {
+      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'created' as const };
+      const rule = new ActionableEventRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ shouldDispatch: true, reason: 'ACTIONABLE_ISSUE_COMMENT' });
+    });
+
+    it('should dispatch pull_request_review + submitted', () => {
+      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const };
+      const rule = new ActionableEventRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ shouldDispatch: true, reason: 'ACTIONABLE_PR_REVIEW' });
+    });
+
+    it('should dispatch issue_comment + edited from allowed bot', () => {
+      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'edited' as const, senderLogin: 'claude[bot]' };
+      const rule = new ActionableEventRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ shouldDispatch: true, reason: 'ACTIONABLE_BOT_EDIT' });
+    });
+
+    it('should NOT dispatch issue_comment + edited from non-bot', () => {
+      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'edited' as const, senderLogin: 'random-user' };
+      const rule = new ActionableEventRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        shouldDispatch: false,
+        reason: 'EVENT_NOT_ACTIONABLE',
+        context: { eventType: 'issue_comment', action: 'edited' },
+      });
+    });
+
+    it('should NOT dispatch pull_request + opened', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, action: 'opened' as const };
+      const rule = new ActionableEventRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        shouldDispatch: false,
+        reason: 'EVENT_NOT_ACTIONABLE',
+        context: { eventType: 'pull_request', action: 'opened' },
+      });
+    });
+
+    it('should NOT dispatch pull_request_review + dismissed', () => {
+      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'dismissed' as const };
+      const rule = new ActionableEventRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        shouldDispatch: false,
+        reason: 'EVENT_NOT_ACTIONABLE',
+        context: { eventType: 'pull_request_review', action: 'dismissed' },
+      });
+    });
+
+    it('should NOT dispatch issue_comment + deleted', () => {
+      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'deleted' as const };
+      const rule = new ActionableEventRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        shouldDispatch: false,
+        reason: 'EVENT_NOT_ACTIONABLE',
+        context: { eventType: 'issue_comment', action: 'deleted' },
+      });
+    });
+
+    it('should NOT dispatch ping events', () => {
+      const event = { ...mockEvent, eventType: 'ping' as const, action: null };
+      const rule = new ActionableEventRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        shouldDispatch: false,
+        reason: 'EVENT_NOT_ACTIONABLE',
+        context: { eventType: 'ping', action: null },
       });
     });
   });

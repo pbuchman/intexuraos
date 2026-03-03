@@ -155,7 +155,7 @@ async function handleExistingTask(
   task: { id: string; userId: string },
   logger: Logger,
 ): Promise<WebhookDispatchResult> {
-  const message = deps.messageBuilder.build(event, { taskId: task.id, userId: task.userId });
+  const message = deps.messageBuilder.build(event);
 
   const sendResult = await sendTaskMessage(
     {
