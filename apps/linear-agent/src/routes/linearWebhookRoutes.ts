@@ -302,9 +302,15 @@ async function handleLinearWebhook(
 
     // Find all users who have this issue synced
     const userIdsResult = await services.issueRepository.findUserIdsByIssueId(data.issueId);
-    const commentUserId = userIdsResult.ok && userIdsResult.value.length > 0
-      ? (userIdsResult.value[0] ?? issue.userId)
-      : issue.userId;
+    let commentUserId: string;
+    if (userIdsResult.ok && userIdsResult.value.length > 0) {
+      commentUserId = userIdsResult.value[0] ?? issue.userId; // noUncheckedIndexedAccess
+    } else {
+      if (!userIdsResult.ok) {
+        request.log.warn({ error: userIdsResult.error, issueId: data.issueId }, 'Failed to find users by issue ID, falling back to issue.userId');
+      }
+      commentUserId = issue.userId;
+    }
 
     // Process Comment webhook
     // Comments are stored by Linear UUID (not user-scoped), so syncing once is sufficient
