@@ -30,7 +30,8 @@ RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/c
     fd \
     bat \
     github-cli \
-    chromium
+    chromium \
+    direnv
 
 # Install terraform from hashicorp (TARGETARCH is set automatically by BuildKit)
 ARG TARGETARCH
@@ -88,6 +89,9 @@ RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gclou
 # /home/claude is tmpfs so image contents are wiped — entrypoint.sh copies these at startup
 # NOTE: Build context is workspace root (.), so paths are root-relative
 COPY --chown=claude:claude workers/claude-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
+
+# Hook direnv into bash so env vars auto-load when entering /repo
+RUN echo 'eval "$(direnv hook bash)"' >> /opt/claude-defaults/.bashrc
 
 # Copy entrypoint
 COPY --chown=claude:claude workers/claude-worker/entrypoint.sh /entrypoint.sh

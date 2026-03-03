@@ -293,9 +293,10 @@ fi
 # ------------------------------------------------------------------------------
 # Load environment variables from container envrc (synced from GCP Secret Manager)
 # ------------------------------------------------------------------------------
-if [ -f "/secrets/envrc" ]; then
-    source /secrets/envrc
-    echo "[entrypoint] Loaded environment from /secrets/envrc ($(grep -c '^export ' /secrets/envrc) vars)"
+if [ -f "/repo/.envrc" ]; then
+    source /repo/.envrc
+    direnv allow /repo
+    echo "[entrypoint] Loaded environment from /repo/.envrc ($(grep -c '^export ' /repo/.envrc) vars)"
 fi
 
 # ------------------------------------------------------------------------------

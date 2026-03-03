@@ -567,6 +567,12 @@ export class DockerProvider implements IsolationProvider {
       }
       /* v8 ignore stop @preserve */
 
+      /* v8 ignore start -- test-infra: envrc copy only present when container.envrc synced at startup @preserve */
+      if (this.config.containerEnvrcPath !== undefined && fs.existsSync(this.config.containerEnvrcPath)) {
+        await fs.promises.copyFile(this.config.containerEnvrcPath, path.join(worktreePath, '.envrc'));
+      }
+      /* v8 ignore stop @preserve */
+
       const workerTypeConfig = (await import('./types.js')).WORKER_TYPES[workerType];
       const apiKey = secrets[workerTypeConfig.apiKeyEnvVar];
 
@@ -672,12 +678,6 @@ export class DockerProvider implements IsolationProvider {
             ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
             /* v8 ignore stop @preserve */
             ...(taskForensicsPath !== null ? [`${taskForensicsPath}:/var/crash:rw`] : []),
-            /* v8 ignore start -- test-infra: envrc mount only present when container.envrc synced at startup @preserve */
-            ...(this.config.containerEnvrcPath !== undefined &&
-            fs.existsSync(this.config.containerEnvrcPath)
-              ? [`${this.config.containerEnvrcPath}:/secrets/envrc:ro`]
-              : []),
-            /* v8 ignore stop @preserve */
           ],
           NetworkMode: this.config.networkName,
           ReadonlyRootfs: false,
