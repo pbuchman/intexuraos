@@ -55,7 +55,7 @@ declare -a SKIPPED_INPUT=()
 usage() {
   cat <<EOF
 Usage:
-  ${SCRIPT_NAME} [environment] [--add-new] [--project-id <project_id>]
+  ${SCRIPT_NAME} [environment] [--add-new] [--project-id <project_id>] [--output <path>]
 
 Modes:
   default        Non-interactive sync from GCP Secret Manager to .envrc
@@ -67,6 +67,7 @@ Arguments:
 Options:
   --add-new      Prompt for missing secret values (no overwrite flow)
   --project-id   Override GCP project ID
+  --output       Override output file path (default: <repo>/.envrc)
   -h, --help     Show this help
 
 Project ID resolution order:
@@ -489,6 +490,16 @@ parse_args() {
         ;;
       --project-id=*)
         CLI_PROJECT_ID="${1#*=}"
+        shift
+        ;;
+      --output)
+        shift
+        [[ $# -gt 0 ]] || fail "--output requires a path"
+        ENVRC_FILE="$1"
+        shift
+        ;;
+      --output=*)
+        ENVRC_FILE="${1#*=}"
         shift
         ;;
       -h|--help)

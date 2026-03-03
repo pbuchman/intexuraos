@@ -183,13 +183,13 @@ export async function fetchRemote(path: string, logger: Logger): Promise<void> {
 
 /**
  * Reset repository to a clean state by discarding all local changes.
- * Runs: git reset --hard HEAD && git clean -df
+ * Runs: git reset --hard origin/development && git clean -df
  */
 export async function cleanWorktree(path: string, logger: Logger): Promise<void> {
-  logger.info({ path }, 'Cleaning worktree: git reset --hard HEAD && git clean -df');
+  logger.info({ path }, 'Cleaning worktree: git reset --hard origin/development && git clean -df');
 
   try {
-    await execFileAsync('git', ['reset', '--hard', 'HEAD'], { cwd: path });
+    await execFileAsync('git', ['reset', '--hard', 'origin/development'], { cwd: path });
     await execFileAsync('git', ['clean', '-df'], { cwd: path });
     logger.info({ path }, 'Worktree cleaned successfully');
   } catch (error: unknown) {
@@ -222,8 +222,8 @@ export async function ensureRepository(url: string, path: string, logger: Logger
     logger.info({ path }, 'Repository path exists, validating...');
     try {
       await validateRepository(path, url, logger);
-      await cleanWorktree(path, logger);
       await fetchRemote(path, logger);
+      await cleanWorktree(path, logger);
     } catch (error) {
       logger.error({ error, path, url }, 'Repository validation or fetch failed');
       throw error;
