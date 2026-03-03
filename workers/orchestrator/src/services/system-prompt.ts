@@ -1,4 +1,5 @@
 import { hasCodeTaskLabel } from '@intexuraos/common-core';
+import type { WorkerType } from './isolation/types.js';
 
 export interface SystemPromptParams {
   taskId: string;
@@ -6,7 +7,7 @@ export interface SystemPromptParams {
   linearIssueTitle?: string;
   taskUrl?: string;
   linearIssueLabels: string[];
-  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+  workerType?: WorkerType;
   agentType?: 'planning' | 'execution' | 'pull_request';
 }
 

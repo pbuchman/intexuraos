@@ -29,6 +29,7 @@ import { CredentialMonitor } from './services/isolation/credential-monitor.js';
 import { CredentialRefresher } from './services/isolation/credential-refresher.js';
 import Docker from 'dockerode';
 import { ApiKeyValidator } from './services/api-key-validator.js';
+import { WORKER_TYPES } from './services/isolation/types.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from './services/task-dispatcher.js';
@@ -169,10 +170,64 @@ async function fetchWithRetry(
   throw new Error('fetchWithRetry: unreachable');
 }
 
+async function validateThirdPartyApiKey(
+  workerTypeName: string,
+  apiKey: string,
+  suffix: (key: string) => string,
+  logger: pino.Logger
+): Promise<void> {
+  const config = WORKER_TYPES[workerTypeName as keyof typeof WORKER_TYPES];
+  const keyName = config.apiKeyEnvVar;
+  const keySuffix = suffix(apiKey);
+
+  const url =
+    config.model !== undefined
+      ? `${config.apiBaseUrl}/v1/messages`
+      : `${config.apiBaseUrl}/v1/models`;
+
+  const fetchOptions =
+    config.model !== undefined
+      ? {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: config.model,
+            max_tokens: 1,
+            messages: [{ role: 'user', content: 'ping' }],
+          }),
+        }
+      : {
+          method: 'GET',
+          headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        };
+
+  try {
+    const resp = await fetchWithRetry(url, fetchOptions);
+    if (resp.ok) {
+      logger.info({ apiKey: keySuffix }, `${keyName} validated successfully`);
+    } else {
+      logger.error(
+        { status: resp.status, apiKey: keySuffix },
+        `${keyName} validation failed — ${workerTypeName} tasks will fail`
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
+      `${keyName} validation request failed (network issue) — key may still be valid`
+    );
+  }
+}
+
 async function validateWorkerApiKeys(
   credentialMonitor: CredentialMonitor,
   zaiKey: string,
   minimaxKey: string,
+  dashscopeKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
@@ -196,60 +251,16 @@ async function validateWorkerApiKeys(
     );
   }
 
-  if (zaiKey !== '') {
-    const keySuffix = suffix(zaiKey);
-    try {
-      const resp = await fetchWithRetry('https://api.z.ai/api/anthropic/v1/models', {
-        method: 'GET',
-        headers: { 'x-api-key': zaiKey, 'anthropic-version': '2023-06-01' },
-      });
-      if (resp.ok) {
-        logger.info({ apiKey: keySuffix }, 'ZAI_API_KEY validated successfully');
-      } else {
-        logger.error(
-          { status: resp.status, apiKey: keySuffix },
-          'ZAI_API_KEY validation failed — glm tasks will fail'
-        );
-      }
-    } catch (error) {
-      logger.warn(
-        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
-        'ZAI_API_KEY validation request failed (network issue) — key may still be valid'
-      );
-    }
-  }
-
-  if (minimaxKey !== '') {
-    const keySuffix = suffix(minimaxKey);
-    try {
-      const resp = await fetchWithRetry('https://api.minimax.io/anthropic/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': minimaxKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'MiniMax-M2.5',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'ping' }],
-        }),
-      });
-      if (resp.ok) {
-        logger.info({ apiKey: keySuffix }, 'MINIMAX_API_KEY validated successfully');
-      } else {
-        logger.error(
-          { status: resp.status, apiKey: keySuffix },
-          'MINIMAX_API_KEY validation failed — minimax tasks will fail'
-        );
-      }
-    } catch (error) {
-      logger.warn(
-        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
-        'MINIMAX_API_KEY validation request failed (network issue) — key may still be valid'
-      );
-    }
-  }
+  // Validate all third-party API keys in parallel
+  await Promise.all([
+    zaiKey !== '' ? validateThirdPartyApiKey('glm', zaiKey, suffix, logger) : Promise.resolve(),
+    minimaxKey !== ''
+      ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
+      : Promise.resolve(),
+    dashscopeKey !== ''
+      ? validateThirdPartyApiKey('qwen3.5-plus', dashscopeKey, suffix, logger)
+      : Promise.resolve(),
+  ]);
 }
 /* v8 ignore stop @preserve */
 
@@ -571,6 +582,7 @@ async function bootstrap(): Promise<void> {
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_APP_API_KEY'),
     MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
+    DASHSCOPE_API_KEY: getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY'),
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
@@ -595,6 +607,7 @@ async function bootstrap(): Promise<void> {
     credentialMonitor,
     secrets.ZAI_API_KEY,
     secrets.MINIMAX_API_KEY,
+    secrets.DASHSCOPE_API_KEY,
     logger
   );
 
