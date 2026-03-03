@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import type { Logger } from '@intexuraos/common-core';
-import { stripDockerHeaders } from './log-formatter.js';
+import { stripDockerHeaders, stripBulkMetadata } from './log-formatter.js';
 
 export interface LogForwarderConfig {
   logBasePath: string;
@@ -67,7 +67,7 @@ export class LogForwarder {
 
     // Flush any remaining partial line through formatter
     if (state.partialLine !== '') {
-      const cleaned = stripDockerHeaders(state.partialLine + '\n');
+      const cleaned = stripBulkMetadata(stripDockerHeaders(state.partialLine + '\n'));
       state.buffer += this.prefixTimestamps(cleaned);
       state.partialLine = '';
     }
@@ -159,7 +159,7 @@ export class LogForwarder {
 
     /* v8 ignore start -- test-infra: partialLine only set via appendChunk (Docker mode), stopForwarding tests use file-based mode @preserve */
     if (state.partialLine !== '') {
-      const cleaned = stripDockerHeaders(state.partialLine + '\n');
+      const cleaned = stripBulkMetadata(stripDockerHeaders(state.partialLine + '\n'));
       state.buffer += this.prefixTimestamps(cleaned);
       state.partialLine = '';
     }
@@ -224,7 +224,7 @@ export class LogForwarder {
     const complete = combined.slice(0, lastNewline + 1);
     state.partialLine = combined.slice(lastNewline + 1);
 
-    const cleaned = stripDockerHeaders(complete);
+    const cleaned = stripBulkMetadata(stripDockerHeaders(complete));
     state.buffer += this.prefixTimestamps(cleaned);
 
     // Flush if buffer exceeds max chunk size
@@ -247,7 +247,7 @@ export class LogForwarder {
       if (newContent.length === 0) return;
 
       state.position = content.length;
-      state.buffer += stripDockerHeaders(newContent);
+      state.buffer += stripBulkMetadata(stripDockerHeaders(newContent));
 
       // Flush if buffer exceeds max chunk size
       if (state.buffer.length >= MAX_CHUNK_SIZE) {
@@ -473,7 +473,7 @@ export class LogForwarder {
     if (state === undefined) return;
 
     if (state.partialLine !== '') {
-      const cleaned = stripDockerHeaders(state.partialLine + '\n');
+      const cleaned = stripBulkMetadata(stripDockerHeaders(state.partialLine + '\n'));
       state.buffer += this.prefixTimestamps(cleaned);
       state.partialLine = '';
     }
