@@ -819,7 +819,7 @@ export class TaskDispatcher {
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `🤖 Gemini response:\n${verification.trace.response}`
+      `🤖 Gemini summary: ${verification.agentData?.summary ?? '(no summary extracted)'}`
     );
 
     if (typeof exitCode === 'number') {
