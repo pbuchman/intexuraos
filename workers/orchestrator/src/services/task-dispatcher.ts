@@ -794,19 +794,16 @@ export class TaskDispatcher {
       agentType: completionAgentType,
       rawLogs,
     });
-    this.appendOrchestratorTaskLog(task.taskId, `━━━ Verification Result ━━━`);
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `  Passed: ${String(verification.passed)} | VerifierFailure: ${String(verification.verifierFailure)}`
+      `Passed: ${String(verification.passed)} | VerifierFailure: ${String(verification.verifierFailure)}`
     );
     if (verification.missingFields.length > 0) {
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `  Missing fields: ${verification.missingFields.join(' | ')}`
+        `Missing fields: ${verification.missingFields.join(' | ')}`
       );
     }
-    this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    this.appendOrchestratorTaskLog(task.taskId, `━━━ Verification Trace ━━━`);
     const transcriptLines = verification.trace.transcript
       .split('\n')
       .filter((l) => l.trim() !== '');
@@ -822,13 +819,8 @@ export class TaskDispatcher {
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `📝 Prompt sent to Gemini:\n${verification.trace.prompt}`
-    );
-    this.appendOrchestratorTaskLog(
-      task.taskId,
       `🤖 Gemini response:\n${verification.trace.response}`
     );
-    this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     if (typeof exitCode === 'number') {
       task.lastExitCode = exitCode;
