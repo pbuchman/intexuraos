@@ -51,8 +51,8 @@ export function stripBulkMetadata(content: string): string {
       try {
         const obj = JSON.parse(line) as Record<string, unknown>;
         if ('tool_use_result' in obj) {
-          delete obj['tool_use_result'];
-          return JSON.stringify(obj);
+          const { tool_use_result: _, ...rest } = obj;
+          return JSON.stringify(rest);
         }
       } catch {
         // Partial/invalid JSON — pass through unchanged
