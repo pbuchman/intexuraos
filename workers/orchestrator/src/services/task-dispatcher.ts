@@ -1313,9 +1313,16 @@ export class TaskDispatcher {
     await this.collectTurnMetrics(task, attempt);
     delete task.resumedAfterSuccess;
 
+    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
+    const geminiSummary = await this.completionVerifier.extractResumeSummary(task.taskId, rawLogs);
+
     const enrichedResult = this.enrichResultForResumedTask(task, result);
+    if (enrichedResult !== undefined && geminiSummary !== undefined) {
+      enrichedResult.summary = geminiSummary;
+    }
     await this.finalizeTask(task, 'completed', {
       ...(enrichedResult !== undefined && { result: enrichedResult }),
+      resumedCompletion: true,
     });
   }
 
@@ -1443,7 +1450,7 @@ export class TaskDispatcher {
   private async finalizeTask(
     task: Task,
     statusParam: TaskStatus,
-    payload: { result?: TaskResult; error?: TaskError }
+    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean }
   ): Promise<void> {
     const finalStatus = statusParam;
     const shouldPreserve =
@@ -1504,6 +1511,7 @@ export class TaskDispatcher {
         ...(payload.result !== undefined && { result: payload.result }),
         ...(payload.error !== undefined && { error: payload.error }),
         duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
+        ...(payload.resumedCompletion === true && { resumedCompletion: true }),
       },
       taskId: task.taskId,
     });

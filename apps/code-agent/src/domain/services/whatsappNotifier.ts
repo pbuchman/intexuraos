@@ -75,6 +75,19 @@ export interface WhatsAppNotifier {
   ): Promise<Result<void, NotificationError>>;
 
   /**
+   * Send notification when a resumed session completes successfully.
+   * Distinct from notifyTaskComplete — uses 🔁 emoji and Gemini-extracted summary.
+   *
+   * @param userId - User ID to send notification to
+   * @param task - Completed task with result (summary may be Gemini-extracted)
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyResumedTaskComplete(
+    userId: string,
+    task: CodeTask
+  ): Promise<Result<void, NotificationError>>;
+
+  /**
    * Send notification when Phase 1 (design) completes, with button to proceed to Phase 2.
    * INT-628
    *

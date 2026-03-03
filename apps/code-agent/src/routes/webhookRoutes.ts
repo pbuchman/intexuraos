@@ -36,38 +36,38 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // ============================================================
 
   // POST /internal/webhooks/task-complete - Task completion callback from orchestrator
-  fastify.post<{
-    Body: {
-      taskId: string;
-      status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
-      result?: {
-        prUrl?: string;
-        branch?: string;
-        commits?: number;
-        summary?: string;
-        ciFailed?: boolean;
-        partialWork?: boolean;
-        rebaseResult?: 'success' | 'conflict' | 'skipped';
-        comment_replied?: boolean;
-        planning_outcome_label?: 'planned' | 'unclear';
-        planning_superpowers_writing_plans_used?: '0' | '1';
-        planning_linear_url?: string;
-        planning_is_complex?: '0' | '1';
-        planning_subtask_urls?: string;
-        planning_pr_url?: string;
-        planning_unclear_clarification?: string;
-        execution_outcome_label?: 'implemented';
-        execution_superpowers_executing_plans_used?: '0' | '1';
-        execution_superpowers_requesting_code_review_used?: '0' | '1';
-        execution_linear_issue_url?: string;
-      };
-      error?: {
-        code: string;
-        message: string;
-      };
-      duration?: number;
+  type TaskCompleteWebhookBody = {
+    taskId: string;
+    status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
+    result?: {
+      prUrl?: string;
+      branch?: string;
+      commits?: number;
+      summary?: string;
+      ciFailed?: boolean;
+      partialWork?: boolean;
+      rebaseResult?: 'success' | 'conflict' | 'skipped';
+      comment_replied?: boolean;
+      planning_outcome_label?: 'planned' | 'unclear';
+      planning_superpowers_writing_plans_used?: '0' | '1';
+      planning_linear_url?: string;
+      planning_is_complex?: '0' | '1';
+      planning_subtask_urls?: string;
+      planning_pr_url?: string;
+      planning_unclear_clarification?: string;
+      execution_outcome_label?: 'implemented';
+      execution_superpowers_executing_plans_used?: '0' | '1';
+      execution_superpowers_requesting_code_review_used?: '0' | '1';
+      execution_linear_issue_url?: string;
     };
-  }>(
+    error?: {
+      code: string;
+      message: string;
+    };
+    duration?: number;
+    resumedCompletion?: boolean;
+  };
+  fastify.post<{ Body: TaskCompleteWebhookBody }>(
     '/internal/webhooks/task-complete',
     {
       schema: {
@@ -116,6 +116,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               required: ['code', 'message'],
             },
             duration: { type: 'number' },
+            resumedCompletion: { type: 'boolean' },
           },
           required: ['taskId', 'status'],
         },
@@ -147,7 +148,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_linear_url?: string; planning_is_complex?: '0' | '1'; planning_subtask_urls?: string; planning_pr_url?: string; planning_unclear_clarification?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: TaskCompleteWebhookBody }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/webhooks/task-complete',
       });
@@ -812,6 +813,14 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             request.log.warn(
               { taskId, errorCode: notifyResult.error.code, errorMessage: notifyResult.error.message },
               'Failed to send design-complete notification — user may not receive Phase 2 button'
+            );
+          }
+        } else if (request.body.resumedCompletion === true) {
+          const resumedNotifyResult = await whatsappNotifier.notifyResumedTaskComplete(task.userId, completedTask);
+          if (!resumedNotifyResult.ok) {
+            request.log.warn(
+              { taskId, errorCode: resumedNotifyResult.error.code, errorMessage: resumedNotifyResult.error.message },
+              'Failed to send resumed-task-complete notification'
             );
           }
         } else {

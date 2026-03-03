@@ -125,6 +125,9 @@ function createMockWhatsAppNotifier(): WhatsAppNotifier {
     async notifyTaskResumed(): ReturnType<WhatsAppNotifier['notifyTaskResumed']> {
       return ok(undefined);
     },
+    async notifyResumedTaskComplete(): ReturnType<WhatsAppNotifier['notifyResumedTaskComplete']> {
+      return ok(undefined);
+    },
     async notifyDesignComplete(): ReturnType<WhatsAppNotifier['notifyDesignComplete']> {
       return ok(undefined);
     },
