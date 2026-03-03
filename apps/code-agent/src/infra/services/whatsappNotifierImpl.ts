@@ -84,6 +84,29 @@ Branch: ${task.baseBranch}`;
 }
 
 /**
+ * Format resumed session completion notification message.
+ */
+function formatResumedCompletionMessage(task: CodeTask): string {
+  const title = task.linearIssueTitle ?? task.prompt.slice(0, 50);
+  const fallbackWarning = task.linearFallback === true
+    ? '\n⚠️ (Linear unavailable - no issue tracking)'
+    : '';
+
+  const result = task.result;
+  if (!result) {
+    return `🔁 Session continued: ${title}${fallbackWarning}`;
+  }
+
+  const prLine = result.prUrl !== undefined && result.prUrl.length > 0
+    ? `PR: ${result.prUrl}\n`
+    : '';
+  const summaryLine = result.summary ?? '';
+  return `🔁 Session continued: ${title}
+
+${prLine}${summaryLine}${fallbackWarning}`;
+}
+
+/**
  * Format design complete notification message (Phase 1 completion).
  * INT-628
  */
@@ -232,6 +255,28 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         userId,
         message,
         buttons,
+        correlationId: task.traceId,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
+
+    async notifyResumedTaskComplete(
+      userId: string,
+      task: CodeTask
+    ): Promise<Result<void, NotificationError>> {
+      const message = formatResumedCompletionMessage(task);
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
         correlationId: task.traceId,
       });
 

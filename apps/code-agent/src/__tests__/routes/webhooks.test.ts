@@ -4961,4 +4961,103 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     // Webhook should still succeed even if notification fails
     expect(response.statusCode).toBe(200);
   });
+
+  it('sends 🔁 session-continued notification when resumedCompletion is true', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Implement the new feature',
+      sanitizedPrompt: 'Implement the new feature',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_resumed',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      resumedCompletion: true,
+      result: {
+        branch: 'fix/resumed-branch',
+        commits: 1,
+        summary: 'Claude fixed the auth redirect.',
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/500',
+      },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledTimes(1);
+    const publishCall = mockWhatsAppPublisher.publishSendMessage.mock.calls[0];
+    const params = publishCall?.[0] as { userId: string; message: string };
+    expect(params.userId).toBe('user-123');
+    expect(params.message).toContain('🔁');
+    expect(params.message).toContain('Session continued');
+    expect(params.message).not.toContain('✅');
+  });
+
+  it('sends standard completion notification when resumedCompletion is false', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_not_resumed',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      resumedCompletion: false,
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const publishCall = mockWhatsAppPublisher.publishSendMessage.mock.calls[0];
+    const params = publishCall?.[0] as { message: string };
+    expect(params.message).toContain('✅');
+    expect(params.message).not.toContain('🔁');
+  });
 });
