@@ -597,6 +597,7 @@ export class FakeProcessedActionRepository implements ProcessedActionRepository 
 }
 
 export class FakeLinearIssueRepository implements LinearIssueRepository {
+  /** Storage uses composite key (userId_issueId) to match real Firestore behavior */
   private issues = new Map<string, SyncedLinearIssue>();
   private shouldFail = false;
   private shouldFailSave = false;
@@ -604,21 +605,31 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
   private shouldFailDeleteById = false;
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
 
+  private compositeKey(userId: string, issueId: string): string {
+    return `${userId}_${issueId}`;
+  }
+
   async save(issue: SyncedLinearIssue): Promise<Result<SyncedLinearIssue, LinearError>> {
     if (this.shouldFail || this.shouldFailSave) return err(this.failError);
-    this.issues.set(issue.id, { ...issue });
+    this.issues.set(this.compositeKey(issue.userId, issue.id), { ...issue });
     return ok(issue);
   }
 
   async findById(id: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
     if (this.shouldFail) return err(this.failError);
-    return ok(this.issues.get(id) ?? null);
+    for (const issue of this.issues.values()) {
+      if (issue.id === id) return ok(issue);
+    }
+    return ok(null);
   }
 
-  async findByIdentifier(identifier: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
+  async findByIdentifier(identifier: string, userId?: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
     if (this.shouldFail) return err(this.failError);
     for (const issue of this.issues.values()) {
-      if (issue.identifier === identifier) return ok(issue);
+      if (issue.identifier === identifier) {
+        if (userId !== undefined && issue.userId !== userId) continue;
+        return ok(issue);
+      }
     }
     return ok(null);
   }
@@ -629,9 +640,9 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(userIssues);
   }
 
-  async deleteById(id: string): Promise<Result<void, LinearError>> {
+  async deleteById(id: string, userId: string): Promise<Result<void, LinearError>> {
     if (this.shouldFail || this.shouldFailDeleteById) return err(this.failError);
-    this.issues.delete(id);
+    this.issues.delete(this.compositeKey(userId, id));
     return ok(undefined);
   }
 
@@ -664,7 +675,7 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
   }
 
   seedIssue(issue: SyncedLinearIssue): void {
-    this.issues.set(issue.id, issue);
+    this.issues.set(this.compositeKey(issue.userId, issue.id), issue);
   }
 
   get count(): number {
