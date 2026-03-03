@@ -16,7 +16,7 @@ import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
 import { buildSystemPrompt } from './system-prompt.js';
-import { stripDockerHeaders } from './log-formatter.js';
+import { stripDockerHeaders, summarizeFirstLast } from './log-formatter.js';
 import {
   type CompletionAgentType,
   type CompletionVerifier,
@@ -807,22 +807,13 @@ export class TaskDispatcher {
     }
     this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     this.appendOrchestratorTaskLog(task.taskId, `━━━ Verification Trace ━━━`);
-    const transcriptLines = verification.trace.transcript
-      .split('\n')
-      .filter((l) => l.trim() !== '');
-    const firstLine = transcriptLines[0] ?? '';
-    const lastLine = transcriptLines[transcriptLines.length - 1] ?? '';
-    const transcriptSummary =
-      transcriptLines.length <= 2
-        ? transcriptLines.join('\n')
-        : `${firstLine}\n  ... (${String(transcriptLines.length - 2)} lines omitted) ...\n${lastLine}`;
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `📋 Transcript (first + last):\n${transcriptSummary}`
+      `📋 Transcript (first + last):\n${summarizeFirstLast(verification.trace.transcript)}`
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `📝 Prompt sent to Gemini:\n${verification.trace.prompt}`
+      `📝 Prompt sent to Gemini (first + last):\n${summarizeFirstLast(verification.trace.prompt)}`
     );
     this.appendOrchestratorTaskLog(
       task.taskId,

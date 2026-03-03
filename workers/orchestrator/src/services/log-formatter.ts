@@ -1,3 +1,17 @@
+/**
+ * Summarize multi-line text to first + last non-empty lines.
+ * Returns the original text when it has 2 or fewer non-empty lines.
+ */
+export function summarizeFirstLast(text: string): string {
+  const lines = text.split('\n').filter((l) => l.trim() !== '');
+  if (lines.length <= 2) return lines.join('\n');
+  /* v8 ignore start -- ts-type: lines.length > 2 guarantees index 0 and last index are defined; ?? fallback is unreachable @preserve */
+  const first = lines[0] ?? '';
+  const last = lines[lines.length - 1] ?? '';
+  /* v8 ignore stop @preserve */
+  return `${first}\n  ... (${String(lines.length - 2)} lines omitted) ...\n${last}`;
+}
+
 const DOCKER_HEADER_SIZE = 8;
 
 // Matches ANSI/VT100 escape sequences: ESC [ ... final-byte

@@ -3,7 +3,7 @@ import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory
 import { LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
 import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
 import { z } from 'zod';
-import { stripDockerHeaders } from './log-formatter.js';
+import { stripDockerHeaders, summarizeFirstLast } from './log-formatter.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
 export type CompletionAgentType = 'planning' | 'execution' | 'pull_request';
@@ -269,14 +269,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         agentType: input.agentType,
         model: this.model,
         promptChars: prompt.length,
-        transcript: ((): string => {
-          const tLines = transcript.split('\n').filter((l) => l.trim() !== '');
-          const first = tLines[0] ?? '';
-          const last = tLines[tLines.length - 1] ?? '';
-          return tLines.length <= 2
-            ? tLines.join('\n')
-            : `${first}\n  ... (${String(tLines.length - 2)} lines omitted) ...\n${last}`;
-        })(),
+        transcript: summarizeFirstLast(transcript),
       },
       'Gemini completion verifier request'
     );
