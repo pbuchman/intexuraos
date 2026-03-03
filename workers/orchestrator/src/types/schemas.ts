@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Worker type validation
-export const WorkerTypeSchema = z.enum(['opus', 'auto', 'sonnet', 'minimax', 'glm']);
+export const WorkerTypeSchema = z.enum(['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3max']);
 
 // Task status validation
 export const TaskStatusSchema = z.enum([

@@ -169,10 +169,98 @@ async function fetchWithRetry(
   throw new Error('fetchWithRetry: unreachable');
 }
 
+async function validateZaiApiKey(zaiKey: string, suffix: (key: string) => string, logger: pino.Logger): Promise<void> {
+  const keySuffix = suffix(zaiKey);
+  try {
+    const resp = await fetchWithRetry('https://api.z.ai/api/anthropic/v1/models', {
+      method: 'GET',
+      headers: { 'x-api-key': zaiKey, 'anthropic-version': '2023-06-01' },
+    });
+    if (resp.ok) {
+      logger.info({ apiKey: keySuffix }, 'ZAI_API_KEY validated successfully');
+    } else {
+      logger.error(
+        { status: resp.status, apiKey: keySuffix },
+        'ZAI_API_KEY validation failed — glm tasks will fail'
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
+      'ZAI_API_KEY validation request failed (network issue) — key may still be valid'
+    );
+  }
+}
+
+async function validateMinimaxApiKey(minimaxKey: string, suffix: (key: string) => string, logger: pino.Logger): Promise<void> {
+  const keySuffix = suffix(minimaxKey);
+  try {
+    const resp = await fetchWithRetry('https://api.minimax.io/anthropic/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': minimaxKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'MiniMax-M2.5',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ping' }],
+      }),
+    });
+    if (resp.ok) {
+      logger.info({ apiKey: keySuffix }, 'MINIMAX_API_KEY validated successfully');
+    } else {
+      logger.error(
+        { status: resp.status, apiKey: keySuffix },
+        'MINIMAX_API_KEY validation failed — minimax tasks will fail'
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
+      'MINIMAX_API_KEY validation request failed (network issue) — key may still be valid'
+    );
+  }
+}
+
+async function validateDashscopeApiKey(dashscopeKey: string, suffix: (key: string) => string, logger: pino.Logger): Promise<void> {
+  const keySuffix = suffix(dashscopeKey);
+  try {
+    const resp = await fetchWithRetry('https://coding-intl.dashscope.aliyuncs.com/apps/anthropic/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': dashscopeKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'qwen3-max-2026-01-23',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ping' }],
+      }),
+    });
+    if (resp.ok) {
+      logger.info({ apiKey: keySuffix }, 'DASHSCOPE_API_KEY validated successfully');
+    } else {
+      logger.error(
+        { status: resp.status, apiKey: keySuffix },
+        'DASHSCOPE_API_KEY validation failed — qwen3max tasks will fail'
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
+      'DASHSCOPE_API_KEY validation request failed (network issue) — key may still be valid'
+    );
+  }
+}
+
 async function validateWorkerApiKeys(
   credentialMonitor: CredentialMonitor,
   zaiKey: string,
   minimaxKey: string,
+  dashscopeKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
@@ -196,60 +284,12 @@ async function validateWorkerApiKeys(
     );
   }
 
-  if (zaiKey !== '') {
-    const keySuffix = suffix(zaiKey);
-    try {
-      const resp = await fetchWithRetry('https://api.z.ai/api/anthropic/v1/models', {
-        method: 'GET',
-        headers: { 'x-api-key': zaiKey, 'anthropic-version': '2023-06-01' },
-      });
-      if (resp.ok) {
-        logger.info({ apiKey: keySuffix }, 'ZAI_API_KEY validated successfully');
-      } else {
-        logger.error(
-          { status: resp.status, apiKey: keySuffix },
-          'ZAI_API_KEY validation failed — glm tasks will fail'
-        );
-      }
-    } catch (error) {
-      logger.warn(
-        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
-        'ZAI_API_KEY validation request failed (network issue) — key may still be valid'
-      );
-    }
-  }
-
-  if (minimaxKey !== '') {
-    const keySuffix = suffix(minimaxKey);
-    try {
-      const resp = await fetchWithRetry('https://api.minimax.io/anthropic/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': minimaxKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'MiniMax-M2.5',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'ping' }],
-        }),
-      });
-      if (resp.ok) {
-        logger.info({ apiKey: keySuffix }, 'MINIMAX_API_KEY validated successfully');
-      } else {
-        logger.error(
-          { status: resp.status, apiKey: keySuffix },
-          'MINIMAX_API_KEY validation failed — minimax tasks will fail'
-        );
-      }
-    } catch (error) {
-      logger.warn(
-        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
-        'MINIMAX_API_KEY validation request failed (network issue) — key may still be valid'
-      );
-    }
-  }
+  // Validate all API keys in parallel (max 10s instead of 30s sequential)
+  await Promise.all([
+    zaiKey !== '' ? validateZaiApiKey(zaiKey, suffix, logger) : Promise.resolve(),
+    minimaxKey !== '' ? validateMinimaxApiKey(minimaxKey, suffix, logger) : Promise.resolve(),
+    dashscopeKey !== '' ? validateDashscopeApiKey(dashscopeKey, suffix, logger) : Promise.resolve(),
+  ]);
 }
 /* v8 ignore stop @preserve */
 
@@ -571,6 +611,7 @@ async function bootstrap(): Promise<void> {
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_APP_API_KEY'),
     MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
+    DASHSCOPE_API_KEY: getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY'),
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
@@ -595,6 +636,7 @@ async function bootstrap(): Promise<void> {
     credentialMonitor,
     secrets.ZAI_API_KEY,
     secrets.MINIMAX_API_KEY,
+    secrets.DASHSCOPE_API_KEY,
     logger
   );
 

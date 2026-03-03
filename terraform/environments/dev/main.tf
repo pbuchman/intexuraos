@@ -492,10 +492,11 @@ module "secret_manager" {
     # Crawl4AI Cloud API
     "INTEXURAOS_CRAWL4AI_APP_API_KEY" = "Crawl4AI Cloud API key for web-agent"
     # LLM API keys
-    "INTEXURAOS_OPENAI_APP_API_KEY"  = "OpenAI API key for chat-agent"
-    "INTEXURAOS_ZAI_APP_API_KEY"     = "Platform ZAI API key for all services"
-    "INTEXURAOS_MINIMAX_APP_API_KEY" = "MiniMax API key for orchestrator worker containers"
-    "INTEXURAOS_GEMINI_APP_API_KEY"  = "Gemini API key for orchestrator completion verifier"
+    "INTEXURAOS_OPENAI_APP_API_KEY"    = "OpenAI API key for chat-agent"
+    "INTEXURAOS_ZAI_APP_API_KEY"       = "Platform ZAI API key for all services"
+    "INTEXURAOS_MINIMAX_APP_API_KEY"   = "MiniMax API key for orchestrator worker containers"
+    "INTEXURAOS_GEMINI_APP_API_KEY"    = "Gemini API key for orchestrator completion verifier"
+    "INTEXURAOS_DASHSCOPE_APP_API_KEY" = "Dashscope API key for orchestrator qwen3max worker containers"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to Claude worker containers"
     "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to Claude worker containers"
@@ -555,16 +556,17 @@ module "claude_code_dev" {
 locals {
   # Secrets that ALL services need
   common_service_secrets = {
-    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_SENTRY_DSN          = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-    INTEXURAOS_ZAI_APP_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_ZAI_APP_API_KEY"]
-    INTEXURAOS_MINIMAX_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
-    INTEXURAOS_GEMINI_APP_API_KEY  = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
-    INTEXURAOS_DASH0_OTLP_ENDPOINT = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
-    INTEXURAOS_DASH0_AUTH_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
+    INTEXURAOS_AUTH_JWKS_URL         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER           = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN   = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_SENTRY_DSN            = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+    INTEXURAOS_ZAI_APP_API_KEY       = module.secret_manager.secret_ids["INTEXURAOS_ZAI_APP_API_KEY"]
+    INTEXURAOS_MINIMAX_APP_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
+    INTEXURAOS_GEMINI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
+    INTEXURAOS_DASHSCOPE_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
+    INTEXURAOS_DASH0_OTLP_ENDPOINT   = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
+    INTEXURAOS_DASH0_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
   }
 }
 

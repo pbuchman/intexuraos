@@ -4,7 +4,7 @@ import type { OAuthState } from '../services/isolation/types.js';
 // POST /tasks request
 export interface CreateTaskRequest {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3max';
   prompt: string;
   repository?: string;
   baseBranch?: string;
