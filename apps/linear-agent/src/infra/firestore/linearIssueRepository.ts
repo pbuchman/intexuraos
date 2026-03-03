@@ -4,6 +4,11 @@
  *
  * Document keys use composite format: `${userId}_${issueId}` to prevent
  * cross-user overwrites when multiple users are connected to the same Linear team.
+ *
+ * DEPLOYMENT NOTE (INT-623): After deploying, trigger fullSyncAllUsers to repopulate
+ * with correctly-keyed documents. Old orphaned documents (keyed by issueId only)
+ * can be cleaned up separately — they are harmless but will be returned by field
+ * queries until removed.
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
@@ -84,6 +89,10 @@ export async function saveLinearIssue(
 /**
  * Find issue by Linear UUID using a field query (not doc key lookup).
  * Works without userId — used by webhook comment handler which only has the Linear issue ID.
+ *
+ * NOTE: In multi-user scenarios where two users have the same Linear issue synced,
+ * this returns whichever document Firestore returns first. This is a known
+ * limitation for webhook routing (separate issue from INT-623).
  */
 export async function findLinearIssueById(
   id: string
