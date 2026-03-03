@@ -291,6 +291,14 @@ if [ -f "/secrets/gcp-sa.json" ]; then
 fi
 
 # ------------------------------------------------------------------------------
+# Load environment variables from container envrc (synced from GCP Secret Manager)
+# ------------------------------------------------------------------------------
+if [ -f "/secrets/envrc" ]; then
+    source /secrets/envrc
+    echo "[entrypoint] Loaded environment from /secrets/envrc ($(grep -c '^export ' /secrets/envrc) vars)"
+fi
+
+# ------------------------------------------------------------------------------
 # Set up git identity and GitHub token
 # ------------------------------------------------------------------------------
 setup_git_identity

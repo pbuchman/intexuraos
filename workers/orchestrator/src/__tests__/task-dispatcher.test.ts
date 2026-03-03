@@ -248,6 +248,7 @@ describe('TaskDispatcher', () => {
             superpowers_writing_plans: 'used',
             linear_url: '',
             is_complex: '0',
+            subtask_urls: '',
             pr_url: '',
             summary: 'Task completed',
             unclear_clarification: '',
