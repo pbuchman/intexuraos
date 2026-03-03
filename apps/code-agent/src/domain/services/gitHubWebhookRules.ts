@@ -73,6 +73,27 @@ export class RepositoryScopeRule implements WebhookRule {
   }
 }
 
+export class ActionableEventRule implements WebhookRule {
+  constructor(private readonly allowedBots: Set<string>) {}
+
+  evaluate(event: GitHubPREvent): RuleResult {
+    if (event.eventType === 'issue_comment' && event.action === 'created') {
+      return { shouldDispatch: true, reason: 'ACTIONABLE_ISSUE_COMMENT' };
+    }
+    if (event.eventType === 'pull_request_review' && event.action === 'submitted') {
+      return { shouldDispatch: true, reason: 'ACTIONABLE_PR_REVIEW' };
+    }
+    if (event.eventType === 'issue_comment' && event.action === 'edited' && this.allowedBots.has(event.senderLogin)) {
+      return { shouldDispatch: true, reason: 'ACTIONABLE_BOT_EDIT' };
+    }
+    return {
+      shouldDispatch: false,
+      reason: 'EVENT_NOT_ACTIONABLE',
+      context: { eventType: event.eventType, action: event.action },
+    };
+  }
+}
+
 /**
  * Rule that checks if the sender is in the allowed bots list or is the repository owner.
  */

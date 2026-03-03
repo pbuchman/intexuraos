@@ -32,7 +32,7 @@ import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js'
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubPRHttpClient } from '../../infra/http/gitHubPRHttpClient.js';
-import { RepositoryScopeRule, SenderWhitelistRule, SkipPrefixRule, BotReviewEditRule, createWebhookRulesService } from '../../domain/services/gitHubWebhookRules.js';
+import { RepositoryScopeRule, ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, BotReviewEditRule, createWebhookRulesService } from '../../domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService } from '../../domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from '../../domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS } from '../../routes/webhooks/github.js';
@@ -198,6 +198,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
     webhookRules: createWebhookRulesService([
       new RepositoryScopeRule(new Set(['intexuraos/*'])),
+      new ActionableEventRule(ALLOWED_BOTS),
       new SenderWhitelistRule(ALLOWED_BOTS),
       new SkipPrefixRule(['@claude', '@codex', '@ignore']),
       new BotReviewEditRule(ALLOWED_BOTS),
@@ -220,7 +221,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
       userServiceClient: mockUserServiceClient,
       firestore: fakeFirestore,
-      messageBuilder: createWebhookMessageBuilder(),
+      messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
       allowedBots: ALLOWED_BOTS,
       orchestratorSecret: 'test-secret',
       serviceUrl: 'http://localhost:8080',

@@ -2,6 +2,7 @@ export {
   createWebhookRulesService,
   GitHubWebhookRules,
   RepositoryScopeRule,
+  ActionableEventRule,
   SenderWhitelistRule,
   SkipPrefixRule,
   BotReviewEditRule,
@@ -20,7 +21,6 @@ export {
 
 export {
   createWebhookMessageBuilder,
-  GitHubMessageBuilder,
   type WebhookMessageBuilder,
-  type TaskContext,
+  type MessageTemplate,
 } from './gitHubMessageBuilder.js';

@@ -1,23 +1,23 @@
-import { GitHubMessageBuilder, PullRequestReviewTemplate, IssueCommentTemplate, EditedBotReviewTemplate, GenericCommentTemplate } from '../../../domain/services/gitHubMessageBuilder.js';
-import type { GitHubPREvent, GitHubEventType } from '../../../domain/models/gitHubPREvent.js';
-import type { TaskContext } from '../../../domain/services/gitHubMessageBuilder.js';
+import { PullRequestReviewTemplate, IssueCommentTemplate, EditedBotReviewTemplate, createWebhookMessageBuilder } from '../../../domain/services/gitHubMessageBuilder.js';
+import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { describe, it, expect } from 'vitest';
 
-// Mock event data
+const ALLOWED_BOTS = new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']);
+
 const mockPRReviewEvent: GitHubPREvent = {
   id: 'event-123',
   githubEventId: 123,
-  repository: 'test/repo',
+  repository: 'intexuraos/code-agent',
   repositoryId: 54321,
-  pullRequestNumber: 123,
+  pullRequestNumber: 42,
   pullRequestId: 12345,
   eventType: 'pull_request_review',
   action: 'submitted',
-  senderLogin: 'test-user',
+  senderLogin: 'pbuchman',
   senderId: 999,
   senderType: 'User',
   title: 'Test PR',
-  body: 'This is a review comment',
+  body: 'Looks good, minor nit on line 5',
   state: 'open',
   mergedAt: null,
   createdAt: new Date('2026-03-03T10:00:00Z'),
@@ -25,351 +25,316 @@ const mockPRReviewEvent: GitHubPREvent = {
   payload: {
     review: {
       id: 456,
-      state: 'approved'
-    }
-  }
+      state: 'approved',
+    },
+  },
 };
 
 const mockIssueCommentEvent: GitHubPREvent = {
   id: 'event-124',
   githubEventId: 124,
-  repository: 'test/repo',
+  repository: 'intexuraos/code-agent',
   repositoryId: 54321,
-  pullRequestNumber: 123,
+  pullRequestNumber: 42,
   pullRequestId: 12345,
   eventType: 'issue_comment',
   action: 'created',
-  senderLogin: 'test-user',
+  senderLogin: 'pbuchman',
   senderId: 999,
   senderType: 'User',
   title: 'Test PR',
-  body: 'This is an issue comment',
+  body: 'Can you fix the lint error?',
   state: 'open',
   mergedAt: null,
   createdAt: new Date('2026-03-03T10:00:00Z'),
   processedAt: new Date('2026-03-03T10:00:00Z'),
-  payload: {}
+  payload: {
+    comment: {
+      id: 789,
+    },
+  },
 };
 
-const mockEditedBotReviewEvent: GitHubPREvent = {
+const mockEditedBotEvent: GitHubPREvent = {
   id: 'event-125',
   githubEventId: 125,
-  repository: 'test/repo',
+  repository: 'intexuraos/code-agent',
   repositoryId: 54321,
-  pullRequestNumber: 123,
+  pullRequestNumber: 42,
   pullRequestId: 12345,
-  eventType: 'pull_request_review',
+  eventType: 'issue_comment',
   action: 'edited',
-  senderLogin: 'test-user',
-  senderId: 999,
-  senderType: 'User',
+  senderLogin: 'claude[bot]',
+  senderId: 888,
+  senderType: 'Bot',
   title: 'Test PR',
-  body: 'This is an edited bot review',
+  body: '## Code Review\n- Found unused import on line 3',
   state: 'open',
   mergedAt: null,
   createdAt: new Date('2026-03-03T10:00:00Z'),
   processedAt: new Date('2026-03-03T10:00:00Z'),
-  payload: {}
-};
-
-const mockGenericEvent: GitHubPREvent = {
-  id: 'event-126',
-  githubEventId: 126,
-  repository: 'test/repo',
-  repositoryId: 54321,
-  pullRequestNumber: 123,
-  pullRequestId: 12345,
-  eventType: 'unknown_event' as GitHubEventType,
-  action: 'opened',
-  senderLogin: 'test-user',
-  senderId: 999,
-  senderType: 'User',
-  title: 'Test PR',
-  body: 'This is a generic event',
-  state: 'open',
-  mergedAt: null,
-  createdAt: new Date('2026-03-03T10:00:00Z'),
-  processedAt: new Date('2026-03-03T10:00:00Z'),
-  payload: {}
-};
-
-const mockTaskContext: TaskContext = {
-  taskId: 'task-123',
-  userId: 'user-456'
+  payload: {
+    comment: {
+      id: 1010,
+    },
+  },
 };
 
 describe('GitHubMessageBuilder', () => {
   describe('PullRequestReviewTemplate', () => {
-    it('renders pull request review events correctly', () => {
+    it('renders header with PR number, repo, sender, review ID, and state', () => {
       const template = new PullRequestReviewTemplate();
-      const result = template.render(mockPRReviewEvent, mockTaskContext);
+      const result = template.render(mockPRReviewEvent);
 
-      expect(result).toContain('GitHub Pull Request Review');
-      expect(result).toContain('Repository: test/repo');
-      expect(result).toContain('PR #123');
-      expect(result).toContain('Sender: test-user');
+      expect(result).toContain('[PR Review] New review on PR #42 in intexuraos/code-agent');
+      expect(result).toContain('From: @pbuchman');
       expect(result).toContain('Review ID: 456');
-      expect(result).toContain('Review State: approved');
-      expect(result).toContain('This is a review comment');
-      expect(result).toContain('Task ID: task-123');
-      expect(result).toContain('User ID: user-456');
+      expect(result).toContain('Review state: approved');
+    });
+
+    it('includes review body', () => {
+      const template = new PullRequestReviewTemplate();
+      const result = template.render(mockPRReviewEvent);
+
+      expect(result).toContain('Review body:\nLooks good, minor nit on line 5');
+    });
+
+    it('includes gh CLI instructions for inline comments and replies', () => {
+      const template = new PullRequestReviewTemplate();
+      const result = template.render(mockPRReviewEvent);
+
+      expect(result).toContain('gh pr view 42 --json state,merged');
+      expect(result).toContain('gh api /repos/intexuraos/code-agent/pulls/42/reviews/456/comments');
+      expect(result).toContain('React with rocket to each inline comment');
+      expect(result).toContain('Reply to each comment');
+    });
+
+    it('uses literal ${repository} in worker instruction lines', () => {
+      const template = new PullRequestReviewTemplate();
+      const result = template.render(mockPRReviewEvent);
+
+      expect(result).toContain('gh api /repos/${repository}/pulls/comments/{id}/reactions');
+      expect(result).toContain('gh api /repos/${repository}/pulls/${prNumber}/comments');
+    });
+
+    it('handles null body with (empty)', () => {
+      const event: GitHubPREvent = { ...mockPRReviewEvent, body: null };
+      const template = new PullRequestReviewTemplate();
+      const result = template.render(event);
+
+      expect(result).toContain('Review body:\n(empty)');
     });
 
     it('handles missing review payload gracefully', () => {
-      const eventWithMissingPayload: GitHubPREvent = {
-        ...mockPRReviewEvent,
-        payload: {}
-      };
-
+      const event: GitHubPREvent = { ...mockPRReviewEvent, payload: {} };
       const template = new PullRequestReviewTemplate();
-      const result = template.render(eventWithMissingPayload, mockTaskContext);
+      const result = template.render(event);
 
       expect(result).toContain('Review ID: unknown');
-      expect(result).toContain('Review State: unknown');
-    });
-
-    it('handles null body gracefully', () => {
-      const eventWithNullBody: GitHubPREvent = {
-        ...mockPRReviewEvent,
-        body: null as unknown as string
-      };
-
-      const template = new PullRequestReviewTemplate();
-      const result = template.render(eventWithNullBody, mockTaskContext);
-
-      expect(result).toContain('(No review comment provided)');
+      expect(result).toContain('Review state: unknown');
     });
 
     it('handles review with non-object review field', () => {
-      const event: GitHubPREvent = {
-        ...mockPRReviewEvent,
-        payload: { review: 'not-an-object' }
-      };
-
+      const event: GitHubPREvent = { ...mockPRReviewEvent, payload: { review: 'not-an-object' } };
       const template = new PullRequestReviewTemplate();
-      const result = template.render(event, mockTaskContext);
+      const result = template.render(event);
 
       expect(result).toContain('Review ID: unknown');
-      expect(result).toContain('Review State: unknown');
+      expect(result).toContain('Review state: unknown');
     });
 
     it('handles review with non-standard id and state types', () => {
-      const event: GitHubPREvent = {
-        ...mockPRReviewEvent,
-        payload: { review: { id: true, state: 42 } }
-      };
-
+      const event: GitHubPREvent = { ...mockPRReviewEvent, payload: { review: { id: true, state: 42 } } };
       const template = new PullRequestReviewTemplate();
-      const result = template.render(event, mockTaskContext);
+      const result = template.render(event);
 
       expect(result).toContain('Review ID: unknown');
-      expect(result).toContain('Review State: unknown');
+      expect(result).toContain('Review state: unknown');
     });
 
-    it('handles missing context gracefully', () => {
+    it('does not include TaskContext', () => {
       const template = new PullRequestReviewTemplate();
-      const result = template.render(mockPRReviewEvent, undefined);
+      const result = template.render(mockPRReviewEvent);
 
-      expect(result).toContain('Task ID: unknown');
-      expect(result).toContain('User ID: unknown');
+      expect(result).not.toContain('Task ID');
+      expect(result).not.toContain('User ID');
     });
   });
 
   describe('IssueCommentTemplate', () => {
-    it('renders issue comment events correctly', () => {
+    it('renders header with PR number, repo, sender, and comment ID', () => {
       const template = new IssueCommentTemplate();
-      const result = template.render(mockIssueCommentEvent, mockTaskContext);
+      const result = template.render(mockIssueCommentEvent);
 
-      expect(result).toContain('GitHub Issue Comment');
-      expect(result).toContain('Repository: test/repo');
-      expect(result).toContain('PR #123');
-      expect(result).toContain('Sender: test-user');
-      expect(result).toContain('This is an issue comment');
-      expect(result).toContain('Task ID: task-123');
-      expect(result).toContain('User ID: user-456');
+      expect(result).toContain('[PR Comment] New comment on PR #42 in intexuraos/code-agent');
+      expect(result).toContain('From: @pbuchman');
+      expect(result).toContain('Comment ID: 789');
+      expect(result).toContain('Type: issue_comment');
     });
 
-    it('handles null body gracefully', () => {
-      const eventWithNullBody: GitHubPREvent = {
-        ...mockIssueCommentEvent,
-        body: null as unknown as string
-      };
-
+    it('includes commenter body', () => {
       const template = new IssueCommentTemplate();
-      const result = template.render(eventWithNullBody, mockTaskContext);
+      const result = template.render(mockIssueCommentEvent);
 
-      expect(result).toContain('(No comment provided)');
+      expect(result).toContain('The commenter said:\nCan you fix the lint error?');
     });
 
-    it('handles missing context gracefully', () => {
+    it('includes gh CLI instructions for reactions and replies', () => {
       const template = new IssueCommentTemplate();
-      const result = template.render(mockIssueCommentEvent, undefined);
+      const result = template.render(mockIssueCommentEvent);
 
-      expect(result).toContain('Task ID: unknown');
-      expect(result).toContain('User ID: unknown');
+      expect(result).toContain('gh api /repos/intexuraos/code-agent/issues/comments/789/reactions');
+      expect(result).toContain('gh api /repos/intexuraos/code-agent/issues/42/comments -f body="..."');
+    });
+
+    it('handles null body with (empty)', () => {
+      const event: GitHubPREvent = { ...mockIssueCommentEvent, body: null };
+      const template = new IssueCommentTemplate();
+      const result = template.render(event);
+
+      expect(result).toContain('The commenter said:\n(empty)');
+    });
+
+    it('handles missing comment payload gracefully', () => {
+      const event: GitHubPREvent = { ...mockIssueCommentEvent, payload: {} };
+      const template = new IssueCommentTemplate();
+      const result = template.render(event);
+
+      expect(result).toContain('Comment ID: unknown');
+    });
+
+    it('does not include TaskContext', () => {
+      const template = new IssueCommentTemplate();
+      const result = template.render(mockIssueCommentEvent);
+
+      expect(result).not.toContain('Task ID');
+      expect(result).not.toContain('User ID');
     });
   });
 
   describe('EditedBotReviewTemplate', () => {
-    it('renders edited bot review events correctly', () => {
+    it('renders header with PR number, repo, sender, and comment ID', () => {
       const template = new EditedBotReviewTemplate();
-      const result = template.render(mockEditedBotReviewEvent, mockTaskContext);
+      const result = template.render(mockEditedBotEvent);
 
-      expect(result).toContain('GitHub Edited Bot Review');
-      expect(result).toContain('Repository: test/repo');
-      expect(result).toContain('PR #123');
-      expect(result).toContain('Sender: test-user');
-      expect(result).toContain('This is an edited bot review');
-      expect(result).toContain('Task ID: task-123');
-      expect(result).toContain('User ID: user-456');
-      expect(result).toContain('Special Instructions for Triage Table Updates');
+      expect(result).toContain('[PR Comment — Bot Review Edit] Comment updated on PR #42 in intexuraos/code-agent');
+      expect(result).toContain('From: @claude[bot]');
+      expect(result).toContain('Comment ID: 1010');
+      expect(result).toContain('Type: issue_comment (edited)');
     });
 
-    it('handles null body gracefully', () => {
-      const eventWithNullBody: GitHubPREvent = {
-        ...mockEditedBotReviewEvent,
-        body: null as unknown as string
-      };
-
+    it('includes full comment body', () => {
       const template = new EditedBotReviewTemplate();
-      const result = template.render(eventWithNullBody, mockTaskContext);
+      const result = template.render(mockEditedBotEvent);
 
-      expect(result).toContain('(No review comment provided)');
+      expect(result).toContain('Full comment body:\n## Code Review\n- Found unused import on line 3');
     });
 
-    it('handles missing context gracefully', () => {
+    it('includes in-progress detection instructions', () => {
       const template = new EditedBotReviewTemplate();
-      const result = template.render(mockEditedBotReviewEvent, undefined);
+      const result = template.render(mockEditedBotEvent);
 
-      expect(result).toContain('Task ID: unknown');
-      expect(result).toContain('User ID: unknown');
+      expect(result).toContain('CHECK IF REVIEW IS STILL IN PROGRESS');
+      expect(result).toContain('Body contains "is working"');
+    });
+
+    it('includes triage table instructions', () => {
+      const template = new EditedBotReviewTemplate();
+      const result = template.render(mockEditedBotEvent);
+
+      expect(result).toContain('Post a response comment with a triage table');
+      expect(result).toContain('Columns: # | Finding | Verdict (FIX/SKIP) | Reasoning | Action');
+    });
+
+    it('includes mandatory implementation warning', () => {
+      const template = new EditedBotReviewTemplate();
+      const result = template.render(mockEditedBotEvent);
+
+      expect(result).toContain('MANDATORY — DO NOT STOP AFTER POSTING THE TABLE');
+      expect(result).toContain('contract violation');
+    });
+
+    it('includes gh CLI instructions for reactions', () => {
+      const template = new EditedBotReviewTemplate();
+      const result = template.render(mockEditedBotEvent);
+
+      expect(result).toContain('gh api /repos/intexuraos/code-agent/issues/comments/1010/reactions -f content=rocket');
+    });
+
+    it('handles null body with (empty)', () => {
+      const event: GitHubPREvent = { ...mockEditedBotEvent, body: null };
+      const template = new EditedBotReviewTemplate();
+      const result = template.render(event);
+
+      expect(result).toContain('Full comment body:\n(empty)');
+    });
+
+    it('does not include TaskContext', () => {
+      const template = new EditedBotReviewTemplate();
+      const result = template.render(mockEditedBotEvent);
+
+      expect(result).not.toContain('Task ID');
+      expect(result).not.toContain('User ID');
     });
   });
 
-  describe('GenericCommentTemplate', () => {
-    it('renders generic events correctly', () => {
-      const template = new GenericCommentTemplate();
-      const result = template.render(mockGenericEvent, mockTaskContext);
+  describe('createWebhookMessageBuilder', () => {
+    it('routes pull_request_review to PullRequestReviewTemplate', () => {
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const result = builder.build(mockPRReviewEvent);
 
-      expect(result).toContain('GitHub Event: unknown_event');
-      expect(result).toContain('Repository: test/repo');
-      expect(result).toContain('PR #123');
-      expect(result).toContain('Sender: test-user');
-      expect(result).toContain('This is a generic event');
-      expect(result).toContain('Task ID: task-123');
-      expect(result).toContain('User ID: user-456');
+      expect(result).toContain('[PR Review] New review on PR #42');
     });
 
-    it('handles null body gracefully', () => {
-      const eventWithNullBody: GitHubPREvent = {
-        ...mockGenericEvent,
-        body: null as unknown as string
+    it('routes issue_comment to IssueCommentTemplate', () => {
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const result = builder.build(mockIssueCommentEvent);
+
+      expect(result).toContain('[PR Comment] New comment on PR #42');
+    });
+
+    it('routes edited bot comment to EditedBotReviewTemplate', () => {
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const result = builder.build(mockEditedBotEvent);
+
+      expect(result).toContain('[PR Comment — Bot Review Edit]');
+    });
+
+    it('does not route edited non-bot comment to EditedBotReviewTemplate', () => {
+      const nonBotEditedEvent: GitHubPREvent = {
+        ...mockEditedBotEvent,
+        senderLogin: 'random-user',
       };
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const result = builder.build(nonBotEditedEvent);
 
-      const template = new GenericCommentTemplate();
-      const result = template.render(eventWithNullBody, mockTaskContext);
-
-      expect(result).toContain('(No content provided)');
+      expect(result).toContain('[PR Comment] New comment on PR #42');
+      expect(result).not.toContain('Bot Review Edit');
     });
 
-    it('handles missing context gracefully', () => {
-      const template = new GenericCommentTemplate();
-      const result = template.render(mockGenericEvent, undefined);
-
-      expect(result).toContain('Task ID: unknown');
-      expect(result).toContain('User ID: unknown');
-    });
-  });
-
-  describe('GitHubMessageBuilder', () => {
-    it('builds messages using registered templates', () => {
-      const builder = new GitHubMessageBuilder();
-      const result = builder.build(mockPRReviewEvent, mockTaskContext);
-
-      expect(result).toContain('GitHub Pull Request Review');
-      expect(result).toContain('Review ID: 456');
-    });
-
-    it('falls back to generic template for unregistered event types', () => {
-      const builder = new GitHubMessageBuilder();
-      const result = builder.build(mockGenericEvent, mockTaskContext);
-
-      expect(result).toContain('GitHub Event: unknown_event');
-    });
-
-    it('allows custom template registration', () => {
-      const builder = new GitHubMessageBuilder();
-      const customTemplate = new GenericCommentTemplate();
-
-      builder.registerTemplate('custom_event' as GitHubEventType, customTemplate);
-
-      const customEvent: GitHubPREvent = {
-        id: 'event-custom',
-        githubEventId: 999,
-        eventType: 'custom_event' as GitHubEventType,
+    it('falls back to IssueCommentTemplate for unknown event types', () => {
+      const unknownEvent: GitHubPREvent = {
+        ...mockIssueCommentEvent,
+        eventType: 'push',
         action: 'created',
-        repository: 'test/repo',
-        repositoryId: 54321,
-        pullRequestNumber: 123,
-        pullRequestId: 12345,
-        senderLogin: 'test-user',
-        senderId: 999,
-        senderType: 'User',
-        body: 'Custom event',
-        title: 'Test PR',
-        state: 'open',
-        mergedAt: null,
-        createdAt: new Date('2026-03-03T10:00:00Z'),
-        processedAt: new Date('2026-03-03T10:00:00Z'),
-        payload: {}
       };
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const result = builder.build(unknownEvent);
 
-      const result = builder.build(customEvent, mockTaskContext);
-      expect(result).toContain('GitHub Event: custom_event');
+      expect(result).toContain('[PR Comment] New comment on PR #42');
     });
 
-    it('returns all registered template types', () => {
-      const builder = new GitHubMessageBuilder();
-      const registeredTypes = builder.getRegisteredTemplateTypes();
+    it('prioritizes edited bot detection over eventType routing', () => {
+      const editedBotReviewEvent: GitHubPREvent = {
+        ...mockPRReviewEvent,
+        action: 'edited',
+        senderLogin: 'claude[bot]',
+        payload: { comment: { id: 555 } },
+      };
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const result = builder.build(editedBotReviewEvent);
 
-      expect(registeredTypes).toContain('pull_request_review');
-      expect(registeredTypes).toContain('issue_comment');
-      expect(registeredTypes).toContain('edited_bot_review');
-    });
-
-    it('handles missing task context gracefully', () => {
-      const builder = new GitHubMessageBuilder();
-      const result = builder.build(mockPRReviewEvent, undefined as unknown as TaskContext);
-
-      expect(result).toContain('Task ID: unknown');
-      expect(result).toContain('User ID: unknown');
-    });
-  });
-
-  // Snapshot tests
-  describe('Snapshot Tests', () => {
-    it('matches snapshot for pull request review', () => {
-      const builder = new GitHubMessageBuilder();
-      const result = builder.build(mockPRReviewEvent, mockTaskContext);
-      expect(result).toMatchSnapshot();
-    });
-
-    it('matches snapshot for issue comment', () => {
-      const builder = new GitHubMessageBuilder();
-      const result = builder.build(mockIssueCommentEvent, mockTaskContext);
-      expect(result).toMatchSnapshot();
-    });
-
-    it('matches snapshot for edited bot review', () => {
-      const builder = new GitHubMessageBuilder();
-      const result = builder.build(mockEditedBotReviewEvent, mockTaskContext);
-      expect(result).toMatchSnapshot();
-    });
-
-    it('matches snapshot for generic event', () => {
-      const builder = new GitHubMessageBuilder();
-      const result = builder.build(mockGenericEvent, mockTaskContext);
-      expect(result).toMatchSnapshot();
+      expect(result).toContain('[PR Comment — Bot Review Edit]');
     });
   });
 });

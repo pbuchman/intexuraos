@@ -83,9 +83,6 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
     firestore: {} as never,
     messageBuilder: {
       build: vi.fn().mockReturnValue('built-message'),
-      buildMessage: vi.fn(),
-      registerTemplate: vi.fn(),
-      getRegisteredTemplateTypes: vi.fn(),
     } as never,
     allowedBots: new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']),
     orchestratorSecret: 'test-secret',
@@ -118,10 +115,7 @@ describe('GitHubDispatchService', () => {
         dispatched: true,
         taskId: 'task-123',
       });
-      expect(deps.messageBuilder.build).toHaveBeenCalledWith(
-        mockEvent,
-        { taskId: 'task-123', userId: 'user-456' }
-      );
+      expect(deps.messageBuilder.build).toHaveBeenCalledWith(mockEvent);
       expect(mockedSendTaskMessage).toHaveBeenCalledWith(
         expect.objectContaining({ logger: mockLogger }),
         { taskId: 'task-123', userId: 'user-456', message: 'built-message' }
