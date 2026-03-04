@@ -1473,9 +1473,18 @@ describe('POST /internal/webhooks/task-complete', () => {
       // validateIssue called only once for original issue (no URL-based subtask resolution)
       expect(validateIssueSpy).toHaveBeenCalledTimes(1);
 
-      // All 3 direct children normalized via tree fallback
+      // All 3 direct children normalized via tree fallback (removes assignee)
       expect(updateIssueStateSpy).toHaveBeenCalledTimes(4); // 1 parent + 3 children
       expect(updateIssueMetadataSpy).toHaveBeenCalledTimes(4); // 1 parent + 3 children
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-1-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+      );
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-2-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+      );
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-3-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+      );
 
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
