@@ -294,6 +294,9 @@ function checkVersionBumped(promptFiles) {
 
 /**
  * Find all files containing PromptBuilder exports.
+ * Guards: each search directory must contain at least one prompt.
+ * If a directory exists but yields zero prompts, the script fails —
+ * this catches silent breakage in the verification itself.
  */
 function findPromptFiles() {
   const searchDirs = [
@@ -306,11 +309,23 @@ function findPromptFiles() {
 
   for (const dir of searchDirs) {
     const tsFiles = findTsFiles(dir);
+    const dirLabel = relative(repoRoot, dir);
+    let dirCount = 0;
+
     for (const filePath of tsFiles) {
       const content = readFileSync(filePath, 'utf8');
       if (hasPromptBuilderExport(content)) {
         promptFiles.push(filePath);
+        dirCount++;
       }
+    }
+
+    if (existsSync(dir) && dirCount === 0) {
+      errors.push({
+        file: dirLabel,
+        message: `Directory "${dirLabel}" exists but contains no PromptBuilder exports. This likely indicates a broken verification — check regex patterns and directory structure.`,
+        check: 'A',
+      });
     }
   }
 
