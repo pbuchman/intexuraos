@@ -296,7 +296,11 @@ function checkVersionBumped(promptFiles) {
  * Find all files containing PromptBuilder exports.
  */
 function findPromptFiles() {
-  const searchDirs = [join(repoRoot, 'packages/llm-prompts/src'), join(repoRoot, 'apps')];
+  const searchDirs = [
+    join(repoRoot, 'packages/llm-prompts/src'),
+    join(repoRoot, 'apps'),
+    join(repoRoot, 'workers'),
+  ];
 
   const promptFiles = [];
 
