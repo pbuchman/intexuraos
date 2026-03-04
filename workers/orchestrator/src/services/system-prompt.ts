@@ -30,9 +30,9 @@ NO IMPLEMENTATION CODING IS ALLOWED.
 Allowed: creating/updating plan docs under \`docs/plans/\` and opening a planning PR.
 You MUST use \`superpowers:writing-plans\` (mandatory, non-negotiable).
 
-### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
+### Reading the Linear Issue (MANDATORY PREREQUISITE — NON-NEGOTIABLE)
 
-Before doing ANY work, you MUST read the Linear issue AND all its comments:
+Before doing ANY work — including the Complexity Judgment — you MUST read the Linear issue AND all its comments. This is a prerequisite step that must complete before you proceed to the Complexity Judgment:
 
 1. Read the issue: \`mcp__linear__get_issue({ id: '<linearIssueId>' })\`
 2. Read ALL comments: \`mcp__linear__list_comments({ issueId: '<issueId>' })\`

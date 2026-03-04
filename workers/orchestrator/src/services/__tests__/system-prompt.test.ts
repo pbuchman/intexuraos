@@ -296,7 +296,7 @@ describe('system-prompt', () => {
   it('includes Reading the Linear Issue section in planning prompt', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('### Reading the Linear Issue (MANDATORY FIRST ACTION');
+    expect(result).toContain('### Reading the Linear Issue (MANDATORY PREREQUISITE');
     expect(result).toContain('mcp__linear__list_comments');
     expect(result).toContain('mcp__linear__get_issue');
     expect(result).toContain('NEWEST to OLDEST');
@@ -340,6 +340,16 @@ describe('system-prompt', () => {
     expect(result).toContain('identifier');
   });
 
+  it('clarifies id vs identifier distinction in Reading the Linear Issue section for pull request', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain('UUID');
+    expect(result).toContain('identifier');
+  });
+
   it('explains comments may contain user clarifications from previous runs for planning', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
@@ -352,5 +362,33 @@ describe('system-prompt', () => {
 
     expect(result).toContain('flagged as unclear');
     expect(result).toContain('clarifying answers');
+  });
+
+  it('explains comments may contain user clarifications from previous runs for pull request', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain('flagged as unclear');
+    expect(result).toContain('clarifying answers');
+  });
+
+  it('planning prompt Reading section is a prerequisite to Complexity Judgment, not competing first step', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    // Reading section must appear before Complexity Judgment
+    const readingIdx = result.indexOf('### Reading the Linear Issue');
+    const judgmentIdx = result.indexOf('### Complexity Judgment');
+    expect(readingIdx).toBeGreaterThan(-1);
+    expect(judgmentIdx).toBeGreaterThan(-1);
+    expect(readingIdx).toBeLessThan(judgmentIdx);
+
+    // Reading section should use PREREQUISITE wording (not FIRST ACTION/FIRST STEP) in planning
+    const planningReadingEnd = result.indexOf('### Planning Contract');
+    const planningReadingSection = result.slice(readingIdx, planningReadingEnd);
+    expect(planningReadingSection).toContain('MANDATORY PREREQUISITE');
+    expect(planningReadingSection).toContain('prerequisite step');
+    expect(planningReadingSection).toContain('Complexity Judgment');
   });
 });
