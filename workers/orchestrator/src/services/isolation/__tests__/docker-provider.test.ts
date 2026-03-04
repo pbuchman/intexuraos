@@ -1060,14 +1060,19 @@ describe('DockerProvider', () => {
       expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.5');
     });
 
-    it('mounts shared creds dir for sonnet workers instead of per-task session', async () => {
+    it('uses per-task session path with credential file overlay for sonnet workers', async () => {
       const config = createTestConfig({ workerType: 'sonnet' });
       await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const binds = createCall?.HostConfig?.Binds as string[];
-      expect(binds).toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
-      expect(binds.join(',')).not.toContain('claude-session');
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
+      expect(binds).toContainEqual(
+        '/shared/claude-creds/.credentials.json:/home/claude/.claude/.credentials.json:rw'
+      );
+      expect(binds).not.toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
     });
 
     it('mounts per-task session for minimax workers even with sharedCredsPath', async () => {
@@ -1111,14 +1116,19 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-anthropic-key');
     });
 
-    it('mounts shared creds dir for auto workers instead of per-task session', async () => {
+    it('uses per-task session path with credential file overlay for auto workers', async () => {
       const config = createTestConfig({ workerType: 'auto' });
       await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const binds = createCall?.HostConfig?.Binds as string[];
-      expect(binds).toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
-      expect(binds.join(',')).not.toContain('claude-session');
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
+      expect(binds).toContainEqual(
+        '/shared/claude-creds/.credentials.json:/home/claude/.claude/.credentials.json:rw'
+      );
+      expect(binds).not.toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
     });
 
     it('mounts per-task session for glm workers even with sharedCredsPath', async () => {
