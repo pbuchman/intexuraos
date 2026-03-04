@@ -853,6 +853,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   const [blockOverrides, setBlockOverrides] = useState<Set<number>>(() => new Set());
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
+  const isAutoScrollingRef = useRef(false);
 
   // Tool block collapsing
   const bodyLineMap = useMemo(() => {
@@ -905,7 +906,10 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   // Auto-scroll when new logs arrive and follow mode is on
   useEffect(() => {
     if (logs.length > prevLogCountRef.current && followRef.current) {
+      isAutoScrollingRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      // Clear flag after smooth scroll animation completes (~400ms typical)
+      setTimeout(() => { isAutoScrollingRef.current = false; }, 500);
     }
     prevLogCountRef.current = logs.length;
   }, [logs.length]);
@@ -916,6 +920,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     if (el === null) return;
 
     const onScroll = (): void => {
+      if (isAutoScrollingRef.current) return;
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
       if (atBottom && !followRef.current) {
         followRef.current = true;
@@ -935,7 +940,9 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     followRef.current = next;
     setFollowLogs(next);
     if (next) {
+      isAutoScrollingRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => { isAutoScrollingRef.current = false; }, 500);
     }
   };
 
