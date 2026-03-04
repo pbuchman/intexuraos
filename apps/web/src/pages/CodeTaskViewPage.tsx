@@ -854,7 +854,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
   const isAutoScrollingRef = useRef(false);
-  const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Tool block collapsing
   const bodyLineMap = useMemo(() => {
