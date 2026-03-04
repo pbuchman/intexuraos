@@ -196,6 +196,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           if (input.linearFallback !== undefined) {
             taskData.linearFallback = input.linearFallback;
           }
+          if (input.linearIssueLabels !== undefined) {
+            taskData.linearIssueLabels = input.linearIssueLabels;
+          }
           if (input.webhookSecret !== undefined) {
             taskData.webhookSecret = input.webhookSecret;
           }
