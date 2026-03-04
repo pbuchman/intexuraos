@@ -1595,4 +1595,111 @@ describe('retryTask use case', () => {
       }
     });
   });
+
+  describe('archive original task on retry (INT-711)', () => {
+    it('archives original task after successful retry dispatch', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
+      const retryTaskId = 'retry-task-archive';
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'http://localhost:3000',
+            enabled: true,
+            cfAccessClientId: undefined,
+            cfAccessClientSecret: undefined,
+            dispatchSigningSecret: 'secret',
+          }],
+        })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ orchestratorTaskId: 'orch-123', workerLocation: 'home-mac' })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+      mockMetricsClient.incrementTasksSubmitted.mockResolvedValue(undefined);
+      mockWhatsAppNotifier.notifyTaskStarted.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+
+      // Verify codeTaskRepo.update was called with archived status for original task
+      const updateCalls = mockCodeTaskRepo.update.mock.calls as [string, { status?: string }][];
+      const archiveCall = updateCalls.find(
+        ([taskId, input]) => taskId === originalTaskId && input.status === 'archived'
+      );
+
+      expect(archiveCall).toBeDefined();
+      expect(archiveCall?.[0]).toBe(originalTaskId);
+      expect(archiveCall?.[1]).toEqual({ status: 'archived' });
+    });
+
+    it('succeeds even when archiving original task fails', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
+      const retryTaskId = 'retry-task-archive-fail';
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'http://localhost:3000',
+            enabled: true,
+            cfAccessClientId: undefined,
+            cfAccessClientSecret: undefined,
+            dispatchSigningSecret: 'secret',
+          }],
+        })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ orchestratorTaskId: 'orch-123', workerLocation: 'home-mac' })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+      mockMetricsClient.incrementTasksSubmitted.mockResolvedValue(undefined);
+      mockWhatsAppNotifier.notifyTaskStarted.mockResolvedValue(ok(undefined));
+
+      // Return error only for the original task archive call, success for all others
+      mockCodeTaskRepo.update.mockImplementation(async (taskId: string, input: { status?: string }) => {
+        if (taskId === originalTaskId && input.status === 'archived') {
+          return err({ code: 'FIRESTORE_ERROR' as const, message: 'Archive failed' });
+        }
+        return ok(createMockTask({ id: taskId === retryTaskId ? retryTaskId : originalTaskId }) as unknown as CodeTask);
+      });
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      // Retry should still succeed despite archive failure
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.retriedFrom).toBe(originalTaskId);
+      }
+
+      // Verify warning was logged
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ originalTaskId }),
+        'Failed to archive original task after retry (non-fatal)'
+      );
+    });
+  });
 });

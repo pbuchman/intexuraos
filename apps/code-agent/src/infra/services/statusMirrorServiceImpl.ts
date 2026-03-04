@@ -55,6 +55,7 @@ export function createStatusMirrorService(deps: StatusMirrorServiceDeps): Status
     failed: 'failed',
     cancelled: 'cancelled',
     interrupted: 'interrupted',
+    archived: 'completed',     // Archived tasks treated as completed for Inbox UI (INT-711)
   };
 
   return {

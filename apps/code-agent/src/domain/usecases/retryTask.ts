@@ -524,7 +524,19 @@ ${additionalContext.trim()}
   }
   /* v8 ignore stop @preserve */
 
-  // Step 15: Return success
+  // Step 15: Archive original task (automatic cleanup on retry, INT-711)
+  const archiveResult = await codeTaskRepo.update(originalTaskId, {
+    status: 'archived',
+  });
+  if (!archiveResult.ok) {
+    logger.warn(
+      { originalTaskId, error: archiveResult.error },
+      'Failed to archive original task after retry (non-fatal)'
+    );
+    // Don't fail the retry - archiving is best-effort cleanup
+  }
+
+  // Step 16: Return success
   logger.info(
     { originalTaskId, retryTaskId: retryTask.id, userId },
     'Task retry created successfully'

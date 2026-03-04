@@ -6,11 +6,13 @@ describe('CodeTask model', () => {
     const validStatuses: TaskStatus[] = [
       'dispatched',
       'running',
+      'queued',
       'planned',
       'implemented',
       'failed',
       'interrupted',
       'cancelled',
+      'archived',
     ];
 
     // Type-level validation - if this compiles, types are correct
