@@ -23,7 +23,8 @@ import type { GitHubPREventRepository } from '../../../domain/repositories/gitHu
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
-import { shouldSkipComment, resolveLoginForTaskCreation } from '../../../routes/webhooks/github.js';
+import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService } from '../../../domain/services/gitHubWebhookRules.js';
+import { ALLOWED_BOTS } from '../../../routes/webhooks/github.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
@@ -131,6 +132,12 @@ describe('POST /webhooks/github', () => {
       turnMetricsRepo: {} as never,
       userServiceClient: {} as never,
       gitHubPRClient: {} as never,
+      webhookRules: createWebhookRulesService([
+        new ActionableEventRule(ALLOWED_BOTS),
+        new SenderWhitelistRule(ALLOWED_BOTS),
+        new SkipPrefixRule(['@claude', '@codex', '@ignore']),
+      ]),
+      dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
     };
 
     setServices(mockServices);
@@ -1125,9 +1132,10 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'pbuchman', id: 368465, type: 'User' },
       };
 
-      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      // Use real production rules — only mock dispatchService to verify it's called
+      const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: true });
       const services = (await import('../../../services.js')).getServices();
-      services.codeTaskRepo.findByPR = mockFindByPR;
+      services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
@@ -1165,9 +1173,10 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Repo owner should be allowed — findByPR should be called
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockFindByPR).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
+      expect(mockDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ event: expect.objectContaining({ repository: 'pbuchman/intexuraos', pullRequestNumber: 42 }) })
+      );
     });
 
     it('dispatches issue_comment from chatgpt-codex-connector[bot]', async () => {
@@ -1198,9 +1207,10 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'chatgpt-codex-connector[bot]', id: 555, type: 'Bot' },
       };
 
-      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      // Use real production rules — only mock dispatchService to verify it's called
+      const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: true });
       const services = (await import('../../../services.js')).getServices();
-      services.codeTaskRepo.findByPR = mockFindByPR;
+      services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
@@ -1238,9 +1248,10 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Whitelisted bot should dispatch
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockFindByPR).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
+      expect(mockDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ event: expect.objectContaining({ repository: 'pbuchman/intexuraos', pullRequestNumber: 42 }) })
+      );
     });
 
     it('blocks dispatch when payload has no repository owner', async () => {
@@ -1270,9 +1281,10 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'randomuser', id: 444, type: 'User' },
       };
 
-      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      // Use real production rules — 'randomuser' is not repo owner 'test' and not in ALLOWED_BOTS
+      const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: false });
       const services = (await import('../../../services.js')).getServices();
-      services.codeTaskRepo.findByPR = mockFindByPR;
+      services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
@@ -1310,9 +1322,8 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // No owner in payload + not whitelisted bot = blocked
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockFindByPR).not.toHaveBeenCalled();
+      expect(mockDispatch).not.toHaveBeenCalled();
     });
 
     it('dispatches edited issue_comment from claude[bot] to task', async () => {
@@ -1343,9 +1354,10 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'claude[bot]', id: 999, type: 'Bot' },
       };
 
-      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      // Use real production rules — claude[bot] is in ALLOWED_BOTS so dispatch should fire
+      const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: true });
       const services = (await import('../../../services.js')).getServices();
-      services.codeTaskRepo.findByPR = mockFindByPR;
+      services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
@@ -1383,9 +1395,10 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Edited claude[bot] comment should pass through dispatch gate — findByPR should be called
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockFindByPR).toHaveBeenCalledWith('test/intexuraos', 42);
+      expect(mockDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ event: expect.objectContaining({ repository: 'test/intexuraos', pullRequestNumber: 42 }) })
+      );
     });
 
     it('does not dispatch edited issue_comment from regular user', async () => {
@@ -1416,9 +1429,10 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'reviewer', id: 222, type: 'User' },
       };
 
-      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      // Use real production rules — 'reviewer' is not an allowed bot, so issue_comment+edited is rejected
+      const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: false });
       const services = (await import('../../../services.js')).getServices();
-      services.codeTaskRepo.findByPR = mockFindByPR;
+      services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
@@ -1456,74 +1470,9 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Regular user edited comment should NOT pass through dispatch gate
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockFindByPR).not.toHaveBeenCalled();
+      expect(mockDispatch).not.toHaveBeenCalled();
     });
   });
 });
 
-describe('shouldSkipComment', () => {
-  it('returns true for @claude prefix', () => {
-    expect(shouldSkipComment('@claude please review this PR')).toBe(true);
-  });
-
-  it('returns true for @codex prefix', () => {
-    expect(shouldSkipComment('@codex fix this issue')).toBe(true);
-  });
-
-  it('returns true for @ignore prefix', () => {
-    expect(shouldSkipComment('@ignore this comment')).toBe(true);
-  });
-
-  it('returns true with leading whitespace', () => {
-    expect(shouldSkipComment('  @claude review')).toBe(true);
-    expect(shouldSkipComment('\t@codex fix')).toBe(true);
-    expect(shouldSkipComment('\n@ignore skip')).toBe(true);
-  });
-
-  it('returns true case-insensitive', () => {
-    expect(shouldSkipComment('@Claude review this')).toBe(true);
-    expect(shouldSkipComment('@CODEX fix this')).toBe(true);
-    expect(shouldSkipComment('@IGNORE this')).toBe(true);
-  });
-
-  it('returns true for prefix variations like @codex-review', () => {
-    expect(shouldSkipComment('@codex-review check types')).toBe(true);
-    expect(shouldSkipComment('@claude-code please help')).toBe(true);
-  });
-
-  it('returns false for @claude mid-body', () => {
-    expect(shouldSkipComment('Hey @claude can you check this?')).toBe(false);
-  });
-
-  it('returns false for null body', () => {
-    expect(shouldSkipComment(null)).toBe(false);
-  });
-
-  it('returns false for empty string body', () => {
-    expect(shouldSkipComment('')).toBe(false);
-  });
-
-  it('returns false for normal comment', () => {
-    expect(shouldSkipComment('This looks good to me!')).toBe(false);
-  });
-});
-
-describe('resolveLoginForTaskCreation', () => {
-  it('returns senderLogin unchanged for non-bot usernames', () => {
-    expect(resolveLoginForTaskCreation('pbuchman', 'pbuchman/intexuraos')).toBe('pbuchman');
-  });
-
-  it('returns repo owner for claude[bot]', () => {
-    expect(resolveLoginForTaskCreation('claude[bot]', 'pbuchman/intexuraos')).toBe('pbuchman');
-  });
-
-  it('returns repo owner for chatgpt-codex-connector[bot]', () => {
-    expect(resolveLoginForTaskCreation('chatgpt-codex-connector[bot]', 'pbuchman/intexuraos')).toBe('pbuchman');
-  });
-
-  it('returns bot username as fallback when repository has no slash', () => {
-    expect(resolveLoginForTaskCreation('claude[bot]', 'intexuraos')).toBe('claude[bot]');
-  });
-});
