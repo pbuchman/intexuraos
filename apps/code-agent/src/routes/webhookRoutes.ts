@@ -601,9 +601,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { ok: true };
       };
 
-      // Helper: clean up PR task lock for PR-originated tasks reaching terminal state
+      // Helper: clean up PR task lock for PR-originated tasks reaching terminal state.
+      // Only the original lock-owning task (parentTaskId === undefined) should delete the lock.
+      // Follow-up tasks copy prNumber but don't own the lock — deleting here could remove
+      // a lock that belongs to a different in-flight PR-comment task.
       const cleanupLockIfPR = async (): Promise<void> => {
-        if (task.prNumber !== undefined) {
+        if (task.prNumber !== undefined && task.parentTaskId === undefined) {
           await deletePRTaskLock(firestore, task.repository, task.prNumber, request.log);
         }
       };

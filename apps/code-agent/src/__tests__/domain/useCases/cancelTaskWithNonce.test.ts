@@ -347,5 +347,22 @@ describe('cancelTaskWithNonce', () => {
       // Verify lock deletion was NOT called (no prNumber on task)
       expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
+
+    it('does NOT delete PR task lock after cancellation when task is a follow-up (has parentTaskId)', async () => {
+      const followUpTask = { ...baseTask, prNumber: 42, parentTaskId: 'parent-task-123' };
+      vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(followUpTask));
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({ ...followUpTask, status: 'cancelled' as const })
+      );
+
+      const result = await cancelTaskWithNonce(
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+        { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
+      );
+
+      expect(result.ok).toBe(true);
+      // Verify lock deletion was NOT called (follow-up task does not own the lock)
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
   });
 });

@@ -784,5 +784,51 @@ describe('drainTaskQueue', () => {
       // Verify lock deletion was NOT called (no prNumber on task)
       expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
+
+    it('does NOT delete PR task lock on TTL expiry when task is a follow-up (has parentTaskId)', async () => {
+      const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+      const task = createMockTask({
+        queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+        prNumber: 42,
+        parentTaskId: 'parent-task-123',
+      });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+      // Mock parent task lookup for implementationTaskId clearing logic
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(createMockTask({ id: 'parent-task-123' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      }
+      // Verify lock deletion was NOT called (follow-up task does not own the lock)
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
+
+    it('does NOT delete PR task lock on dispatch failure when task is a follow-up (has parentTaskId)', async () => {
+      const task = createMockTask({
+        prNumber: 42,
+        parentTaskId: 'parent-task-123',
+      });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'network_error', message: 'Connection refused' })
+      );
+
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+      }
+      // Verify lock deletion was NOT called (follow-up task does not own the lock)
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
   });
 });
