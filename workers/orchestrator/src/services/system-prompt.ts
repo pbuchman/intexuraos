@@ -145,6 +145,7 @@ PLANNING_AGENT_FINAL:
 After this block, stop. Do not append any other checklist or schema payload.
 
 Note: For complex planned outcomes, you MUST include explicit proof of the parallel breakdown. This means showing exactly how each subissue's boundaries are defined — what types/interfaces each subissue owns, what contracts it exposes, and how agents can work on each subissue independently without coordination.`;
+  /* v8 ignore stop @preserve */
   },
 };
 
@@ -155,7 +156,8 @@ export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
-    return `[SYSTEM CONTEXT]
+  /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
+  return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [AGENT:EXECUTION]
@@ -254,8 +256,8 @@ EXECUTION_AGENT_FINAL:
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
-  },
   /* v8 ignore stop @preserve */
+  },
 };
 
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
