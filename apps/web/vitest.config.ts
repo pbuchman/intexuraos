@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 
 // Set up environment variables for tests
@@ -27,6 +28,7 @@ process.env.INTEXURAOS_FIREBASE_AUTH_DOMAIN = 'test.firebaseapp.com';
 process.env.INTEXURAOS_SENTRY_DSN_WEB = 'test-dsn';
 
 export default defineConfig({
+  plugins: [react()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
