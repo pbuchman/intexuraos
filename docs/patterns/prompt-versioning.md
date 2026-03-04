@@ -56,6 +56,7 @@ Prompt files are located in:
 
 - `packages/llm-prompts/src/` — shared prompts used across services
 - `apps/*/src/` — service-specific prompts
+- `workers/*/src/` — worker-specific prompts (e.g., orchestrator system prompts)
 
 ## Enforcement
 
@@ -78,4 +79,4 @@ pnpm run verify:prompt-versions
 
 ## Out of Scope
 
-Bare `build*Prompt()` functions (not using `PromptBuilder`) are not versioned. These are typically repair/context prompts with simple, stable templates.
+Bare `build*Prompt()` functions (not using `PromptBuilder`) are not versioned. These are typically repair/context prompts with simple, stable templates. If a bare function controls significant agent behavior, it should be converted to the `PromptBuilder` pattern.

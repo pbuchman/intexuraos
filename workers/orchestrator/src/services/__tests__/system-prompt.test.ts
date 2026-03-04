@@ -1,7 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { buildSystemPrompt } from '../system-prompt.js';
+import {
+  buildSystemPrompt,
+  planningPrompt,
+  executionPrompt,
+  pullRequestPrompt,
+  prReviewOverlayPrompt,
+} from '../system-prompt.js';
 
 describe('system-prompt', () => {
+  const SEMVER_REGEX = /^\d+\.\d+\.\d+$/;
+
+  describe('prompt versioning', () => {
+    it.each([
+      { name: 'planningPrompt', prompt: planningPrompt },
+      { name: 'executionPrompt', prompt: executionPrompt },
+      { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
+      { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
+    ])('$name has valid semver version', ({ prompt }) => {
+      expect(prompt.version).toMatch(SEMVER_REGEX);
+    });
+
+    it.each([
+      { name: 'planningPrompt', prompt: planningPrompt },
+      { name: 'executionPrompt', prompt: executionPrompt },
+      { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
+      { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
+    ])('$name has required metadata fields', ({ prompt }) => {
+      expect(prompt.name).toBeTruthy();
+      expect(prompt.description).toBeTruthy();
+      expect(typeof prompt.build).toBe('function');
+    });
+  });
+
   const baseParams = {
     taskId: 'task-123',
     linearIssueId: 'INT-123',
