@@ -49,6 +49,10 @@ import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
+import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
+import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
+import { ALLOWED_BOTS } from './routes/webhooks/github.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -75,6 +79,8 @@ export interface ServiceContainer {
   userServiceClient: UserServiceClient;
   gitHubPRClient: GitHubPRClient;
   userLookupService?: UserLookupService;
+  webhookRules: WebhookRulesService;
+  dispatchService: WebhookDispatchService;
 }
 
 // Configuration required to initialize services
@@ -87,6 +93,8 @@ export interface ServiceConfig {
   linearAgentUrl: string;
   actionsAgentUrl: string;
   webhookVerifySecret: string;
+  orchestratorSecret: string;
+  serviceUrl: string;
   userServiceUrl: string;
 }
 
@@ -256,53 +264,89 @@ export function initServices(config: ServiceConfig): void {
     },
   });
 
+  const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
+  const logLineRepo = createFirestoreLogLineRepository({ firestore, logger });
+  const workerSettingsRepo = createWorkerSettingsRepository({ firestore, logger });
+  const taskDispatcher = createTaskDispatcherService({ logger });
+  const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher });
+  const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000 });
+
+  const statusMirrorService = createStatusMirrorService({
+    actionsAgentClient,
+    logger,
+  });
+
+  const userLookupService = createUserLookupService({
+    gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient, logger }),
+    workerSettingsRepo,
+    logger,
+  });
+
   container = {
     firestore,
     logger,
-    codeTaskRepo: createFirestoreCodeTaskRepository({ firestore, logger }),
+    codeTaskRepo,
     logChunkRepo: createFirestoreLogChunkRepository({ firestore, logger }),
-    logLineRepo: createFirestoreLogLineRepository({ firestore, logger }),
-    taskDispatcher: createTaskDispatcherService({
-      logger,
-    }),
-    whatsappNotifier: createWhatsAppNotifier({
-      whatsappPublisher,
-    }),
+    logLineRepo,
+    taskDispatcher,
+    whatsappNotifier,
     actionsAgentClient,
     linearAgentClient,
-    statusMirrorService: createStatusMirrorService({
-      actionsAgentClient,
-      logger,
-    }),
+    statusMirrorService,
     rateLimitService: createRateLimitService({
       userUsageRepository: createUserUsageFirestoreRepository(firestore, logger),
       logger,
     }),
     linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({
-      codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
+      codeTaskRepository: codeTaskRepo,
       logger,
     }),
     detectZombieTasks: createDetectZombieTasksUseCase({
-      codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
+      codeTaskRepository: codeTaskRepo,
       logger,
     }),
     cleanupTaskLogs: createCleanupTaskLogsUseCase({
-      codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
+      codeTaskRepository: codeTaskRepo,
       logger,
     }),
     metricsClient,
-    workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
+    workerSettingsRepo,
     workerHealthProbe: createWorkerHealthProbe(),
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
     userServiceClient,
-    gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 10000 }),
-    userLookupService: createUserLookupService({
-      gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient, logger }),
-      workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
-      logger,
+    gitHubPRClient,
+    userLookupService,
+    webhookRules: createWebhookRulesService([
+      // Note: RepositoryScopeRule is NOT included here because the route handler
+      // already filters via shouldProcessRepository() which correctly handles
+      // both intexuraos/* and */intexuraos patterns. Adding it here would be
+      // redundant and risks scope mismatch (see PR #997 review).
+      new ActionableEventRule(ALLOWED_BOTS),
+      new SenderWhitelistRule(ALLOWED_BOTS),
+      new SkipPrefixRule(['@claude', '@codex', '@ignore']),
+      // Note: BotReviewEditRule is NOT included here because it introduces
+      // new "meaningful changes" filtering not present in the original code.
+      // The original dispatched all edited bot comments without payload inspection.
+    ]),
+    dispatchService: createWebhookDispatchService({
+      codeTaskRepo,
+      logLineRepo,
+      userLookupService,
+      linearIssueService,
+      taskDispatcher,
+      whatsappNotifier,
+      workerSettingsRepo,
+      statusMirrorService,
+      gitHubPRClient,
+      userServiceClient,
+      firestore,
+      messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
+      allowedBots: ALLOWED_BOTS,
+      orchestratorSecret: config.orchestratorSecret,
+      serviceUrl: config.serviceUrl,
     }),
   };
 }
