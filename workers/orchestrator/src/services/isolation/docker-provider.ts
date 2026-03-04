@@ -666,7 +666,9 @@ export class DockerProvider implements IsolationProvider {
             `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
             `${taskSessionPath}:/home/claude/.claude:rw`,
             ...(useSharedCreds && this.config.sharedCredsPath !== undefined
-              ? [`${this.config.sharedCredsPath}/.credentials.json:/home/claude/.claude/.credentials.json:rw`]
+              ? [
+                  `${this.config.sharedCredsPath}/.credentials.json:/home/claude/.claude/.credentials.json:rw`,
+                ]
               : []),
             /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
             ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),

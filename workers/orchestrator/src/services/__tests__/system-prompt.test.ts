@@ -292,5 +292,4 @@ describe('system-prompt', () => {
     expect(result).not.toContain('View progress');
     expect(result).not.toContain('View task');
   });
-
 });
