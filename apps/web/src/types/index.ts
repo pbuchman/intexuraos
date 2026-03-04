@@ -1121,7 +1121,8 @@ export type CodeTaskStatus =
   | 'implemented'
   | 'failed'
   | 'interrupted'
-  | 'cancelled';
+  | 'cancelled'
+  | 'archived';
 
 /**
  * Task result on successful completion.

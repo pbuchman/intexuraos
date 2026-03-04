@@ -237,11 +237,13 @@ describe('statusMirrorService', () => {
     it.each([
       ['dispatched', 'dispatched'],
       ['running', 'running'],
+      ['queued', 'dispatched'],
       ['planned', 'completed'],
       ['implemented', 'completed'],
       ['failed', 'failed'],
       ['cancelled', 'cancelled'],
       ['interrupted', 'interrupted'],
+      ['archived', 'completed'],
     ])('should map %s to %s', async (taskStatus, expectedResourceStatus) => {
       getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
