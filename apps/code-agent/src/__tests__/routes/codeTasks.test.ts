@@ -670,6 +670,53 @@ describe('GET /code/tasks endpoints', () => {
         fetchSpy.mockRestore();
       });
 
+      it('includes linearIssueLabels in task response when stored', async () => {
+        const task = await codeTaskRepo.create({
+          userId: 'test-user-id',
+          prompt: 'Task with labels',
+          sanitizedPrompt: 'Task with labels',
+          systemPromptHash: 'default',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_labels',
+          linearIssueId: 'INT-200',
+          linearIssueLabels: ['feature', 'backend'],
+        });
+
+        if (!task.ok) {
+          throw new Error(`Failed to create test task: ${task.error.message}`);
+        }
+
+        vi.spyOn(linearAgentClient, 'fetchIssueForDisplay').mockResolvedValueOnce(
+          ok({
+            identifier: 'INT-200',
+            title: 'Feature with labels',
+            state: { name: 'In Progress', type: 'started' },
+            priority: 2,
+            assignee: null,
+            labels: [],
+            url: 'https://linear.app/intexura/issue/INT-200',
+            commentCount: 0,
+            lastCommentAt: null,
+          })
+        );
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/code/tasks/${task.value.id}`,
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.linearIssueLabels).toEqual(['feature', 'backend']);
+      });
+
       it('returns task without linearIssue when task has no linearIssueId', async () => {
         const task = await codeTaskRepo.create({
           userId: 'test-user-id',

@@ -63,6 +63,11 @@ const codeTaskSchema = {
     linearIssueTitle: { type: 'string', nullable: true },
     linearIssueUrl: { type: 'string', nullable: true },
     linearFallback: { type: 'boolean', nullable: true },
+    linearIssueLabels: {
+      type: 'array',
+      nullable: true,
+      items: { type: 'string' },
+    },
     agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
     implementationTaskId: { type: 'string' },
     parentTaskId: { type: 'string' },
@@ -161,6 +166,7 @@ function taskToApiResponse(task: {
   linearIssueTitle?: string;
   linearIssueUrl?: string;
   linearFallback?: boolean;
+  linearIssueLabels?: string[];
   agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
@@ -210,6 +216,7 @@ function taskToApiResponse(task: {
   linearIssueTitle?: string;
   linearIssueUrl?: string;
   linearFallback?: boolean;
+  linearIssueLabels?: string[];
   agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
@@ -269,6 +276,9 @@ function taskToApiResponse(task: {
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.linearFallback !== undefined && { linearFallback: task.linearFallback }),
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: optional property spread @preserve */
+    ...(task.linearIssueLabels !== undefined && { linearIssueLabels: task.linearIssueLabels }),
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.agentType !== undefined && { agentType: task.agentType }),
@@ -1618,6 +1628,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   linearIssueId: { type: 'string' },
                   linearIssueTitle: { type: 'string' },
                   linearFallback: { type: 'boolean' },
+                  linearIssueLabels: {
+                    type: 'array',
+                    nullable: true,
+                    items: { type: 'string' },
+                  },
                   agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
                   implementationTaskId: { type: 'string' },
                   parentTaskId: { type: 'string' },
