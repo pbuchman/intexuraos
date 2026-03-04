@@ -23,7 +23,8 @@ import type { GitHubPREventRepository } from '../../../domain/repositories/gitHu
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
-import type { RuleResult } from '../../../domain/services/gitHubWebhookRules.js';
+import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService } from '../../../domain/services/gitHubWebhookRules.js';
+import { ALLOWED_BOTS } from '../../../routes/webhooks/github.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
@@ -131,7 +132,11 @@ describe('POST /webhooks/github', () => {
       turnMetricsRepo: {} as never,
       userServiceClient: {} as never,
       gitHubPRClient: {} as never,
-      webhookRules: { evaluate: (): RuleResult => ({ shouldDispatch: false, reason: 'TEST_SKIP' }) },
+      webhookRules: createWebhookRulesService([
+        new ActionableEventRule(ALLOWED_BOTS),
+        new SenderWhitelistRule(ALLOWED_BOTS),
+        new SkipPrefixRule(['@claude', '@codex', '@ignore']),
+      ]),
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
     };
 
@@ -1127,9 +1132,9 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'pbuchman', id: 368465, type: 'User' },
       };
 
+      // Use real production rules — only mock dispatchService to verify it's called
       const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: true });
       const services = (await import('../../../services.js')).getServices();
-      services.webhookRules = { evaluate: (): RuleResult => ({ shouldDispatch: true, reason: 'TEST_ALLOW' }) };
       services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
@@ -1202,9 +1207,9 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'chatgpt-codex-connector[bot]', id: 555, type: 'Bot' },
       };
 
+      // Use real production rules — only mock dispatchService to verify it's called
       const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: true });
       const services = (await import('../../../services.js')).getServices();
-      services.webhookRules = { evaluate: (): RuleResult => ({ shouldDispatch: true, reason: 'TEST_ALLOW' }) };
       services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
@@ -1276,9 +1281,9 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'randomuser', id: 444, type: 'User' },
       };
 
+      // Use real production rules — 'randomuser' is not repo owner 'test' and not in ALLOWED_BOTS
       const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: false });
       const services = (await import('../../../services.js')).getServices();
-      services.webhookRules = { evaluate: (): RuleResult => ({ shouldDispatch: false, reason: 'SENDER_NOT_WHITELISTED' }) };
       services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
@@ -1349,9 +1354,9 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'claude[bot]', id: 999, type: 'Bot' },
       };
 
+      // Use real production rules — claude[bot] is in ALLOWED_BOTS so dispatch should fire
       const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: true });
       const services = (await import('../../../services.js')).getServices();
-      services.webhookRules = { evaluate: (): RuleResult => ({ shouldDispatch: true, reason: 'TEST_ALLOW' }) };
       services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
@@ -1424,9 +1429,9 @@ describe('POST /webhooks/github', () => {
         sender: { login: 'reviewer', id: 222, type: 'User' },
       };
 
+      // Use real production rules — 'reviewer' is not an allowed bot, so issue_comment+edited is rejected
       const mockDispatch = vi.fn().mockResolvedValue({ success: true, dispatched: false });
       const services = (await import('../../../services.js')).getServices();
-      services.webhookRules = { evaluate: (): RuleResult => ({ shouldDispatch: false, reason: 'SENDER_NOT_WHITELISTED' }) };
       services.dispatchService = { dispatch: mockDispatch };
 
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({

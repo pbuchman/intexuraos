@@ -49,7 +49,7 @@ import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { RepositoryScopeRule, ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, BotReviewEditRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS } from './routes/webhooks/github.js';
@@ -320,11 +320,16 @@ export function initServices(config: ServiceConfig): void {
     gitHubPRClient,
     userLookupService,
     webhookRules: createWebhookRulesService([
-      new RepositoryScopeRule(new Set(['intexuraos/*'])),
+      // Note: RepositoryScopeRule is NOT included here because the route handler
+      // already filters via shouldProcessRepository() which correctly handles
+      // both intexuraos/* and */intexuraos patterns. Adding it here would be
+      // redundant and risks scope mismatch (see PR #997 review).
       new ActionableEventRule(ALLOWED_BOTS),
       new SenderWhitelistRule(ALLOWED_BOTS),
       new SkipPrefixRule(['@claude', '@codex', '@ignore']),
-      new BotReviewEditRule(ALLOWED_BOTS),
+      // Note: BotReviewEditRule is NOT included here because it introduces
+      // new "meaningful changes" filtering not present in the original code.
+      // The original dispatched all edited bot comments without payload inspection.
     ]),
     dispatchService: createWebhookDispatchService({
       codeTaskRepo,
