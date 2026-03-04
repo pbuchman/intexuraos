@@ -3369,7 +3369,6 @@ describe('TaskDispatcher', () => {
       expect(result).toContain('[ACTIVE GOAL');
       expect(result).toContain('Just a plain message');
     });
-
   });
 
   describe('active goal in systemPrompt (integration)', () => {
