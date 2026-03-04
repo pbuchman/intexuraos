@@ -9,21 +9,21 @@ Investigate code-agent task execution by fetching task metadata and logs from Fi
 
 ## Invocation Detection
 
-| Input Pattern | Action |
-|---|---|
-| `https://dev.intexuraos.cloud/#/code-tasks/task_*` | Extract task ID, env=dev |
-| `https://intexuraos.cloud/#/code-tasks/task_*` | Extract task ID, env=prod |
-| `task_<uuid>` + "debug"/"investigate"/"what went wrong" | Use task ID directly |
+| Input Pattern                                           | Action                    |
+| ------------------------------------------------------- | ------------------------- |
+| `https://dev.intexuraos.cloud/#/code-tasks/task_*`      | Extract task ID, env=dev  |
+| `https://intexuraos.cloud/#/code-tasks/task_*`          | Extract task ID, env=prod |
+| `task_<uuid>` + "debug"/"investigate"/"what went wrong" | Use task ID directly      |
 
 ## Phase 1: Environment Detection
 
 Parse the URL. Do NOT fetch it — hash-routed SPA returns only shell HTML.
 
-| Signal | dev | prod |
-|---|---|---|
-| URL | `dev.intexuraos.cloud` | `intexuraos.cloud` (no `dev.`) |
-| Orchestrator | home-dev (systemd) | Cloud Run |
-| Logs | PM2 / systemd | gcloud logging |
+| Signal       | dev                    | prod                           |
+| ------------ | ---------------------- | ------------------------------ |
+| URL          | `dev.intexuraos.cloud` | `intexuraos.cloud` (no `dev.`) |
+| Orchestrator | home-dev (systemd)     | Cloud Run                      |
+| Logs         | PM2 / systemd          | gcloud logging                 |
 
 Run `uname -n` to confirm current machine.
 
@@ -56,13 +56,14 @@ Only needed when Firestore logs are insufficient. Requires being on the same mac
 ### Orchestrator Logs
 
 Check `uname -n` first. If orchestrator is on a different machine, access it remotely:
+
 - From **mac-dev** → SSH to home-dev: `ssh home-dev journalctl -u intexuraos-orchestrator@pbuchman --since ... --until ...`
 - From **home-dev** → cannot SSH to mac-dev. Tell the user.
 
-| Machine | How orchestrator runs | Log command |
-|---|---|---|
-| **home-dev** | systemd (`intexuraos-orchestrator@pbuchman`) | `journalctl -u intexuraos-orchestrator@pbuchman --since "<time>" --until "<time>"` |
-| **mac-dev** | `pnpm --filter orchestrator dev` in `~/deploy/intexuraos/` | Terminal output where the dev process is running. Code not auto-deployed on push. |
+| Machine      | How orchestrator runs                                      | Log command                                                                        |
+| ------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **home-dev** | systemd (`intexuraos-orchestrator@pbuchman`)               | `journalctl -u intexuraos-orchestrator@pbuchman --since "<time>" --until "<time>"` |
+| **mac-dev**  | `pnpm --filter orchestrator dev` in `~/deploy/intexuraos/` | Terminal output where the dev process is running. Code not auto-deployed on push.  |
 
 Derive time window from task document `createdAt._seconds` and `completedAt._seconds`:
 

@@ -28,7 +28,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 # Architecture
 
-**Overview:** `apps/` (Fastify, Cloud Run) | `workers/` (Cloud Functions) | `packages/` (common-*, infra-*) | `terraform/` | `docs/`. Apps use `services.ts` DI; workers use lightweight direct injection. Both require 95% coverage. Reference: `.claude/reference/architecture.md`
+**Overview:** `apps/` (Fastify, Cloud Run) | `workers/` (Cloud Functions) | `packages/` (common-_, infra-_) | `terraform/` | `docs/`. Apps use `services.ts` DI; workers use lightweight direct injection. Both require 95% coverage. Reference: `.claude/reference/architecture.md`
 
 **Rules:** Apps can't import other apps. Routes use `getServices()`. Service communication via `/internal/{resource-name}` with `X-Internal-Auth`. All endpoints MUST use `logIncomingRequest()`. Pub/Sub: HTTP push only (no pull). Use cases MUST accept `logger: Logger`. Firestore: one collection owner per service, cross-service via HTTP, registry: `firestore-collections.json`. Migrations: IMMUTABLE — create new to fix bugs. Multi-field queries need composite indexes in `migrations/*.mjs`.
 
