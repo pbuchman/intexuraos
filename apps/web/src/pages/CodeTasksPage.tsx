@@ -42,6 +42,11 @@ interface StatusStyle {
 }
 
 const ALL_TASK_STATUSES: CodeTaskStatus[] = [
+  'queued', 'dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled', 'archived',
+];
+
+// Statuses shown by default (all except archived — INT-711)
+const DEFAULT_VISIBLE_STATUSES: CodeTaskStatus[] = [
   'queued', 'dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled',
 ];
 
@@ -54,6 +59,7 @@ const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
   failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed' },
   interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted' },
   cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled' },
+  archived: { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-500 dark:text-slate-500', label: 'Archived' },
 };
 
 export function CodeTasksPage(): React.JSX.Element {
@@ -71,7 +77,8 @@ export function CodeTasksPage(): React.JSX.Element {
         // Invalid JSON, use default
       }
     }
-    return [];
+    // Default: show all statuses EXCEPT archived (INT-711)
+    return DEFAULT_VISIBLE_STATUSES;
   });
   const [isFilterExpanded, setIsFilterExpanded] = useState(
     () => localStorage.getItem('code-tasks-filter-expanded') === 'true'
