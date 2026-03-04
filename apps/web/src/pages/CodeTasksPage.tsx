@@ -332,16 +332,6 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE}`}>
               {task.linearIssue.state.name}
             </span>
-            {task.linearIssue.labels.length > 0 ? (
-              task.linearIssue.labels.map((label) => (
-                <span
-                  key={label.id}
-                  className="inline-flex items-center rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300"
-                >
-                  {label.name}
-                </span>
-              ))
-            ) : null}
             {task.linearIssue.assignee !== null ? (
               <span className="text-xs text-green-600 dark:text-green-400">{task.linearIssue.assignee.name}</span>
             ) : null}
@@ -368,6 +358,16 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
               {task.linearIssueId}
             </span>
           )
+        ) : null}
+        {task.linearIssue?.labels !== undefined && task.linearIssue.labels.length > 0 ? (
+          task.linearIssue.labels.map((label) => (
+            <span
+              key={label.id}
+              className="inline-flex items-center rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300"
+            >
+              {label.name}
+            </span>
+          ))
         ) : null}
         {task.result?.prUrl !== undefined ? (
           <a
