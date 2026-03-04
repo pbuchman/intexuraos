@@ -7,7 +7,15 @@ vi.mock('node:os', async (importOriginal) => {
   const gid = process.getgid?.() ?? 1000;
   return {
     ...actual,
-    userInfo: vi.fn().mockReturnValue({ uid, gid, username: 'testuser', homedir: `/home/testuser`, shell: '/bin/bash' }),
+    userInfo: vi
+      .fn()
+      .mockReturnValue({
+        uid,
+        gid,
+        username: 'testuser',
+        homedir: `/home/testuser`,
+        shell: '/bin/bash',
+      }),
   };
 });
 
