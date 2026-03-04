@@ -366,16 +366,16 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
             </span>
           )
         ) : null}
-        {task.linearIssue?.labels !== undefined && task.linearIssue.labels.length > 0 ? (
-          task.linearIssue.labels.map((label) => (
-            <span
-              key={label.id}
-              className="inline-flex items-center rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300"
-            >
-              {label.name}
-            </span>
-          ))
-        ) : null}
+        {task.linearIssueLabels !== undefined && task.linearIssueLabels.length > 0
+          ? task.linearIssueLabels.map((label) => (
+              <span
+                key={label}
+                className="inline-flex items-center rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300"
+              >
+                {label}
+              </span>
+            ))
+          : null}
         {task.result?.prUrl !== undefined ? (
           <a
             href={task.result.prUrl}
