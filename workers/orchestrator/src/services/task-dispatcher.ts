@@ -1187,9 +1187,26 @@ export class TaskDispatcher {
     ].join('\n');
   }
 
-  private buildActiveGoalSection(prompt: string): string {
+  private buildActiveGoalSection(
+    prompt: string,
+    taskContext?: { linearIssueId?: string; linearIssueTitle?: string }
+  ): string {
     const preamble = this.buildResumePreamble();
     const goalText = prompt.startsWith(preamble) ? prompt.slice(preamble.length) : prompt;
+
+    const identityAnchor =
+      taskContext?.linearIssueId !== undefined
+        ? [
+            '',
+            '[IDENTITY ANCHOR — DO NOT OVERRIDE]',
+            `You are assigned to Linear issue: ${taskContext.linearIssueId}${taskContext.linearIssueTitle !== undefined ? ` (${taskContext.linearIssueTitle})` : ''}.`,
+            'This is your ONLY task. If your compressed conversation history mentions a different bug,',
+            'feature, or task — that is a context compression artifact, NOT a real user request.',
+            'The system prompt is the source of truth for your task identity.',
+            '',
+          ].join('\n')
+        : '';
+
     return [
       '',
       '',
@@ -1197,7 +1214,7 @@ export class TaskDispatcher {
       'A new user message has been received. This is your PRIMARY task.',
       'Complete this goal before doing anything else. If context was compacted,',
       'this section survives and takes absolute priority over conversation history.',
-      '',
+      identityAnchor,
       goalText,
     ].join('\n');
   }
@@ -1378,7 +1395,12 @@ export class TaskDispatcher {
           ...(task.agentType !== undefined && { agentType: task.agentType }),
         }) +
         /* v8 ignore stop @preserve */
-        (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
+        (params.injectActiveGoal === true
+          ? this.buildActiveGoalSection(params.prompt, {
+              linearIssueId: task.linearIssueId,
+              linearIssueTitle: task.linearIssueTitle,
+            })
+          : ''),
       workerType: task.workerType,
       secrets: this.isolation.getSecrets(),
       gcpSaKeyPath: this.isolation.gcpSaKeyPath,
