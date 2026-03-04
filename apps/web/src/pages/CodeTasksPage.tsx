@@ -297,6 +297,11 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {task.status === 'planned' && task.implementationTaskId === undefined && (
+          <span className="inline-flex items-center rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-medium text-green-400 dark:bg-red-700 dark:text-green-300">
+            Ready to implement
+          </span>
+        )}
         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}>
           {status.label}
         </span>
