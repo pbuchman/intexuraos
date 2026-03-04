@@ -1170,12 +1170,12 @@ describe('POST /internal/webhooks/task-complete', () => {
         expect.objectContaining({ issueId: 'child-2-uuid', state: 'todo' })
       );
 
-      // Both subtasks normalized + stamped with code-task in single call
+      // Both subtasks normalized + stamped with code-task in single call (removes assignee)
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-1-uuid', removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-1-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-2-uuid', removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-2-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
       );
 
       const getResult = await codeTaskRepo.findById(task.id);
