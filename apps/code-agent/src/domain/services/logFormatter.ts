@@ -487,7 +487,26 @@ function formatResult(obj: StreamJsonMessage): string {
 }
 
 function collapseOutput(output: string): string {
-  const lines = stripSystemReminders(output)
+  const cleaned = stripSystemReminders(output);
+  const trimmed = cleaned.trim();
+
+  // Summarize large JSON hook output into a compact one-liner
+  if (trimmed.length >= 200) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return `  hook output: [${String(parsed.length)} items] [${String(trimmed.length)} chars]`;
+      }
+      if (typeof parsed === 'object' && parsed !== null) {
+        const keys = Object.keys(parsed);
+        return `  hook output: {${String(keys.length)} keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', ...' : ''}} [${String(trimmed.length)} chars]`;
+      }
+    } catch {
+      // Not JSON — fall through to line-by-line indenting
+    }
+  }
+
+  const lines = cleaned
     .split('\n')
     .filter((l) => l.trim() !== '');
   return lines.map((l) => `  ${l}`).join('\n');
