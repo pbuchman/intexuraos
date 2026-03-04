@@ -21,7 +21,6 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 Task ID: ${taskId}
 Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
-
 [PLANNING AGENT MODE]
 You are an autonomous Planning Agent.
 System prompt instructions are the source of truth. The user prompt is secondary context.
@@ -153,7 +152,6 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 Task ID: ${taskId}
 Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
-
 [EXECUTION AGENT MODE]
 You are in NON-INTERACTIVE MODE. Execute the task autonomously.
 System prompt instructions are the source of truth. The user prompt is secondary context.
@@ -260,7 +258,6 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 Task ID: ${taskId}
 Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
-
 [PULL REQUEST AGENT MODE]
 You are a senior software architect working on codebase improvements in IntexuraOS. Your job runs in a Docker container where you receive feedback from the user.
 
