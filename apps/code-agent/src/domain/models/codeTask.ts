@@ -145,6 +145,7 @@ export interface CodeTask {
   linearIssueTitle?: string;
   linearIssueUrl?: string;
   linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';  // LLM-classified issue type
+  linearIssueLabels?: string[];            // Label names from Linear at dispatch time
   linearFallback?: boolean;     // True if Linear was unavailable (design lines 290-296)
 
   // PR Correlation (for linking tasks to PRs - INT-465)

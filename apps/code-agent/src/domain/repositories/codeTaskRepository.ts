@@ -23,6 +23,7 @@ export interface CreateTaskInput {
   linearIssueId?: string;
   linearIssueTitle?: string;
   linearIssueUrl?: string;
+  linearIssueLabels?: string[];
   linearFallback?: boolean;
   webhookSecret?: string;
   /**
