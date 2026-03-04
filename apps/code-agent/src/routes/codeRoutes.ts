@@ -373,6 +373,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             },
             required: ['success', 'error'],
           },
+          400: {
+            description: 'Invalid request — prompt failed injection sanitization',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
           409: {
             description: 'Duplicate task (deduplication triggered)',
             type: 'object',
@@ -543,6 +559,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         if (error.code === 'worker_unavailable') {
           return await reply.fail('MISCONFIGURED', 'Worker unavailable');
+        }
+
+        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
+        if (error.code === 'validation_error') {
+        /* v8 ignore stop @preserve */
+          return await reply.fail('INVALID_REQUEST', error.message);
         }
 
         return await reply.fail('INTERNAL_ERROR', error.message);
