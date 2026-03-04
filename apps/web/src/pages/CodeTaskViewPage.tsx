@@ -149,27 +149,25 @@ export function CodeTaskViewPage(): React.JSX.Element {
     }
   }, [task?.workerType]);
 
-  const handleRetryWithWorkerType = useCallback(async (type: WorkerType) => {
-    setSelectedWorkerType(type);
+  const handleRetry = useCallback(async () => {
     setShowRetryDropdown(false);
     try {
-      const newId = await retryTask(type);
+      const newId = await retryTask(selectedWorkerType);
       void navigate(`/code-tasks/${newId}`);
     } catch {
       // retryTask already sets retryError state
     }
-  }, [retryTask, navigate]);
+  }, [retryTask, navigate, selectedWorkerType]);
 
-  const handleImplementWithWorkerType = useCallback(async (type: WorkerType) => {
-    setSelectedWorkerType(type);
+  const handleImplement = useCallback(async () => {
     setShowImplementDropdown(false);
     try {
-      const newId = await startImplementation(type);
+      const newId = await startImplementation(selectedWorkerType);
       void navigate(`/code-tasks/${newId}`);
     } catch {
       // startImplementation already sets implementError state
     }
-  }, [startImplementation, navigate]);
+  }, [startImplementation, navigate, selectedWorkerType]);
 
   const handleDelete = useCallback(async (): Promise<void> => {
     try {
@@ -257,9 +255,11 @@ export function CodeTaskViewPage(): React.JSX.Element {
         implementError={implementError}
         {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
         selectedWorkerType={selectedWorkerType}
+        originalWorkerType={task.workerType as WorkerType}
         showDropdown={showImplementDropdown}
         onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
-        onSelectWorkerType={(type): void => { void handleImplementWithWorkerType(type); }}
+        onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowImplementDropdown(false); }}
+        onImplement={(): void => { void handleImplement(); }}
       />
 
       <MemoTaskActions
@@ -271,9 +271,11 @@ export function CodeTaskViewPage(): React.JSX.Element {
         retrying={retrying}
         retryError={retryError}
         selectedWorkerType={selectedWorkerType}
+        originalWorkerType={task.workerType as WorkerType}
         showDropdown={showRetryDropdown}
         onToggleDropdown={(): void => { setShowRetryDropdown(!showRetryDropdown); }}
-        onSelectWorkerType={(type): void => { void handleRetryWithWorkerType(type); }}
+        onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowRetryDropdown(false); }}
+        onRetry={(): void => { void handleRetry(); }}
         deleting={deleting}
         deleteError={deleteError}
         showDeleteConfirm={showDeleteConfirm}
@@ -409,7 +411,8 @@ function isActiveStatus(status: CodeTaskStatus): boolean {
 function TaskActions({
   isActive, cancelling, cancelError, onCancel,
   isRetryable, retrying, retryError,
-  selectedWorkerType, showDropdown, onToggleDropdown, onSelectWorkerType,
+  selectedWorkerType, originalWorkerType, showDropdown, onToggleDropdown, onSelectWorkerType,
+  onRetry,
   deleting, deleteError, showDeleteConfirm,
   onShowDeleteConfirm, onCancelDeleteConfirm, onConfirmDelete,
 }: {
@@ -421,9 +424,11 @@ function TaskActions({
   retrying: boolean;
   retryError: string | null;
   selectedWorkerType: WorkerType;
+  originalWorkerType: WorkerType;
   showDropdown: boolean;
   onToggleDropdown: () => void;
   onSelectWorkerType: (type: WorkerType) => void;
+  onRetry: () => void;
   deleting: boolean;
   deleteError: string | null;
   showDeleteConfirm: boolean;
@@ -447,72 +452,86 @@ function TaskActions({
         </Button>
       ) : null}
       {isRetryable ? (
-        <div className="relative">
-          <Button
-            onClick={(): void => { onToggleDropdown(); }}
-            disabled={retrying || deleting}
-            isLoading={retrying}
-            loadingText="Retrying..."
-          >
-            <RotateCcw className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Retry Task</span>
-            <ChevronDown className="ml-2 h-4 w-4" />
-          </Button>
-          {showDropdown && (
-            <div className="absolute z-10 mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
-              {WORKER_TYPES.map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={(): void => { onSelectWorkerType(type); }}
-                  className={`block w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                    selectedWorkerType === type ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {WORKER_TYPE_LABELS[type]}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : null}
-      {isRetryable ? (
-        !showDeleteConfirm ? (
-          <Button
-            variant="ghost"
-            onClick={onShowDeleteConfirm}
-            disabled={deleting || retrying}
-            className="text-slate-600 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
-          >
-            <Trash2 className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Delete</span>
-          </Button>
-        ) : (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-900/30">
-            <p className="mb-3 text-sm text-red-800 dark:text-red-400">
-              Delete this task permanently?
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={onConfirmDelete}
-                disabled={deleting}
-                isLoading={deleting}
-                loadingText="Deleting..."
-              >
-                Delete
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={onCancelDeleteConfirm}
-                disabled={deleting}
-              >
-                Cancel
-              </Button>
-            </div>
+        showDeleteConfirm ? (
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-red-400">Delete this task permanently?</p>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={onConfirmDelete}
+              disabled={deleting}
+              isLoading={deleting}
+              loadingText="Deleting..."
+            >
+              Delete
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onCancelDeleteConfirm}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
           </div>
+        ) : (
+          <>
+            <div className="relative flex">
+              <button
+                type="button"
+                onClick={onRetry}
+                disabled={retrying || deleting}
+                className="flex items-center gap-2 rounded-l-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+              >
+                {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                <span className="hidden sm:inline">Retry Task</span>
+                <span className="hidden sm:inline font-normal text-blue-200">{'· '}{WORKER_TYPE_LABELS[selectedWorkerType]}</span>
+              </button>
+              <div className="w-px bg-blue-400/30" />
+              <button
+                type="button"
+                onClick={onToggleDropdown}
+                disabled={retrying || deleting}
+                className="flex items-center rounded-r-lg bg-blue-600 px-2.5 py-2 text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+              >
+                <ChevronDown className={`h-4 w-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showDropdown ? (
+                <div className="absolute bottom-full left-0 z-10 mb-2 w-48 rounded-lg border border-gray-700 bg-gray-800 py-1.5 shadow-xl">
+                  <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Model</div>
+                  {WORKER_TYPES.map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={(): void => { onSelectWorkerType(type); }}
+                      className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-700 ${
+                        selectedWorkerType === type ? 'text-blue-400' : 'text-gray-300'
+                      }`}
+                    >
+                      <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${
+                        selectedWorkerType === type ? 'border-blue-400' : 'border-gray-500'
+                      }`}>
+                        {selectedWorkerType === type ? <div className="h-1.5 w-1.5 rounded-full bg-blue-400" /> : null}
+                      </div>
+                      <span className="flex-1">{WORKER_TYPE_LABELS[type]}</span>
+                      {type === originalWorkerType ? (
+                        <span className="rounded bg-blue-900/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-blue-400">original</span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={onShowDeleteConfirm}
+              disabled={deleting || retrying}
+              className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-red-900/20 hover:text-red-400 disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Delete</span>
+            </button>
+          </>
         )
       ) : null}
       {cancelError !== null ? (
@@ -604,9 +623,11 @@ interface NextStepsProps {
   implementError: string | null;
   implementationTaskId?: string;
   selectedWorkerType: WorkerType;
+  originalWorkerType: WorkerType;
   showDropdown: boolean;
   onToggleDropdown: () => void;
   onSelectWorkerType: (type: WorkerType) => void;
+  onImplement: () => void;
 }
 
 function NextSteps({
@@ -615,9 +636,11 @@ function NextSteps({
   implementError,
   implementationTaskId,
   selectedWorkerType,
+  originalWorkerType,
   showDropdown,
   onToggleDropdown,
   onSelectWorkerType,
+  onImplement,
 }: NextStepsProps): React.JSX.Element | null {
   if (!isImplementable && implementationTaskId === undefined && implementError === null) return null;
 
@@ -632,33 +655,53 @@ function NextSteps({
           View Implementation
         </a>
       ) : isImplementable ? (
-        <div className="relative">
-          <Button
-            onClick={(): void => { onToggleDropdown(); }}
-            disabled={implementing}
-            isLoading={implementing}
-            loadingText="Starting Implementation..."
-          >
-            <Play className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Start Implementation</span>
-            <ChevronDown className="ml-2 h-4 w-4" />
-          </Button>
-          {showDropdown && (
-            <div className="absolute z-10 mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
-              {WORKER_TYPES.map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={(): void => { onSelectWorkerType(type); }}
-                  className={`block w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                    selectedWorkerType === type ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {WORKER_TYPE_LABELS[type]}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="relative flex items-center gap-3">
+          <div className="relative flex">
+            <button
+              type="button"
+              onClick={onImplement}
+              disabled={implementing}
+              className="flex items-center gap-2 rounded-l-lg border border-emerald-600/30 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+            >
+              {implementing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              <span className="hidden sm:inline">Implement</span>
+              <span className="hidden sm:inline font-normal text-emerald-400/70">{'· '}{WORKER_TYPE_LABELS[selectedWorkerType]}</span>
+            </button>
+            <div className="w-px bg-emerald-500/20" />
+            <button
+              type="button"
+              onClick={onToggleDropdown}
+              disabled={implementing}
+              className="flex items-center rounded-r-lg border border-l-0 border-emerald-600/30 bg-emerald-500/10 px-2.5 py-2 text-emerald-400 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showDropdown ? (
+              <div className="absolute bottom-full left-0 z-10 mb-2 w-48 rounded-lg border border-gray-700 bg-gray-800 py-1.5 shadow-xl">
+                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Model</div>
+                {WORKER_TYPES.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={(): void => { onSelectWorkerType(type); }}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-700 ${
+                      selectedWorkerType === type ? 'text-emerald-400' : 'text-gray-300'
+                    }`}
+                  >
+                    <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${
+                      selectedWorkerType === type ? 'border-emerald-400' : 'border-gray-500'
+                    }`}>
+                      {selectedWorkerType === type ? <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> : null}
+                    </div>
+                    <span className="flex-1">{WORKER_TYPE_LABELS[type]}</span>
+                    {type === originalWorkerType ? (
+                      <span className="rounded bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-400">plan</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
       {implementError !== null ? (
