@@ -2821,6 +2821,83 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.data.resourceUrl).toContain('/#/code-tasks/');
       expect(body.data.workerLocation).toBe('mac');
     });
+
+    it('accepts qwen3.5-plus as workerType without 400 validation error', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Design feature Y',
+        sanitizedPrompt: 'Design feature Y (sanitized)',
+        systemPromptHash: 'abc123',
+        workerType: 'auto',
+        workerLocation: 'home-dev',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-planning-qwen',
+        agentType: 'planning',
+        linearIssueId: 'INT-200',
+        linearIssueTitle: 'Feature Y',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'planned' });
+
+      const mockLinearClient: LinearAgentClient = {
+        validateIssue: async () =>
+          ok({
+            id: 'INT-200',
+            identifier: 'INT-200',
+            title: 'Feature Y',
+            url: 'https://linear.app/intexuraos/issue/INT-200',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          }),
+        updateIssueState: async () => ok({}),
+        addComment: async () => ok({}),
+      } as unknown as LinearAgentClient;
+
+      const mockWorkerSettings: WorkerSettingsRepository = {
+        getSettings: async () =>
+          ok({
+            workers: [
+              {
+                name: 'home-dev',
+                url: 'https://worker.dev',
+                enabled: true,
+                cfAccessClientId: '',
+                cfAccessClientSecret: '',
+                dispatchSigningSecret: '',
+              },
+            ],
+          }),
+      } as unknown as WorkerSettingsRepository;
+
+      setServices({
+        ...getServices(),
+        linearAgentClient: mockLinearClient,
+        workerSettingsRepo: mockWorkerSettings,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/code/tasks/${created.value.id}/implement`,
+        headers: { authorization: 'Bearer test-token' },
+        body: { workerType: 'qwen3.5-plus' },
+      });
+
+      // Must NOT return 400 validation error — schema must accept qwen3.5-plus
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+      expect(body.data.implementationOf).toBe(created.value.id);
+    });
   });
 
   describe('POST /code/tasks/:taskId/messages (existing)', () => {

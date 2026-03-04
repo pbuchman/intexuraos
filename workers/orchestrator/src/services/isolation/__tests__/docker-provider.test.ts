@@ -109,6 +109,18 @@ function createMockDocker(): MockDockerResult {
   };
 }
 
+// Mock os.userInfo() to prevent crashing in Docker environments without /etc/passwd.
+// Use process.getuid/getgid so UIDs match what tests assert via process.getuid?.() ?? 1000.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  const uid = process.getuid?.() ?? 1000;
+  const gid = process.getgid?.() ?? 1000;
+  return {
+    ...actual,
+    userInfo: vi.fn().mockReturnValue({ uid, gid, username: 'testuser', homedir: `/home/testuser`, shell: '/bin/bash' }),
+  };
+});
+
 // Mock fs at module level
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
