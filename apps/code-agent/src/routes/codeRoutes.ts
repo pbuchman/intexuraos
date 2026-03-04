@@ -1226,6 +1226,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueId?: string;
         linearIssueTitle?: string;
         linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
+        linearIssueLabels?: string[];
         linearFallback?: boolean;
         agentType: 'planning' | 'execution';
       } = {
@@ -1263,6 +1264,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
         createInput.linearFallback = true;
       }
+      // Save linearIssueLabels for display in task list
+      createInput.linearIssueLabels = issueResult.linearIssueLabels;
       const createResult = await codeTaskRepo.create(createInput);
 
       if (!createResult.ok) {

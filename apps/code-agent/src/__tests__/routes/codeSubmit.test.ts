@@ -335,7 +335,10 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(200);
       expect(createSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ agentType: 'execution' })
+        expect.objectContaining({
+          agentType: 'execution',
+          linearIssueLabels: ['code-task'],
+        })
       );
     });
 
