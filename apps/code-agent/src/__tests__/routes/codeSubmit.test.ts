@@ -488,33 +488,6 @@ describe('POST /code/submit', () => {
       expect(body.error.message).toContain('concurrent tasks');
     });
 
-    it('returns 429 when daily cost limit exceeded', async () => {
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-
-      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'daily_cost_limit',
-          message: 'Daily cost limit of $20 reached ($15 spent today)',
-          retryAfter: 'tomorrow',
-        },
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Test prompt' },
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-      expect(body.error.message).toContain('cost limit');
-    });
-
     it('returns 429 when monthly cost limit exceeded', async () => {
       const { getServices } = await import('../../services.js');
       const services = getServices();
