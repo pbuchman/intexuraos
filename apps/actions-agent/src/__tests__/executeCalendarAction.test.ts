@@ -71,8 +71,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
-      expect(result.value.resourceUrl).toBe('/#/calendar');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.resourceUrl).toBe('/#/calendar'); // @allow-result-access -- guarded by isOk() check above
     }
   });
 
@@ -114,8 +114,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
-      expect(result.value.resourceUrl).toBe('https://calendar.google.com/calendar/event?eid=fake123');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.resourceUrl).toBe('https://calendar.google.com/calendar/event?eid=fake123'); // @allow-result-access -- guarded by isOk() check above
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -144,8 +144,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('failed');
-      expect(result.value.message).toBe('Invalid date format');
+      expect(result.value.status).toBe('failed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.message).toBe('Invalid date format'); // @allow-result-access -- guarded by isOk() check above
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -173,8 +173,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('failed');
-      expect(result.value.message).toBe('Unknown error');
+      expect(result.value.status).toBe('failed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.message).toBe('Unknown error'); // @allow-result-access -- guarded by isOk() check above
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -199,8 +199,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('failed');
-      expect(result.value.message).toBe('Calendar service unavailable');
+      expect(result.value.status).toBe('failed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.message).toBe('Calendar service unavailable'); // @allow-result-access -- guarded by isOk() check above
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -223,7 +223,7 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
     }
   });
 
@@ -294,7 +294,7 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
     }
   });
 
@@ -362,9 +362,9 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
-      expect(result.value.message).toBe('Previously created calendar event');
-      expect(result.value.resourceUrl).toBe('/#/calendar');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.message).toBe('Previously created calendar event'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.resourceUrl).toBe('/#/calendar'); // @allow-result-access -- guarded by isOk() check above
     }
   });
 
@@ -384,7 +384,7 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
     }
   });
 
@@ -435,6 +435,88 @@ describe('executeCalendarAction usecase', () => {
     const processedActions = fakeCalendarClient.getProcessedActions();
     expect(processedActions).toHaveLength(1);
     expect(processedActions[0]?.text).toBe('Meeting with John');
+  });
+
+  it('sends rich WhatsApp completion message when preview data is available', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+
+    fakeCalendarClient.setPreview('action-123', {
+      actionId: 'action-123',
+      userId: 'user-456',
+      status: 'ready',
+      summary: 'Meeting with John',
+      start: '2025-01-15T15:00:00',
+      end: '2025-01-15T16:00:00',
+      duration: '1 hour',
+      location: 'Office',
+      isAllDay: false,
+      generatedAt: '2025-01-15T10:00:00Z',
+    });
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.message).toContain('\u2705 Calendar Event Created');
+    expect(messages[0]?.message).toContain('*Meeting with John*');
+    expect(messages[0]?.message).toContain('1 hour');
+    expect(messages[0]?.message).toContain('Office');
+    expect(messages[0]?.message).toContain('https://calendar.google.com/calendar/event?eid=fake123');
+  });
+
+  it('sends basic completion message when getPreview returns error (graceful fallback)', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+
+    fakeCalendarClient.setFailGetPreview(true, new Error('Preview service unavailable'));
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    // Falls back to basic message format when preview fetch errors
+    expect(messages[0]?.message).toContain('Calendar event created');
+    expect(messages[0]?.message).toContain('https://calendar.google.com/calendar/event?eid=fake123');
+  });
+
+  it('sends basic completion message when no preview is cached (graceful fallback)', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+
+    // No preview set — getPreview returns null by default
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    // Falls back to basic message format
+    expect(messages[0]?.message).toContain('Calendar event created');
+    expect(messages[0]?.message).toContain('https://calendar.google.com/calendar/event?eid=fake123');
   });
 
   it('falls back to title when payload.prompt is not a string', async () => {
