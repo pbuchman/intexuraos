@@ -205,6 +205,7 @@ export async function processCodeAction(
     linearIssueId?: string;
     linearIssueTitle?: string;
     linearIssueUrl?: string;
+    linearIssueLabels?: string[];
     linearFallback?: boolean;
     agentType: 'planning' | 'execution';
   } = {
@@ -223,6 +224,7 @@ export async function processCodeAction(
     actionId,
     approvalEventId,
     webhookSecret,
+    linearIssueLabels,
     agentType: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning',
   };
 

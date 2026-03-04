@@ -303,6 +303,7 @@ describe('processCodeAction', () => {
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         agentType: 'planning',
+        linearIssueLabels: [],
       })
     );
 
