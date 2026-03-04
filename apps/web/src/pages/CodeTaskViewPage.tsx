@@ -844,6 +844,9 @@ interface LogStreamProps {
   workerName: string;
 }
 
+/** Delay (ms) before clearing the auto-scroll guard flag after a programmatic scrollIntoView. */
+const SMOOTH_SCROLL_GUARD_MS = 500;
+
 function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage, sending, sendError, messageStatus, workerOnline, workerName }: LogStreamProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -905,7 +908,6 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   }, [logs]);
 
   // Auto-scroll when new logs arrive and follow mode is on
-  const SMOOTH_SCROLL_GUARD_MS = 500;
   useEffect(() => {
     if (logs.length > prevLogCountRef.current && followRef.current) {
       isAutoScrollingRef.current = true;
