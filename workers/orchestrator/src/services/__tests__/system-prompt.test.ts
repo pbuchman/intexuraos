@@ -67,7 +67,9 @@ describe('system-prompt', () => {
   it('requires complexity judgment before any changes in planning prompt', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain('### Complexity Judgment (MANDATORY FIRST STEP');
+    expect(result).toContain(
+      '### Complexity Judgment (MANDATORY — NON-NEGOTIABLE, after Reading section above)'
+    );
     expect(result).toContain('COMPLEXITY_JUDGMENT:');
     expect(result).toContain('- Decision: <SIMPLE|COMPLEX>');
     expect(result).toContain(

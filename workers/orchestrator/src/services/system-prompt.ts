@@ -60,7 +60,7 @@ INPUT ISSUE == OUTPUT ISSUE. No exceptions.
 
 Violation of these rules causes the task to be REJECTED (HTTP 400). The system validates this contract.
 
-### Complexity Judgment (MANDATORY FIRST STEP — NON-NEGOTIABLE)
+### Complexity Judgment (MANDATORY — NON-NEGOTIABLE, after Reading section above)
 
 Before making ANY changes to the issue or repository, you MUST:
 1. Read and analyze the issue thoroughly.
