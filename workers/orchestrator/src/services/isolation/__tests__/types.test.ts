@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WORKER_TYPES } from '../services/isolation/types.js';
+import { WORKER_TYPES } from '../types.js';
 
 describe('WORKER_TYPES configuration', () => {
   it('uses generic opus alias so CLI resolves the latest model at runtime', () => {
