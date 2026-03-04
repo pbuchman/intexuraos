@@ -2,9 +2,9 @@
  * Use case: Send a message to an active or completed code task.
  *
  * Running tasks: message is queued on the worker and delivered when the current attempt completes.
- * Terminal tasks (completed/failed/interrupted): task resumes with the message via --continue.
+ * Terminal tasks (completed/failed/interrupted/cancelled): task resumes with the message via --continue.
  * Dispatched tasks: message is queued locally in Firestore (pendingUserMessages) until orchestrator picks up.
- * Cancelled/queued tasks: rejected.
+ * Queued tasks: rejected.
  */
 
 import { Timestamp } from '@google-cloud/firestore';
@@ -67,7 +67,7 @@ export async function sendTaskMessage(
   const task = taskResult.value;
 
   // Step 2: Validate task status
-  if (task.status === 'cancelled' || task.status === 'queued') {
+  if (task.status === 'queued') {
     logger.warn({ taskId, status: task.status }, 'Cannot send message to task with this status');
     return err({
       code: 'invalid_status',
