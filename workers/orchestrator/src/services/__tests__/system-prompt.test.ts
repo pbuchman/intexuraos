@@ -292,4 +292,65 @@ describe('system-prompt', () => {
     expect(result).not.toContain('View progress');
     expect(result).not.toContain('View task');
   });
+
+  it('includes Reading the Linear Issue section in planning prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('### Reading the Linear Issue (MANDATORY FIRST ACTION');
+    expect(result).toContain('mcp__linear__list_comments');
+    expect(result).toContain('mcp__linear__get_issue');
+    expect(result).toContain('NEWEST to OLDEST');
+    expect(result).toContain('User clarifications');
+  });
+
+  it('includes Reading the Linear Issue section in execution prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('### Reading the Linear Issue (MANDATORY FIRST ACTION');
+    expect(result).toContain('mcp__linear__list_comments');
+    expect(result).toContain('mcp__linear__get_issue');
+    expect(result).toContain('NEWEST to OLDEST');
+    expect(result).toContain('User clarifications');
+  });
+
+  it('includes Reading the Linear Issue section in pull request prompt', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain('### Reading the Linear Issue (MANDATORY FIRST ACTION');
+    expect(result).toContain('mcp__linear__list_comments');
+    expect(result).toContain('mcp__linear__get_issue');
+    expect(result).toContain('NEWEST to OLDEST');
+    expect(result).toContain('User clarifications');
+  });
+
+  it('clarifies id vs identifier distinction in Reading the Linear Issue section for planning', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('UUID');
+    expect(result).toContain('identifier');
+  });
+
+  it('clarifies id vs identifier distinction in Reading the Linear Issue section for execution', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('UUID');
+    expect(result).toContain('identifier');
+  });
+
+  it('explains comments may contain user clarifications from previous runs for planning', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain('flagged as unclear');
+    expect(result).toContain('clarifying answers');
+  });
+
+  it('explains comments may contain user clarifications from previous runs for execution', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('flagged as unclear');
+    expect(result).toContain('clarifying answers');
+  });
 });

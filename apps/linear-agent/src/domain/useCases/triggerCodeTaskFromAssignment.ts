@@ -8,10 +8,10 @@ export interface TriggerCodeTaskDeps {
 }
 
 const ASSIGNMENT_PROMPT =
-  'Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.';
+  'Analyze the linked Linear issue and all its comments (newest first). Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.';
 
 const EXECUTION_PROMPT =
-  'Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.';
+  'Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.';
 
 const CODE_TASK_LABEL = 'code-task';
 

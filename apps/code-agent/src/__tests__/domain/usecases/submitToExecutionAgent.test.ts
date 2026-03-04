@@ -867,6 +867,10 @@ describe('submitToExecutionAgent', () => {
       );
     });
 
+    it('EXECUTION_AGENT_PROMPT mentions reading comments newest first', () => {
+      expect(EXECUTION_AGENT_PROMPT).toContain('comments (newest first)');
+    });
+
     it('does not copy actionId or approvalEventId from original task to execution task', async () => {
       // actionId and approvalEventId are Firestore dedup keys.
       // Copying them to the execution task causes DUPLICATE_APPROVAL for processCodeAction tasks.
