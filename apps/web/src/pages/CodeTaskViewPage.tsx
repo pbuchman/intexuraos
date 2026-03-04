@@ -844,6 +844,9 @@ interface LogStreamProps {
   workerName: string;
 }
 
+/** Delay (ms) before clearing the auto-scroll guard flag after a programmatic scrollIntoView. */
+const SMOOTH_SCROLL_GUARD_MS = 500;
+
 function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage, sending, sendError, messageStatus, workerOnline, workerName }: LogStreamProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -853,6 +856,8 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   const [blockOverrides, setBlockOverrides] = useState<Set<number>>(() => new Set());
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
+  const isAutoScrollingRef = useRef(false);
+  const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Tool block collapsing
   const bodyLineMap = useMemo(() => {
@@ -905,9 +910,13 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   // Auto-scroll when new logs arrive and follow mode is on
   useEffect(() => {
     if (logs.length > prevLogCountRef.current && followRef.current) {
+      isAutoScrollingRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = setTimeout(() => { isAutoScrollingRef.current = false; }, SMOOTH_SCROLL_GUARD_MS);
     }
     prevLogCountRef.current = logs.length;
+    return (): void => { clearTimeout(autoScrollTimerRef.current); };
   }, [logs.length]);
 
   // Detect manual scroll-up to disable follow
@@ -916,6 +925,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     if (el === null) return;
 
     const onScroll = (): void => {
+      if (isAutoScrollingRef.current) return;
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
       if (atBottom && !followRef.current) {
         followRef.current = true;
@@ -935,7 +945,10 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     followRef.current = next;
     setFollowLogs(next);
     if (next) {
+      isAutoScrollingRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = setTimeout(() => { isAutoScrollingRef.current = false; }, SMOOTH_SCROLL_GUARD_MS);
     }
   };
 
