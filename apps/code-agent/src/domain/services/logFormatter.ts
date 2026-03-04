@@ -256,6 +256,10 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 3) + '...' : s;
 }
 
+function formatObjectKeysSummary(keys: string[], charCount: number): string {
+  return `{${String(keys.length)} keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', ...' : ''}} [${String(charCount)} chars]`;
+}
+
 function summarizeJsonContent(content: string): string | undefined {
   if (content.length < 200) return undefined; // Short JSON is fine as-is
 
@@ -289,8 +293,7 @@ function summarizeJsonContent(content: string): string | undefined {
   }
 
   // Generic JSON fallback: show key count and truncated preview
-  const keys = Object.keys(obj);
-  return `{${String(keys.length)} keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', ...' : ''}} [${String(content.length)} chars]`;
+  return formatObjectKeysSummary(Object.keys(obj), content.length);
 }
 
 function extractLogin(obj: Record<string, unknown>): string {
@@ -487,7 +490,25 @@ function formatResult(obj: StreamJsonMessage): string {
 }
 
 function collapseOutput(output: string): string {
-  const lines = stripSystemReminders(output)
+  const cleaned = stripSystemReminders(output);
+  const trimmed = cleaned.trim();
+
+  // Summarize large JSON hook output into a compact one-liner
+  if (trimmed.length >= 200) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return `  hook output: [${String(parsed.length)} items] [${String(trimmed.length)} chars]`;
+      }
+      if (typeof parsed === 'object' && parsed !== null) {
+        return `  hook output: ${formatObjectKeysSummary(Object.keys(parsed), trimmed.length)}`;
+      }
+    } catch {
+      // Not JSON — fall through to line-by-line indenting
+    }
+  }
+
+  const lines = cleaned
     .split('\n')
     .filter((l) => l.trim() !== '');
   return lines.map((l) => `  ${l}`).join('\n');
