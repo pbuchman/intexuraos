@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildSystemPrompt } from '../system-prompt.js';
 import {
+  buildSystemPrompt,
   planningPrompt,
   executionPrompt,
   pullRequestPrompt,
