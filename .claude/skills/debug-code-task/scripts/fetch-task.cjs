@@ -27,10 +27,14 @@ async function main() {
 
   if (wantLogs) {
     if (!logsOnly) console.log('\n--- LOG LINES ---\n');
-    const logSnap = await db.collection('code_tasks').doc(taskId)
-      .collection('log_lines').orderBy('sequence').get();
+    const logSnap = await db
+      .collection('code_tasks')
+      .doc(taskId)
+      .collection('log_lines')
+      .orderBy('sequence')
+      .get();
     console.log('Total log lines: ' + logSnap.size);
-    logSnap.forEach(doc => {
+    logSnap.forEach((doc) => {
       const d = doc.data();
       console.log('[' + d.sequence + '] ' + d.text);
     });
@@ -39,4 +43,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(e => { console.error(e.message); process.exit(1); });
+main().catch((e) => {
+  console.error(e.message);
+  process.exit(1);
+});
