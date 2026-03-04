@@ -37,7 +37,6 @@ export const DEFAULT_LIMITS = {
   maxConcurrentTasks: 3,
   maxTasksPerHour: 10,
   maxPromptLength: 10000,
-  dailyCostCap: 20, // $20
   monthlyCostCap: 200, // $200
 } as const;
 
