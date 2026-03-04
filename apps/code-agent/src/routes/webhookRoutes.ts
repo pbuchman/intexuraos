@@ -9,6 +9,7 @@ import { formatLogChunk, createFormatterState, type FormatterState } from '../do
 import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
+import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 
 export const parseLinearIdentifierFromUrl = (url: string): string | null => {
   const mdMatch = /\[.*?\]\((.*?)\)/.exec(url);
@@ -600,6 +601,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { ok: true };
       };
 
+      // Helper: clean up PR task lock for PR-originated tasks reaching terminal state
+      const cleanupLockIfPR = async (): Promise<void> => {
+        if (task.prNumber !== undefined) {
+          await deletePRTaskLock(getServices().firestore, task.repository, task.prNumber, request.log);
+        }
+      };
+
       // Step 3: Update task based on status
       if (status === 'completed') {
         // Trace which agent type is being handled for debugging
@@ -623,6 +631,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             if (!failResult.ok) {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
+            await cleanupLockIfPR();
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -653,6 +662,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             if (!failResult.ok) {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
+            await cleanupLockIfPR();
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -676,6 +686,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             if (!failResult.ok) {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
+            await cleanupLockIfPR();
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -706,6 +717,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             if (!failResult.ok) {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
+            await cleanupLockIfPR();
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -729,6 +741,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             if (!failResult.ok) {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
+            await cleanupLockIfPR();
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -750,6 +763,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               if (!failResult.ok) {
                 return reply.fail('INTERNAL_ERROR', failResult.error.message);
               }
+              await cleanupLockIfPR();
               // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
               return await reply.send({ received: true });
             }
@@ -780,6 +794,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+        await cleanupLockIfPR();
 
         // Best-effort In Review transition for agent types without deterministic enforcement
         // (planning, execution, and pull_request agents handle this in their own enforcement paths)
@@ -895,6 +910,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             if (!failResult.ok) {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
+            await cleanupLockIfPR();
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -914,6 +930,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as failed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+        await cleanupLockIfPR();
 
         // Notify actions-agent if task has actionId
         /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
@@ -975,6 +992,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as interrupted');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+        await cleanupLockIfPR();
 
         // Notify actions-agent if task has actionId
         // Design line 328: interrupted → failed
@@ -1043,6 +1061,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as cancelled');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+        await cleanupLockIfPR();
 
         /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (task.actionId) {

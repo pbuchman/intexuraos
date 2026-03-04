@@ -2735,6 +2735,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           codeTaskRepo: services.codeTaskRepo,
           taskDispatcher: services.taskDispatcher,
           workerSettingsRepo: services.workerSettingsRepo,
+          firestore: services.firestore,
         },
         { taskId, nonce, userId }
       );
@@ -3219,6 +3220,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
           serviceUrl: loadConfig().serviceUrl,
+          firestore: getServices().firestore,
         },
         retryRequest
       );
@@ -3868,6 +3870,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearAgentClient: services.linearAgentClient,
         whatsappNotifier: services.whatsappNotifier,
         workerSettingsRepo: services.workerSettingsRepo,
+        firestore: services.firestore,
       });
 
       if (!result.ok) {

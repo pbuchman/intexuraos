@@ -51,6 +51,10 @@ describe('retryTask use case', () => {
   let mockMetricsClient: {
     incrementTasksSubmitted: ReturnType<typeof vi.fn>;
   };
+  let mockLockDeleteFn: ReturnType<typeof vi.fn>;
+  let mockFirestore: {
+    doc: ReturnType<typeof vi.fn>;
+  };
 
   const userId = 'test-user-123';
   const originalTaskId = 'task_abc123';
@@ -156,6 +160,12 @@ describe('retryTask use case', () => {
     mockMetricsClient = {
       incrementTasksSubmitted: vi.fn().mockResolvedValue(undefined),
     };
+
+    // Mock firestore for PR task lock cleanup
+    mockLockDeleteFn = vi.fn().mockResolvedValue(undefined);
+    mockFirestore = {
+      doc: vi.fn().mockReturnValue({ delete: mockLockDeleteFn }),
+    };
   });
 
   function createDeps(): RetryTaskDeps {
@@ -169,6 +179,7 @@ describe('retryTask use case', () => {
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as RetryTaskDeps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
       serviceUrl: 'https://test.example.com',
+      firestore: mockFirestore as unknown as RetryTaskDeps['firestore'],
     };
   }
 
@@ -1700,6 +1711,140 @@ describe('retryTask use case', () => {
         expect.objectContaining({ originalTaskId }),
         'Failed to archive original task after retry (non-fatal)'
       );
+    });
+  });
+
+  describe('PR task lock cleanup', () => {
+    it('deletes PR task lock on queue full (PR task)', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        prNumber: 42,
+        repository: 'org/repo',
+      });
+      const retryTaskId = 'retry-task-lock-queue-full';
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'http://localhost:3000',
+            enabled: true,
+            cfAccessClientId: undefined,
+            cfAccessClientSecret: undefined,
+            dispatchSigningSecret: 'secret',
+          }],
+        })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }))
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: 'All workers at capacity' })
+      );
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(10)); // At max
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }))
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+      // Verify lock deletion was called
+      expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/org_repo_42');
+      expect(mockLockDeleteFn).toHaveBeenCalled();
+    });
+
+    it('deletes PR task lock on dispatch failure (PR task)', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        prNumber: 42,
+        repository: 'org/repo',
+      });
+      const retryTaskId = 'retry-task-lock-dispatch-fail';
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'http://localhost:3000',
+            enabled: true,
+            cfAccessClientId: undefined,
+            cfAccessClientSecret: undefined,
+            dispatchSigningSecret: 'secret',
+          }],
+        })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'WORKER_UNAVAILABLE', message: 'No workers available' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      // Verify lock deletion was called
+      expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/org_repo_42');
+      expect(mockLockDeleteFn).toHaveBeenCalled();
+    });
+
+    it('does NOT delete PR task lock on dispatch failure (non-PR task)', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      // Create task without prNumber
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+      }) as unknown as Record<string, unknown>;
+      delete mockTask['prNumber'];
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask as unknown as CodeTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'http://localhost:3000',
+            enabled: true,
+            cfAccessClientId: undefined,
+            cfAccessClientSecret: undefined,
+            dispatchSigningSecret: 'secret',
+          }],
+        })
+      );
+      const retryTaskId = 'retry-task-lock-no-pr';
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'WORKER_UNAVAILABLE', message: 'No workers available' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      // Verify lock deletion was NOT called (no prNumber on original task)
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
   });
 });

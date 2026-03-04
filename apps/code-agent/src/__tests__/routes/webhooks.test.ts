@@ -220,6 +220,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
+        firestore: fakeFirestore as unknown as Firestore,
       }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
@@ -3755,6 +3756,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
+        firestore: fakeFirestore as unknown as Firestore,
       }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
@@ -4101,6 +4103,7 @@ describe('POST /internal/logs', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
+        firestore: fakeFirestore as unknown as Firestore,
       }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
@@ -4669,6 +4672,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       detectZombieTasks: createDetectZombieTasksUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
+        firestore: fakeFirestore as unknown as Firestore,
       }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
