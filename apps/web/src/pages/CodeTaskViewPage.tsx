@@ -854,6 +854,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
   const isAutoScrollingRef = useRef(false);
+  const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Tool block collapsing
   const bodyLineMap = useMemo(() => {
@@ -904,14 +905,16 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   }, [logs]);
 
   // Auto-scroll when new logs arrive and follow mode is on
+  const SMOOTH_SCROLL_GUARD_MS = 500;
   useEffect(() => {
     if (logs.length > prevLogCountRef.current && followRef.current) {
       isAutoScrollingRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      // Clear flag after smooth scroll animation completes (~400ms typical)
-      setTimeout(() => { isAutoScrollingRef.current = false; }, 500);
+      clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = setTimeout(() => { isAutoScrollingRef.current = false; }, SMOOTH_SCROLL_GUARD_MS);
     }
     prevLogCountRef.current = logs.length;
+    return (): void => { clearTimeout(autoScrollTimerRef.current); };
   }, [logs.length]);
 
   // Detect manual scroll-up to disable follow
@@ -942,7 +945,8 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     if (next) {
       isAutoScrollingRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      setTimeout(() => { isAutoScrollingRef.current = false; }, 500);
+      clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = setTimeout(() => { isAutoScrollingRef.current = false; }, SMOOTH_SCROLL_GUARD_MS);
     }
   };
 
