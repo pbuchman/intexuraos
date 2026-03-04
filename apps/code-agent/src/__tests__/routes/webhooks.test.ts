@@ -1574,11 +1574,13 @@ describe('POST /internal/webhooks/task-complete', () => {
           removeLabels: ['unclear', 'planned'],
         })
       );
-      // Stamp code-task label as last step
+      // Stamp code-task label as last step (removes unclear, clears assignee)
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           issueId: 'original-uuid',
+          assigneeId: null,
           addLabels: ['code-task'],
+          removeLabels: ['unclear'],
         })
       );
 
@@ -1844,7 +1846,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         expect.objectContaining({ issueId: 'routed-uuid', state: 'in_review' })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'routed-uuid', addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'routed-uuid', assigneeId: null, addLabels: ['code-task'], removeLabels: ['unclear'] })
       );
       expect(markInReviewSpy).not.toHaveBeenCalled();
 
