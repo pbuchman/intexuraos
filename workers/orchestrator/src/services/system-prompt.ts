@@ -145,8 +145,8 @@ PLANNING_AGENT_FINAL:
 After this block, stop. Do not append any other checklist or schema payload.
 
 Note: For complex planned outcomes, you MUST include explicit proof of the parallel breakdown. This means showing exactly how each subissue's boundaries are defined — what types/interfaces each subissue owns, what contracts it exposes, and how agents can work on each subissue independently without coordination.`;
-  /* v8 ignore stop @preserve */
   },
+  /* v8 ignore stop @preserve */
 };
 
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
@@ -256,8 +256,8 @@ EXECUTION_AGENT_FINAL:
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
-  /* v8 ignore stop @preserve */
   },
+  /* v8 ignore stop @preserve */
 };
 
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
