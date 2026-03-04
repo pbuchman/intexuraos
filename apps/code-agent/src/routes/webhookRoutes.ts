@@ -189,7 +189,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, linearAgentClient, logger } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, linearAgentClient, logger, firestore } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -604,7 +604,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Helper: clean up PR task lock for PR-originated tasks reaching terminal state
       const cleanupLockIfPR = async (): Promise<void> => {
         if (task.prNumber !== undefined) {
-          await deletePRTaskLock(getServices().firestore, task.repository, task.prNumber, request.log);
+          await deletePRTaskLock(firestore, task.repository, task.prNumber, request.log);
         }
       };
 
