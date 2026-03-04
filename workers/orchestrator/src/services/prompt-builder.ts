@@ -1,6 +1,6 @@
 /**
  * Local PromptBuilder interface for orchestrator system prompts.
- * Mirrors the pattern from packages/llm-prompts/src/types.ts but kept
+ * Follows the same pattern as packages/llm-prompts/src/types.ts but kept
  * local to avoid coupling orchestrator to the llm-prompts package.
  *
  * CI enforcement: scripts/verify-prompt-versions.mjs detects PromptBuilder<

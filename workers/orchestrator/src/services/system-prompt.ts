@@ -18,8 +18,8 @@ export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   version: '1.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
-  /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
-  return `[SYSTEM CONTEXT]
+    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
+    return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [AGENT:PLANNING]
@@ -156,8 +156,8 @@ export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
-  /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
-  return `[SYSTEM CONTEXT]
+    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
+    return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [AGENT:EXECUTION]
@@ -267,8 +267,8 @@ export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
-  /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
-  return `[SYSTEM CONTEXT]
+    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
+    return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [AGENT:PULL_REQUEST]
@@ -372,8 +372,8 @@ export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   version: '1.0.0',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
-  /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
-  return `
+    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
+    return `
 
 [PR REVIEW MODE — CONDITIONAL]
 
