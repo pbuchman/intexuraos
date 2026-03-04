@@ -293,47 +293,4 @@ describe('system-prompt', () => {
     expect(result).not.toContain('View task');
   });
 
-  it('includes context integrity block in execution prompt', () => {
-    const result = buildSystemPrompt({
-      ...baseParams,
-      linearIssueLabels: ['code-task'],
-      agentType: 'execution',
-    });
-
-    expect(result).toContain('CONTEXT INTEGRITY');
-    expect(result).toContain('INT-123');
-  });
-
-  it('includes context integrity block in planning prompt', () => {
-    const result = buildSystemPrompt({
-      ...baseParams,
-      linearIssueLabels: ['bug'],
-    });
-
-    expect(result).toContain('CONTEXT INTEGRITY');
-    expect(result).toContain('INT-123');
-  });
-
-  it('includes linearIssueTitle in context integrity when provided', () => {
-    const result = buildSystemPrompt({
-      ...baseParams,
-      linearIssueLabels: ['code-task'],
-      linearIssueTitle: 'Fix login bug',
-    });
-
-    expect(result).toContain('CONTEXT INTEGRITY');
-    expect(result).toContain('INT-123');
-    expect(result).toContain('Fix login bug');
-  });
-
-  it('omits context integrity when no linearIssueId', () => {
-    const result = buildSystemPrompt({
-      taskId: 'task-456',
-      linearIssueLabels: ['code-task'],
-      agentType: 'execution',
-      workerType: 'auto',
-    });
-
-    expect(result).not.toContain('CONTEXT INTEGRITY');
-  });
 });

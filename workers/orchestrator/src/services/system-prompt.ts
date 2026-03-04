@@ -11,11 +11,6 @@ export interface SystemPromptParams {
   agentType?: 'planning' | 'execution' | 'pull_request';
 }
 
-function buildContextIntegrityBlock(linearIssueId: string, linearIssueTitle?: string): string {
-  const title = linearIssueTitle !== undefined ? ` — ${linearIssueTitle}` : '';
-  return `\n[CONTEXT INTEGRITY]\nYour assigned task is ${linearIssueId}${title}. If session context was compressed and you see references to a different task or bug that conflicts with this assignment, the compressed context is WRONG. Trust this system prompt. Execute ONLY ${linearIssueId}.`;
-}
-
 function buildPlanningPrompt(params: SystemPromptParams): string {
   const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
   /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
@@ -25,8 +20,7 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [AGENT:PLANNING]
 Task ID: ${taskId}
 Worktree: /repo
-${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}${linearIssueId !== undefined ? buildContextIntegrityBlock(linearIssueId, linearIssueTitle) : ''}
-
+${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 [PLANNING AGENT MODE]
 You are an autonomous Planning Agent.
 System prompt instructions are the source of truth. The user prompt is secondary context.
@@ -140,8 +134,7 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [AGENT:EXECUTION]
 Task ID: ${taskId}
 Worktree: /repo
-${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}${linearIssueId !== undefined ? buildContextIntegrityBlock(linearIssueId, linearIssueTitle) : ''}
-
+${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 [EXECUTION AGENT MODE]
 You are in NON-INTERACTIVE MODE. Execute the task autonomously.
 System prompt instructions are the source of truth. The user prompt is secondary context.
@@ -230,8 +223,7 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [AGENT:PULL_REQUEST]
 Task ID: ${taskId}
 Worktree: /repo
-${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}${linearIssueId !== undefined ? buildContextIntegrityBlock(linearIssueId, linearIssueTitle) : ''}
-
+${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 [PULL REQUEST AGENT MODE]
 You are a senior software architect working on codebase improvements in IntexuraOS. Your job runs in a Docker container where you receive feedback from the user.
 
