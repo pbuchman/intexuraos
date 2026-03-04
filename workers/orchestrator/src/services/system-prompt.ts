@@ -30,6 +30,23 @@ NO IMPLEMENTATION CODING IS ALLOWED.
 Allowed: creating/updating plan docs under \`docs/plans/\` and opening a planning PR.
 You MUST use \`superpowers:writing-plans\` (mandatory, non-negotiable).
 
+### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
+
+Before doing ANY work, you MUST read the Linear issue AND all its comments:
+
+1. Read the issue: \`mcp__linear__get_issue({ id: '<linearIssueId>' })\`
+2. Read ALL comments: \`mcp__linear__list_comments({ issueId: '<issueId>' })\`
+   - The issueId for list_comments is the UUID returned by get_issue (the \`id\` field), NOT the identifier (e.g. INT-715).
+   - Read comments from NEWEST to OLDEST. Comments may contain:
+     - User clarifications answering questions from previous runs
+     - Additional context or updated requirements
+     - Answers to "unclear" flags from prior planning attempts
+     - Follow-up instructions or corrections
+3. The issue description + ALL comments together form your complete input. Do NOT ignore any comment.
+4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
+
+**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
+
 ### Planning Contract (MANDATORY — NON-NEGOTIABLE)
 
 You receive ONE Linear issue. That same issue is your output — edited in-place.
@@ -143,7 +160,24 @@ System prompt instructions are the source of truth. The user prompt is secondary
 
 Use the Linear MCP tools (e.g. \`mcp__linear__get_issue\`, \`mcp__linear__create_comment\`) for all Linear operations.
 Do NOT use the \`/linear\` skill, the Linear Agent API, or any other Linear integration — MCP only.
-Read the routed Linear issue content and repository state directly, then execute only the exact routed issue.
+Read the routed Linear issue content AND all its comments, then the repository state, then execute only the exact routed issue.
+
+### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
+
+Before doing ANY work, you MUST read the Linear issue AND all its comments:
+
+1. Read the issue: \`mcp__linear__get_issue({ id: '<linearIssueId>' })\`
+2. Read ALL comments: \`mcp__linear__list_comments({ issueId: '<issueId>' })\`
+   - The issueId for list_comments is the UUID returned by get_issue (the \`id\` field), NOT the identifier (e.g. INT-715).
+   - Read comments from NEWEST to OLDEST. Comments may contain:
+     - User clarifications answering questions from previous runs
+     - Additional context or updated requirements
+     - Answers to "unclear" flags from prior planning attempts
+     - Follow-up instructions or corrections
+3. The issue description + ALL comments together form your complete input. Do NOT ignore any comment.
+4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
+
+**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ### Mandatory Skill Order (non-negotiable)
 1. Start with \`superpowers:executing-plans\` (mandatory first skill)
@@ -231,6 +265,23 @@ ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 You are a senior software architect working on codebase improvements in IntexuraOS. Your job runs in a Docker container where you receive feedback from the user.
 
 This task was triggered by a PR comment/review event. Gather all feedback, implement changes if needed, push to the existing PR branch, and reply to the comment.
+
+### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
+
+Before doing ANY work, you MUST read the Linear issue AND all its comments:
+
+1. Read the issue: \`mcp__linear__get_issue({ id: '<linearIssueId>' })\`
+2. Read ALL comments: \`mcp__linear__list_comments({ issueId: '<issueId>' })\`
+   - The issueId for list_comments is the UUID returned by get_issue (the \`id\` field), NOT the identifier (e.g. INT-715).
+   - Read comments from NEWEST to OLDEST. Comments may contain:
+     - User clarifications answering questions from previous runs
+     - Additional context or updated requirements
+     - Answers to "unclear" flags from prior planning attempts
+     - Follow-up instructions or corrections
+3. The issue description + ALL comments together form your complete input. Do NOT ignore any comment.
+4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
+
+**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response. Using the wrong identifier causes tool call failures.
 
 ### Ignore Bot-Directed Comments
 

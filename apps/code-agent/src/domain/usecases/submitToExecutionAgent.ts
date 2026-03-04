@@ -20,7 +20,7 @@ import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from 
 import { loadConfig } from '../../config.js';
 
 export const EXECUTION_AGENT_PROMPT =
-  'Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.';
+  'Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.';
 
 /**
  * Request to start Execution Agent implementation from a completed planning design task.
