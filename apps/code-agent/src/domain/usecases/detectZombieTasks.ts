@@ -81,8 +81,8 @@ export function createDetectZombieTasksUseCase(
         } else {
           logger.info({ taskId: task.id }, 'Interrupted zombie task');
           result.interrupted++;
-          // Best-effort: clean up PR task lock if this was a PR-originated task
-          if (task.prNumber !== undefined) {
+          // Best-effort: clean up PR task lock if this was the original lock-owning task
+          if (task.prNumber !== undefined && task.parentTaskId === undefined) {
             await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
           }
         }

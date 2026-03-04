@@ -204,6 +204,27 @@ describe('detectZombieTasks', () => {
       // Verify lock deletion was NOT called (no prNumber on task)
       expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
+
+    it('does NOT delete PR task lock for zombie follow-up task (has parentTaskId)', async () => {
+      const zombieTask = createFakeCodeTask({
+        id: 'zombie-followup-task',
+        status: 'running',
+        repository: 'org/repo',
+        prNumber: 42,
+        parentTaskId: 'parent-task-123',
+      });
+      findZombieTasksMock.mockResolvedValue(ok([zombieTask]));
+      updateMock.mockResolvedValue(ok({ ...zombieTask, status: 'interrupted' as const }));
+
+      const result = await useCase();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.interrupted).toBe(1);
+      }
+      // Verify lock deletion was NOT called (follow-up task does not own the lock)
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
   });
 
   afterEach(() => {

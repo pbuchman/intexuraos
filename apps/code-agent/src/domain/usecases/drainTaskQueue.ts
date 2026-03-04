@@ -91,8 +91,8 @@ export async function drainTaskQueue(
         },
       });
 
-      // Best-effort: clean up PR task lock if this was a PR-originated task
-      if (task.prNumber !== undefined) {
+      // Best-effort: clean up PR task lock if this was the original lock-owning task
+      if (task.prNumber !== undefined && task.parentTaskId === undefined) {
         await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
       }
 
@@ -201,8 +201,8 @@ export async function drainTaskQueue(
         logger.error({ taskId: task.id, error: failUpdateResult.error }, 'Failed to persist failed status during drain');
       }
 
-      // Best-effort: clean up PR task lock if this was a PR-originated task
-      if (task.prNumber !== undefined) {
+      // Best-effort: clean up PR task lock if this was the original lock-owning task
+      if (task.prNumber !== undefined && task.parentTaskId === undefined) {
         await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
       }
 

@@ -108,8 +108,8 @@ export async function cancelTaskWithNonce(
     return err({ code: 'internal_error', message: 'Failed to cancel task' });
   }
 
-  // Best-effort: clean up PR task lock if this was a PR-originated task
-  if (task.prNumber !== undefined) {
+  // Best-effort: clean up PR task lock if this was the original lock-owning task
+  if (task.prNumber !== undefined && task.parentTaskId === undefined) {
     await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
   }
 
