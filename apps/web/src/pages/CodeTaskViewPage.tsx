@@ -1063,17 +1063,14 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
         <div ref={bottomRef} />
       </div>
 
-      {/* Message input (hidden for cancelled tasks) */}
-      {taskStatus !== 'cancelled' ? (
-        <MessageInput
-          onSendMessage={onSendMessage}
-          sending={sending}
-          sendError={sendError}
-          messageStatus={messageStatus}
-          workerOnline={workerOnline}
-          workerName={workerName}
-        />
-      ) : null}
+      <MessageInput
+        onSendMessage={onSendMessage}
+        sending={sending}
+        sendError={sendError}
+        messageStatus={messageStatus}
+        workerOnline={workerOnline}
+        workerName={workerName}
+      />
     </div>
   );
 }

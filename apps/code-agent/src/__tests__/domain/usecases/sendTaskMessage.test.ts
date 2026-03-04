@@ -3,7 +3,7 @@
  *
  * Test Requirements:
  * 1. Returns task_not_found when task doesn't exist
- * 2. Returns invalid_status for cancelled task
+ * 2. Returns invalid_status for queued task
  * 3. Queues message locally for dispatched task (stores in pendingUserMessages, no worker contact)
  * 4. Queues message for running task (writes log line, forwards to worker, returns { action: 'queued' })
  * 5. Resumes completed task with message (writes log line, forwards to worker, returns { action: 'resumed' })
@@ -171,23 +171,6 @@ describe('sendTaskMessage', () => {
       }
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId, userId }),
-        expect.any(String)
-      );
-    });
-
-    it('should return invalid_status for cancelled task', async () => {
-      const cancelledTask = createMockTask({ status: 'cancelled' });
-      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(cancelledTask));
-
-      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('invalid_status');
-        expect(result.error.message).toContain('cancelled');
-      }
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId, status: 'cancelled' }),
         expect.any(String)
       );
     });
@@ -563,6 +546,17 @@ describe('sendTaskMessage', () => {
 
     it('should allow messaging for interrupted task', async () => {
       setupSuccessPath({ status: 'interrupted' }, 'resumed');
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('resumed');
+      }
+    });
+
+    it('should allow messaging for cancelled task', async () => {
+      setupSuccessPath({ status: 'cancelled' }, 'resumed');
 
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
