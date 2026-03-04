@@ -28,7 +28,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 # Architecture
 
-**Overview:** `apps/` (Fastify, Cloud Run) | `workers/` (Cloud Functions) | `packages/` (common-*, infra-*) | `terraform/` | `docs/`. Apps use `services.ts` DI; workers use lightweight direct injection. Both require 95% coverage. Reference: `.claude/reference/architecture.md`
+**Overview:** `apps/` (Fastify, Cloud Run) | `workers/` (Cloud Functions) | `packages/` (common-_, infra-_) | `terraform/` | `docs/`. Apps use `services.ts` DI; workers use lightweight direct injection. Both require 95% coverage. Reference: `.claude/reference/architecture.md`
 
 **Rules:** Apps can't import other apps. Routes use `getServices()`. Service communication via `/internal/{resource-name}` with `X-Internal-Auth`. All endpoints MUST use `logIncomingRequest()`. Pub/Sub: HTTP push only (no pull). Use cases MUST accept `logger: Logger`. Firestore: one collection owner per service, cross-service via HTTP, registry: `firestore-collections.json`. Migrations: IMMUTABLE — create new to fix bugs. Multi-field queries need composite indexes in `migrations/*.mjs`.
 
@@ -51,6 +51,8 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 **Infrastructure:** ALL via Terraform. GCP project: `--project=intexuraos-dev-pbuchman`. SA key: `$HOME/.config/gcloud/sa-key.json`. Reference: `.claude/reference/infrastructure.md`
 
 **Environments:** dev=`dev.intexuraos.cloud` (PM2, home-dev) | prod=`intexuraos.cloud` (Cloud Run). No "local". Firestore shared. Reference: `.claude/reference/environments.md`
+
+**Code Task Investigation:** When user pastes `dev.intexuraos.cloud/#/code-tasks/task_*` or `intexuraos.cloud/#/code-tasks/task_*` URL — use `/debug-code-task` skill. NEVER WebFetch/curl the SPA URL (hash routing returns shell HTML). Data is in Firestore `code_tasks` collection.
 
 **User Communication:** Ask ONE clarifying question at a time. Do not batch.
 
