@@ -67,12 +67,18 @@ const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
 
 // Container must run as the host user so bind-mounted files (worktrees, secrets,
 // pnpm store) are accessible without permission hacks.
-// Lazily evaluated to avoid crashing at module load in environments without /etc/passwd.
+// Lazily evaluated (not at module load) to avoid crashing in Docker environments
+// without /etc/passwd. Cached after first call: the UID/GID never changes within
+// a process lifetime, so repeated syscalls would be wasteful.
 let _hostUserInfo: { uid: number; gid: number; userString: string } | null = null;
 function getHostUserInfo(): { uid: number; gid: number; userString: string } {
   if (_hostUserInfo === null) {
     const info = os.userInfo();
-    _hostUserInfo = { uid: info.uid, gid: info.gid, userString: `${String(info.uid)}:${String(info.gid)}` };
+    _hostUserInfo = {
+      uid: info.uid,
+      gid: info.gid,
+      userString: `${String(info.uid)}:${String(info.gid)}`,
+    };
   }
   return _hostUserInfo;
 }

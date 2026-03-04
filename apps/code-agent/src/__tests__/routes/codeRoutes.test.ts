@@ -2897,6 +2897,12 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toMatch(/^task_/);
       expect(body.data.implementationOf).toBe(created.value.id);
+
+      // Verify qwen3.5-plus actually flows through the runtime guard to the stored task
+      const executionTask = await repo.findById(body.data.codeTaskId);
+      expect(executionTask.ok).toBe(true);
+      if (!executionTask.ok) return;
+      expect(executionTask.value.workerType).toBe('qwen3.5-plus');
     });
   });
 
