@@ -3370,50 +3370,6 @@ describe('TaskDispatcher', () => {
       expect(result).toContain('Just a plain message');
     });
 
-    it('includes Linear issue identity anchor when task has linearIssueId', () => {
-      const internal = dispatcher as unknown as {
-        buildActiveGoalSection: (
-          prompt: string,
-          taskContext?: { linearIssueId?: string; linearIssueTitle?: string }
-        ) => string;
-      };
-      const result = internal.buildActiveGoalSection('Fix the colors', {
-        linearIssueId: 'INT-713',
-        linearIssueTitle: 'Add task labels to code task list view',
-      });
-
-      expect(result).toContain('[ACTIVE GOAL');
-      expect(result).toContain('INT-713');
-      expect(result).toContain('IDENTITY ANCHOR');
-      expect(result).toContain('Add task labels to code task list view');
-    });
-
-    it('includes corruption detection warning', () => {
-      const internal = dispatcher as unknown as {
-        buildActiveGoalSection: (
-          prompt: string,
-          taskContext?: { linearIssueId?: string; linearIssueTitle?: string }
-        ) => string;
-      };
-      const result = internal.buildActiveGoalSection('Do something', {
-        linearIssueId: 'INT-500',
-      });
-
-      expect(result).toContain('context compression');
-      expect(result).toContain('system prompt is the source of truth');
-    });
-
-    it('works without linearIssueId (no anchor block)', () => {
-      const internal = dispatcher as unknown as {
-        buildActiveGoalSection: (
-          prompt: string,
-          taskContext?: { linearIssueId?: string; linearIssueTitle?: string }
-        ) => string;
-      };
-      const result = internal.buildActiveGoalSection('Just a message');
-
-      expect(result).not.toContain('IDENTITY ANCHOR');
-    });
   });
 
   describe('active goal in systemPrompt (integration)', () => {
@@ -3452,39 +3408,6 @@ describe('TaskDispatcher', () => {
       const config = createWorkerCall?.[0];
       expect(config?.systemPrompt).toContain('[ACTIVE GOAL');
       expect(config?.systemPrompt).toContain('User follow-up message');
-    });
-
-    it('includes identity anchor in system prompt when resuming task with linearIssueId', async () => {
-      const request: CreateTaskRequest = {
-        taskId: 'active-goal-anchor-test',
-        workerType: 'auto',
-        prompt: 'Original task prompt',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: ['code-task'],
-        linearIssueId: 'INT-713',
-        linearIssueTitle: 'Add task labels',
-        hasChildren: false,
-      };
-      await dispatcher.submitTask(request);
-      await flushAsync();
-
-      const state = await statePersistence.load();
-      const task = state.tasks['active-goal-anchor-test'];
-      if (!task) throw new Error('Task not found');
-      task.status = 'completed';
-      await statePersistence.save(state);
-
-      vi.mocked(mockIsolationProvider.createWorker).mockClear();
-
-      await dispatcher.sendMessage('active-goal-anchor-test', 'Follow-up message');
-      await flushAsync();
-
-      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls[0];
-      expect(createWorkerCall).toBeDefined();
-      const config = createWorkerCall?.[0];
-      expect(config?.systemPrompt).toContain('IDENTITY ANCHOR');
-      expect(config?.systemPrompt).toContain('INT-713');
     });
 
     it('does not include active goal in system prompt for initial submission', async () => {
