@@ -414,7 +414,7 @@ describe('TurnMetricsCollector', () => {
       expect(result.timeClassification.apiWaitSeconds).toBe(3);
     });
 
-    it('reads from sharedCredsPath when configured', async () => {
+    it('reads from per-task session path even when sharedCredsPath is configured', async () => {
       const sharedCollector = new TurnMetricsCollector(
         { ...config, sharedCredsPath: '/tmp/shared-creds' },
         mockLogger
@@ -430,28 +430,22 @@ describe('TurnMetricsCollector', () => {
       ].join('\n');
 
       async function* fakeGlob(): AsyncGenerator<string> {
-        yield '/tmp/shared-creds/projects/test/session.jsonl';
+        yield '/tmp/secrets/claude-session-task1/projects/test/session.jsonl';
       }
       mockGlob.mockReturnValueOnce(fakeGlob() as never);
       mockReadFile.mockResolvedValueOnce(jsonlContent);
 
-      const result = await sharedCollector.parseSessionJsonl('task1', {
-        startedAt: '2025-06-01T09:00:00Z',
-        completedAt: '2025-06-01T11:00:00Z',
-      });
+      const result = await sharedCollector.parseSessionJsonl('task1');
 
-      expect(mockGlob).toHaveBeenCalledWith('/tmp/shared-creds/projects/**/*.jsonl');
+      expect(mockGlob).toHaveBeenCalledWith(
+        '/tmp/secrets/claude-session-task1/projects/**/*.jsonl'
+      );
       expect(result.tokens.totalInputTokens).toBe(200);
       expect(result.tokens.totalOutputTokens).toBe(75);
       expect(result.tokens.apiCallCount).toBe(1);
     });
 
-    it('excludes files outside the time window', async () => {
-      const sharedCollector = new TurnMetricsCollector(
-        { ...config, sharedCredsPath: '/tmp/shared-creds' },
-        mockLogger
-      );
-
+    it('reads all files without time-window filtering from per-task path', async () => {
       const oldFileContent = [
         JSON.stringify({ type: 'user', timestamp: '2024-01-01T00:00:00Z' }),
         JSON.stringify({
@@ -461,7 +455,7 @@ describe('TurnMetricsCollector', () => {
         }),
       ].join('\n');
 
-      const inWindowContent = [
+      const recentContent = [
         JSON.stringify({ type: 'user', timestamp: '2025-06-01T10:00:00Z' }),
         JSON.stringify({
           type: 'assistant',
@@ -471,73 +465,51 @@ describe('TurnMetricsCollector', () => {
       ].join('\n');
 
       async function* fakeGlob(): AsyncGenerator<string> {
-        yield '/tmp/shared-creds/projects/test/old.jsonl';
-        yield '/tmp/shared-creds/projects/test/current.jsonl';
+        yield '/tmp/secrets/claude-session-task1/projects/test/old.jsonl';
+        yield '/tmp/secrets/claude-session-task1/projects/test/current.jsonl';
       }
       mockGlob.mockReturnValueOnce(fakeGlob() as never);
-      mockReadFile.mockResolvedValueOnce(oldFileContent).mockResolvedValueOnce(inWindowContent);
+      mockReadFile.mockResolvedValueOnce(oldFileContent).mockResolvedValueOnce(recentContent);
 
-      const result = await sharedCollector.parseSessionJsonl('task1', {
-        startedAt: '2025-06-01T09:00:00Z',
-        completedAt: '2025-06-01T11:00:00Z',
-      });
+      const result = await collector.parseSessionJsonl('task1');
 
-      expect(result.tokens.totalInputTokens).toBe(50);
-      expect(result.tokens.totalOutputTokens).toBe(25);
-      expect(result.tokens.apiCallCount).toBe(1);
+      // Both files are included since per-task dirs only contain one task's data
+      expect(result.tokens.totalInputTokens).toBe(1049);
+      expect(result.tokens.totalOutputTokens).toBe(1024);
+      expect(result.tokens.apiCallCount).toBe(2);
     });
 
     it('handles single-line JSONL file without trailing newline', async () => {
-      const sharedCollector = new TurnMetricsCollector(
-        { ...config, sharedCredsPath: '/tmp/shared-creds' },
-        mockLogger
-      );
-
       const singleLine = JSON.stringify({
         type: 'user',
         timestamp: '2025-06-01T10:00:00Z',
       });
 
       async function* fakeGlob(): AsyncGenerator<string> {
-        yield '/tmp/shared-creds/projects/-repo/single.jsonl';
+        yield '/tmp/secrets/claude-session-task1/projects/-repo/single.jsonl';
       }
       mockGlob.mockReturnValueOnce(fakeGlob() as never);
       mockReadFile.mockResolvedValueOnce(singleLine);
 
-      const result = await sharedCollector.parseSessionJsonl('task1', {
-        startedAt: '2025-06-01T09:00:00Z',
-        completedAt: '2025-06-01T11:00:00Z',
-      });
+      const result = await collector.parseSessionJsonl('task1');
 
       expect(result.timeClassification.wallTimeSeconds).toBe(0);
     });
 
-    it('skips file with empty first line in shared mode', async () => {
-      const sharedCollector = new TurnMetricsCollector(
-        { ...config, sharedCredsPath: '/tmp/shared-creds' },
-        mockLogger
-      );
-
+    it('parses file with empty first line', async () => {
       async function* fakeGlob(): AsyncGenerator<string> {
-        yield '/tmp/shared-creds/projects/-repo/empty.jsonl';
+        yield '/tmp/secrets/claude-session-task1/projects/-repo/empty.jsonl';
       }
       mockGlob.mockReturnValueOnce(fakeGlob() as never);
       mockReadFile.mockResolvedValueOnce('\n{"type":"user","timestamp":"2025-06-01T10:00:00Z"}');
 
-      const result = await sharedCollector.parseSessionJsonl('task1', {
-        startedAt: '2025-06-01T09:00:00Z',
-        completedAt: '2025-06-01T11:00:00Z',
-      });
+      const result = await collector.parseSessionJsonl('task1');
 
-      expect(result.tokens.apiCallCount).toBe(0);
+      // Empty lines are skipped, but subsequent valid entries are parsed
+      expect(result.timeClassification.wallTimeSeconds).toBe(0);
     });
 
     it('includes file when first entry has no timestamp field', async () => {
-      const sharedCollector = new TurnMetricsCollector(
-        { ...config, sharedCredsPath: '/tmp/shared-creds' },
-        mockLogger
-      );
-
       const content = [
         JSON.stringify({ type: 'queue-operation', operation: 'enqueue' }),
         JSON.stringify({
@@ -548,26 +520,28 @@ describe('TurnMetricsCollector', () => {
       ].join('\n');
 
       async function* fakeGlob(): AsyncGenerator<string> {
-        yield '/tmp/shared-creds/projects/-repo/no-ts.jsonl';
+        yield '/tmp/secrets/claude-session-task1/projects/-repo/no-ts.jsonl';
       }
       mockGlob.mockReturnValueOnce(fakeGlob() as never);
       mockReadFile.mockResolvedValueOnce(content);
 
-      const result = await sharedCollector.parseSessionJsonl('task1', {
-        startedAt: '2025-06-01T09:00:00Z',
-        completedAt: '2025-06-01T11:00:00Z',
-      });
+      const result = await collector.parseSessionJsonl('task1');
 
       expect(result.tokens.totalInputTokens).toBe(42);
     });
 
-    it('falls back to per-task path when sharedCredsPath not set', async () => {
+    it('always uses per-task path regardless of sharedCredsPath', async () => {
+      const sharedCollector = new TurnMetricsCollector(
+        { ...config, sharedCredsPath: '/tmp/shared-creds' },
+        mockLogger
+      );
+
       async function* fakeGlob(): AsyncGenerator<string> {
         // yield nothing
       }
       mockGlob.mockReturnValueOnce(fakeGlob() as never);
 
-      await collector.parseSessionJsonl('task-abc');
+      await sharedCollector.parseSessionJsonl('task-abc');
 
       expect(mockGlob).toHaveBeenCalledWith(
         '/tmp/secrets/claude-session-task-abc/projects/**/*.jsonl'
