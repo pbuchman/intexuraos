@@ -85,7 +85,7 @@ describe('triggerCodeTaskFromAssignment', () => {
     expect(req).not.toBeNull();
     expect(req?.userId).toBe('user-123');
     expect(req?.linearIssueId).toBe('INT-123');
-    expect(req?.prompt).toBe('Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.');
+    expect(req?.prompt).toBe('Analyze the linked Linear issue and all its comments (newest first). Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.');
     expect(req?.workerType).toBe('auto');
   });
 
@@ -107,7 +107,7 @@ describe('triggerCodeTaskFromAssignment', () => {
 
     const req = client.getLastRequest();
     expect(req).not.toBeNull();
-    expect(req?.prompt).toBe('Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.');
+    expect(req?.prompt).toBe('Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.');
   });
 
   it('uses identifier and timestamp for actionId and approvalEventId deduplication', async () => {
