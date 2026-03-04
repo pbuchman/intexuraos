@@ -48,7 +48,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Cross-Linking:** PR titles contain `INT-XXX`. PR body: `Fixes INT-XXX`. Reference: `.claude/reference/cross-linking.md`
 
-**Infrastructure:** ALL via Terraform. SA key: `$HOME/.config/gcloud/sa-key.json`. Reference: `.claude/reference/infrastructure.md`
+**Infrastructure:** ALL via Terraform. GCP project: `--project=intexuraos-dev-pbuchman`. SA key: `$HOME/.config/gcloud/sa-key.json`. Reference: `.claude/reference/infrastructure.md`
 
 **Environments:** dev=`dev.intexuraos.cloud` (PM2, home-dev) | prod=`intexuraos.cloud` (Cloud Run). No "local". Firestore shared. Reference: `.claude/reference/environments.md`
 
