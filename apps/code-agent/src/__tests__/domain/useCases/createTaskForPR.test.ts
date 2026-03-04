@@ -228,6 +228,22 @@ describe('createTaskForPR', () => {
     }
   });
 
+  it('saves linearIssueLabels from linearResult in createInput', async () => {
+    let capturedCreateInput: Record<string, unknown> = {};
+
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      async create(input): ReturnType<CodeTaskRepository['create']> {
+        capturedCreateInput = input as unknown as Record<string, unknown>;
+        return ok({} as never);
+      },
+    };
+
+    await createTaskForPR(deps, request);
+
+    expect(capturedCreateInput['linearIssueLabels']).toEqual(expect.arrayContaining(['code-task']));
+  });
+
   it('returns user_not_found when user lookup fails with USER_NOT_FOUND', async () => {
     deps.userLookupService = {
       async resolveByGitHubUsername(): ReturnType<UserLookupService['resolveByGitHubUsername']> {
