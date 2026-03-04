@@ -16,6 +16,7 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel, getWorkerTypeFromLabels } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
+import { sanitizePromptForInjection } from '../../domain/utils/promptInjectionSanitizer.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { loadConfig } from '../../config.js';
 
@@ -57,6 +58,7 @@ export type ProcessCodeActionErrorCode =
   | 'worker_not_configured'
   | 'queue_full'          // Queue at max capacity (INT-619)
   | 'queue_timeout'       // Task expired in queue (INT-619)
+  | 'validation_error'    // Prompt failed injection sanitization (INT-413)
   | 'internal_error';
 
 /**
@@ -137,8 +139,16 @@ export async function processCodeAction(
     })),
   };
 
-  // Step 2: Sanitize prompt early so the raw prompt never leaks to external services
-  const sanitizedPromptText = sanitizePrompt(prompt);
+  // Step 2: Sanitize prompt — secret redaction first, then injection prevention
+  const secretRedacted = sanitizePrompt(prompt);
+  const injectionResult = sanitizePromptForInjection(secretRedacted);
+  if (!injectionResult.ok) {
+    return err({
+      code: 'validation_error',
+      message: injectionResult.error.message,
+    });
+  }
+  const sanitizedPromptText = injectionResult.value;
 
   // Step 3: Ensure Linear issue exists and get labels/childCount
   const issueResult = await linearIssueService.ensureIssueExists({
