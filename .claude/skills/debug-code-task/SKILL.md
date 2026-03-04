@@ -19,11 +19,9 @@ Investigate code-agent task execution by fetching task metadata and logs from Fi
 
 Parse the URL. Do NOT fetch it — hash-routed SPA returns only shell HTML.
 
-| Signal       | dev                    | prod                           |
-| ------------ | ---------------------- | ------------------------------ |
-| URL          | `dev.intexuraos.cloud` | `intexuraos.cloud` (no `dev.`) |
-| Orchestrator | home-dev (systemd)     | Cloud Run                      |
-| Logs         | PM2 / systemd          | gcloud logging                 |
+| Signal | dev                    | prod                           |
+| ------ | ---------------------- | ------------------------------ |
+| URL    | `dev.intexuraos.cloud` | `intexuraos.cloud` (no `dev.`) |
 
 Run `uname -n` to confirm current machine.
 
@@ -51,11 +49,13 @@ Present log lines to user. Do NOT analyze or speculate about root cause without 
 
 ## Phase 4: Orchestrator & Container Logs (optional, on request)
 
-Only needed when Firestore logs are insufficient. Requires being on the same machine as the orchestrator.
+Only needed when Firestore logs are insufficient.
+
+The orchestrator runs on the same machine as the worker. Read `workerLocation` from the task document (Phase 2) to determine which machine.
 
 ### Orchestrator Logs
 
-Check `uname -n` first. If orchestrator is on a different machine, access it remotely:
+Check `uname -n` vs task's `workerLocation`. If on a different machine:
 
 - From **mac-dev** → SSH to home-dev: `ssh home-dev journalctl -u intexuraos-orchestrator@pbuchman --since ... --until ...`
 - From **home-dev** → cannot SSH to mac-dev. Tell the user.
