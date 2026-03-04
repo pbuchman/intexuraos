@@ -1,4 +1,5 @@
 import { hasCodeTaskLabel } from '@intexuraos/common-core';
+import type { PromptBuilder } from './prompt-builder.js';
 import type { WorkerType } from './isolation/types.js';
 
 export interface SystemPromptParams {
@@ -11,8 +12,12 @@ export interface SystemPromptParams {
   agentType?: 'planning' | 'execution' | 'pull_request';
 }
 
-function buildPlanningPrompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+export const planningPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-planning',
+  description: 'Planning agent system prompt for autonomous code task planning',
+  version: '1.0.0',
+  build(params: SystemPromptParams): string {
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
   /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
   return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
@@ -140,12 +145,17 @@ PLANNING_AGENT_FINAL:
 After this block, stop. Do not append any other checklist or schema payload.
 
 Note: For complex planned outcomes, you MUST include explicit proof of the parallel breakdown. This means showing exactly how each subissue's boundaries are defined — what types/interfaces each subissue owns, what contracts it exposes, and how agents can work on each subissue independently without coordination.`;
-}
+  },
+};
 
-function buildExecutionPrompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+export const executionPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-execution',
+  description: 'Execution agent system prompt for autonomous code task implementation',
+  version: '1.0.0',
+  build(params: SystemPromptParams): string {
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
-  return `[SYSTEM CONTEXT]
+    return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [AGENT:EXECUTION]
@@ -244,11 +254,16 @@ EXECUTION_AGENT_FINAL:
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
+  },
   /* v8 ignore stop @preserve */
-}
+};
 
-function buildPullRequestPrompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-pull-request',
+  description: 'Pull request agent system prompt for addressing PR review feedback',
+  version: '1.0.0',
+  build(params: SystemPromptParams): string {
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
   /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
   return `[SYSTEM CONTEXT]
@@ -345,11 +360,16 @@ PULL_REQUEST_AGENT_FINAL:
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
+  },
   /* v8 ignore stop @preserve */
-}
+};
 
-function buildPRReviewOverlay(params: SystemPromptParams): string {
-  const { taskUrl } = params;
+export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-pr-review-overlay',
+  description: 'Conditional PR review overlay appended to planning and execution prompts',
+  version: '1.0.0',
+  build(params: SystemPromptParams): string {
+    const { taskUrl } = params;
   /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
   return `
 
@@ -431,25 +451,26 @@ PULL_REQUEST_AGENT_FINAL:
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
+  },
   /* v8 ignore stop @preserve */
-}
+};
 
 export function buildSystemPrompt(params: SystemPromptParams): string {
   const isPRComment = params.linearIssueLabels.some(
     (label) => label.trim().toLowerCase() === 'pr-comment'
   );
   if (isPRComment) {
-    return buildPullRequestPrompt(params);
+    return pullRequestPrompt.build(params);
   }
 
   const resolvedAgentType =
     params.agentType ?? (hasCodeTaskLabel(params.linearIssueLabels) ? 'execution' : 'planning');
 
-  const overlay = buildPRReviewOverlay(params);
+  const overlay = prReviewOverlayPrompt.build(params);
 
   if (resolvedAgentType === 'planning') {
-    return buildPlanningPrompt(params) + overlay;
+    return planningPrompt.build(params) + overlay;
   }
 
-  return buildExecutionPrompt(params) + overlay;
+  return executionPrompt.build(params) + overlay;
 }
