@@ -2,9 +2,12 @@ import * as os from 'node:os';
 import type Docker from 'dockerode';
 import type { Logger } from '@intexuraos/common-core';
 
-const HOST_UID = os.userInfo().uid;
-const HOST_GID = os.userInfo().gid;
-const HOST_USER_STRING = `${String(HOST_UID)}:${String(HOST_GID)}`;
+function getHostUserString(): { uid: number; gid: number; userString: string } {
+  const info = os.userInfo();
+  const uid = info.uid;
+  const gid = info.gid;
+  return { uid, gid, userString: `${String(uid)}:${String(gid)}` };
+}
 
 export interface CredentialRefresherConfig {
   sharedCredsPath: string;
@@ -25,6 +28,7 @@ export class CredentialRefresher {
 
   async refresh(): Promise<boolean> {
     let container: Docker.Container | undefined;
+    const { uid, gid, userString } = getHostUserString();
 
     try {
       container = await this.docker.createContainer({
@@ -32,7 +36,7 @@ export class CredentialRefresher {
         name: `claude-cred-refresh-${String(Date.now())}`,
         Entrypoint: ['claude'],
         Cmd: ['--print', '--model', 'haiku', 'reply ok'],
-        User: HOST_USER_STRING,
+        User: userString,
         Tty: false,
         HostConfig: {
           Binds: [`${this.config.sharedCredsPath}:/home/claude/.claude:rw`],
@@ -40,7 +44,7 @@ export class CredentialRefresher {
           AutoRemove: false,
           Tmpfs: {
             '/tmp': 'rw,noexec,nosuid,size=100m',
-            '/home/claude': `rw,noexec,nosuid,size=100m,uid=${String(HOST_UID)},gid=${String(HOST_GID)}`,
+            '/home/claude': `rw,noexec,nosuid,size=100m,uid=${String(uid)},gid=${String(gid)}`,
           },
           CapDrop: ['ALL'],
           SecurityOpt: ['no-new-privileges'],

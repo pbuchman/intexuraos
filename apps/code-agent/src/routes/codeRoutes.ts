@@ -44,7 +44,7 @@ const codeTaskSchema = {
     prompt: { type: 'string' },
     sanitizedPrompt: { type: 'string' },
     systemPromptHash: { type: 'string' },
-    workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'] },
+    workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
     workerLocation: { type: 'string' },
     repository: { type: 'string' },
     baseBranch: { type: 'string' },
@@ -329,7 +329,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               type: 'object',
               properties: {
                 prompt: { type: 'string' },
-                workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'] },
+                workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
                 linearIssueId: { type: 'string' },
                 repository: { type: 'string' },
                 baseBranch: { type: 'string' },
@@ -893,9 +893,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active code task check complete');
-
-      return await reply.ok(result.value);
+      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active code task check complete'); // @allow-result-access -- .ok checked at line 891
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 891
     }
   );
 
@@ -988,10 +987,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ count: result.value.length }, 'Zombie code tasks found');
-
+      request.log.info({ count: result.value.length }, 'Zombie code tasks found'); // @allow-result-access -- .ok checked at line 986
       return await reply.ok({
-        tasks: result.value.map(taskToApiResponse),
+        tasks: result.value.map(taskToApiResponse), // @allow-result-access -- .ok checked at line 986
       });
     }
   );
@@ -1005,7 +1003,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
   fastify.post<{
     Body: {
       prompt: string;
-      workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+      workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
       workerLocation?: string;
       linearIssueId?: string;
       linearIssueTitle?: string;
@@ -1023,7 +1021,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           type: 'object',
           properties: {
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
-            workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'] },
+            workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
             workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
             linearIssueTitle: { type: 'string' },
@@ -1150,7 +1148,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/submit',
         includeParams: true,
@@ -1159,7 +1157,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo } = getServices();
       const body = request.body as {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         workerLocation?: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
@@ -1209,7 +1207,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         prompt: string;
         sanitizedPrompt: string;
         systemPromptHash: string;
-        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         workerLocation: string;
         repository: string;
         baseBranch: string;
@@ -2527,7 +2525,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', 'Failed to process heartbeat');
       }
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 2523
     }
   );
 
@@ -2598,7 +2596,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', 'Failed to detect zombie tasks');
       }
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 2594
     }
   );
 
@@ -2897,8 +2895,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       /* v8 ignore stop @preserve */
 
-      request.log.info({ taskId, phase2TaskId: result.value.codeTaskId }, 'Phase 2 submitted successfully');
-      return await reply.ok(result.value);
+      request.log.info({ taskId, phase2TaskId: result.value.codeTaskId }, 'Phase 2 submitted successfully'); // @allow-result-access -- .ok checked above in the v8-ignore block
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked above in the v8-ignore block
     }
   );
 
@@ -3041,14 +3039,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info(
         {
-          tasksProcessed: result.value.tasksProcessed,
-          logsDeleted: result.value.logsDeleted,
-          durationMs: result.value.durationMs,
+          tasksProcessed: result.value.tasksProcessed, // @allow-result-access -- .ok checked at line 3035
+          logsDeleted: result.value.logsDeleted, // @allow-result-access -- .ok checked at line 3035
+          durationMs: result.value.durationMs, // @allow-result-access -- .ok checked at line 3035
         },
         'Task log cleanup completed'
       );
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 3035
     }
   );
 
@@ -3077,7 +3075,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             },
             workerType: {
               type: 'string',
-              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'],
+              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'],
               description: 'Optional worker type to use for the retry',
             },
           },
@@ -3196,7 +3194,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         originalTaskId: string;
         userId: string;
         additionalContext?: string;
-        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
       } = {
         originalTaskId: taskId,
         userId,
@@ -3206,8 +3204,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         retryRequest.additionalContext = additionalContext;
       }
       // Only add workerType if provided and valid
-      if (workerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm'].includes(workerType)) {
-        retryRequest.workerType = workerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+      if (workerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'].includes(workerType)) {
+        retryRequest.workerType = workerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
       }
 
       const result = await retryTask(
@@ -3483,7 +3481,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             workerType: {
               type: 'string',
-              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'],
+              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'],
               description: 'Optional worker type to use for the implementation',
             },
           },
@@ -3616,9 +3614,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request.log.info({ taskId, userId, workerType: requestedWorkerType }, 'Processing Execution Agent implementation request');
 
       // Only add workerType if provided and valid
-      const executionAgentRequest: { originalTaskId: string; userId: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' } = { originalTaskId: taskId, userId };
-      if (requestedWorkerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm'].includes(requestedWorkerType)) {
-        executionAgentRequest.workerType = requestedWorkerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+      const executionAgentRequest: { originalTaskId: string; userId: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus' } = { originalTaskId: taskId, userId };
+      if (requestedWorkerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'].includes(requestedWorkerType)) {
+        executionAgentRequest.workerType = requestedWorkerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
       }
 
       const result = await submitToExecutionAgent(

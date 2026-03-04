@@ -67,9 +67,21 @@ const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
 
 // Container must run as the host user so bind-mounted files (worktrees, secrets,
 // pnpm store) are accessible without permission hacks.
-const HOST_UID = os.userInfo().uid;
-const HOST_GID = os.userInfo().gid;
-const HOST_USER_STRING = `${String(HOST_UID)}:${String(HOST_GID)}`;
+// Lazily evaluated (not at module load) to avoid crashing in Docker environments
+// without /etc/passwd. Cached after first call: the UID/GID never changes within
+// a process lifetime, so repeated syscalls would be wasteful.
+let _hostUserInfo: { uid: number; gid: number; userString: string } | null = null;
+function getHostUserInfo(): { uid: number; gid: number; userString: string } {
+  if (_hostUserInfo === null) {
+    const info = os.userInfo();
+    _hostUserInfo = {
+      uid: info.uid,
+      gid: info.gid,
+      userString: `${String(info.uid)}:${String(info.gid)}`,
+    };
+  }
+  return _hostUserInfo;
+}
 const DOCKER_PROVIDER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const FORENSICS_SECCOMP_PROFILE_FILENAME = 'claude-worker-forensics-seccomp.json';
 const EXEC_INSPECT_POLL_INTERVAL_MS = 5_000;
@@ -281,7 +293,7 @@ export class DockerProvider implements IsolationProvider {
         AttachStderr: true,
         Tty: false,
         WorkingDir: '/',
-        User: HOST_USER_STRING,
+        User: getHostUserInfo().userString,
       });
       const snapshotResult = await this.runExecAndCapture(taskId, snapshotExec);
       await fs.promises.writeFile(
@@ -657,7 +669,7 @@ export class DockerProvider implements IsolationProvider {
         name: `claude-worker-${taskId}`,
         Env: env,
         WorkingDir: '/repo',
-        User: HOST_USER_STRING,
+        User: getHostUserInfo().userString,
         Tty: false,
         HostConfig: {
           Binds: [
@@ -676,10 +688,10 @@ export class DockerProvider implements IsolationProvider {
           ReadonlyRootfs: false,
           Tmpfs: {
             '/tmp': 'rw,noexec,nosuid,size=2g',
-            '/home/claude': `rw,noexec,nosuid,size=500m,uid=${String(HOST_UID)},gid=${String(HOST_GID)}`,
+            '/home/claude': `rw,noexec,nosuid,size=500m,uid=${String(getHostUserInfo().uid)},gid=${String(getHostUserInfo().gid)}`,
             // Shadows the Mac host's node_modules (bind-mounted via /repo), giving the
             // container an empty writable dir for Linux-native pnpm install.
-            '/repo/node_modules': `rw,exec,nosuid,size=4g,uid=${String(HOST_UID)},gid=${String(HOST_GID)}`,
+            '/repo/node_modules': `rw,exec,nosuid,size=4g,uid=${String(getHostUserInfo().uid)},gid=${String(getHostUserInfo().gid)}`,
           },
           CapDrop: ['ALL'],
           // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude
@@ -1154,7 +1166,7 @@ export class DockerProvider implements IsolationProvider {
       AttachStderr: true,
       Tty: false,
       WorkingDir: '/',
-      User: HOST_USER_STRING,
+      User: getHostUserInfo().userString,
     });
 
     const execStream = await execInstance.start({ hijack: false, stdin: false });
@@ -1229,7 +1241,7 @@ export class DockerProvider implements IsolationProvider {
         AttachStderr: true,
         Tty: false,
         WorkingDir: '/',
-        User: HOST_USER_STRING,
+        User: getHostUserInfo().userString,
         Env: [`CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`],
       });
 
