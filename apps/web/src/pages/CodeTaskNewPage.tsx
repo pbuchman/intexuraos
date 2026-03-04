@@ -566,6 +566,9 @@ export function CodeTaskNewPage(): React.JSX.Element {
         }}
         onClose={(): void => {
           setShowIssueSelectorModal(false);
+          if (selectedIssue === null) {
+            setLinearMode('create');
+          }
         }}
       />
     </Layout>
