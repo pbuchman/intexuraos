@@ -136,6 +136,109 @@ describe('formatLogChunk', () => {
       expect(result[0]?.text).toBe('[hook] unknown \u2713 (exit 0)');
     });
 
+    it('hook_response with large JSON object output shows compact summary', () => {
+      const largeObj = {
+        additional_context: 'A'.repeat(300),
+        hookSpecificOutput: 'B'.repeat(200)
+      };
+      const json = JSON.stringify({
+        type: 'system',
+        subtype: 'hook_response',
+        hook_name: 'SessionStart:resume',
+        exit_code: 0,
+        output: JSON.stringify(largeObj)
+      });
+      const result = formatLogChunk(json, 0, ts());
+      const outputStr = JSON.stringify(largeObj);
+      expect(result[0]?.text).toBe(
+        `[hook] SessionStart:resume \u2713 (exit 0)\n  hook output: {2 keys: additional_context, hookSpecificOutput} [${String(outputStr.length)} chars]`
+      );
+    });
+
+    it('hook_response with large JSON array output shows compact summary', () => {
+      const largeArr = Array.from({ length: 5 }, (_, i) => ({ id: i, name: `item-${String(i)}`, data: 'X'.repeat(50) }));
+      const json = JSON.stringify({
+        type: 'system',
+        subtype: 'hook_response',
+        hook_name: 'SomeHook',
+        exit_code: 0,
+        output: JSON.stringify(largeArr)
+      });
+      const result = formatLogChunk(json, 0, ts());
+      const outputStr = JSON.stringify(largeArr);
+      expect(result[0]?.text).toBe(
+        `[hook] SomeHook \u2713 (exit 0)\n  hook output: [5 items] [${String(outputStr.length)} chars]`
+      );
+    });
+
+    it('hook_response with short JSON output displays inline', () => {
+      const shortObj = { status: 'ok' };
+      const json = JSON.stringify({
+        type: 'system',
+        subtype: 'hook_response',
+        hook_name: 'validate-lint',
+        exit_code: 0,
+        output: JSON.stringify(shortObj)
+      });
+      const result = formatLogChunk(json, 0, ts());
+      // Short JSON (< 200 chars) should use existing collapseOutput behavior
+      expect(result[0]?.text).toBe('[hook] validate-lint \u2713 (exit 0)\n  {"status":"ok"}');
+    });
+
+    it('hook_response with large JSON object having >5 keys truncates key list', () => {
+      const manyKeysObj: Record<string, string> = {};
+      for (let i = 0; i < 7; i++) {
+        manyKeysObj[`key${String(i)}`] = 'X'.repeat(30);
+      }
+      const json = JSON.stringify({
+        type: 'system',
+        subtype: 'hook_response',
+        hook_name: 'SomeHook',
+        exit_code: 0,
+        output: JSON.stringify(manyKeysObj)
+      });
+      const result = formatLogChunk(json, 0, ts());
+      const outputStr = JSON.stringify(manyKeysObj);
+      expect(result[0]?.text).toBe(
+        `[hook] SomeHook \u2713 (exit 0)\n  hook output: {7 keys: key0, key1, key2, key3, key4, ...} [${String(outputStr.length)} chars]`
+      );
+    });
+
+    it('hook_response with large non-object JSON falls through to line-by-line', () => {
+      // JSON.parse of a large string literal — not an object or array
+      const largeString = '"' + 'A'.repeat(250) + '"';
+      const json = JSON.stringify({
+        type: 'system',
+        subtype: 'hook_response',
+        hook_name: 'SomeHook',
+        exit_code: 0,
+        output: largeString
+      });
+      const result = formatLogChunk(json, 0, ts());
+      // Falls through to line-by-line since parsed value is a string, not object/array
+      expect(result[0]?.text).toBe(`[hook] SomeHook \u2713 (exit 0)\n  ${largeString}`);
+    });
+
+    it('hook_response with JSON containing system-reminder strips reminder first', () => {
+      const largeObj = {
+        additional_context: 'C'.repeat(300),
+        hookSpecificOutput: 'D'.repeat(200)
+      };
+      const outputWithReminder = '<system-reminder>Some reminder text</system-reminder>\n' + JSON.stringify(largeObj);
+      const json = JSON.stringify({
+        type: 'system',
+        subtype: 'hook_response',
+        hook_name: 'SessionStart:resume',
+        exit_code: 0,
+        output: outputWithReminder
+      });
+      const result = formatLogChunk(json, 0, ts());
+      const cleanOutput = JSON.stringify(largeObj);
+      expect(result[0]?.text).toBe(
+        `[hook] SessionStart:resume \u2713 (exit 0)\n  hook output: {2 keys: additional_context, hookSpecificOutput} [${String(cleanOutput.length)} chars]`
+      );
+    });
+
     it('init with all fields', () => {
       const json = JSON.stringify({
         type: 'system',
