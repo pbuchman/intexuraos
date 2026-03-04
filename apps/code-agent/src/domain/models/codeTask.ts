@@ -28,6 +28,7 @@ export type AgentType = 'planning' | 'execution' | 'pull_request';
  * Flow: queued → dispatched → running → planned|implemented|failed|cancelled
  *       dispatched → interrupted (if worker dies)
  *       queued → failed (if TTL expires or queue full)
+ *       failed|cancelled|interrupted → archived (when task is retried, INT-711)
  *
  * 'planned'      = Planning Agent task completed successfully
  * 'implemented'  = Execution Agent task completed successfully
@@ -40,7 +41,8 @@ export type TaskStatus =
   | 'implemented'  // Execution Agent task finished
   | 'failed'       // Error occurred
   | 'interrupted'  // Worker died unexpectedly
-  | 'cancelled';   // User cancelled
+  | 'cancelled'    // User cancelled
+  | 'archived';    // Task archived after retry (INT-711)
 
 /**
  * Status summary phases for UI display when logs unavailable.
