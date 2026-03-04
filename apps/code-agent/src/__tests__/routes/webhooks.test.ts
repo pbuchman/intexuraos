@@ -1170,12 +1170,12 @@ describe('POST /internal/webhooks/task-complete', () => {
         expect.objectContaining({ issueId: 'child-2-uuid', state: 'todo' })
       );
 
-      // Both subtasks normalized + stamped with code-task in single call
+      // Both subtasks normalized + stamped with code-task in single call (removes assignee)
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-1-uuid', removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-1-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-2-uuid', removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-2-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
       );
 
       const getResult = await codeTaskRepo.findById(task.id);
@@ -1473,9 +1473,18 @@ describe('POST /internal/webhooks/task-complete', () => {
       // validateIssue called only once for original issue (no URL-based subtask resolution)
       expect(validateIssueSpy).toHaveBeenCalledTimes(1);
 
-      // All 3 direct children normalized via tree fallback
+      // All 3 direct children normalized via tree fallback (removes assignee)
       expect(updateIssueStateSpy).toHaveBeenCalledTimes(4); // 1 parent + 3 children
       expect(updateIssueMetadataSpy).toHaveBeenCalledTimes(4); // 1 parent + 3 children
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-1-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+      );
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-2-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+      );
+      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'child-3-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+      );
 
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
@@ -1574,11 +1583,13 @@ describe('POST /internal/webhooks/task-complete', () => {
           removeLabels: ['unclear', 'planned'],
         })
       );
-      // Stamp code-task label as last step
+      // Stamp code-task label as last step (removes unclear, clears assignee)
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           issueId: 'original-uuid',
+          assigneeId: null,
           addLabels: ['code-task'],
+          removeLabels: ['unclear'],
         })
       );
 
@@ -1844,7 +1855,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         expect.objectContaining({ issueId: 'routed-uuid', state: 'in_review' })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'routed-uuid', addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'routed-uuid', assigneeId: null, addLabels: ['code-task'], removeLabels: ['unclear'] })
       );
       expect(markInReviewSpy).not.toHaveBeenCalled();
 
