@@ -1,4 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Mock os.userInfo() to prevent crashing in Docker environments without /etc/passwd.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  const uid = process.getuid?.() ?? 1000;
+  const gid = process.getgid?.() ?? 1000;
+  return {
+    ...actual,
+    userInfo: vi.fn().mockReturnValue({ uid, gid, username: 'testuser', homedir: `/home/testuser`, shell: '/bin/bash' }),
+  };
+});
+
 import { CredentialRefresher } from '../credential-refresher.js';
 import type { Logger } from '@intexuraos/common-core';
 
