@@ -157,7 +157,6 @@ describe('GET /code/tasks endpoints', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
-        firestore: fakeFirestore as unknown as Firestore,
       }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,

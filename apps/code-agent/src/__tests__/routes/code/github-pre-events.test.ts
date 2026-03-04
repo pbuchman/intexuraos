@@ -183,7 +183,6 @@ describe('GET /code/github-pr-events', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
-        firestore: fakeFirestore as unknown as Firestore,
       }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,

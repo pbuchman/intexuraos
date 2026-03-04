@@ -158,7 +158,7 @@ describe('GET /code/github-pr-summaries', () => {
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger, firestore: fakeFirestore as unknown as Firestore }),
+      detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,

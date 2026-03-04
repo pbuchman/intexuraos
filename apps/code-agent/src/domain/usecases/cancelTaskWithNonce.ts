@@ -10,8 +10,7 @@ import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
-import type { DocumentReference } from '@google-cloud/firestore';
-import { deletePRTaskLock } from '../utils/prTaskLock.js';
+import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 
 export interface CancelTaskWithNonceRequest {
   taskId: string;
@@ -37,7 +36,6 @@ export interface CancelTaskWithNonceDeps {
   codeTaskRepo: CodeTaskRepository;
   taskDispatcher: TaskDispatcherService;
   workerSettingsRepo: WorkerSettingsRepository;
-  firestore: { doc: (path: string) => DocumentReference };
 }
 
 /**
@@ -55,8 +53,8 @@ export interface CancelTaskWithNonceDeps {
 export async function cancelTaskWithNonce(
   deps: CancelTaskWithNonceDeps,
   request: CancelTaskWithNonceRequest
-): Promise<Result<{ cancelled: true }, CancelTaskWithNonceError>> {
-  const { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore } = deps;
+): Promise<Result<{ cancelled: true; locksToCleanup: LockCleanupInfo[] }, CancelTaskWithNonceError>> {
+  const { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo } = deps;
   const { taskId, nonce, userId } = request;
 
   // Step 1: Fetch task
@@ -108,10 +106,7 @@ export async function cancelTaskWithNonce(
     return err({ code: 'internal_error', message: 'Failed to cancel task' });
   }
 
-  // Best-effort: clean up PR task lock if this was the original lock-owning task
-  if (task.prNumber !== undefined && task.parentTaskId === undefined) {
-    await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
-  }
+  const locksToCleanup = buildLockCleanups(task);
 
   // Step 7: Notify worker to stop (best effort)
   try {
@@ -137,5 +132,5 @@ export async function cancelTaskWithNonce(
   }
 
   logger.info({ taskId }, 'Task cancelled via nonce');
-  return ok({ cancelled: true });
+  return ok({ cancelled: true, locksToCleanup });
 }

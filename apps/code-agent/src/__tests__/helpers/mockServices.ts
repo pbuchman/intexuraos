@@ -163,7 +163,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
         logger,
       }),
       logger,
-      firestore: fakeFirestore,
     }),
     cleanupTaskLogs: createCleanupTaskLogsUseCase({
       codeTaskRepository: createFirestoreCodeTaskRepository({

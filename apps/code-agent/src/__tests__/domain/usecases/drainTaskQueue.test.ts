@@ -61,11 +61,6 @@ describe('drainTaskQueue', () => {
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
   };
-  let mockLockDeleteFn: ReturnType<typeof vi.fn>;
-  let mockFirestore: {
-    doc: ReturnType<typeof vi.fn>;
-  };
-
   const workerConfig = {
     name: 'home-mac',
     url: 'https://worker.local',
@@ -109,10 +104,6 @@ describe('drainTaskQueue', () => {
       getSettings: vi.fn(),
     };
 
-    mockLockDeleteFn = vi.fn().mockResolvedValue(undefined);
-    mockFirestore = {
-      doc: vi.fn().mockReturnValue({ delete: mockLockDeleteFn }),
-    };
   });
 
   afterEach(() => {
@@ -158,7 +149,6 @@ describe('drainTaskQueue', () => {
       linearAgentClient: mockLinearAgentClient as unknown as DrainTaskQueueDeps['linearAgentClient'],
       whatsappNotifier: mockWhatsappNotifier as unknown as DrainTaskQueueDeps['whatsappNotifier'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainTaskQueueDeps['workerSettingsRepo'],
-      firestore: mockFirestore as unknown as DrainTaskQueueDeps['firestore'],
     };
   }
 
@@ -211,7 +201,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify task marked as failed
@@ -247,7 +237,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify findById was called for parent
@@ -277,7 +267,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify implementationTaskId was NOT cleared (parent points to different task)
@@ -307,7 +297,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify warning was logged
@@ -333,7 +323,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify warning was logged about notification failure
@@ -358,7 +348,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
   });
 
@@ -440,7 +430,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'failed', taskId: 'task-123' }));
     }
 
     // Verify task was marked as failed with the dispatch error
@@ -471,7 +461,7 @@ describe('drainTaskQueue', () => {
     // Still returns failed action even if update didn't persist
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'failed', taskId: 'task-123' }));
     }
 
     // Verify error was logged about the failed update
@@ -725,7 +715,7 @@ describe('drainTaskQueue', () => {
   });
 
   describe('PR task lock cleanup', () => {
-    it('deletes PR task lock on TTL expiry (PR task)', async () => {
+    it('returns locksToCleanup on TTL expiry (PR task)', async () => {
       const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
       const task = createMockTask({
         queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
@@ -738,14 +728,14 @@ describe('drainTaskQueue', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+        expect(result.value.action).toBe('expired');
+        expect(result.value.locksToCleanup).toEqual([
+          { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        ]);
       }
-      // Verify lock deletion was called
-      expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/pbuchman_intexuraos_42');
-      expect(mockLockDeleteFn).toHaveBeenCalled();
     });
 
-    it('deletes PR task lock on dispatch failure (PR task)', async () => {
+    it('returns locksToCleanup on dispatch failure (PR task)', async () => {
       const task = createMockTask({ prNumber: 42 });
       mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
       setupWorkerSettings();
@@ -760,14 +750,14 @@ describe('drainTaskQueue', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+        expect(result.value.action).toBe('failed');
+        expect(result.value.locksToCleanup).toEqual([
+          { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        ]);
       }
-      // Verify lock deletion was called
-      expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/pbuchman_intexuraos_42');
-      expect(mockLockDeleteFn).toHaveBeenCalled();
     });
 
-    it('does NOT delete PR task lock on TTL expiry (non-PR task)', async () => {
+    it('returns empty locksToCleanup on TTL expiry (non-PR task)', async () => {
       const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
       const task = createMockTask({
         queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
@@ -779,13 +769,12 @@ describe('drainTaskQueue', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+        expect(result.value.action).toBe('expired');
+        expect(result.value.locksToCleanup).toEqual([]);
       }
-      // Verify lock deletion was NOT called (no prNumber on task)
-      expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
 
-    it('does NOT delete PR task lock on TTL expiry when task is a follow-up (has parentTaskId)', async () => {
+    it('returns empty locksToCleanup on TTL expiry when task is a follow-up (has parentTaskId)', async () => {
       const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
       const task = createMockTask({
         queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
@@ -801,13 +790,12 @@ describe('drainTaskQueue', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+        expect(result.value.action).toBe('expired');
+        expect(result.value.locksToCleanup).toEqual([]);
       }
-      // Verify lock deletion was NOT called (follow-up task does not own the lock)
-      expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
 
-    it('does NOT delete PR task lock on dispatch failure when task is a follow-up (has parentTaskId)', async () => {
+    it('returns empty locksToCleanup on dispatch failure when task is a follow-up (has parentTaskId)', async () => {
       const task = createMockTask({
         prNumber: 42,
         parentTaskId: 'parent-task-123',
@@ -825,10 +813,9 @@ describe('drainTaskQueue', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+        expect(result.value.action).toBe('failed');
+        expect(result.value.locksToCleanup).toEqual([]);
       }
-      // Verify lock deletion was NOT called (follow-up task does not own the lock)
-      expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
   });
 });

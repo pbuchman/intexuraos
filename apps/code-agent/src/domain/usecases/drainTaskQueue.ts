@@ -14,10 +14,9 @@ import type { TaskDispatcherService, DispatchWorkerCredentials } from '../servic
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
-import type { DocumentReference } from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
 import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
-import { deletePRTaskLock } from '../utils/prTaskLock.js';
+import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 
 // In-memory guard for single-instance environments
 let isDraining = false;
@@ -30,6 +29,7 @@ export function _resetDrainGuard(): void {
 export interface DrainTaskQueueResult {
   action: 'dispatched' | 'expired' | 'still_busy' | 'empty' | 'skipped' | 'failed';
   taskId?: string;
+  locksToCleanup?: LockCleanupInfo[];
 }
 
 export interface DrainTaskQueueError {
@@ -44,13 +44,12 @@ export interface DrainTaskQueueDeps {
   linearAgentClient: LinearAgentClient;
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
-  firestore: { doc: (path: string) => DocumentReference };
 }
 
 export async function drainTaskQueue(
   deps: DrainTaskQueueDeps
 ): Promise<Result<DrainTaskQueueResult, DrainTaskQueueError>> {
-  const { logger, codeTaskRepo, taskDispatcher, linearAgentClient, whatsappNotifier, workerSettingsRepo, firestore } = deps;
+  const { logger, codeTaskRepo, taskDispatcher, linearAgentClient, whatsappNotifier, workerSettingsRepo } = deps;
   const config = loadConfig();
 
   // Fast-path guard for single-instance
@@ -91,10 +90,7 @@ export async function drainTaskQueue(
         },
       });
 
-      // Best-effort: clean up PR task lock if this was the original lock-owning task
-      if (task.prNumber !== undefined && task.parentTaskId === undefined) {
-        await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
-      }
+      const locksToCleanup = buildLockCleanups(task);
 
       // Clear parent planning task's implementationTaskId if this was an execution agent task,
       // so the web UI can re-submit (INT-619 review fix #2)
@@ -113,7 +109,7 @@ export async function drainTaskQueue(
         logger.warn({ taskId: task.id, error: notifyResult.error }, 'Failed to send queue expired notification');
       }
 
-      return ok({ action: 'expired', taskId: task.id });
+      return ok({ action: 'expired', taskId: task.id, locksToCleanup });
     }
 
     // Step 3: Fetch user's CURRENT worker settings
@@ -201,12 +197,9 @@ export async function drainTaskQueue(
         logger.error({ taskId: task.id, error: failUpdateResult.error }, 'Failed to persist failed status during drain');
       }
 
-      // Best-effort: clean up PR task lock if this was the original lock-owning task
-      if (task.prNumber !== undefined && task.parentTaskId === undefined) {
-        await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
-      }
+      const locksToCleanup = buildLockCleanups(task);
 
-      return ok({ action: 'failed', taskId: task.id });
+      return ok({ action: 'failed', taskId: task.id, locksToCleanup });
     }
 
     // Step 6: Success - update status to dispatched

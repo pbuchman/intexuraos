@@ -16,13 +16,11 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
-import type { DocumentReference } from '@google-cloud/firestore';
 import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { loadConfig } from '../../config.js';
-import { deletePRTaskLock } from '../../domain/utils/prTaskLock.js';
 
 /**
  * Cool-off period before retry is allowed (1 minute).
@@ -83,7 +81,6 @@ export interface RetryTaskDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
   serviceUrl: string;
-  firestore: { doc: (path: string) => DocumentReference };
 }
 
 /**
@@ -378,13 +375,6 @@ ${additionalContext.trim()}
           },
         });
 
-        // Best-effort: clean up PR task lock if original was PR-originated.
-        // Uses originalTask (not retryTask) because the lock was created with the original's
-        // repository/prNumber, and the retry task may not yet have prNumber populated.
-        if (originalTask.prNumber !== undefined) {
-          await deletePRTaskLock(deps.firestore, originalTask.repository, originalTask.prNumber, logger);
-        }
-
         return err({
           code: 'queue_full',
           message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
@@ -437,13 +427,6 @@ ${additionalContext.trim()}
         { taskId: retryTask.id, error: updateWithErrorResult.error },
         'Failed to persist dispatch error on retry task'
       );
-    }
-
-    // Best-effort: clean up PR task lock if original was PR-originated.
-    // Uses originalTask (not retryTask) because the lock was created with the original's
-    // repository/prNumber, and the retry task may not yet have prNumber populated.
-    if (originalTask.prNumber !== undefined) {
-      await deletePRTaskLock(deps.firestore, originalTask.repository, originalTask.prNumber, logger);
     }
 
     // Safe to access [0] because we return early if enabledWorkers.length === 0
