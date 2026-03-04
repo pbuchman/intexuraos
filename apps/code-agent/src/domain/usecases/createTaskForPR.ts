@@ -267,6 +267,7 @@ export async function createTaskForPR(
         approvalEventId: eventId,
         prNumber,
         linearIssueTitle: linearResult.linearIssueTitle,
+        linearIssueLabels: linearResult.linearIssueLabels,
         webhookSecret,
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
