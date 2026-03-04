@@ -453,7 +453,7 @@ function TaskActions({
       ) : null}
       {isRetryable ? (
         showDeleteConfirm ? (
-          <div className="flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-3">
             <p className="text-sm text-red-400">Delete this task permanently?</p>
             <Button
               variant="danger"
