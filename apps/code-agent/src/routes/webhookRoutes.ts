@@ -383,7 +383,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             const stampCodeTask = await linearAgentClient.updateIssueMetadata({
               userId: task.userId,
               issueId: originalIssueUuid,
+              assigneeId: null,
               addLabels: ['code-task'],
+              removeLabels: ['unclear'],
             });
             if (!stampCodeTask.ok) {
               return { ok: false, message: `Failed to add code-task label to original issue: ${stampCodeTask.error.message}` };
@@ -517,7 +519,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const keepCodeTaskLabel = await linearAgentClient.updateIssueMetadata({
           userId: task.userId,
           issueId: routedIssueValidation.value.id,
+          assigneeId: null,
           addLabels: ['code-task'],
+          removeLabels: ['unclear'],
         });
         if (!keepCodeTaskLabel.ok) {
           return {
