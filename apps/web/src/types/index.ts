@@ -1175,6 +1175,7 @@ export interface CodeTask {
   linearIssueTitle?: string;
   linearIssueUrl?: string;
   linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
+  linearIssueLabels?: string[];
   linearFallback?: boolean;
   linearIssue?: {
     identifier: string;
