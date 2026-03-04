@@ -1397,8 +1397,10 @@ export class TaskDispatcher {
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true
           ? this.buildActiveGoalSection(params.prompt, {
-              linearIssueId: task.linearIssueId,
-              linearIssueTitle: task.linearIssueTitle,
+              ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+              ...(task.linearIssueTitle !== undefined && {
+                linearIssueTitle: task.linearIssueTitle,
+              }),
             })
           : ''),
       workerType: task.workerType,
