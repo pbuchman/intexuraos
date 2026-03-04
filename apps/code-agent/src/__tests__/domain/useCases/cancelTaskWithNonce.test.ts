@@ -7,7 +7,7 @@ import { err, ok } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
 import type { Logger } from 'pino';
-import { cancelTaskWithNonce, type CancelTaskWithNonceDeps } from '../../../domain/usecases/cancelTaskWithNonce.js';
+import { cancelTaskWithNonce } from '../../../domain/usecases/cancelTaskWithNonce.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 
@@ -16,8 +16,6 @@ describe('cancelTaskWithNonce', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let workerSettingsRepo: WorkerSettingsRepository;
-  let mockLockDeleteFn: ReturnType<typeof vi.fn>;
-  let mockFirestore: { doc: ReturnType<typeof vi.fn> };
 
   const baseTask = {
     id: 'task-123',
@@ -83,10 +81,6 @@ describe('cancelTaskWithNonce', () => {
       updateTestResult: vi.fn(),
     } as unknown as WorkerSettingsRepository;
 
-    mockLockDeleteFn = vi.fn().mockResolvedValue(undefined);
-    mockFirestore = {
-      doc: vi.fn().mockReturnValue({ delete: mockLockDeleteFn }),
-    };
   });
 
   it('returns task_not_found when task does not exist', async () => {
@@ -95,7 +89,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'nonexistent', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -109,7 +103,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'wrong', userId: 'user-789' }
     );
 
@@ -124,7 +118,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(taskWithoutNonce as CodeTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -142,7 +136,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(expiredTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -156,7 +150,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'different-user' }
     );
 
@@ -171,7 +165,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(completedTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -187,7 +181,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(failedTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -204,7 +198,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -221,7 +215,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -251,7 +245,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -266,7 +260,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -290,7 +284,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -305,7 +299,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(taskDispatcher.cancelOnWorker).mockRejectedValueOnce(new Error('Worker unreachable'));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -314,7 +308,7 @@ describe('cancelTaskWithNonce', () => {
   });
 
   describe('PR task lock cleanup', () => {
-    it('deletes PR task lock after cancellation when task has prNumber', async () => {
+    it('returns locksToCleanup after cancellation when task has prNumber', async () => {
       const taskWithPR = { ...baseTask, prNumber: 42 };
       vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(taskWithPR));
       vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
@@ -322,33 +316,36 @@ describe('cancelTaskWithNonce', () => {
       );
 
       const result = await cancelTaskWithNonce(
-        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
         { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
       );
 
       expect(result.ok).toBe(true);
-      // Verify lock deletion was called with correct path
-      expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/pbuchman_intexuraos_42');
-      expect(mockLockDeleteFn).toHaveBeenCalled();
+      if (result.ok) {
+        expect(result.value.locksToCleanup).toEqual([
+          { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        ]);
+      }
     });
 
-    it('does NOT delete PR task lock after cancellation when task has no prNumber', async () => {
+    it('returns empty locksToCleanup after cancellation when task has no prNumber', async () => {
       vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
       vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
         ok({ ...baseTask, status: 'cancelled' as const })
       );
 
       const result = await cancelTaskWithNonce(
-        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
         { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
       );
 
       expect(result.ok).toBe(true);
-      // Verify lock deletion was NOT called (no prNumber on task)
-      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+      if (result.ok) {
+        expect(result.value.locksToCleanup).toEqual([]);
+      }
     });
 
-    it('does NOT delete PR task lock after cancellation when task is a follow-up (has parentTaskId)', async () => {
+    it('returns empty locksToCleanup after cancellation when task is a follow-up (has parentTaskId)', async () => {
       const followUpTask = { ...baseTask, prNumber: 42, parentTaskId: 'parent-task-123' };
       vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(followUpTask));
       vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
@@ -356,13 +353,14 @@ describe('cancelTaskWithNonce', () => {
       );
 
       const result = await cancelTaskWithNonce(
-        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, firestore: mockFirestore as unknown as CancelTaskWithNonceDeps['firestore'] },
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
         { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
       );
 
       expect(result.ok).toBe(true);
-      // Verify lock deletion was NOT called (follow-up task does not own the lock)
-      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+      if (result.ok) {
+        expect(result.value.locksToCleanup).toEqual([]);
+      }
     });
   });
 });

@@ -42,20 +42,12 @@ describe('detectZombieTasks', () => {
   let useCase: ReturnType<typeof createDetectZombieTasksUseCase>;
   let findZombieTasksMock: MockedFunction<(staleThreshold: Date) => Promise<ReturnType<typeof ok>>>;
   let updateMock: MockedFunction<(taskId: string, input: unknown) => Promise<unknown>>;
-  let mockLockDeleteFn: ReturnType<typeof vi.fn>;
-  let mockFirestore: { doc: ReturnType<typeof vi.fn> };
-
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-01T12:00:00Z'));
 
     findZombieTasksMock = vi.fn() as unknown as MockedFunction<(staleThreshold: Date) => Promise<ReturnType<typeof ok>>>;
     updateMock = vi.fn() as unknown as MockedFunction<(taskId: string, input: unknown) => Promise<unknown>>;
-
-    mockLockDeleteFn = vi.fn().mockResolvedValue(undefined);
-    mockFirestore = {
-      doc: vi.fn().mockReturnValue({ delete: mockLockDeleteFn }),
-    };
 
     deps = {
       codeTaskRepository: {
@@ -69,7 +61,6 @@ describe('detectZombieTasks', () => {
         update: updateMock,
       } as unknown as DetectZombieTasksDeps['codeTaskRepository'],
       logger: createFakeLogger() as unknown as DetectZombieTasksDeps['logger'],
-      firestore: mockFirestore as unknown as DetectZombieTasksDeps['firestore'],
     };
     useCase = createDetectZombieTasksUseCase(deps);
   });
@@ -166,7 +157,7 @@ describe('detectZombieTasks', () => {
   });
 
   describe('PR task lock cleanup', () => {
-    it('deletes PR task lock for zombie PR task', async () => {
+    it('returns locksToCleanup for zombie PR task', async () => {
       const zombieTask = createFakeCodeTask({
         id: 'zombie-pr-task',
         status: 'running',
@@ -181,13 +172,13 @@ describe('detectZombieTasks', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.interrupted).toBe(1);
+        expect(result.value.locksToCleanup).toEqual([
+          { repository: 'org/repo', prNumber: 42 },
+        ]);
       }
-      // Verify lock deletion was called
-      expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/org_repo_42');
-      expect(mockLockDeleteFn).toHaveBeenCalled();
     });
 
-    it('does NOT delete PR task lock for zombie non-PR task', async () => {
+    it('returns empty locksToCleanup for zombie non-PR task', async () => {
       const zombieTask = createFakeCodeTask({
         id: 'zombie-non-pr-task',
         status: 'running',
@@ -200,12 +191,11 @@ describe('detectZombieTasks', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.interrupted).toBe(1);
+        expect(result.value.locksToCleanup).toEqual([]);
       }
-      // Verify lock deletion was NOT called (no prNumber on task)
-      expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
 
-    it('does NOT delete PR task lock for zombie follow-up task (has parentTaskId)', async () => {
+    it('returns empty locksToCleanup for zombie follow-up task (has parentTaskId)', async () => {
       const zombieTask = createFakeCodeTask({
         id: 'zombie-followup-task',
         status: 'running',
@@ -221,9 +211,8 @@ describe('detectZombieTasks', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.interrupted).toBe(1);
+        expect(result.value.locksToCleanup).toEqual([]);
       }
-      // Verify lock deletion was NOT called (follow-up task does not own the lock)
-      expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
   });
 

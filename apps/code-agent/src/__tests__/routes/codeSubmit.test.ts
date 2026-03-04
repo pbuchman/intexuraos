@@ -154,7 +154,6 @@ describe('POST /code/submit', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
-        firestore: fakeFirestore as unknown as Firestore,
       }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,

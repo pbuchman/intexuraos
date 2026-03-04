@@ -2,8 +2,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { Logger } from 'pino';
-import type { DocumentReference } from '@google-cloud/firestore';
-import { deletePRTaskLock } from '../utils/prTaskLock.js';
+import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 
 /**
  * Minutes of inactivity before a task is considered a zombie.
@@ -14,13 +13,13 @@ const ZOMBIE_THRESHOLD_MINUTES = 30;
 export interface DetectZombieTasksDeps {
   codeTaskRepository: CodeTaskRepository;
   logger: Logger;
-  firestore: { doc: (path: string) => DocumentReference };
 }
 
 export interface ZombieDetectionResult {
   detected: number;
   interrupted: number;
   errors: string[];
+  locksToCleanup: LockCleanupInfo[];
 }
 
 export type DetectZombieTasksUseCase = () => Promise<Result<ZombieDetectionResult>>;
@@ -35,13 +34,14 @@ export type DetectZombieTasksUseCase = () => Promise<Result<ZombieDetectionResul
 export function createDetectZombieTasksUseCase(
   deps: DetectZombieTasksDeps
 ): DetectZombieTasksUseCase {
-  const { codeTaskRepository, logger, firestore } = deps;
+  const { codeTaskRepository, logger } = deps;
 
   return async (): Promise<Result<ZombieDetectionResult>> => {
     const result: ZombieDetectionResult = {
       detected: 0,
       interrupted: 0,
       errors: [],
+      locksToCleanup: [],
     };
 
     // Calculate stale threshold
@@ -81,10 +81,7 @@ export function createDetectZombieTasksUseCase(
         } else {
           logger.info({ taskId: task.id }, 'Interrupted zombie task');
           result.interrupted++;
-          // Best-effort: clean up PR task lock if this was the original lock-owning task
-          if (task.prNumber !== undefined && task.parentTaskId === undefined) {
-            await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
-          }
+          result.locksToCleanup.push(...buildLockCleanups(task));
         }
       } catch (error) {
         const message = getErrorMessage(error);
