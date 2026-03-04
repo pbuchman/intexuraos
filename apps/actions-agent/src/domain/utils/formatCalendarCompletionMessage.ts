@@ -1,30 +1,27 @@
 import type { CalendarPreview } from '../ports/calendarServiceClient.js';
 import { formatDateTime } from './calendarMessageFormatting.js';
 
-export interface FormatCalendarApprovalMessageParams {
+export interface FormatCalendarCompletionMessageParams {
   preview: CalendarPreview | null;
-  actionTitle: string;
-  actionId: string;
-  webAppUrl: string;
+  fallbackMessage: string;
+  eventUrl: string;
 }
 
 /**
- * Format a rich calendar approval message with event details.
+ * Format a rich calendar completion message with event details.
  * Falls back to a basic message when preview is unavailable or failed.
  */
-export function formatCalendarApprovalMessage(params: FormatCalendarApprovalMessageParams): string {
-  const { preview, actionTitle, actionId, webAppUrl } = params;
-  const reviewUrl = `${webAppUrl}/#/inbox?action=${actionId}`;
+export function formatCalendarCompletionMessage(params: FormatCalendarCompletionMessageParams): string {
+  const { preview, fallbackMessage, eventUrl } = params;
 
-  // Fallback: no preview or failed preview
   if (
     preview?.status !== 'ready' ||
     preview.summary === undefined
   ) {
-    return `\u{1F4C5} New calendar event ready for approval: "${actionTitle}"\n\nReview: ${reviewUrl}`;
+    return `\u{1F4C5} ${fallbackMessage}\n\nView: ${eventUrl}`;
   }
 
-  const lines: string[] = ['\u{1F4C5} Calendar Event', ''];
+  const lines: string[] = ['\u2705 Calendar Event Created', ''];
 
   lines.push(`*${preview.summary}*`);
 
@@ -42,7 +39,7 @@ export function formatCalendarApprovalMessage(params: FormatCalendarApprovalMess
   }
 
   lines.push('');
-  lines.push(`Review: ${reviewUrl}`);
+  lines.push(`View: ${eventUrl}`);
 
   return lines.join('\n');
 }
