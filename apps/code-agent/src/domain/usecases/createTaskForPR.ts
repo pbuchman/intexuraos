@@ -24,6 +24,7 @@ import type { CodeTask } from '../models/codeTask.js';
 import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
+import { deletePRTaskLock } from '../utils/prTaskLock.js';
 
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
@@ -403,6 +404,7 @@ export async function createTaskForPR(
             message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
           },
         });
+        await deletePRTaskLock(firestore, repository, prNumber, logger);
         return err({
           code: 'queue_full',
           message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
@@ -441,6 +443,7 @@ export async function createTaskForPR(
       status: 'failed',
       error: { code: dispatchError.code, message: dispatchError.message },
     });
+    await deletePRTaskLock(firestore, repository, prNumber, logger);
     return err({
       code: 'task_creation_failed' as CreateTaskForPRErrorCode,
       message: `Task created but dispatch failed: ${dispatchError.message}`,

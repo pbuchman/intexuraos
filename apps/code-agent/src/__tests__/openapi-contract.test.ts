@@ -126,6 +126,7 @@ describe('OpenAPI contract', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
+        firestore: fakeFirestore,
       }),
       cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,

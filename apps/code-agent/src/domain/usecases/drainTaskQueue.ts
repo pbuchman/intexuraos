@@ -14,8 +14,10 @@ import type { TaskDispatcherService, DispatchWorkerCredentials } from '../servic
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import type { DocumentReference } from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
 import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { deletePRTaskLock } from '../utils/prTaskLock.js';
 
 // In-memory guard for single-instance environments
 let isDraining = false;
@@ -42,12 +44,13 @@ export interface DrainTaskQueueDeps {
   linearAgentClient: LinearAgentClient;
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
+  firestore: { doc: (path: string) => DocumentReference };
 }
 
 export async function drainTaskQueue(
   deps: DrainTaskQueueDeps
 ): Promise<Result<DrainTaskQueueResult, DrainTaskQueueError>> {
-  const { logger, codeTaskRepo, taskDispatcher, linearAgentClient, whatsappNotifier, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, taskDispatcher, linearAgentClient, whatsappNotifier, workerSettingsRepo, firestore } = deps;
   const config = loadConfig();
 
   // Fast-path guard for single-instance
@@ -87,6 +90,11 @@ export async function drainTaskQueue(
           message: `Task expired in queue after ${String(config.queue.ttlMinutes)} minutes. Workers were still busy.`,
         },
       });
+
+      // Best-effort: clean up PR task lock if this was a PR-originated task
+      if (task.prNumber !== undefined) {
+        await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
+      }
 
       // Clear parent planning task's implementationTaskId if this was an execution agent task,
       // so the web UI can re-submit (INT-619 review fix #2)
@@ -192,6 +200,12 @@ export async function drainTaskQueue(
       if (!failUpdateResult.ok) {
         logger.error({ taskId: task.id, error: failUpdateResult.error }, 'Failed to persist failed status during drain');
       }
+
+      // Best-effort: clean up PR task lock if this was a PR-originated task
+      if (task.prNumber !== undefined) {
+        await deletePRTaskLock(firestore, task.repository, task.prNumber, logger);
+      }
+
       return ok({ action: 'failed', taskId: task.id });
     }
 

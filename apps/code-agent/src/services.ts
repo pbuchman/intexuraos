@@ -305,6 +305,7 @@ export function initServices(config: ServiceConfig): void {
     detectZombieTasks: createDetectZombieTasksUseCase({
       codeTaskRepository: codeTaskRepo,
       logger,
+      firestore,
     }),
     cleanupTaskLogs: createCleanupTaskLogsUseCase({
       codeTaskRepository: codeTaskRepo,

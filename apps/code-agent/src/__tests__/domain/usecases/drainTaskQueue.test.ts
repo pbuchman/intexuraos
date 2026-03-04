@@ -61,6 +61,10 @@ describe('drainTaskQueue', () => {
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
   };
+  let mockLockDeleteFn: ReturnType<typeof vi.fn>;
+  let mockFirestore: {
+    doc: ReturnType<typeof vi.fn>;
+  };
 
   const workerConfig = {
     name: 'home-mac',
@@ -103,6 +107,11 @@ describe('drainTaskQueue', () => {
 
     mockWorkerSettingsRepo = {
       getSettings: vi.fn(),
+    };
+
+    mockLockDeleteFn = vi.fn().mockResolvedValue(undefined);
+    mockFirestore = {
+      doc: vi.fn().mockReturnValue({ delete: mockLockDeleteFn }),
     };
   });
 
@@ -149,6 +158,7 @@ describe('drainTaskQueue', () => {
       linearAgentClient: mockLinearAgentClient as unknown as DrainTaskQueueDeps['linearAgentClient'],
       whatsappNotifier: mockWhatsappNotifier as unknown as DrainTaskQueueDeps['whatsappNotifier'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainTaskQueueDeps['workerSettingsRepo'],
+      firestore: mockFirestore as unknown as DrainTaskQueueDeps['firestore'],
     };
   }
 
@@ -712,5 +722,67 @@ describe('drainTaskQueue', () => {
         agentType: 'execution',
       })
     );
+  });
+
+  describe('PR task lock cleanup', () => {
+    it('deletes PR task lock on TTL expiry (PR task)', async () => {
+      const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+      const task = createMockTask({
+        queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+        prNumber: 42,
+      });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      }
+      // Verify lock deletion was called
+      expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/pbuchman_intexuraos_42');
+      expect(mockLockDeleteFn).toHaveBeenCalled();
+    });
+
+    it('deletes PR task lock on dispatch failure (PR task)', async () => {
+      const task = createMockTask({ prNumber: 42 });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'network_error', message: 'Connection refused' })
+      );
+
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+      }
+      // Verify lock deletion was called
+      expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/pbuchman_intexuraos_42');
+      expect(mockLockDeleteFn).toHaveBeenCalled();
+    });
+
+    it('does NOT delete PR task lock on TTL expiry (non-PR task)', async () => {
+      const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+      const task = createMockTask({
+        queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      }
+      // Verify lock deletion was NOT called (no prNumber on task)
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
   });
 });

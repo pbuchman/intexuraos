@@ -191,6 +191,7 @@ describe('codeRoutes', () => {
       detectZombieTasks: createDetectZombieTasksUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
+        firestore: fakeFirestore as unknown as Firestore,
       }),
 cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
