@@ -192,7 +192,7 @@ describe('retryTask use case', () => {
     });
 
     it('should return error when task status is not failed, cancelled, or interrupted', async () => {
-      const nonRetryableStatuses: TaskStatus[] = ['dispatched', 'running', 'implemented'];
+      const nonRetryableStatuses: TaskStatus[] = ['dispatched', 'running', 'implemented', 'archived'];
 
       for (const status of nonRetryableStatuses) {
         vi.clearAllMocks();
