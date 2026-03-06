@@ -216,11 +216,31 @@ async function validateThirdPartyApiKey(
       );
     }
   } catch (error) {
+    const errorDetail = extractErrorChain(error);
     logger.warn(
-      { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
+      { error: errorDetail, url, apiKey: keySuffix },
       `${keyName} validation request failed (network issue) — key may still be valid`
     );
   }
+}
+
+function extractErrorChain(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  while (current !== null && current !== undefined) {
+    if (current instanceof Error) {
+      const code = (current as NodeJS.ErrnoException).code;
+      parts.push(code !== undefined ? `${current.message} [${code}]` : current.message);
+      current = current.cause;
+    } else if (typeof current === 'string') {
+      parts.push(current);
+      break;
+    } else {
+      parts.push(JSON.stringify(current));
+      break;
+    }
+  }
+  return parts.join(' → ');
 }
 
 async function validateWorkerApiKeys(
