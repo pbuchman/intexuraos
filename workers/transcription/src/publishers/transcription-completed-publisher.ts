@@ -3,6 +3,9 @@
  *
  * Extends BasePubSubPublisher to publish transcription results to Pub/Sub.
  */
+// Logger is typed as pino.Logger (not the local Logger interface) because BasePubSubPublisher
+// from infra-pubsub requires a full pino.Logger. The module-level logger singleton from
+// logger.ts is typed as pino.Logger and is passed at cold start in index.ts.
 import type { Logger } from 'pino';
 import { BasePubSubPublisher } from '@intexuraos/infra-pubsub';
 import type { PublishError } from '@intexuraos/infra-pubsub';

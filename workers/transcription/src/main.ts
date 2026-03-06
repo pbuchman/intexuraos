@@ -71,6 +71,8 @@ export async function transcribeAudio(
   deps: TranscriptionDeps,
   logger: Logger
 ): Promise<void> {
+  // mediaId is part of AudioStoredEvent for audit traceability in consuming services,
+  // but is not needed for the transcription workflow itself (GCS path identifies the file).
   const { userId, messageId, gcsPath, mimeType } = event;
 
   logger.info(
