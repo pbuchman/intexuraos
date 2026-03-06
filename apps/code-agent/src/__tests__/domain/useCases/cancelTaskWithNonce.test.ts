@@ -80,6 +80,7 @@ describe('cancelTaskWithNonce', () => {
       reorderWorkers: vi.fn(),
       updateTestResult: vi.fn(),
     } as unknown as WorkerSettingsRepository;
+
   });
 
   it('returns task_not_found when task does not exist', async () => {
@@ -304,5 +305,62 @@ describe('cancelTaskWithNonce', () => {
 
     expect(result.ok).toBe(true);
     expect(logger.warn).toHaveBeenCalled();
+  });
+
+  describe('PR task lock cleanup', () => {
+    it('returns locksToCleanup after cancellation when task has prNumber', async () => {
+      const taskWithPR = { ...baseTask, prNumber: 42 };
+      vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(taskWithPR));
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({ ...taskWithPR, status: 'cancelled' as const })
+      );
+
+      const result = await cancelTaskWithNonce(
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
+        { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.locksToCleanup).toEqual([
+          { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        ]);
+      }
+    });
+
+    it('returns empty locksToCleanup after cancellation when task has no prNumber', async () => {
+      vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({ ...baseTask, status: 'cancelled' as const })
+      );
+
+      const result = await cancelTaskWithNonce(
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
+        { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.locksToCleanup).toEqual([]);
+      }
+    });
+
+    it('returns empty locksToCleanup after cancellation when task is a follow-up (has parentTaskId)', async () => {
+      const followUpTask = { ...baseTask, prNumber: 42, parentTaskId: 'parent-task-123' };
+      vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(followUpTask));
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({ ...followUpTask, status: 'cancelled' as const })
+      );
+
+      const result = await cancelTaskWithNonce(
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
+        { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.locksToCleanup).toEqual([]);
+      }
+    });
   });
 });

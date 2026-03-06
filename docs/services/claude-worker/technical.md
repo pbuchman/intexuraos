@@ -143,8 +143,8 @@ The `entrypoint.sh` script supports two invocation modes:
 5. **Mount verification** - Checks that `/repo` exists and contains a git repository (supports both `.git` directory and worktree `.git` file)
 6. **GCP authentication** - Activates GCP service account from `/secrets/gcp-sa.json` via `gcloud auth`
 7. **Git identity setup** - Configures `user.name` / `user.email` from `GIT_USER_NAME` / `GIT_USER_EMAIL` env vars
-8. **GitHub token setup** - Reads token from `/secrets/github-token` into `GITHUB_TOKEN` env var; configures git credential helper for HTTPS
-9. **Token refresh watcher** - Background loop checks `/secrets/github-token` every 60 seconds for updates
+8. **GitHub token setup** - Reads token from `/secrets/github-token` into `GITHUB_TOKEN` env var (point-in-time snapshot for convenience); configures git credential helper to read the token file directly on each git operation
+9. **Token freshness** - No background watcher needed. The git credential helper re-reads `/secrets/github-token` on every git operation, and the `gh` CLI wrapper (`/usr/local/bin/gh`) re-reads it before each invocation. The orchestrator's `TokenRefresher` updates the bind-mounted file every 30 minutes.
 10. **pnpm install** - If `/repo/pnpm-lock.yaml` exists, runs `pnpm install --frozen-lockfile` with `CI=true`
 11. **Attribution config** - Picks a random verb from 25 options and writes `{ attribution: { commit, pr } }` to `/repo/.claude/settings.local.json`
 12. **Readiness marker** - Writes `/tmp/worker-ready`
@@ -284,7 +284,7 @@ workers/claude-worker/
 
 **pnpm store is host-mounted** - The orchestrator creates `{secretsBasePath}/../pnpm-store` on the host and bind-mounts it at `/home/claude/pnpm-store:rw`. This directory survives container teardown and is shared across all containers started by the same orchestrator instance. However, the entrypoint still calls `pnpm install --frozen-lockfile` at startup, which re-links packages from the store — the first container may be slow, but subsequent ones benefit from the populated store cache.
 
-**Token refresh watcher only updates the entrypoint subshell** - The background token watcher exports `GITHUB_TOKEN` in a subshell, which does not propagate to the main Claude process. Token delivery to `gh` CLI relies on the git credential helper (`!f() { echo "password=${GITHUB_TOKEN}"; }; f`) being re-evaluated at `gh` invocation time, which reads the current env.
+**GitHub token is read from file, not env** - The `GITHUB_TOKEN` env var set at startup is a point-in-time snapshot that may go stale within long-running attempts. The git credential helper reads `/secrets/github-token` directly on each git operation (`$(cat /secrets/github-token)` in gitconfig). The `gh` CLI uses a wrapper at `/usr/local/bin/gh` that re-reads the file before each invocation. Both mechanisms pick up token refreshes from the orchestrator's `TokenRefresher` without any background watcher.
 
 **Attribution file uses jq merge** - If `/repo/.claude/settings.local.json` already exists (e.g. from a previous orchestrator run on the same worktree), the entrypoint uses `jq` to merge the `attribution` key rather than overwriting the file. This preserves any user settings already present.
 

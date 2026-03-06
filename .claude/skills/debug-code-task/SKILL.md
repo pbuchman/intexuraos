@@ -35,7 +35,7 @@ Run from **monorepo root** (required for `firebase-admin` module resolution):
 node .claude/skills/debug-code-task/scripts/fetch-task.cjs <taskId>
 ```
 
-Print key fields as a summary table: `id`, `status`, `linearIssueId`, `linearIssueTitle`, `workerLocation`, `agentType`, `result.summary`, `error`.
+Print key fields as a summary table: `id`, `status`, `linearIssueId`, `workerLocation`, `agentType`, `result.summary`, `error`.
 
 ## Phase 3: Fetch Log Lines
 

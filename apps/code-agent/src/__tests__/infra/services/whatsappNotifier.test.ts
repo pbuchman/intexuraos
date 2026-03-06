@@ -10,12 +10,41 @@ import { createWhatsAppNotifier, type WhatsAppNotifierConfig } from '../../../in
 import type { CodeTask, TaskError, TaskResult } from '../../../domain/models/codeTask.js';
 
 describe('WhatsAppNotifier', () => {
+  type MockTaskOverrides = Partial<CodeTask> & {
+    linearIssueTitle?: string;
+    linearFallback?: boolean;
+  };
+
   let mockPublisher: WhatsAppSendPublisher;
+  let linearIssueTitles: Map<string, string>;
+  let mockLinearAgentClient: {
+    fetchIssueForDisplay: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     mockPublisher = {
       publishSendMessage: vi.fn(),
     } as unknown as WhatsAppSendPublisher;
+    linearIssueTitles = new Map<string, string>();
+    mockLinearAgentClient = {
+      fetchIssueForDisplay: vi.fn(async ({ identifier }: { identifier: string }) => {
+        const title = linearIssueTitles.get(identifier);
+        if (title === undefined) {
+          return err({ code: 'NOT_FOUND', message: 'not found' });
+        }
+        return ok({
+          identifier,
+          title,
+          state: { name: 'In Progress', type: 'started' as const },
+          priority: 0,
+          assignee: null,
+          labels: [],
+          url: `https://linear.app/intexuraos/issue/${identifier}`,
+          commentCount: 0,
+          lastCommentAt: null,
+        });
+      }),
+    };
   });
 
   const getPublishSendMessageMock = (): ReturnType<typeof vi.fn> =>
@@ -25,27 +54,41 @@ describe('WhatsAppNotifier', () => {
     vi.clearAllMocks();
   });
 
-  const createMockTask = (overrides?: Partial<CodeTask>): CodeTask => ({
-    id: 'task-123',
-    prompt: 'Fix login bug',
-    systemPromptHash: 'abc123',
-    repository: 'test/repo',
-    baseBranch: 'main',
-    workerType: 'opus',
-    workerLocation: 'mac',
-    status: 'implemented',
-    createdAt: Timestamp.fromDate(new Date()),
-    updatedAt: Timestamp.fromDate(new Date()),
-    traceId: 'trace-123',
-    userId: 'user-123',
-    sanitizedPrompt: 'fix login bug',
-    dedupKey: 'dedup-123',
-    callbackReceived: false,
-    ...overrides,
-  });
+  const createMockTask = (overrides: MockTaskOverrides = {}): CodeTask => {
+    const {
+      linearIssueTitle,
+      linearFallback: _linearFallback,
+      ...taskOverrides
+    } = overrides;
+    const task: CodeTask = {
+      id: 'task-123',
+      prompt: 'Fix login bug',
+      systemPromptHash: 'abc123',
+      repository: 'test/repo',
+      baseBranch: 'main',
+      workerType: 'opus',
+      workerLocation: 'mac',
+      status: 'implemented',
+      createdAt: Timestamp.fromDate(new Date()),
+      updatedAt: Timestamp.fromDate(new Date()),
+      traceId: 'trace-123',
+      userId: 'user-123',
+      sanitizedPrompt: 'fix login bug',
+      dedupKey: 'dedup-123',
+      callbackReceived: false,
+      ...taskOverrides,
+    };
+
+    if (task.linearIssueId !== undefined && linearIssueTitle !== undefined) {
+      linearIssueTitles.set(task.linearIssueId, linearIssueTitle);
+    }
+
+    return task;
+  };
 
   const createMockConfig = (): WhatsAppNotifierConfig => ({
     whatsappPublisher: mockPublisher,
+    linearAgentClient: mockLinearAgentClient as unknown as NonNullable<WhatsAppNotifierConfig['linearAgentClient']>,
   });
 
   const createMockResult = (overrides?: Partial<TaskResult>): TaskResult => ({
@@ -131,12 +174,11 @@ describe('WhatsAppNotifier', () => {
           summary: 'Fixed auth bug',
         }),
       });
-      const { linearIssueTitle: _, ...taskWithoutLinearTitle } = task;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
       getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
-      await notifier.notifyTaskComplete('user-123', taskWithoutLinearTitle);
+      await notifier.notifyTaskComplete('user-123', task);
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain(
@@ -144,7 +186,7 @@ describe('WhatsAppNotifier', () => {
       );
     });
 
-    it('includes Linear fallback warning when linearFallback is true', async () => {
+    it('does not include fallback warning when linearFallback is true', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
         linearFallback: true,
@@ -157,7 +199,7 @@ describe('WhatsAppNotifier', () => {
       await notifier.notifyTaskComplete('user-123', task);
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
-      expect(callArgs.message).toContain('⚠️ (Linear unavailable - no issue tracking)');
+      expect(callArgs.message).not.toContain('⚠️ (Linear unavailable - no issue tracking)');
     });
 
     it('omits Linear fallback warning when linearFallback is false', async () => {
@@ -179,6 +221,7 @@ describe('WhatsAppNotifier', () => {
     it('uses Linear title when available', async () => {
       const task = createMockTask({
         prompt: 'Fix the bug in the authentication system',
+        linearIssueId: 'INT-123',
         linearIssueTitle: 'INT-123 Fix auth bug',
         result: createMockResult({
           branch: 'fix/auth-bug',
@@ -195,6 +238,33 @@ describe('WhatsAppNotifier', () => {
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('✅ Code task completed: INT-123 Fix auth bug');
       expect(callArgs.message).not.toContain('Fix the bug in the authentication system');
+    });
+
+    it('falls back to prompt summary when live Linear title lookup fails', async () => {
+      const task = createMockTask({
+        prompt: 'Fix the bug in the authentication system',
+        linearIssueId: 'INT-404',
+        result: createMockResult({
+          branch: 'fix/auth-bug',
+          commits: 2,
+          summary: 'Fixed auth bug',
+        }),
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskComplete('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(mockLinearAgentClient.fetchIssueForDisplay).toHaveBeenCalledWith({
+        userId: 'user-123',
+        identifier: 'INT-404',
+      });
+      expect(callArgs.message).toContain(
+        '✅ Code task completed: Fix the bug in the authentication system'
+      );
+      expect(callArgs.message).not.toContain('INT-404');
     });
 
     it('handles completion without result', async () => {
@@ -215,6 +285,7 @@ describe('WhatsAppNotifier', () => {
 
     it('formats completion with summary only (planning agent, no branch/commits)', async () => {
       const task = createMockTask({
+        linearIssueId: 'INT-124',
         linearIssueTitle: 'Analyze auth flow',
         result: {
           summary: 'Analyzed the feature request and identified three approaches. Created design with test requirements. Task is ready for execution.',
@@ -236,6 +307,7 @@ describe('WhatsAppNotifier', () => {
 
     it('formats completion with no summary', async () => {
       const task = createMockTask({
+        linearIssueId: 'INT-125',
         linearIssueTitle: 'Quick fix',
         result: {
           prUrl: 'https://github.com/org/repo/pull/99',
@@ -342,7 +414,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).not.toContain('Suggestion:');
     });
 
-    it('includes Linear fallback warning when linearFallback is true', async () => {
+    it('does not include fallback warning when linearFallback is true', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
         linearFallback: true,
@@ -356,7 +428,7 @@ describe('WhatsAppNotifier', () => {
       await notifier.notifyTaskFailed('user-123', task, error);
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
-      expect(callArgs.message).toContain('⚠️ (Linear unavailable - no issue tracking)');
+      expect(callArgs.message).not.toContain('⚠️ (Linear unavailable - no issue tracking)');
     });
 
     it('omits Linear fallback warning when linearFallback is false', async () => {
@@ -383,13 +455,12 @@ describe('WhatsAppNotifier', () => {
         prompt: longPrompt,
         status: 'failed',
       });
-      const { linearIssueTitle: _, ...taskWithoutLinearTitle } = task;
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
       getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
-      await notifier.notifyTaskFailed('user-123', taskWithoutLinearTitle, error);
+      await notifier.notifyTaskFailed('user-123', task, error);
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain(
@@ -400,6 +471,7 @@ describe('WhatsAppNotifier', () => {
     it('uses Linear title when available for failure', async () => {
       const task = createMockTask({
         prompt: 'Fix the bug in the authentication system',
+        linearIssueId: 'INT-126',
         linearIssueTitle: 'INT-123 Fix auth bug',
         status: 'failed',
       });
@@ -587,12 +659,11 @@ describe('WhatsAppNotifier', () => {
         prompt: longPrompt,
         status: 'running',
       });
-      const { linearIssueTitle: _, ...taskWithoutLinearTitle } = task;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
       getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
-      await notifier.notifyTaskStarted('user-123', taskWithoutLinearTitle);
+      await notifier.notifyTaskStarted('user-123', task);
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain(
@@ -703,12 +774,11 @@ describe('WhatsAppNotifier', () => {
         prompt: longPrompt,
         status: 'running',
       });
-      const { linearIssueTitle: _, ...taskWithoutLinearTitle } = task;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
       getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
-      await notifier.notifyTaskResumed('user-123', taskWithoutLinearTitle);
+      await notifier.notifyTaskResumed('user-123', task);
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain(
@@ -739,6 +809,7 @@ describe('WhatsAppNotifier', () => {
   describe('notifyDesignComplete', () => {
     it('sends design-complete message with implement button', async () => {
       const task = createMockTask({
+        linearIssueId: 'INT-127',
         linearIssueTitle: 'Add dark mode',
         result: createMockResult({ summary: 'Design plan with implementation steps.' }),
       });
@@ -925,12 +996,11 @@ describe('WhatsAppNotifier', () => {
       const task = createMockTask({
         prompt: 'Fix the authentication bug that causes redirect loops',
       });
-      const { linearIssueTitle: _, ...taskWithoutTitle } = task;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
       getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
-      const result = await notifier.notifyTaskQueued('user-123', taskWithoutTitle, 1, 5);
+      const result = await notifier.notifyTaskQueued('user-123', task, 1, 5);
 
       expect(result.ok).toBe(true);
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
@@ -979,12 +1049,11 @@ describe('WhatsAppNotifier', () => {
       const task = createMockTask({
         prompt: 'Fix the authentication bug that causes redirect loops',
       });
-      const { linearIssueTitle: _, ...taskWithoutTitle } = task;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
       getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
-      const result = await notifier.notifyTaskQueueExpired('user-123', taskWithoutTitle);
+      const result = await notifier.notifyTaskQueueExpired('user-123', task);
 
       expect(result.ok).toBe(true);
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
@@ -1014,6 +1083,7 @@ describe('WhatsAppNotifier', () => {
   describe('notifyResumedTaskComplete', () => {
     it('formats message with 🔁 emoji and session-continued prefix', async () => {
       const task = createMockTask({
+        linearIssueId: 'INT-128',
         linearIssueTitle: 'Fix token refresh',
         result: createMockResult({
           prUrl: 'https://github.com/pbuchman/intexuraos/pull/201',
@@ -1108,7 +1178,7 @@ describe('WhatsAppNotifier', () => {
       expect(params.message).toContain('Implement the new rate limit feature for all end');
     });
 
-    it('includes linearFallback warning when set', async () => {
+    it('does not include fallback warning when set', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix issue',
         linearFallback: true,
@@ -1121,8 +1191,8 @@ describe('WhatsAppNotifier', () => {
 
       const publishCall = getPublishSendMessageMock().mock.calls[0];
       const params = publishCall?.[0] as { message: string };
-      expect(params.message).toContain('⚠️');
-      expect(params.message).toContain('Linear unavailable');
+      expect(params.message).not.toContain('⚠️');
+      expect(params.message).not.toContain('Linear unavailable');
     });
 
     it('does not include buttons (plain message only)', async () => {

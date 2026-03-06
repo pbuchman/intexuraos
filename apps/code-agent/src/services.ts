@@ -193,6 +193,22 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         lastCommentAt: null,
       }));
     },
+    fetchIssuesForDisplay(request): ReturnType<LinearAgentClient['fetchIssuesForDisplay']> {
+      logger.info({ issueCount: request.identifiers.length }, '[E2E] Mock Linear issues fetch for display');
+      return Promise.resolve(ok(
+        request.identifiers.map((identifier) => ({
+          identifier,
+          title: `Mock ${identifier}`,
+          state: { name: 'In Progress', type: 'started' as const },
+          priority: 2,
+          assignee: null,
+          labels: [],
+          url: `https://linear.app/intexura/issue/${identifier}`,
+          commentCount: 0,
+          lastCommentAt: null,
+        }))
+      ));
+    },
   };
 }
 
@@ -268,7 +284,7 @@ export function initServices(config: ServiceConfig): void {
   const logLineRepo = createFirestoreLogLineRepository({ firestore, logger });
   const workerSettingsRepo = createWorkerSettingsRepository({ firestore, logger });
   const taskDispatcher = createTaskDispatcherService({ logger });
-  const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher });
+  const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher, linearAgentClient });
   const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000 });
 
   const statusMirrorService = createStatusMirrorService({

@@ -173,8 +173,6 @@ export async function processCodeAction(
     linearIssueTitle,
     linearIssueLabels,
     hasChildren,
-    linearFallback,
-    linearIssueUrl,
   } = issueResult;
 
   // Derive worker type from labels (single match only, otherwise fall back to request's workerType)
@@ -213,9 +211,6 @@ export async function processCodeAction(
     approvalEventId: string;
     webhookSecret: string;
     linearIssueId?: string;
-    linearIssueTitle?: string;
-    linearIssueUrl?: string;
-    linearFallback?: boolean;
     agentType: 'planning' | 'execution';
   } = {
     id: taskId,
@@ -240,11 +235,6 @@ export async function processCodeAction(
   /* v8 ignore start -- ts-type: type narrowing branch for optional linear issue fields, requires complex setup @preserve */
   if (finalLinearIssueId !== undefined) {
     createInput.linearIssueId = finalLinearIssueId;
-    createInput.linearIssueTitle = linearIssueTitle;
-    createInput.linearFallback = linearFallback;
-    if (linearIssueUrl !== undefined) {
-      createInput.linearIssueUrl = linearIssueUrl;
-    }
   }
   /* v8 ignore stop @preserve */
 
