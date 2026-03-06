@@ -14,10 +14,17 @@ const execFileAsync = promisify(execFile);
  * - Case-insensitive comparison
  */
 export function normalizeUrl(url: string): string {
-  return url
-    .replace(/\.git$/, '')
-    .replace(/^git@github\.com:/, 'https://github.com/')
-    .toLowerCase();
+  const httpsUrl = url.replace(/\.git$/, '').replace(/^git@github\.com:/, 'https://github.com/');
+  try {
+    const parsed = new URL(httpsUrl);
+    parsed.username = '';
+    parsed.password = '';
+    return parsed.toString().toLowerCase();
+  } catch {
+    /* v8 ignore start -- upstream: URL parsing fails only for truly malformed non-git input @preserve */
+    return httpsUrl.toLowerCase();
+  }
+  /* v8 ignore stop @preserve */
 }
 
 /**
