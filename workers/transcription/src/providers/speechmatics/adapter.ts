@@ -4,8 +4,8 @@
  * Implements SpeechTranscriptionPort using @speechmatics/batch-client.
  */
 import { BatchClient } from '@speechmatics/batch-client';
-import { err, getErrorMessage, ok, serializeError, type Result } from '@intexuraos/common-core';
-import pino from 'pino';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import type { Logger } from '../../logger.js';
 import type {
   SpeechTranscriptionPort,
   TranscriptionJobInput,
@@ -16,16 +16,6 @@ import type {
   TranscriptionApiCall,
 } from '../transcription-provider.js';
 import { ADDITIONAL_VOCAB } from './vocabulary.js';
-
-/* v8 ignore start -- module-init: logger initialized at module load with env var fallback @preserve */
-const logger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  formatters: {
-    level: (label: string): { level: string } => ({ level: label }),
-  },
-  serializers: { error: serializeError, err: serializeError },
-});
-/* v8 ignore stop @preserve */
 
 /**
  * Type definitions for Speechmatics json-v2 response.
@@ -150,13 +140,15 @@ function createApiCall(
  */
 export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort {
   private readonly client: BatchClient;
+  private readonly logger: Logger;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, logger: Logger) {
     this.client = new BatchClient({
       apiKey,
       apiUrl: SPEECHMATICS_EU_API_URL,
       appId: 'intexuraos-transcription',
     });
+    this.logger = logger;
   }
 
   async submitJob(
@@ -164,7 +156,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
   ): Promise<Result<TranscriptionJobSubmitResult, TranscriptionPortError>> {
     const startTime = Date.now();
 
-    logger.info(
+    this.logger.info(
       {
         event: 'speechmatics_submit_start',
         audioUrl: input.audioUrl,
@@ -200,7 +192,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       const durationMs = Date.now() - startTime;
       const apiCall = createApiCall('submit', true, { jobId: response.id });
 
-      logger.info(
+      this.logger.info(
         { event: 'speechmatics_submit_success', jobId: response.id, durationMs },
         'Transcription job submitted successfully'
       );
@@ -212,7 +204,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       const errorContext = extractErrorContext(error);
       const apiCall = createApiCall('submit', false, { error: errorMessage, errorContext });
 
-      logger.error(
+      this.logger.error(
         {
           event: 'speechmatics_submit_error',
           error: errorMessage,
@@ -232,7 +224,10 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
   ): Promise<Result<TranscriptionJobPollResult, TranscriptionPortError>> {
     const startTime = Date.now();
 
-    logger.info({ event: 'speechmatics_poll_start', jobId }, 'Polling transcription job status');
+    this.logger.info(
+      { event: 'speechmatics_poll_start', jobId },
+      'Polling transcription job status'
+    );
 
     try {
       const response = await this.client.getJob(jobId);
@@ -254,7 +249,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
         rawStatus: response.job.status,
       });
 
-      logger.info(
+      this.logger.info(
         { event: 'speechmatics_poll_success', jobId, status, rawStatus: jobStatus, durationMs },
         'Poll successful'
       );
@@ -279,7 +274,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       const errorContext = extractErrorContext(error);
       const apiCall = createApiCall('poll', false, { error: errorMessage, errorContext });
 
-      logger.error(
+      this.logger.error(
         { event: 'speechmatics_poll_error', jobId, error: errorMessage, errorContext, durationMs },
         'Failed to poll job status'
       );
@@ -293,7 +288,10 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
   ): Promise<Result<TranscriptionTextResult, TranscriptionPortError>> {
     const startTime = Date.now();
 
-    logger.info({ event: 'speechmatics_transcript_start', jobId }, 'Fetching transcription result');
+    this.logger.info(
+      { event: 'speechmatics_transcript_start', jobId },
+      'Fetching transcription result'
+    );
 
     try {
       const result = (await this.client.getJobResult(
@@ -343,7 +341,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
         detectedLanguage,
       });
 
-      logger.info(
+      this.logger.info(
         {
           event: 'speechmatics_transcript_success',
           jobId,
@@ -367,7 +365,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       const errorContext = extractErrorContext(error);
       const apiCall = createApiCall('fetch_result', false, { error: errorMessage, errorContext });
 
-      logger.error(
+      this.logger.error(
         {
           event: 'speechmatics_transcript_error',
           jobId,

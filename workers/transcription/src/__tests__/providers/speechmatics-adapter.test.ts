@@ -30,16 +30,15 @@ vi.mock('@speechmatics/batch-client', () => ({
   },
 }));
 
-vi.mock('pino', () => ({
-  default: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  })),
-}));
-
 import { SpeechmaticsTranscriptionAdapter } from '../../providers/speechmatics/adapter.js';
+
+const mockLogger = {
+  level: 'info',
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
 
 describe('SpeechmaticsTranscriptionAdapter', () => {
   let adapter: SpeechmaticsTranscriptionAdapter;
@@ -47,7 +46,7 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     constructorArgs.length = 0;
-    adapter = new SpeechmaticsTranscriptionAdapter('test-api-key');
+    adapter = new SpeechmaticsTranscriptionAdapter('test-api-key', mockLogger);
   });
 
   describe('constructor', () => {
