@@ -75,11 +75,18 @@ export class HandleTranscriptionCompletedUseCase {
     }
 
     const fromNumber = message.fromNumber;
-    const phoneNumberId = message.metadata?.phoneNumberId ?? '';
+    const phoneNumberId = message.metadata?.phoneNumberId;
+    if (phoneNumberId === undefined) {
+      logger.error(
+        { event: 'transcription_missing_phone_number_id', messageId: event.messageId },
+        'Missing phoneNumberId on message metadata, cannot send WhatsApp message'
+      );
+      return;
+    }
 
     if (event.status === 'completed') {
       // Update Firestore with completed transcription state
-      await messageRepository.updateTranscription(event.userId, event.messageId, {
+      const updateResult = await messageRepository.updateTranscription(event.userId, event.messageId, {
         status: 'completed',
         jobId: event.jobId,
         ...(event.transcript !== undefined && { text: event.transcript }),
@@ -87,6 +94,12 @@ export class HandleTranscriptionCompletedUseCase {
         startedAt: event.timestamp,
         completedAt: new Date().toISOString(),
       });
+      if (!updateResult.ok) {
+        logger.error(
+          { event: 'transcription_update_failed', messageId: event.messageId, error: updateResult.error },
+          'Failed to update transcription in Firestore'
+        );
+      }
 
       // Build success message
       let whatsappMessage = `🎙️ *Transcription:*\n\n${event.transcript ?? ''}`;
@@ -97,12 +110,19 @@ export class HandleTranscriptionCompletedUseCase {
       }
 
       // Send success message via WhatsApp
-      await whatsappCloudApi.sendMessage(
+      const sendResult = await whatsappCloudApi.sendMessage(
         phoneNumberId,
         fromNumber,
         whatsappMessage,
         message.waMessageId
       );
+      if (!sendResult.ok) {
+        logger.error(
+          { event: 'transcription_send_failed', messageId: event.messageId, error: sendResult.error },
+          'Failed to send transcription WhatsApp message to user'
+        );
+        return;
+      }
 
       logger.info(
         { event: 'transcription_completed_message_sent', messageId: event.messageId, userId: event.userId },
@@ -110,7 +130,7 @@ export class HandleTranscriptionCompletedUseCase {
       );
 
       // Publish command.ingest event
-      await eventPublisher.publishCommandIngest({
+      const commandResult = await eventPublisher.publishCommandIngest({
         type: 'command.ingest',
         userId: event.userId,
         sourceType: 'whatsapp_voice',
@@ -119,6 +139,13 @@ export class HandleTranscriptionCompletedUseCase {
         ...(event.summary !== undefined && { summary: event.summary }),
         timestamp: event.timestamp,
       });
+      if (!commandResult.ok) {
+        logger.error(
+          { event: 'transcription_command_ingest_failed', messageId: event.messageId, error: commandResult.error },
+          'Failed to publish command.ingest event'
+        );
+        return;
+      }
 
       logger.info(
         { event: 'transcription_completed_command_ingest_published', messageId: event.messageId, userId: event.userId },
@@ -126,7 +153,7 @@ export class HandleTranscriptionCompletedUseCase {
       );
     } else {
       // Update Firestore with failed transcription state
-      await messageRepository.updateTranscription(event.userId, event.messageId, {
+      const updateFailResult = await messageRepository.updateTranscription(event.userId, event.messageId, {
         status: 'failed',
         jobId: event.jobId,
         error: {
@@ -136,18 +163,31 @@ export class HandleTranscriptionCompletedUseCase {
         startedAt: event.timestamp,
         completedAt: new Date().toISOString(),
       });
+      if (!updateFailResult.ok) {
+        logger.error(
+          { event: 'transcription_failure_update_failed', messageId: event.messageId, error: updateFailResult.error },
+          'Failed to update failed transcription in Firestore'
+        );
+      }
 
       // Build failure message
       const errorDetails = event.error ?? 'An error occurred during transcription';
       const failureMessage = `❌ *Transcription failed:*\n\n${errorDetails}`;
 
       // Send failure message via WhatsApp
-      await whatsappCloudApi.sendMessage(
+      const sendFailResult = await whatsappCloudApi.sendMessage(
         phoneNumberId,
         fromNumber,
         failureMessage,
         message.waMessageId
       );
+      if (!sendFailResult.ok) {
+        logger.error(
+          { event: 'transcription_failure_send_failed', messageId: event.messageId, error: sendFailResult.error },
+          'Failed to send transcription failure message to user'
+        );
+        return;
+      }
 
       logger.info(
         { event: 'transcription_failed_message_sent', messageId: event.messageId, userId: event.userId },

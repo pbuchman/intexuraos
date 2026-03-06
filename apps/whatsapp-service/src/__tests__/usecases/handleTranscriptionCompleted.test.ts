@@ -227,8 +227,8 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
   });
 
-  it('uses empty string when phoneNumberId is not in message metadata', async () => {
-    // Create message without metadata to exercise the `metadata?.phoneNumberId ?? ''` fallback
+  it('returns early when phoneNumberId is missing from message metadata', async () => {
+    // Create message without metadata to exercise the phoneNumberId early return
     const messageWithoutMetadata: WhatsAppMessage = {
       id: 'msg-1',
       userId: 'user-1',
@@ -256,9 +256,8 @@ describe('HandleTranscriptionCompletedUseCase', () => {
       logger
     );
 
-    const sentMessages = whatsappCloudApi.getSentMessages();
-    expect(sentMessages).toHaveLength(1);
-    expect(sentMessages[0]?.phoneNumberId).toBe('');
+    expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
   });
 
   it('uses empty string for transcript when transcript is undefined (completed)', async () => {
@@ -306,5 +305,114 @@ describe('HandleTranscriptionCompletedUseCase', () => {
 
     const savedMessage = messageRepository.getMessageSync('msg-1');
     expect(savedMessage?.transcription?.error?.message).toBe('Transcription failed');
+  });
+
+  it('continues and sends WhatsApp message when updateTranscription fails (completed)', async () => {
+    messageRepository.setMessage(createTestMessage());
+    messageRepository.setFailUpdateTranscription(true);
+
+    await usecase.execute(
+      {
+        type: 'srt.transcription.completed',
+        userId: 'user-1',
+        messageId: 'msg-1',
+        jobId: 'job-1',
+        status: 'completed',
+        transcript: 'Hello world',
+        timestamp: new Date().toISOString(),
+      },
+      logger
+    );
+
+    // Should still send the WhatsApp message and publish command.ingest despite Firestore failure
+    expect(whatsappCloudApi.getSentMessages()).toHaveLength(1);
+    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(1);
+  });
+
+  it('continues and sends failure message when updateTranscription fails (failed status)', async () => {
+    messageRepository.setMessage(createTestMessage());
+    messageRepository.setFailUpdateTranscription(true);
+
+    await usecase.execute(
+      {
+        type: 'srt.transcription.completed',
+        userId: 'user-1',
+        messageId: 'msg-1',
+        jobId: 'job-1',
+        status: 'failed',
+        error: 'Audio quality too low',
+        timestamp: new Date().toISOString(),
+      },
+      logger
+    );
+
+    // Should still send the failure message to user despite Firestore failure
+    const sentMessages = whatsappCloudApi.getSentMessages();
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0]?.message).toContain('❌ *Transcription failed:*');
+  });
+
+  it('returns early and does not publish command.ingest when sendMessage fails (completed)', async () => {
+    messageRepository.setMessage(createTestMessage());
+    whatsappCloudApi.setFailSendMessage(true);
+
+    await usecase.execute(
+      {
+        type: 'srt.transcription.completed',
+        userId: 'user-1',
+        messageId: 'msg-1',
+        jobId: 'job-1',
+        status: 'completed',
+        transcript: 'Hello world',
+        timestamp: new Date().toISOString(),
+      },
+      logger
+    );
+
+    // Should NOT publish command.ingest since user was not notified
+    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
+  });
+
+  it('returns early when sendMessage fails (failed status)', async () => {
+    messageRepository.setMessage(createTestMessage());
+    whatsappCloudApi.setFailSendMessage(true);
+
+    await usecase.execute(
+      {
+        type: 'srt.transcription.completed',
+        userId: 'user-1',
+        messageId: 'msg-1',
+        jobId: 'job-1',
+        status: 'failed',
+        error: 'Audio quality too low',
+        timestamp: new Date().toISOString(),
+      },
+      logger
+    );
+
+    // Returns early — no command.ingest to check, just verify it didn't throw
+    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
+  });
+
+  it('handles publishCommandIngest failure gracefully', async () => {
+    messageRepository.setMessage(createTestMessage());
+    eventPublisher.setCommandIngestFailure('Simulated PubSub failure');
+
+    await usecase.execute(
+      {
+        type: 'srt.transcription.completed',
+        userId: 'user-1',
+        messageId: 'msg-1',
+        jobId: 'job-1',
+        status: 'completed',
+        transcript: 'Hello world',
+        timestamp: new Date().toISOString(),
+      },
+      logger
+    );
+
+    // WhatsApp message was sent successfully, but command.ingest failed
+    expect(whatsappCloudApi.getSentMessages()).toHaveLength(1);
+    expect(eventPublisher.getCommandIngestEvents()).toHaveLength(0);
   });
 });
