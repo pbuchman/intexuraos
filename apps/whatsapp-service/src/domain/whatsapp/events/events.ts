@@ -211,7 +211,7 @@ export interface CommandIngestEvent {
   text: string;
 
   /**
-   * AI-generated summary (key points) from Speechmatics transcription.
+   * AI-generated summary (key points) from transcription.
    * Only present for voice messages.
    */
   summary?: string;

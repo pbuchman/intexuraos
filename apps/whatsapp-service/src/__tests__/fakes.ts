@@ -340,6 +340,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   private shouldFailGetMessagesByUser = false;
   private shouldThrowOnGetMessage = false;
   private shouldThrowOnUpdateTranscription = false;
+  private shouldFailUpdateTranscription = false;
   private shouldFailFindById = false;
   private nextCursorToReturn: string | undefined = undefined;
 
@@ -365,6 +366,10 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   setThrowOnUpdateTranscription(shouldThrow: boolean): void {
     this.shouldThrowOnUpdateTranscription = shouldThrow;
+  }
+
+  setFailUpdateTranscription(fail: boolean): void {
+    this.shouldFailUpdateTranscription = fail;
   }
 
   setFailFindById(fail: boolean): void {
@@ -472,6 +477,9 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     if (this.shouldThrowOnUpdateTranscription) {
       return Promise.reject(new Error('Simulated unexpected updateTranscription exception'));
     }
+    if (this.shouldFailUpdateTranscription) {
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated updateTranscription failure' }));
+    }
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Message not found' }));
@@ -515,6 +523,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     this.shouldFailGetMessagesByUser = false;
     this.shouldThrowOnGetMessage = false;
     this.shouldThrowOnUpdateTranscription = false;
+    this.shouldFailUpdateTranscription = false;
     this.shouldFailFindById = false;
     this.nextCursorToReturn = undefined;
   }
@@ -643,6 +652,7 @@ export class FakeEventPublisher implements EventPublisherPort {
   private approvalReplyEvents: ApprovalReplyEvent[] = [];
   private approvalReplyFailureMessage: string | null = null;
   private extractLinkPreviewsFailureMessage: string | null = null;
+  private commandIngestFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
@@ -650,8 +660,17 @@ export class FakeEventPublisher implements EventPublisherPort {
   }
 
   publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.commandIngestFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.commandIngestFailureMessage })
+      );
+    }
     this.commandIngestEvents.push(event);
     return Promise.resolve(ok(undefined));
+  }
+
+  setCommandIngestFailure(message: string): void {
+    this.commandIngestFailureMessage = message;
   }
 
   publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
@@ -727,6 +746,7 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.approvalReplyEvents = [];
     this.approvalReplyFailureMessage = null;
     this.extractLinkPreviewsFailureMessage = null;
+    this.commandIngestFailureMessage = null;
   }
 }
 

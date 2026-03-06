@@ -469,8 +469,6 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
-    # Speechmatics API secrets
-    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for whatsapp-service"
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Firebase configuration for web app
@@ -624,23 +622,22 @@ module "pubsub_whatsapp_webhook_process" {
   ]
 }
 
-# Topic for WhatsApp audio transcription (long-running operations up to 15 min)
-module "pubsub_whatsapp_transcription" {
+# Subscription for srt-service transcription completed events (srt-service -> whatsapp-service)
+# Topic is owned by srt-service; whatsapp-service defines the push subscription here.
+module "pubsub_srt_transcription_completed" {
   source = "../../modules/pubsub-push"
 
   project_id     = var.project_id
   project_number = local.project_number
-  topic_name     = "intexuraos-whatsapp-transcription-${var.environment}"
+  topic_name     = "intexuraos-srt-transcription-completed-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcribe-audio"
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
   push_audience              = module.whatsapp_service.service_url
-  ack_deadline_seconds       = 600 # Max allowed by GCP (transcription can take up to 5 min)
+  ack_deadline_seconds       = 120
 
-  publisher_service_accounts = {
-    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
+  publisher_service_accounts = {}
 
   depends_on = [
     google_project_service.apis,
