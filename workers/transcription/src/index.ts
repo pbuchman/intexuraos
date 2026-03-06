@@ -114,6 +114,9 @@ async function handleAudioStored(event: CloudEvent<PubSubData>): Promise<void> {
     return;
   }
 
+  // First check: log the actual unexpected type value for debugging. isAudioStoredEvent also
+  // checks the type literal, but this explicit guard provides a more targeted log message
+  // that captures what wrong type was received.
   if (audioEvent.type !== 'whatsapp.audio.stored') {
     logger.warn(
       { event: 'unexpected_event_type', type: audioEvent.type, eventId: event.id },
@@ -122,6 +125,9 @@ async function handleAudioStored(event: CloudEvent<PubSubData>): Promise<void> {
     return;
   }
 
+  // Second check: validate remaining required fields (userId, messageId, mediaId, gcsPath,
+  // mimeType, timestamp). After the type guard above, isAudioStoredEvent's type check always
+  // passes — this guard only fails when non-type required fields are missing.
   if (!isAudioStoredEvent(audioEvent)) {
     logger.warn(
       { event: 'invalid_event_schema', eventId: event.id },
