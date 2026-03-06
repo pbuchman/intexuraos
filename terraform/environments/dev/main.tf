@@ -922,9 +922,9 @@ module "whatsapp_service" {
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC      = module.pubsub_commands_ingest.topic_name
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
     # Topic owned by srt-service; srt-service must grant whatsapp_service SA pubsub.publisher role on it.
-    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC         = "audio-stored-${var.environment}"
-    INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC       = module.pubsub_approval_reply.topic_name
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC        = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC   = "audio-stored-${var.environment}"
+    INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC = module.pubsub_approval_reply.topic_name
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC  = "intexuraos-whatsapp-send-${var.environment}"
   })
 
   depends_on = [
