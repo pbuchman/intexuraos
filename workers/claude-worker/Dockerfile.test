@@ -22,6 +22,11 @@ RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/c
     bat \
     github-cli
 
+# Create gh wrapper that reads fresh token from file on every invocation.
+# Mirrors production Dockerfile — /usr/local/bin/gh shadows /usr/bin/gh.
+RUN printf '#!/bin/sh\nif [ -f "/secrets/github-token" ]; then\n  export GITHUB_TOKEN="$(cat /secrets/github-token)"\n  export GH_TOKEN="$GITHUB_TOKEN"\nfi\nexec /usr/bin/gh "$@"\n' > /usr/local/bin/gh \
+    && chmod +x /usr/local/bin/gh
+
 # Install pnpm (required for CI commands in tests)
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
