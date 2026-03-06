@@ -902,6 +902,28 @@ describe('Pub/Sub Routes', () => {
       const responseBody = JSON.parse(response.body) as { success: boolean };
       expect(responseBody.success).toBe(true);
     });
+
+    it('returns 200 when event type is unexpected', async () => {
+      const body = createPubSubBody({
+        type: 'wrong.event.type',
+        messageId: 'msg-123',
+        userId: 'user-456',
+        jobId: 'job-abc',
+        status: 'completed',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody2 = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody2.success).toBe(true);
+    });
   });
 
   describe('POST /internal/whatsapp/pubsub/process-webhook', () => {
