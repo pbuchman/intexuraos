@@ -136,7 +136,7 @@ const WORKER_TYPES: Record<
 5. `createWorker()` writes `system-prompt.txt` and `user-prompt.txt` to the per-task secrets directory automatically. The container reads these files — they are not passed via stdin or environment variables.
 6. The `waitForCompletion` method resolves with `-1` on timeout and automatically triggers `destroyWorker` with force kill.
 7. Concurrent workers are limited to `maxConcurrent` (default 4). Exceeding this limit throws an error; the caller must wait for an existing worker to finish.
-8. GitHub token refresh is handled by the orchestrator's `TokenRefresher`, not by the container itself. The token file at `/secrets/github-token` is updated externally; the entrypoint re-reads it at each `run-attempt` invocation.
+8. GitHub token refresh is handled by the orchestrator's `TokenRefresher`, which updates `/secrets/github-token` every 30 minutes via bind mount. Within a single attempt, tokens are refreshed via file reads — the git credential helper reads the file directly on each git operation (`$(cat /secrets/github-token)` in gitconfig), and the `gh` CLI uses a wrapper at `/usr/local/bin/gh` that re-reads the file before each invocation. The `GITHUB_TOKEN` env var is a point-in-time snapshot set at attempt start and may go stale; it is not the authoritative source.
 9. In managed mode (`CLAUDE_MANAGED_MODE=1`), the container does NOT exit after completing an attempt. The orchestrator must call `destroyWorker` explicitly when the task is done.
 10. When `continueSession: true` is passed to `createWorker`, it restores a preserved container (via `preservedWorkers` map) or reconnects to an orphaned container by name (`claude-worker-{taskId}`). This handles orchestrator restarts without losing in-flight containers.
 
