@@ -82,6 +82,7 @@ describe('HandleTranscriptionCompletedUseCase', () => {
     expect(commandIngestEvents[0]?.userId).toBe('user-1');
     expect(commandIngestEvents[0]?.text).toBe('Hello world');
     expect(commandIngestEvents[0]?.sourceType).toBe('whatsapp_voice');
+    expect(commandIngestEvents[0]?.externalId).toBe('wamid.test');
   });
 
   it('handles failed status: updates transcription, sends failure message, does NOT publish command.ingest', async () => {
