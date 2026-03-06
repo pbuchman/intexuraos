@@ -24,6 +24,7 @@ import type { CodeTask } from '../models/codeTask.js';
 import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
+import { buildLockDocPath, deletePRTaskLock } from '../utils/prTaskLock.js';
 
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
@@ -191,7 +192,7 @@ export async function createTaskForPR(
   logger.debug({ userId, senderLogin }, 'Resolved GitHub username to user');
 
   // Step 2: Use transaction with document-level lock to prevent race conditions
-  const lockDocPath = `pr_task_locks/${repository.replace(/\//g, '_')}_${String(prNumber)}`;
+  const lockDocPath = buildLockDocPath(repository, prNumber);
   const lockRef = firestore.doc(lockDocPath);
 
   type TransactionResult = { taskId: string; isNew: false } | { taskId: string; isNew: true; webhookSecret: string; linearResult: Awaited<ReturnType<LinearIssueService['ensureIssueExists']>> };
@@ -401,6 +402,7 @@ export async function createTaskForPR(
             message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
           },
         });
+        await deletePRTaskLock(firestore, repository, prNumber, logger);
         return err({
           code: 'queue_full',
           message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
@@ -439,6 +441,7 @@ export async function createTaskForPR(
       status: 'failed',
       error: { code: dispatchError.code, message: dispatchError.message },
     });
+    await deletePRTaskLock(firestore, repository, prNumber, logger);
     return err({
       code: 'task_creation_failed' as CreateTaskForPRErrorCode,
       message: `Task created but dispatch failed: ${dispatchError.message}`,

@@ -370,6 +370,7 @@ ${additionalContext.trim()}
             message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
           },
         });
+
         return err({
           code: 'queue_full',
           message: 'All workers are busy and the queue is full. Please try again in a few minutes.',

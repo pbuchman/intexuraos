@@ -61,7 +61,6 @@ describe('drainTaskQueue', () => {
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
   };
-
   const workerConfig = {
     name: 'home-mac',
     url: 'https://worker.local',
@@ -104,6 +103,7 @@ describe('drainTaskQueue', () => {
     mockWorkerSettingsRepo = {
       getSettings: vi.fn(),
     };
+
   });
 
   afterEach(() => {
@@ -201,7 +201,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify task marked as failed
@@ -237,7 +237,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify findById was called for parent
@@ -267,7 +267,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify implementationTaskId was NOT cleared (parent points to different task)
@@ -297,7 +297,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify warning was logged
@@ -323,7 +323,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
 
     // Verify warning was logged about notification failure
@@ -348,7 +348,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'expired', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'expired', taskId: 'task-123' }));
     }
   });
 
@@ -430,7 +430,7 @@ describe('drainTaskQueue', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'failed', taskId: 'task-123' }));
     }
 
     // Verify task was marked as failed with the dispatch error
@@ -461,7 +461,7 @@ describe('drainTaskQueue', () => {
     // Still returns failed action even if update didn't persist
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+      expect(result.value).toEqual(expect.objectContaining({ action: 'failed', taskId: 'task-123' }));
     }
 
     // Verify error was logged about the failed update
@@ -712,5 +712,110 @@ describe('drainTaskQueue', () => {
         agentType: 'execution',
       })
     );
+  });
+
+  describe('PR task lock cleanup', () => {
+    it('returns locksToCleanup on TTL expiry (PR task)', async () => {
+      const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+      const task = createMockTask({
+        queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+        prNumber: 42,
+      });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('expired');
+        expect(result.value.locksToCleanup).toEqual([
+          { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        ]);
+      }
+    });
+
+    it('returns locksToCleanup on dispatch failure (PR task)', async () => {
+      const task = createMockTask({ prNumber: 42 });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'network_error', message: 'Connection refused' })
+      );
+
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('failed');
+        expect(result.value.locksToCleanup).toEqual([
+          { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        ]);
+      }
+    });
+
+    it('returns empty locksToCleanup on TTL expiry (non-PR task)', async () => {
+      const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+      const task = createMockTask({
+        queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('expired');
+        expect(result.value.locksToCleanup).toEqual([]);
+      }
+    });
+
+    it('returns empty locksToCleanup on TTL expiry when task is a follow-up (has parentTaskId)', async () => {
+      const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+      const task = createMockTask({
+        queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+        prNumber: 42,
+        parentTaskId: 'parent-task-123',
+      });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+      // Mock parent task lookup for implementationTaskId clearing logic
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(createMockTask({ id: 'parent-task-123' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('expired');
+        expect(result.value.locksToCleanup).toEqual([]);
+      }
+    });
+
+    it('returns empty locksToCleanup on dispatch failure when task is a follow-up (has parentTaskId)', async () => {
+      const task = createMockTask({
+        prNumber: 42,
+        parentTaskId: 'parent-task-123',
+      });
+      mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'network_error', message: 'Connection refused' })
+      );
+
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('failed');
+        expect(result.value.locksToCleanup).toEqual([]);
+      }
+    });
   });
 });

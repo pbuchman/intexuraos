@@ -13,6 +13,7 @@ import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
@@ -399,6 +400,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             },
             required: ['success', 'error'],
           },
+          400: {
+            description: 'Invalid request — prompt failed injection sanitization',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
           409: {
             description: 'Duplicate task (deduplication triggered)',
             type: 'object',
@@ -569,6 +586,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         if (error.code === 'worker_unavailable') {
           return await reply.fail('MISCONFIGURED', 'Worker unavailable');
+        }
+
+        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
+        if (error.code === 'validation_error') {
+        /* v8 ignore stop @preserve */
+          return await reply.fail('INVALID_REQUEST', error.message);
         }
 
         return await reply.fail('INTERNAL_ERROR', error.message);
@@ -2610,6 +2633,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', 'Failed to detect zombie tasks');
       }
 
+      // Best-effort: clean up PR task locks for interrupted zombie tasks
+      for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by !result.ok guard above
+        await deletePRTaskLock(getServices().firestore, lock.repository, lock.prNumber, request.log);
+      }
+
       return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 2594
     }
   );
@@ -2752,6 +2780,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
         { taskId, nonce, userId }
       );
+
+      if (result.ok) {
+        for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by result.ok check
+          await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+        }
+      }
 
       if (!result.ok) {
         const error = result.error;
@@ -3887,6 +3921,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (!result.ok) {
         request.log.error({ error: result.error }, 'Drain queue failed');
         return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      for (const lock of result.value.locksToCleanup ?? []) { // @allow-result-access -- narrowed by !result.ok guard above
+        await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
       }
 
       return await reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
