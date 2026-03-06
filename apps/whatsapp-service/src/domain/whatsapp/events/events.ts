@@ -107,6 +107,16 @@ export interface TranscriptionCompletedEvent {
   transcript?: string;
 
   /**
+   * AI-generated summary of the transcription.
+   */
+  summary?: string;
+
+  /**
+   * Detected language of the audio (e.g., 'pl', 'en').
+   */
+  detectedLanguage?: string;
+
+  /**
    * Error message (when failed).
    */
   error?: string;
@@ -225,21 +235,6 @@ export interface WebhookProcessEvent {
 }
 
 /**
- * Event published when audio needs transcription.
- * Triggers async transcription polling (up to 5 min).
- */
-export interface TranscribeAudioEvent {
-  type: 'whatsapp.audio.transcribe';
-  messageId: string;
-  userId: string;
-  gcsPath: string;
-  mimeType: string;
-  userPhoneNumber: string;
-  originalWaMessageId: string;
-  phoneNumberId: string;
-}
-
-/**
  * Event published when text message contains URLs for preview extraction.
  */
 export interface ExtractLinkPreviewsEvent {
@@ -281,6 +276,5 @@ export type WhatsAppEvent =
   | CommandIngestEvent
   | SendMessageEvent
   | WebhookProcessEvent
-  | TranscribeAudioEvent
   | ExtractLinkPreviewsEvent
   | ApprovalReplyEvent;

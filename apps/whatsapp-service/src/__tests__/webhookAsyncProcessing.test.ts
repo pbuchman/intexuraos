@@ -615,6 +615,17 @@ describe('Webhook async processing', () => {
       // Audio file should be stored in GCS
       const files = ctx.mediaStorage.getAllFiles();
       expect(files.size).toBe(1);
+
+      // AudioStoredEvent should be published
+      const audioStoredEvents = ctx.eventPublisher.getAudioStoredEvents();
+      expect(audioStoredEvents.length).toBe(1);
+      const audioStoredEvent = audioStoredEvents[0];
+      expect(audioStoredEvent?.type).toBe('whatsapp.audio.stored');
+      expect(audioStoredEvent?.userId).toBe(userId);
+      expect(audioStoredEvent?.mediaId).toBe('test-audio-id-12345');
+      expect(audioStoredEvent?.gcsPath).toContain('/test-audio-id-12345.ogg');
+      expect(audioStoredEvent?.mimeType).toBe('audio/ogg');
+      expect(audioStoredEvent?.timestamp).toBeDefined();
     });
 
     it('handles getMediaUrl failure gracefully for audio', async () => {

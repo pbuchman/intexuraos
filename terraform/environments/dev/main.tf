@@ -916,7 +916,6 @@ module "whatsapp_service" {
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
     INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
     INTEXURAOS_WHATSAPP_WABA_ID         = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_WABA_ID"]
-    INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
@@ -925,7 +924,7 @@ module "whatsapp_service" {
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = "intexuraos-whatsapp-media-cleanup-${var.environment}-push"
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC      = module.pubsub_commands_ingest.topic_name
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
-    INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
+    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC         = "audio-stored-${var.environment}"
     INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC       = module.pubsub_approval_reply.topic_name
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC        = "intexuraos-whatsapp-send-${var.environment}"
   })

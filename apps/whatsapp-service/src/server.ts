@@ -108,7 +108,6 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     mediaCleanupTopic: config.mediaCleanupTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
-    speechmaticsApiKey: config.speechmaticsApiKey,
     webAgentUrl: config.webAgentUrl,
     internalAuthToken: config.internalAuthToken,
   };
@@ -120,9 +119,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     (serviceConfig as { webhookProcessTopic?: string }).webhookProcessTopic =
       config.webhookProcessTopic;
   }
-  if (config.transcriptionTopic !== undefined) {
-    (serviceConfig as { transcriptionTopic?: string }).transcriptionTopic =
-      config.transcriptionTopic;
+  if (config.audioStoredTopic !== undefined) {
+    (serviceConfig as { audioStoredTopic?: string }).audioStoredTopic = config.audioStoredTopic;
   }
   if (config.approvalReplyTopic !== undefined) {
     (serviceConfig as { approvalReplyTopic?: string }).approvalReplyTopic =

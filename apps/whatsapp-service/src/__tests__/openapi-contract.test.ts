@@ -32,7 +32,6 @@ describe('whatsapp-service OpenAPI contract', () => {
     mediaBucket: 'test-media-bucket',
     mediaCleanupTopic: 'test-media-cleanup',
     mediaCleanupSubscription: 'test-media-cleanup-sub',
-    speechmaticsApiKey: 'test-speechmatics-api-key',
     gcpProjectId: 'test-project',
     webAgentUrl: 'https://web-agent.example.com',
     internalAuthToken: 'test-internal-auth-token',
