@@ -266,12 +266,9 @@ export async function createTaskForPR(
         actionId: `pr-comment/${repository}/${String(prNumber)}/${eventId}`,
         approvalEventId: eventId,
         prNumber,
-        linearIssueTitle: linearResult.linearIssueTitle,
-        linearIssueLabels: linearResult.linearIssueLabels,
         webhookSecret,
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
-        ...(linearResult.linearIssueUrl !== undefined && { linearIssueUrl: linearResult.linearIssueUrl }),
         /* v8 ignore stop @preserve */
       };
 
@@ -427,7 +424,7 @@ export async function createTaskForPR(
       const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
       const queuedTask = {
         id: taskId,
-        linearIssueTitle: linearResult.linearIssueTitle,
+        ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
         prompt: buildTaskPrompt(request),
         traceId: eventId,
       } as CodeTask;

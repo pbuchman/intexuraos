@@ -125,7 +125,6 @@ describe('submitTaskFeedback use case', () => {
       updatedAt: now,
       completedAt: now,
       linearIssueId,
-      linearIssueTitle: 'Feedback mechanism test',
     };
 
     // Apply overrides, but skip undefined values to avoid exactOptionalPropertyTypes issues
@@ -610,6 +609,32 @@ describe('submitTaskFeedback use case', () => {
           followUpFor: originalTaskId,
         });
       }
+    });
+
+    it('persists only linearIssueId on the follow-up task', async () => {
+      const deps = createDeps();
+
+      await submitTaskFeedback(deps, {
+        originalTaskId,
+        userId,
+        feedback,
+      });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueId,
+        })
+      );
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueTitle: expect.anything(),
+        })
+      );
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearFallback: expect.anything(),
+        })
+      );
     });
 
     it('should dispatch with empty labels when task has no Linear issue', async () => {

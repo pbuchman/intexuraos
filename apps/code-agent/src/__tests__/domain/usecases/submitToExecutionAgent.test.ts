@@ -84,7 +84,6 @@ describe('submitToExecutionAgent', () => {
       updatedAt: now,
       completedAt: now,
       linearIssueId,
-      linearIssueTitle: 'My Feature',
     };
 
     // Apply overrides, but skip undefined values to avoid exactOptionalPropertyTypes issues
@@ -810,6 +809,34 @@ describe('submitToExecutionAgent', () => {
           linearIssueId,
           linearIssueLabels: ['code-task'],
           hasChildren: false,
+        })
+      );
+    });
+
+    it('persists only linearIssueId on the execution task', async () => {
+      setupHappyPathMocks();
+
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueId,
+          agentType: 'execution',
+        })
+      );
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueTitle: expect.anything(),
+        })
+      );
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueUrl: expect.anything(),
+        })
+      );
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearFallback: expect.anything(),
         })
       );
     });

@@ -21,10 +21,6 @@ export interface CreateTaskInput {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearIssueLabels?: string[];
-  linearFallback?: boolean;
   webhookSecret?: string;
   /**
    * For retried tasks: points to the original task ID that this task is retrying.

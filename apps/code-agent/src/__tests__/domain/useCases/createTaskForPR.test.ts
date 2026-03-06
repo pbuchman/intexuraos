@@ -228,7 +228,7 @@ describe('createTaskForPR', () => {
     }
   });
 
-  it('saves linearIssueLabels from linearResult in createInput', async () => {
+  it('persists only linearIssueId from linearResult in createInput', async () => {
     let capturedCreateInput: Record<string, unknown> = {};
 
     deps.codeTaskRepo = {
@@ -241,7 +241,11 @@ describe('createTaskForPR', () => {
 
     await createTaskForPR(deps, request);
 
-    expect(capturedCreateInput['linearIssueLabels']).toEqual(expect.arrayContaining(['code-task']));
+    expect(capturedCreateInput['linearIssueId']).toBe('INT-100');
+    expect(capturedCreateInput).not.toHaveProperty('linearIssueTitle');
+    expect(capturedCreateInput).not.toHaveProperty('linearIssueUrl');
+    expect(capturedCreateInput).not.toHaveProperty('linearIssueLabels');
+    expect(capturedCreateInput).not.toHaveProperty('linearFallback');
   });
 
   it('returns user_not_found when user lookup fails with USER_NOT_FOUND', async () => {

@@ -35,6 +35,46 @@ export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
 }
 
+const linearIssueForDisplaySchema = {
+  type: 'object',
+  properties: {
+    identifier: { type: 'string' },
+    title: { type: 'string' },
+    state: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        type: { type: 'string' },
+      },
+      required: ['name', 'type'],
+    },
+    priority: { type: 'number' },
+    assignee: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+      },
+    },
+    labels: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+        },
+        required: ['id', 'name'],
+      },
+    },
+    url: { type: 'string' },
+    commentCount: { type: 'number' },
+    lastCommentAt: { type: 'string', nullable: true },
+  },
+  required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
+} as const;
+
 // Response schema for created task
 const codeTaskSchema = {
   type: 'object',
@@ -60,13 +100,9 @@ const codeTaskSchema = {
     actionId: { type: 'string', nullable: true },
     approvalEventId: { type: 'string', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
-    linearIssueTitle: { type: 'string', nullable: true },
-    linearIssueUrl: { type: 'string', nullable: true },
-    linearFallback: { type: 'boolean', nullable: true },
-    linearIssueLabels: {
-      type: 'array',
+    linearIssue: {
+      ...linearIssueForDisplaySchema,
       nullable: true,
-      items: { type: 'string' },
     },
     agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
     implementationTaskId: { type: 'string' },
@@ -163,10 +199,6 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearFallback?: boolean;
-  linearIssueLabels?: string[];
   agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
@@ -213,10 +245,6 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearFallback?: boolean;
-  linearIssueLabels?: string[];
   agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
@@ -267,18 +295,6 @@ function taskToApiResponse(task: {
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearIssueUrl !== undefined && { linearIssueUrl: task.linearIssueUrl }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearFallback !== undefined && { linearFallback: task.linearFallback }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearIssueLabels !== undefined && { linearIssueLabels: task.linearIssueLabels }),
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.agentType !== undefined && { agentType: task.agentType }),
@@ -1016,7 +1032,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
       workerLocation?: string;
       linearIssueId?: string;
-      linearIssueTitle?: string;
     };
   }>(
     '/code/submit',
@@ -1034,7 +1049,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
             workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
-            linearIssueTitle: { type: 'string' },
           },
           required: ['prompt'],
         },
@@ -1170,7 +1184,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         workerLocation?: string;
         linearIssueId?: string;
-        linearIssueTitle?: string;
       };
 
       /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
@@ -1224,10 +1237,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         traceId: string;
         webhookSecret: string;
         linearIssueId?: string;
-        linearIssueTitle?: string;
-        linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
-        linearIssueLabels?: string[];
-        linearFallback?: boolean;
         agentType: 'planning' | 'execution';
       } = {
         id: taskId,
@@ -1250,22 +1259,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
         createInput.linearIssueId = issueResult.linearIssueId;
       }
-      // Save linearIssueTitle (always present in result, even in fallback mode)
-      createInput.linearIssueTitle = issueResult.linearIssueTitle;
-      // Save linearIssueType if available (from LLM classification)
-      /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-      if (issueResult.linearIssueType !== undefined) {
-      /* v8 ignore stop @preserve */
-        createInput.linearIssueType = issueResult.linearIssueType;
-      }
-      // Save fallback flag
-      /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-      if (issueResult.linearFallback) {
-      /* v8 ignore stop @preserve */
-        createInput.linearFallback = true;
-      }
-      // Save linearIssueLabels for display in task list
-      createInput.linearIssueLabels = issueResult.linearIssueLabels;
       const createResult = await codeTaskRepo.create(createInput);
 
       if (!createResult.ok) {
@@ -1530,7 +1523,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo } = getServices();
+      const { codeTaskRepo, linearAgentClient } = getServices();
       /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
@@ -1578,8 +1571,51 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', listResult.error.message);
       }
 
+      const apiTasks = listResult.value.tasks.map(taskToApiResponse);
+      const linearIssueIds = Array.from(
+        new Set(
+          listResult.value.tasks
+            .map((task) => task.linearIssueId)
+            .filter((issueId): issueId is string => issueId !== undefined)
+        )
+      );
+
+      let hydratedIssuesByIdentifier = new Map<string, {
+        identifier: string;
+        title: string;
+        state: { name: string; type: string };
+        priority: number;
+        assignee: { id: string; name: string } | null;
+        labels: Array<{ id: string; name: string }>;
+        url: string;
+        commentCount: number;
+        lastCommentAt: string | null;
+      }>();
+      if (linearIssueIds.length > 0) {
+        const linearIssuesResult = await linearAgentClient.fetchIssuesForDisplay({
+          userId,
+          identifiers: linearIssueIds,
+        });
+
+        if (linearIssuesResult.ok) {
+          hydratedIssuesByIdentifier = new Map(
+            linearIssuesResult.value.map((issue) => [issue.identifier, issue])
+          );
+        } else {
+          request.log.warn(
+            { userId, error: linearIssuesResult.error, issueCount: linearIssueIds.length },
+            'Failed to hydrate Linear issues for code task list'
+          );
+        }
+      }
+
       return await reply.ok({
-        tasks: listResult.value.tasks.map(taskToApiResponse),
+        tasks: apiTasks.map((task) => ({
+          ...task,
+          ...(task.linearIssueId !== undefined && hydratedIssuesByIdentifier.has(task.linearIssueId)
+            ? { linearIssue: hydratedIssuesByIdentifier.get(task.linearIssueId) }
+            : {}),
+        })),
         /* v8 ignore start -- ts-type: spread operator with optional property creates type narrowing branch @preserve */
         ...(listResult.value.nextCursor !== undefined && { nextCursor: listResult.value.nextCursor }),
         /* v8 ignore stop @preserve */
@@ -1629,12 +1665,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   dedupKey: { type: 'string' },
                   callbackReceived: { type: 'boolean' },
                   linearIssueId: { type: 'string' },
-                  linearIssueTitle: { type: 'string' },
-                  linearFallback: { type: 'boolean' },
-                  linearIssueLabels: {
-                    type: 'array',
+                  linearIssue: {
+                    ...linearIssueForDisplaySchema,
                     nullable: true,
-                    items: { type: 'string' },
                   },
                   agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
                   implementationTaskId: { type: 'string' },
@@ -1675,43 +1708,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     },
                   },
                   statusSummary: { type: 'object', nullable: true },
-                  linearIssue: {
-                    type: 'object',
-                    nullable: true,
-                    properties: {
-                      identifier: { type: 'string' },
-                      title: { type: 'string' },
-                      state: {
-                        type: 'object',
-                        properties: {
-                          name: { type: 'string' },
-                          type: { type: 'string' },
-                        },
-                      },
-                      priority: { type: 'number' },
-                      assignee: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          id: { type: 'string' },
-                          name: { type: 'string' },
-                        },
-                      },
-                      labels: {
-                        type: 'array',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            id: { type: 'string' },
-                            name: { type: 'string' },
-                          },
-                        },
-                      },
-                      url: { type: 'string' },
-                      commentCount: { type: 'number' },
-                      lastCommentAt: { type: 'string', nullable: true },
-                    },
-                  },
                 },
               },
             },

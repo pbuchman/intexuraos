@@ -477,6 +477,142 @@ describe('GET /code/tasks endpoints', () => {
         expect(body.data.tasks).toBeDefined();
       });
     });
+
+    describe('linear issue enrichment', () => {
+      it('hydrates list responses with live linearIssue data via linearAgentClient', async () => {
+        const task = await codeTaskRepo.create({
+          userId: 'test-user-id',
+          prompt: 'Task with linear issue',
+          sanitizedPrompt: 'Task with linear issue',
+          systemPromptHash: 'default',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_linear_list',
+          linearIssueId: 'INT-301',
+        });
+
+        if (!task.ok) {
+          throw new Error(`Failed to create test task: ${task.error.message}`);
+        }
+
+        const fetchBatchSpy = vi.spyOn(
+          linearAgentClient as unknown as {
+            fetchIssuesForDisplay: (request: {
+              userId: string;
+              identifiers: string[];
+            }) => Promise<unknown>;
+          },
+          'fetchIssuesForDisplay'
+        ).mockResolvedValueOnce(ok([
+          {
+            identifier: 'INT-301',
+            title: 'List Linear Issue',
+            state: { name: 'In Progress', type: 'started' },
+            priority: 1,
+            assignee: { id: 'user-1', name: 'Test User' },
+            labels: [{ id: 'label-1', name: 'backend' }],
+            url: 'https://linear.app/intexura/issue/INT-301',
+            commentCount: 2,
+            lastCommentAt: '2026-03-06T12:00:00.000Z',
+          },
+        ]));
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/code/tasks',
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: {
+            tasks: {
+              id: string;
+              linearIssue?: { title: string; labels: { name: string }[] };
+            }[];
+          };
+        };
+
+        expect(body.success).toBe(true);
+        const hydratedTask = body.data.tasks.find((item) => item.id === task.value.id);
+        expect(hydratedTask?.linearIssue?.title).toBe('List Linear Issue');
+        expect(hydratedTask?.linearIssue?.labels.map((label) => label.name)).toEqual(['backend']);
+        expect(fetchBatchSpy).toHaveBeenCalledWith({
+          userId: 'test-user-id',
+          identifiers: ['INT-301'],
+        });
+      });
+
+      it('returns the list without linearIssue when batch hydration fails', async () => {
+        const task = await codeTaskRepo.create({
+          userId: 'test-user-id',
+          prompt: 'Task with stale linear issue',
+          sanitizedPrompt: 'Task with stale linear issue',
+          systemPromptHash: 'default',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_linear_list_error',
+          linearIssueId: 'INT-999',
+        });
+
+        if (!task.ok) {
+          throw new Error(`Failed to create test task: ${task.error.message}`);
+        }
+
+        const fetchBatchSpy = vi.spyOn(
+          linearAgentClient as unknown as {
+            fetchIssuesForDisplay: (request: {
+              userId: string;
+              identifiers: string[];
+            }) => Promise<unknown>;
+          },
+          'fetchIssuesForDisplay'
+        ).mockResolvedValueOnce(err({
+          code: 'UNAVAILABLE',
+          message: 'linear-agent unavailable',
+        }));
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/code/tasks',
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: {
+            tasks: {
+              id: string;
+              linearIssueId?: string;
+              linearIssue?: unknown;
+              linearIssueTitle?: string;
+              linearIssueLabels?: string[];
+            }[];
+          };
+        };
+
+        expect(body.success).toBe(true);
+        const hydratedTask = body.data.tasks.find((item) => item.id === task.value.id);
+        expect(hydratedTask?.linearIssueId).toBe('INT-999');
+        expect(hydratedTask?.linearIssue).toBeUndefined();
+        expect(hydratedTask?.linearIssueTitle).toBeUndefined();
+        expect(hydratedTask?.linearIssueLabels).toBeUndefined();
+        expect(fetchBatchSpy).toHaveBeenCalledWith({
+          userId: 'test-user-id',
+          identifiers: ['INT-999'],
+        });
+      });
+    });
   });
 
   describe('GET /code/tasks/:taskId (get single)', () => {
@@ -670,7 +806,7 @@ describe('GET /code/tasks endpoints', () => {
         fetchSpy.mockRestore();
       });
 
-      it('includes linearIssueLabels in task response when stored', async () => {
+      it('does not expose stored linear metadata on the task response', async () => {
         const task = await codeTaskRepo.create({
           userId: 'test-user-id',
           prompt: 'Task with labels',
@@ -682,7 +818,6 @@ describe('GET /code/tasks endpoints', () => {
           baseBranch: 'development',
           traceId: 'trace_labels',
           linearIssueId: 'INT-200',
-          linearIssueLabels: ['feature', 'backend'],
         });
 
         if (!task.ok) {
@@ -714,7 +849,11 @@ describe('GET /code/tasks endpoints', () => {
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
         expect(body.success).toBe(true);
-        expect(body.data.linearIssueLabels).toEqual(['feature', 'backend']);
+        expect(body.data.linearIssueLabels).toBeUndefined();
+        expect(body.data.linearIssueTitle).toBeUndefined();
+        expect(body.data.linearIssueUrl).toBeUndefined();
+        expect(body.data.linearFallback).toBeUndefined();
+        expect(body.data.linearIssue.labels.map((label: { name: string }) => label.name)).toEqual([]);
       });
 
       it('returns task without linearIssue when task has no linearIssueId', async () => {

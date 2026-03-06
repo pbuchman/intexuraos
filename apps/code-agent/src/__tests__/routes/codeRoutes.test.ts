@@ -2760,7 +2760,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         traceId: 'trace-planning',
         agentType: 'planning',
         linearIssueId: 'INT-100',
-        linearIssueTitle: 'Feature X',
       });
       expect(created.ok).toBe(true);
       if (!created.ok) return;
@@ -2840,7 +2839,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         traceId: 'trace-planning-qwen',
         agentType: 'planning',
         linearIssueId: 'INT-200',
-        linearIssueTitle: 'Feature Y',
       });
       expect(created.ok).toBe(true);
       if (!created.ok) return;
@@ -3096,4 +3094,3 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
     });
   });
 });
-

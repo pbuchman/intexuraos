@@ -142,11 +142,6 @@ export interface CodeTask {
 
   // Linear integration
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';  // LLM-classified issue type
-  linearIssueLabels?: string[];            // Label names from Linear at dispatch time
-  linearFallback?: boolean;     // True if Linear was unavailable (design lines 290-296)
 
   // PR Correlation (for linking tasks to PRs - INT-465)
   prNumber?: number;           // GitHub PR number (populated on completion)
