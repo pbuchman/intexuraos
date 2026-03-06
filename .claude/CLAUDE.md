@@ -44,7 +44,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Verification:** Run from repo root. (1) `pnpm run verify:workspace:tracked -- <app-name>`. (2) Verify `packages/*/dist/` exists. (3) `pnpm run ci:tracked` must pass. Never modify `vitest.config.ts` coverage exclusions.
 
-**Git & PR:** Commit Gate must pass before every commit. PRs target `development`. Merge latest base branch before PR. Git worktrees NOT allowed.
+**Git & PR:** Commit Gate must pass before every commit. NEVER commit directly to `main` or `development` — both are protected branches (direct pushes are blocked by branch protection rules). Always create a feature branch and open a PR targeting `development`. Merge latest base branch before PR. Git worktrees NOT allowed.
 
 **Cross-Linking:** PR titles contain `INT-XXX`. PR body: `Fixes INT-XXX`. Reference: `.claude/reference/cross-linking.md`
 
