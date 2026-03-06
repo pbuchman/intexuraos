@@ -574,7 +574,7 @@ User opens research page
 | ----------------------------------------------------------------- | ------------------------------------------------- |
 | `packages/llm-contract/src/supportedModels.ts`                    | Add `OpenRouter` provider type                    |
 | `packages/internal-clients/src/user-service/types.ts`             | Add `openrouter?` to `DecryptedApiKeys`           |
-| `apps/research-agent/src/infra/llm/LlmAdapterFactory.ts`         | Add `case 'openrouter'` to factory switch         |
+| `apps/research-agent/src/infra/llm/LlmAdapterFactory.ts`          | Add `case 'openrouter'` to factory switch         |
 | `apps/research-agent/src/services.ts`                             | Wire OpenRouter model catalog service             |
 | `apps/research-agent/src/routes/researchRoutes.ts`                | Add `/research/openrouter/models` endpoint        |
 | `apps/web/src/components/ModelSelector.tsx`                       | Add OpenRouter section                            |
