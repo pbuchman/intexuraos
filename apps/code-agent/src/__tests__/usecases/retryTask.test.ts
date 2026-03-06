@@ -51,7 +51,6 @@ describe('retryTask use case', () => {
   let mockMetricsClient: {
     incrementTasksSubmitted: ReturnType<typeof vi.fn>;
   };
-
   const userId = 'test-user-123';
   const originalTaskId = 'task_abc123';
   const linearIssueId = 'INT-520';
@@ -156,6 +155,7 @@ describe('retryTask use case', () => {
     mockMetricsClient = {
       incrementTasksSubmitted: vi.fn().mockResolvedValue(undefined),
     };
+
   });
 
   function createDeps(): RetryTaskDeps {
@@ -1702,4 +1702,5 @@ describe('retryTask use case', () => {
       );
     });
   });
+
 });

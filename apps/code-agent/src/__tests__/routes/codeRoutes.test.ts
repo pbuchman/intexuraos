@@ -1619,6 +1619,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           detected: 2,
           interrupted: 1,
           errors: [],
+          locksToCleanup: [],
         },
       });
 
