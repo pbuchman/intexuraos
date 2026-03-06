@@ -85,7 +85,10 @@ export class HandleTranscriptionCompletedUseCase {
     }
 
     if (event.status === 'completed') {
-      // Update Firestore with completed transcription state
+      // Update Firestore with completed transcription state.
+      // Note: if this fails, we continue to send the WhatsApp message so the user is notified.
+      // This means command.ingest may be published with the message still in 'pending' Firestore state.
+      // The tradeoff prioritizes user-facing delivery over strict state consistency.
       const updateResult = await messageRepository.updateTranscription(event.userId, event.messageId, {
         status: 'completed',
         jobId: event.jobId,

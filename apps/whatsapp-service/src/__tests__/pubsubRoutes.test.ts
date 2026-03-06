@@ -862,6 +862,46 @@ describe('Pub/Sub Routes', () => {
       const responseBody = JSON.parse(response.body) as { success: boolean };
       expect(responseBody.success).toBe(true);
     });
+
+    it('returns 200 and logs error when message data is not valid base64', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          message: {
+            data: '!!!not-base64!!!',
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'projects/test/subscriptions/test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+    });
+
+    it('returns 200 and logs error when message data is not valid JSON', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          message: {
+            data: Buffer.from('not json at all').toString('base64'),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'projects/test/subscriptions/test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+    });
   });
 
   describe('POST /internal/whatsapp/pubsub/process-webhook', () => {

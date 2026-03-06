@@ -692,14 +692,12 @@ async function handleAudioMessage(
       timestamp: new Date().toISOString(),
     });
 
-    /* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
     if (!publishResult.ok) {
       request.log.error(
         { error: publishResult.error, messageId: result.value.messageId },
         'Failed to publish audio stored event'
       );
     }
-    /* v8 ignore stop @preserve */
 
     // Mark as read with typing indicator (shows user something is happening)
     await markAudioAsReadWithTyping(request, savedEvent, services.whatsappCloudApi);

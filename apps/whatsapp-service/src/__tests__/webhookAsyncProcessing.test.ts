@@ -628,6 +628,53 @@ describe('Webhook async processing', () => {
       expect(audioStoredEvent?.timestamp).toBeDefined();
     });
 
+
+    it('handles publishAudioStored failure gracefully', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up the fake whatsappCloudApi with audio media
+      ctx.whatsappCloudApi.setMediaUrl('test-audio-id-12345', {
+        url: 'https://example.com/media/test-audio-id-12345',
+        mimeType: 'audio/ogg',
+        fileSize: 5000,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-audio-id-12345',
+        Buffer.from('fake-audio-content')
+      );
+
+      // Simulate Pub/Sub publish failure
+      ctx.eventPublisher.setAudioStoredFailure('Simulated Pub/Sub failure');
+
+      const payload = createAudioWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      // Event should still be marked completed (failure is logged, not thrown)
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      // Pub/Sub failed, so no audio stored events
+      expect(ctx.eventPublisher.getAudioStoredEvents().length).toBe(0);
+    });
     it('handles getMediaUrl failure gracefully for audio', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
