@@ -5,11 +5,10 @@
 /* eslint-disable */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
- 
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable @typescript-eslint/dot-notation */
 
 import type { Firestore } from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
@@ -28,6 +27,29 @@ import type {
 } from '../../domain/repositories/codeTaskRepository.js';
 
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
+
+function stripLegacyLinearFields(data: Record<string, unknown>): Record<string, unknown> {
+  const {
+    linearIssueTitle: _linearIssueTitle,
+    linearIssueUrl: _linearIssueUrl,
+    linearIssueType: _linearIssueType,
+    linearIssueLabels: _linearIssueLabels,
+    linearFallback: _linearFallback,
+    ...taskData
+  } = data;
+  return taskData;
+}
+
+function toCodeTask(doc: { id: string; data(): Record<string, unknown> }): CodeTask {
+  const rawData = doc.data();
+  const data = stripLegacyLinearFields(rawData);
+  return {
+    ...data,
+    id: doc.id,
+    createdAt: data['createdAt'] as Timestamp,
+    updatedAt: data['updatedAt'] as Timestamp,
+  } as CodeTask;
+}
 
 function generateDedupKey(userId: string, prompt: string, linearIssueId?: string): string {
   // Normalize prompt: trim, collapse spaces, lowercase (design lines 1542-1547)
@@ -187,15 +209,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
           if (input.linearIssueId !== undefined) {
             taskData.linearIssueId = input.linearIssueId;
           }
-          if (input.linearIssueTitle !== undefined) {
-            taskData.linearIssueTitle = input.linearIssueTitle;
-          }
-          if (input.linearIssueUrl !== undefined) {
-            taskData.linearIssueUrl = input.linearIssueUrl;
-          }
-          if (input.linearFallback !== undefined) {
-            taskData.linearFallback = input.linearFallback;
-          }
           if (input.webhookSecret !== undefined) {
             taskData.webhookSecret = input.webhookSecret;
           }
@@ -248,15 +261,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           });
         }
 
-        const data = doc.data()!;
-        const task: CodeTask = {
-          ...data,
-          id: doc.id,
-          createdAt: data['createdAt'],
-          updatedAt: data['updatedAt'],
-        } as CodeTask;
-
-        return ok(task);
+        return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
       } catch (error) {
         logger.error({ error }, 'Failed to find task by id');
         return err({
@@ -291,14 +296,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           });
         }
 
-        const task: CodeTask = {
-          ...data,
-          id: doc.id,
-          createdAt: data['createdAt'],
-          updatedAt: data['updatedAt'],
-        } as CodeTask;
-
-        return ok(task);
+        return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
       } catch (error) {
         logger.error({ error }, 'Failed to find task by id for user');
         return err({
@@ -401,15 +399,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         // Fetch updated document
         const updatedDoc = await docRef.get();
-        const data = updatedDoc.data()!;
-        const task: CodeTask = {
-          ...data,
-          id: updatedDoc.id,
-          createdAt: data['createdAt'],
-          updatedAt: data['updatedAt'],
-        } as CodeTask;
-
-        return ok(task);
+        return ok(toCodeTask(updatedDoc as { id: string; data(): Record<string, unknown> }));
       } catch (error) {
         logger.error({ error, taskId, input }, 'Failed to update task');
         return err({
@@ -455,15 +445,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         // Take only the requested number of results
         const resultDocs = hasMore ? docs.slice(0, limit) : docs;
 
-        const tasks = resultDocs.map((doc: any) => {
-          const data = doc.data();
-          return {
-            ...data,
-            id: doc.id,
-            createdAt: data['createdAt'],
-            updatedAt: data['updatedAt'],
-          } as CodeTask;
-        });
+        const tasks = resultDocs.map((doc: any) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
 
         const output: ListTasksOutput = { tasks };
 
@@ -526,15 +510,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .get();
 
          
-        const tasks = snapshot.docs.map((doc: any) => {
-          const data = doc.data();
-          return {
-            ...data,
-            id: doc.id,
-            createdAt: data['createdAt'],
-            updatedAt: data['updatedAt'],
-          } as CodeTask;
-        });
+        const tasks = snapshot.docs.map((doc: any) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
 
         return ok(tasks);
       } catch (error) {

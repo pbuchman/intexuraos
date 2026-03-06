@@ -33,6 +33,13 @@ RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/c
     chromium \
     direnv
 
+# Create gh wrapper that reads fresh token from file on every invocation.
+# apk installs gh at /usr/bin/gh; /usr/local/bin precedes /usr/bin in PATH,
+# so this wrapper shadows the real binary. Ensures gh always uses the latest
+# token from the orchestrator's TokenRefresher bind mount.
+RUN printf '#!/bin/sh\nif [ -f "/secrets/github-token" ]; then\n  export GITHUB_TOKEN="$(cat /secrets/github-token)"\n  export GH_TOKEN="$GITHUB_TOKEN"\nfi\nexec /usr/bin/gh "$@"\n' > /usr/local/bin/gh \
+    && chmod +x /usr/local/bin/gh
+
 # Install terraform from hashicorp (TARGETARCH is set automatically by BuildKit)
 ARG TARGETARCH
 RUN curl -fsSL "https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_${TARGETARCH}.zip" -o /tmp/terraform.zip \
