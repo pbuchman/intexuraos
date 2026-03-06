@@ -2,7 +2,7 @@
  * Tests for createTaskForPR use case.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import pino from 'pino';
@@ -166,8 +166,10 @@ function createMockUserServiceClient(): UserServiceClient {
   };
 }
 
+const mockLockDeleteFn = vi.fn().mockResolvedValue(undefined);
+
 function mockDoc(): never {
-  return {} as never;
+  return { delete: mockLockDeleteFn } as never;
 }
 
 function createMockFirestore(): CreateTaskForPRDeps['firestore'] {
@@ -215,6 +217,7 @@ describe('createTaskForPR', () => {
   let request: CreateTaskForPRRequest;
 
   beforeEach(() => {
+    mockLockDeleteFn.mockClear();
     deps = createDefaultDeps();
     request = createDefaultRequest();
   });
@@ -633,6 +636,73 @@ describe('createTaskForPR', () => {
         expect(result.error.code).toBe('internal_error');
         expect(result.error.message).toBe('Failed to queue task');
       }
+    });
+  });
+
+  describe('PR task lock cleanup', () => {
+    it('deletes PR task lock on dispatch failure (non-capacity)', async () => {
+      deps.taskDispatcher = {
+        ...createMockTaskDispatcher(),
+        async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+          return err({ code: 'worker_unavailable', message: 'No workers available' });
+        },
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('task_creation_failed');
+      }
+      // Verify lock was deleted
+      expect(mockLockDeleteFn).toHaveBeenCalled();
+    });
+
+    it('deletes PR task lock on queue full', async () => {
+      deps.taskDispatcher = {
+        ...createMockTaskDispatcher(),
+        async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+          return err({ code: 'at_capacity', message: 'All workers are busy' });
+        },
+      };
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
+          return ok(10);
+        },
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+      // Verify lock was deleted
+      expect(mockLockDeleteFn).toHaveBeenCalled();
+    });
+
+    it('does NOT delete PR task lock on successful dispatch', async () => {
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      // Verify lock was NOT deleted (task dispatched successfully)
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
+
+    it('does NOT delete PR task lock when task is queued (capacity but not full)', async () => {
+      deps.taskDispatcher = {
+        ...createMockTaskDispatcher(),
+        async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+          return err({ code: 'at_capacity', message: 'All workers are busy' });
+        },
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      // Verify lock was NOT deleted (task queued, not failed)
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
     });
   });
 });

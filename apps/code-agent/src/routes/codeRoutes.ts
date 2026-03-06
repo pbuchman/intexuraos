@@ -13,6 +13,7 @@ import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
@@ -2618,6 +2619,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', 'Failed to detect zombie tasks');
       }
 
+      // Best-effort: clean up PR task locks for interrupted zombie tasks
+      for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by !result.ok guard above
+        await deletePRTaskLock(getServices().firestore, lock.repository, lock.prNumber, request.log);
+      }
+
       return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 2594
     }
   );
@@ -2760,6 +2766,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
         { taskId, nonce, userId }
       );
+
+      if (result.ok) {
+        for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by result.ok check
+          await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+        }
+      }
 
       if (!result.ok) {
         const error = result.error;
@@ -3895,6 +3907,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (!result.ok) {
         request.log.error({ error: result.error }, 'Drain queue failed');
         return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      for (const lock of result.value.locksToCleanup ?? []) { // @allow-result-access -- narrowed by !result.ok guard above
+        await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
       }
 
       return await reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
