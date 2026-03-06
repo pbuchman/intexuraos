@@ -303,7 +303,7 @@ describe('processCodeAction', () => {
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         agentType: 'planning',
-        linearIssueLabels: [],
+        linearIssueId: 'INT-123',
       })
     );
 
@@ -449,6 +449,108 @@ describe('processCodeAction', () => {
       expect(result.value.codeTaskId).toBe('new-task-456');
       expect(result.value.workerLocation).toBe('vm');
     }
+  });
+
+  it('persists only linearIssueId on the created task', async () => {
+    vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+      linearIssueId: 'INT-305',
+      linearIssueTitle: 'Fix the login bug',
+      linearIssueLabels: ['code-task'],
+      hasChildren: false,
+      linearFallback: false,
+      linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-305',
+    });
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-456',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'hash-123',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-305',
+      })
+    );
+    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+      ok({
+        dispatched: true,
+        workerLocation: 'vm',
+      })
+    );
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-456',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'hash-123',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-305',
+        cancelNonce: 'ef01',
+        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      })
+    );
+
+    await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        workerType: 'auto',
+        linearIssueId: 'INT-305',
+      }
+    );
+
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        linearIssueId: 'INT-305',
+        agentType: 'execution',
+      })
+    );
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        linearIssueTitle: expect.anything(),
+      })
+    );
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        linearIssueUrl: expect.anything(),
+      })
+    );
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        linearIssueLabels: expect.anything(),
+      })
+    );
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        linearFallback: expect.anything(),
+      })
+    );
   });
 
   it('successfully creates task with custom repository when provided', async () => {

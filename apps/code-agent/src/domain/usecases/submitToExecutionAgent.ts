@@ -283,11 +283,6 @@ export async function submitToExecutionAgent(
     followUpReason: 'execution_implement' as const,
     agentType: 'execution' as const,
     linearIssueId,
-    /* v8 ignore start -- ts-type: optional field spread operators create type narrowing branches @preserve */
-    ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
-    ...(originalTask.linearIssueUrl !== undefined && { linearIssueUrl: originalTask.linearIssueUrl }),
-    ...(originalTask.linearFallback !== undefined && { linearFallback: originalTask.linearFallback }),
-    /* v8 ignore stop @preserve */
   };
 
   const createResult = await codeTaskRepo.create(createInput);
