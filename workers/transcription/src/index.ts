@@ -85,6 +85,7 @@ const publisher = createTranscriptionCompletedPublisher({
 function isAudioStoredEvent(event: { type?: string }): event is AudioStoredEvent {
   const obj = event as Record<string, unknown>;
   return (
+    obj['type'] === 'whatsapp.audio.stored' &&
     typeof obj['userId'] === 'string' &&
     typeof obj['messageId'] === 'string' &&
     typeof obj['mediaId'] === 'string' &&
