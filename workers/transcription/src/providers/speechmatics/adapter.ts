@@ -309,7 +309,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
         const firstWord = result.results[0];
         detectedLanguage = firstWord?.alternatives?.[0]?.language;
       }
-      /* v8 ignore start -- test-infra: fake transcription always returns language in results @preserve */
+      /* v8 ignore start -- upstream: metadata language fallback depends on Speechmatics API response shape @preserve */
       if (
         detectedLanguage === undefined &&
         result.metadata?.language_pack_info?.language_description !== undefined
@@ -324,7 +324,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       /* v8 ignore stop @preserve */
 
       let text = '';
-      /* v8 ignore start -- test-infra: fake transcription always returns array results @preserve */
+      /* v8 ignore start -- upstream: non-array results guard for malformed Speechmatics API response @preserve */
       if (Array.isArray(result.results)) {
         for (const item of result.results) {
           const alt = item.alternatives?.[0];

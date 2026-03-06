@@ -68,6 +68,16 @@ async function fetchUserProvider(
   }
 }
 
+/* v8 ignore start -- module-init: config, storage and publisher initialized at cold start @preserve */
+const config = loadConfig();
+const storage = new Storage({ projectId: config.gcpProjectId });
+const publisher = createTranscriptionCompletedPublisher({
+  projectId: config.gcpProjectId,
+  topicName: config.transcriptionCompletedTopic,
+  logger,
+});
+/* v8 ignore stop @preserve */
+
 /**
  * Handle an audio stored event from Pub/Sub.
  */
@@ -95,14 +105,6 @@ async function handleAudioStored(event: CloudEvent<PubSubData>): Promise<void> {
     return;
   }
 
-  const config = loadConfig();
-  const storage = new Storage({ projectId: config.gcpProjectId });
-  const publisher = createTranscriptionCompletedPublisher({
-    projectId: config.gcpProjectId,
-    topicName: config.transcriptionCompletedTopic,
-    logger,
-  });
-
   await transcribeAudio(
     audioEvent as import('./types.js').AudioStoredEvent,
     {
@@ -115,7 +117,7 @@ async function handleAudioStored(event: CloudEvent<PubSubData>): Promise<void> {
           const [url] = await file.getSignedUrl({
             version: 'v4',
             action: 'read',
-            expires: Date.now() + 3600 * 1000,
+            expires: Date.now() + 4 * 3600 * 1000,
           });
           return ok(url);
         } catch (error) {

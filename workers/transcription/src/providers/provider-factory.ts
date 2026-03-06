@@ -6,6 +6,7 @@
  */
 import type { SpeechTranscriptionPort } from './transcription-provider.js';
 import { SpeechmaticsTranscriptionAdapter } from './speechmatics/adapter.js';
+import { logger } from '../logger.js';
 
 /**
  * Create a transcription provider by name.
@@ -22,7 +23,10 @@ export function createTranscriptionProvider(
     case 'speechmatics':
       return new SpeechmaticsTranscriptionAdapter(speechmaticsApiKey);
     default:
-      // Default to Speechmatics for unknown providers
+      logger.warn(
+        { event: 'unknown_provider', providerName },
+        'Unknown transcription provider, defaulting to Speechmatics'
+      );
       return new SpeechmaticsTranscriptionAdapter(speechmaticsApiKey);
   }
 }
