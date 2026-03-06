@@ -55,8 +55,13 @@ describe('retryTask use case', () => {
   const originalTaskId = 'task_abc123';
   const linearIssueId = 'INT-520';
 
-  function createMockTask(overrides: Partial<CodeTask> = {}): CodeTask {
+  type MockTaskOverrides = Partial<CodeTask> & {
+    linearIssueTitle?: string;
+  };
+
+  function createMockTask(overrides: MockTaskOverrides = {}): CodeTask {
     const now = Timestamp.now();
+    const { linearIssueTitle: _linearIssueTitle, ...taskOverrides } = overrides;
     const task: CodeTask = {
       id: originalTaskId,
       userId,
@@ -79,11 +84,10 @@ describe('retryTask use case', () => {
         message: 'Task failed',
       },
       linearIssueId,
-      linearIssueTitle: 'Retry mechanism test',
     };
 
     // Apply overrides, but skip undefined values to avoid exactOptionalPropertyTypes issues
-    for (const [key, value] of Object.entries(overrides)) {
+    for (const [key, value] of Object.entries(taskOverrides)) {
       if (value !== undefined) {
         (task as unknown as Record<string, unknown>)[key] = value;
       }
@@ -262,7 +266,6 @@ describe('retryTask use case', () => {
           retriedFrom: originalTaskId,
           webhookSecret: input.webhookSecret ?? 'whsec_secret',
           linearIssueId,
-          linearIssueTitle: 'Retry mechanism test',
         };
         return Promise.resolve(ok(newTask));
       });
@@ -334,7 +337,6 @@ describe('retryTask use case', () => {
           retriedFrom: originalTaskId,
           webhookSecret: input.webhookSecret ?? 'whsec_secret',
           linearIssueId,
-          linearIssueTitle: 'Retry mechanism test',
         };
         return Promise.resolve(ok(newTask));
       });
@@ -398,7 +400,6 @@ describe('retryTask use case', () => {
           retriedFrom: originalTaskId,
           webhookSecret: input.webhookSecret ?? 'whsec_secret',
           linearIssueId,
-          linearIssueTitle: 'Retry mechanism test',
         };
         return Promise.resolve(ok(newTask));
       });
@@ -475,7 +476,6 @@ describe('retryTask use case', () => {
           retriedFrom: originalTaskId,
           webhookSecret: input.webhookSecret ?? 'whsec_secret',
           linearIssueId,
-          linearIssueTitle: 'Retry mechanism test',
         };
         return Promise.resolve(ok(newTask));
       });
@@ -565,7 +565,6 @@ describe('retryTask use case', () => {
           updatedAt: Timestamp.now(),
           retriedFrom: originalTaskId,
           linearIssueId,
-          linearIssueTitle: 'Retry mechanism test',
           webhookSecret: input.webhookSecret ?? 'whsec_secret',
         };
         return Promise.resolve(ok(newTask));
@@ -758,7 +757,6 @@ describe('retryTask use case', () => {
       // Explicitly remove Linear issue fields to avoid exactOptionalPropertyTypes issues
       const taskRecord = mockTaskWithoutLinear as unknown as Record<string, unknown>;
       delete taskRecord['linearIssueId'];
-      delete taskRecord['linearIssueTitle'];
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTaskWithoutLinear));
 
       const deps = createDeps();
@@ -811,7 +809,6 @@ describe('retryTask use case', () => {
           updatedAt: Timestamp.now(),
           retriedFrom: originalTaskId,
           linearIssueId,
-          linearIssueTitle: 'Retry mechanism test',
           webhookSecret: String(input['webhookSecret'] ?? 'whsec_secret'),
           ...(agentTypeValue !== undefined && { agentType: agentTypeValue }),
         };
@@ -869,7 +866,6 @@ describe('retryTask use case', () => {
           updatedAt: Timestamp.now(),
           retriedFrom: originalTaskId,
           linearIssueId,
-          linearIssueTitle: 'Retry mechanism test',
           webhookSecret: String(input['webhookSecret'] ?? 'whsec_secret'),
           ...(agentTypeValue !== undefined && { agentType: agentTypeValue }),
         };
@@ -1699,6 +1695,56 @@ describe('retryTask use case', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ originalTaskId }),
         'Failed to archive original task after retry (non-fatal)'
+      );
+    });
+
+    it('persists only linearIssueId on the retry task', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        linearIssueTitle: 'Retry mechanism test',
+      });
+
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(ok({ hasActive: false }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'http://localhost:3000',
+            enabled: true,
+            cfAccessClientId: undefined,
+            cfAccessClientSecret: undefined,
+            dispatchSigningSecret: 'secret',
+          }],
+        })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: 'retry-task-persisted' }) as unknown as CodeTask)
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ orchestratorTaskId: 'orch-123', workerLocation: 'home-mac' })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+
+      const result = await retryTask(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueId,
+        })
+      );
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueTitle: expect.anything(),
+        })
+      );
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueUrl: expect.anything(),
+        })
       );
     });
   });

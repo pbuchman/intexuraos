@@ -293,7 +293,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(second.error.code).toBe('DUPLICATE_PROMPT');
     });
 
-    it('stores all optional fields', async () => {
+    it('stores supported optional fields only', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -303,8 +303,6 @@ describe('firestoreCodeTaskRepository', () => {
         actionId: 'action-123',
         approvalEventId: 'approval-123',
         linearIssueId: 'LIN-123',
-        linearIssueTitle: 'Fix bug',
-        linearFallback: true,
       });
 
       const result = await repo.create(input);
@@ -315,8 +313,11 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.actionId).toBe('action-123');
       expect(result.value.approvalEventId).toBe('approval-123');
       expect(result.value.linearIssueId).toBe('LIN-123');
-      expect(result.value.linearIssueTitle).toBe('Fix bug');
-      expect(result.value.linearFallback).toBe(true);
+      expect(result.value).not.toHaveProperty('linearIssueTitle');
+      expect(result.value).not.toHaveProperty('linearIssueUrl');
+      expect(result.value).not.toHaveProperty('linearIssueType');
+      expect(result.value).not.toHaveProperty('linearIssueLabels');
+      expect(result.value).not.toHaveProperty('linearFallback');
     });
 
     it('stores PR correlation fields (INT-465)', async () => {
@@ -416,6 +417,40 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.id).toBe(created.value.id);
       expect(result.value.userId).toBe('user-123');
+    });
+
+    it('strips legacy linear fields from existing documents', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ linearIssueId: 'INT-123' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await fakeFirestore
+        .collection('code_tasks')
+        .doc(created.value.id)
+        .update({
+          linearIssueTitle: 'Legacy title',
+          linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-123',
+          linearIssueType: 'feature',
+          linearIssueLabels: ['backend'],
+          linearFallback: true,
+        });
+
+      const result = await repo.findById(created.value.id);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.linearIssueId).toBe('INT-123');
+      expect(result.value).not.toHaveProperty('linearIssueTitle');
+      expect(result.value).not.toHaveProperty('linearIssueUrl');
+      expect(result.value).not.toHaveProperty('linearIssueType');
+      expect(result.value).not.toHaveProperty('linearIssueLabels');
+      expect(result.value).not.toHaveProperty('linearFallback');
     });
 
     it('returns NOT_FOUND for non-existent task', async () => {

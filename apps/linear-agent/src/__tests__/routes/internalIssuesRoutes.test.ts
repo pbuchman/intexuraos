@@ -539,6 +539,185 @@ describe('internalIssuesRoutes', () => {
     });
   });
 
+  describe('POST /internal/linear/issues/display-batch', () => {
+    it('returns issue display data for multiple identifiers', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-101',
+        title: 'First Batch Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [{ id: 'label-1', name: 'backend', color: '#000000' }],
+        url: 'https://linear.app/test/ENG-101',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+      fakeIssueRepo.seedIssue({
+        id: 'issue-2',
+        identifier: 'ENG-202',
+        title: 'Second Batch Issue',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: 'user-99',
+        assigneeName: 'Jane Doe',
+        labels: [],
+        url: 'https://linear.app/test/ENG-202',
+        userId: testUserId,
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        syncedAt: '2024-01-02T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+      await fakeCommentRepo.save({
+        id: 'comment-1',
+        issueId: 'issue-1',
+        issueIdentifier: 'ENG-101',
+        userId: testUserId,
+        userName: 'Alice',
+        body: 'First comment',
+        createdAt: '2024-01-03T10:00:00.000Z',
+        updatedAt: '2024-01-03T10:00:00.000Z',
+        syncedAt: '2024-01-03T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: {
+          identifiers: ['ENG-101', 'ENG-202', 'ENG-404'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          issues: {
+            identifier: string;
+            title: string;
+            commentCount: number;
+            lastCommentAt: string | null;
+          }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.issues).toHaveLength(2);
+      expect(body.data.issues.map((issue) => issue.identifier)).toEqual(['ENG-101', 'ENG-202']);
+      expect(body.data.issues[0]?.title).toBe('First Batch Issue');
+      expect(body.data.issues[0]?.commentCount).toBe(1);
+      expect(body.data.issues[0]?.lastCommentAt).toBe('2024-01-03T10:00:00.000Z');
+    });
+
+    it('returns 401 when X-User-Id is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: internalAuthHeader,
+        payload: {
+          identifiers: ['ENG-101'],
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 401 when X-Internal-Auth is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: { 'x-user-id': testUserId },
+        payload: {
+          identifiers: ['ENG-101'],
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 500 when issue lookup fails', async () => {
+      fakeIssueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'Issue repo unavailable' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: {
+          identifiers: ['ENG-101'],
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Issue repo unavailable');
+    });
+
+    it('returns 500 when comment lookup fails', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-101',
+        title: 'First Batch Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-101',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+      fakeCommentRepo.setListByIssueIdFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Comment repo unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: {
+          identifiers: ['ENG-101'],
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Comment repo unavailable');
+    });
+  });
+
   describe('PATCH /internal/linear/issues/:issueId/metadata', () => {
     it('should return 404 when issue belongs to different user', async () => {
       fakeIssueRepo.seedIssue({

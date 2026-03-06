@@ -283,10 +283,6 @@ ${additionalContext.trim()}
       ? ('pull_request' as const)
       : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const),
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
-    ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(originalTask.linearIssueUrl !== undefined && { linearIssueUrl: originalTask.linearIssueUrl }),
-    /* v8 ignore stop @preserve */
   };
 
   const createResult = await codeTaskRepo.create(createInput);
