@@ -173,10 +173,10 @@ interface Command {
 
 | Rule                    | Description                                                                       |
 | ----------------------- | --------------------------------------------------------------------------------- |
-| **Delete Restriction**  | Can only delete commands with status: received, pending_classification, or failed  |
+| **Delete Restriction**  | Can only delete commands with status: received, pending_classification, or failed |
 | **Archive Restriction** | Can only archive commands with status: classified                                 |
 | **Source Types**        | Create endpoint only supports 'pwa-shared' source; WhatsApp uses Pub/Sub          |
-| **Classification**      | Automatic via Gemini 2.5 Flash (default), GLM-4.7, or GLM-4.7-Flash              |
+| **Classification**      | Automatic via Gemini 2.5 Flash (default), GLM-4.7, or GLM-4.7-Flash               |
 | **Idempotency**         | Commands keyed by {sourceType}:{externalId}; duplicates return existing command   |
 
 ---

@@ -93,12 +93,9 @@ export function parseThumbnailPromptResponse(
     prompt,
     negativePrompt,
     parameters: {
-      aspectRatio: '16:9',
       framing,
-      textOnImage: 'none',
       realism,
       people,
-      logosTrademarks: 'none',
     },
   };
 

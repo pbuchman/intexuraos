@@ -141,31 +141,31 @@ describe('firestoreCodeTaskRepository', () => {
       expect(second.ok).toBe(true);
     });
 
-    it('Layer 2: skips dedup check for phase2_implement follow-up tasks (same prompt intentional)', async () => {
+    it('Layer 2: skips dedup check for execution_implement follow-up tasks (same prompt intentional)', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      // Create Phase 1 task
+      // Create planning task
       const phase1Input = createTaskInput({ linearIssueId: 'INT-200' });
       const phase1 = await repo.create(phase1Input);
       expect(phase1.ok).toBe(true);
 
-      // Update Phase 1 to completed so it does not trigger Layer 3 (active task)
+      // Mark planning task complete so it does not trigger Layer 3 (active task)
       if (phase1.ok) {
-        await repo.update(phase1.value.id, { status: 'designed' });
+        await repo.update(phase1.value.id, { status: 'planned' });
       }
 
-      // Create Phase 2 task with same prompt — must NOT be blocked by DUPLICATE_PROMPT
-      const phase2Input = createTaskInput({
+      // Create execution follow-up task with same prompt — must NOT be blocked by DUPLICATE_PROMPT
+      const executionInput = createTaskInput({
         linearIssueId: 'INT-200',
         parentTaskId: phase1.ok ? phase1.value.id : 'parent-id',
-        followUpReason: 'phase2_implement',
+        followUpReason: 'execution_implement',
       });
-      const phase2 = await repo.create(phase2Input);
+      const executionTask = await repo.create(executionInput);
 
-      expect(phase2.ok).toBe(true);
+      expect(executionTask.ok).toBe(true);
     });
 
     it('Layer 2: allows same prompt for different Linear issues within 5 minutes', async () => {
@@ -182,7 +182,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       // Complete the first task so Layer 3 doesn't block
       if (first.ok) {
-        await repo.update(first.value.id, { status: 'designed' });
+        await repo.update(first.value.id, { status: 'planned' });
       }
 
       // Same prompt, different Linear issue — should NOT be blocked by Layer 2
@@ -265,7 +265,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!first.ok) return;
 
       // Mark first task as completed
-      await repo.update(first.value.id, { status: 'designed' });
+      await repo.update(first.value.id, { status: 'planned' });
 
       // Now allow second task for same Linear issue
       // Use different user to bypass Layer 2 dedup (dedupKey check)
@@ -293,7 +293,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(second.error.code).toBe('DUPLICATE_PROMPT');
     });
 
-    it('stores all optional fields', async () => {
+    it('stores supported optional fields only', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -303,8 +303,6 @@ describe('firestoreCodeTaskRepository', () => {
         actionId: 'action-123',
         approvalEventId: 'approval-123',
         linearIssueId: 'LIN-123',
-        linearIssueTitle: 'Fix bug',
-        linearFallback: true,
       });
 
       const result = await repo.create(input);
@@ -315,8 +313,11 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.actionId).toBe('action-123');
       expect(result.value.approvalEventId).toBe('approval-123');
       expect(result.value.linearIssueId).toBe('LIN-123');
-      expect(result.value.linearIssueTitle).toBe('Fix bug');
-      expect(result.value.linearFallback).toBe(true);
+      expect(result.value).not.toHaveProperty('linearIssueTitle');
+      expect(result.value).not.toHaveProperty('linearIssueUrl');
+      expect(result.value).not.toHaveProperty('linearIssueType');
+      expect(result.value).not.toHaveProperty('linearIssueLabels');
+      expect(result.value).not.toHaveProperty('linearFallback');
     });
 
     it('stores PR correlation fields (INT-465)', async () => {
@@ -343,14 +344,14 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.followUpReason).toBe('pr_comment');
     });
 
-    it('stores executionPhase when provided in create input', async () => {
+    it('stores agentType when provided in create input', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
       const input = createTaskInput({
-        executionPhase: 'design',
+        agentType: 'planning',
       });
 
       const result = await repo.create(input);
@@ -358,17 +359,17 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value.executionPhase).toBe('design');
+      expect(result.value.agentType).toBe('planning');
     });
 
-    it('stores executionPhase as execution when provided', async () => {
+    it('stores agentType as execution when provided', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
       const input = createTaskInput({
-        executionPhase: 'execution',
+        agentType: 'execution',
         retriedFrom: 'original-task-id', // bypass dedup
       });
 
@@ -377,16 +378,16 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value.executionPhase).toBe('execution');
+      expect(result.value.agentType).toBe('execution');
     });
 
-    it('does not set executionPhase when not provided in create input', async () => {
+    it('does not set agentType when not provided in create input', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      // createTaskInput does not set executionPhase by default
+      // createTaskInput does not set agentType by default
       const input = createTaskInput();
 
       const result = await repo.create(input);
@@ -394,7 +395,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value.executionPhase).toBeUndefined();
+      expect(result.value.agentType).toBeUndefined();
     });
   });
 
@@ -416,6 +417,40 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.id).toBe(created.value.id);
       expect(result.value.userId).toBe('user-123');
+    });
+
+    it('strips legacy linear fields from existing documents', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ linearIssueId: 'INT-123' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await fakeFirestore
+        .collection('code_tasks')
+        .doc(created.value.id)
+        .update({
+          linearIssueTitle: 'Legacy title',
+          linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-123',
+          linearIssueType: 'feature',
+          linearIssueLabels: ['backend'],
+          linearFallback: true,
+        });
+
+      const result = await repo.findById(created.value.id);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.linearIssueId).toBe('INT-123');
+      expect(result.value).not.toHaveProperty('linearIssueTitle');
+      expect(result.value).not.toHaveProperty('linearIssueUrl');
+      expect(result.value).not.toHaveProperty('linearIssueType');
+      expect(result.value).not.toHaveProperty('linearIssueLabels');
+      expect(result.value).not.toHaveProperty('linearFallback');
     });
 
     it('returns NOT_FOUND for non-existent task', async () => {
@@ -512,7 +547,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       const completedAt = new Date();
       const result = await repo.update(created.value.id, {
-        status: 'designed',
+        status: 'planned',
         completedAt,
         result: {
           branch: 'feature/test',
@@ -525,7 +560,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value.status).toBe('designed');
+      expect(result.value.status).toBe('planned');
       // Check that completedAt exists (fake Firestore may not handle Timestamp fields properly)
       if (result.value.completedAt !== undefined) {
         expect(result.value.completedAt.toDate()).toEqual(completedAt);
@@ -544,6 +579,30 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe('NOT_FOUND');
+    });
+
+    it('updates task with queuedAt field', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const queuedAt = new Date();
+      const result = await repo.update(created.value.id, {
+        status: 'queued',
+        queuedAt,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.status).toBe('queued');
+      if (result.value.queuedAt !== undefined) {
+        expect(result.value.queuedAt.toDate()).toEqual(queuedAt);
+      }
     });
   });
 
@@ -576,15 +635,15 @@ describe('firestoreCodeTaskRepository', () => {
       const task2 = await repo.create(createTaskInput({ prompt: 'Task 2' }));
       expect(task2.ok).toBe(true);
       if (!task2.ok) return;
-      await repo.update(task2.value.id, { status: 'designed' });
+      await repo.update(task2.value.id, { status: 'planned' });
 
-      const result = await repo.list({ userId: 'user-123', status: ['designed'] });
+      const result = await repo.list({ userId: 'user-123', status: ['planned'] });
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
       expect(result.value.tasks.length).toBe(1);
-      expect(result.value.tasks[0]?.status).toBe('designed');
+      expect(result.value.tasks[0]?.status).toBe('planned');
     });
 
     it('returns tasks', async () => {
@@ -651,7 +710,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 
-      await repo.update(created.value.id, { status: 'designed' });
+      await repo.update(created.value.id, { status: 'planned' });
 
       const result = await repo.hasActiveTaskForLinearIssue('LIN-123');
 
@@ -784,18 +843,18 @@ describe('firestoreCodeTaskRepository', () => {
       const task1 = await repo.create(createTaskInput({ userId: 'user-123' }));
       expect(task1.ok).toBe(true);
       if (task1.ok) {
-        await repo.update(task1.value.id, { status: 'designed' });
+        await repo.update(task1.value.id, { status: 'planned' });
       }
 
       await repo.create(createTaskInput({ userId: 'user-123' }));
 
-      const result = await repo.list({ userId: 'user-123', status: ['designed'] });
+      const result = await repo.list({ userId: 'user-123', status: ['planned'] });
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
       expect(result.value.tasks).toHaveLength(1);
-      expect(result.value.tasks[0]?.status).toBe('designed');
+      expect(result.value.tasks[0]?.status).toBe('planned');
     });
 
     it('filters by multiple statuses', async () => {
@@ -808,7 +867,7 @@ describe('firestoreCodeTaskRepository', () => {
       const task1 = await repo.create(createTaskInput({ userId: 'user-123', prompt: 'multi-1' }));
       expect(task1.ok).toBe(true);
       if (task1.ok) {
-        await repo.update(task1.value.id, { status: 'designed' });
+        await repo.update(task1.value.id, { status: 'planned' });
       }
 
       const task2 = await repo.create(createTaskInput({ userId: 'user-123', prompt: 'multi-2' }));
@@ -820,14 +879,14 @@ describe('firestoreCodeTaskRepository', () => {
       // dispatched task (should not be returned)
       await repo.create(createTaskInput({ userId: 'user-123', prompt: 'multi-3' }));
 
-      const result = await repo.list({ userId: 'user-123', status: ['designed', 'failed'] });
+      const result = await repo.list({ userId: 'user-123', status: ['planned', 'failed'] });
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
       expect(result.value.tasks).toHaveLength(2);
       const statuses = result.value.tasks.map((t) => t.status);
-      expect(statuses).toContain('designed');
+      expect(statuses).toContain('planned');
       expect(statuses).toContain('failed');
     });
 
@@ -916,7 +975,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!created.ok) return;
 
       const result = await repo.update(created.value.id, {
-        status: 'designed',
+        status: 'planned',
         result: {
           branch: 'fix-branch',
           commits: 3,
@@ -927,7 +986,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value.status).toBe('designed');
+      expect(result.value.status).toBe('planned');
       expect(result.value.result?.branch).toBe('fix-branch');
     });
 
@@ -937,7 +996,7 @@ describe('firestoreCodeTaskRepository', () => {
         logger,
       });
 
-      const result = await repo.update('non-existent-task', { status: 'designed' });
+      const result = await repo.update('non-existent-task', { status: 'planned' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -1143,7 +1202,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!created.ok) return;
 
       await repo.update(created.value.id, {
-        status: 'designed',
+        status: 'planned',
         completedAt: new Date('2024-01-01'),
       });
 
@@ -1193,7 +1252,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!created.ok) return;
 
       await repo.update(created.value.id, {
-        status: 'designed',
+        status: 'planned',
         completedAt: new Date(),
       });
 
@@ -1319,6 +1378,46 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe('NOT_FOUND');
+    });
+  });
+
+  describe('findOldestQueued', () => {
+    it('returns null when no queued tasks exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.findOldestQueued();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+    });
+
+    it('returns the oldest queued task when one exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task and set it to queued
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'queued',
+        queuedAt: new Date(),
+      });
+
+      const result = await repo.findOldestQueued();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe(created.value.id);
+      expect(result.value?.status).toBe('queued');
     });
   });
 });

@@ -170,8 +170,8 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 
 | Date       | Issue                                         | Resolution                                                                           |
 | ---------- | --------------------------------------------- | ------------------------------------------------------------------------------------ |
-| 2026-02-22 | Unsafe casts in ContextInferenceAdapter        | Simplified with safer fallback defaults during adversarial dual-agent prompt audit    |
-| 2026-02-22 | Package version behind monorepo-wide releases | Aligned to v3.1.0 (v3.0.0 and v3.1.0 were version bumps only for research-agent)    |
+| 2026-02-22 | Unsafe casts in ContextInferenceAdapter       | Simplified with safer fallback defaults during adversarial dual-agent prompt audit   |
+| 2026-02-22 | Package version behind monorepo-wide releases | Aligned to v3.1.0 (v3.0.0 and v3.1.0 were version bumps only for research-agent)     |
 
 ### 2026-02-19 - v2.4.0 Observability & Developer Experience
 

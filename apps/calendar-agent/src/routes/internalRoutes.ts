@@ -13,6 +13,7 @@ interface ProcessActionBody {
     userId: string;
     title: string;
   };
+  text?: string;
 }
 
 interface GeneratePreviewMessage {
@@ -29,6 +30,13 @@ interface PubSubBody {
     publishTime: string;
   };
   subscription: string;
+}
+
+interface DirectPreviewBody {
+  actionId: string;
+  userId: string;
+  text: string;
+  currentDate: string;
 }
 
 interface GetPreviewParams {
@@ -70,9 +78,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               properties: {
                 id: { type: 'string', description: 'Action ID' },
                 userId: { type: 'string', description: 'User ID' },
-                title: { type: 'string', description: 'User message text to extract event from' },
+                title: { type: 'string', description: 'Short classifier-generated title' },
               },
             },
+            text: { type: 'string', description: 'Full user prompt text to extract event from (falls back to action.title)' },
           },
         },
         response: {
@@ -143,10 +152,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const services = getServices();
-      const { action } = request.body;
+      const { action, text: requestText } = request.body;
+      const text = typeof requestText === 'string' && requestText.length > 0 ? requestText : action.title;
 
       request.log.info(
-        { actionId: action.id, userId: action.userId, textLength: action.title.length },
+        { actionId: action.id, userId: action.userId, textLength: text.length, hasFullText: typeof requestText === 'string' },
         'internal/processCalendarAction: processing action'
       );
 
@@ -154,7 +164,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         {
           actionId: action.id,
           userId: action.userId,
-          text: action.title,
+          text,
         },
         {
           userServiceClient: services.userServiceClient,
@@ -314,19 +324,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { messageId: message.messageId, actionId, error: result.error },
           'internal/generateCalendarPreview: preview generation failed'
         );
-        reply.status(500);
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
       /* v8 ignore stop @preserve */
 
       request.log.info(
-        { messageId: message.messageId, actionId, status: result.value.preview.status },
+        { messageId: message.messageId, actionId, status: result.value.preview.status }, // @allow-result-access -- guarded by !result.ok at line 319
         'internal/generateCalendarPreview: complete'
       );
 
       return await reply.ok({
         previewId: actionId,
-        status: result.value.preview.status,
+        status: result.value.preview.status, // @allow-result-access -- guarded by !result.ok at line 319
       });
     }
   );
@@ -389,8 +398,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               diagnostics: { $ref: 'Diagnostics#' },
             },
           },
-          500: {
-            description: 'Internal Server Error',
+          502: {
+            description: 'Bad Gateway',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
@@ -425,16 +434,143 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { actionId, error: result.error },
           'internal/getCalendarPreview: failed to fetch preview'
         );
-        reply.status(500);
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
       request.log.info(
-        { actionId, found: result.value !== null, status: result.value?.status },
+        { actionId, found: result.value !== null, status: result.value?.status }, // @allow-result-access -- guarded by !result.ok at line 430
         'internal/getCalendarPreview: complete'
       );
 
-      return await reply.ok({ preview: result.value });
+      return await reply.ok({ preview: result.value }); // @allow-result-access -- guarded by !result.ok at line 430
+    }
+  );
+
+  // Direct HTTP endpoint for synchronous preview generation
+  fastify.post<{ Body: DirectPreviewBody }>(
+    '/internal/calendar/preview',
+    {
+      schema: {
+        operationId: 'generateCalendarPreviewDirect',
+        summary: 'Generate a calendar event preview synchronously via direct HTTP',
+        description: 'Direct HTTP endpoint for synchronous preview generation (not Pub/Sub)',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          required: ['actionId', 'userId', 'text', 'currentDate'],
+          properties: {
+            actionId: { type: 'string', description: 'Action ID' },
+            userId: { type: 'string', description: 'User ID' },
+            text: { type: 'string', description: 'Natural language text to extract event from' },
+            currentDate: { type: 'string', description: 'Current date for relative date resolution' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  preview: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      actionId: { type: 'string' },
+                      userId: { type: 'string' },
+                      status: { type: 'string', enum: ['pending', 'ready', 'failed'] },
+                      summary: { type: 'string' },
+                      start: { type: 'string' },
+                      end: { type: 'string', nullable: true },
+                      location: { type: 'string', nullable: true },
+                      description: { type: 'string', nullable: true },
+                      duration: { type: 'string', nullable: true },
+                      isAllDay: { type: 'boolean' },
+                      error: { type: 'string' },
+                      reasoning: { type: 'string' },
+                      generatedAt: { type: 'string' },
+                    },
+                  },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          400: {
+            description: 'Bad Request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          502: {
+            description: 'Bad Gateway',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: DirectPreviewBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const { actionId, userId, text, currentDate } = request.body;
+
+      request.log.info(
+        { actionId, userId, textLength: text.length },
+        'internal/generateCalendarPreviewDirect: processing preview request'
+      );
+
+      const services = getServices();
+
+      const result = await generateCalendarPreview(
+        { actionId, userId, text, currentDate },
+        {
+          calendarActionExtractionService: services.calendarActionExtractionService,
+          calendarPreviewRepository: services.calendarPreviewRepository,
+          logger: request.log,
+        }
+      );
+
+      /* v8 ignore start -- test-infra: fake extraction service always succeeds @preserve */
+      if (!result.ok) {
+        request.log.error(
+          { actionId, error: result.error },
+          'internal/generateCalendarPreviewDirect: preview generation failed'
+        );
+        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
+      }
+      /* v8 ignore stop @preserve */
+
+      request.log.info(
+        { actionId, status: result.value.preview.status }, // @allow-result-access -- guarded by !result.ok check above
+        'internal/generateCalendarPreviewDirect: complete'
+      );
+
+      return await reply.ok({ preview: result.value.preview }); // @allow-result-access -- guarded by !result.ok check above
     }
   );
 

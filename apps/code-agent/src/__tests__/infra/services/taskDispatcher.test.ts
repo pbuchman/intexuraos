@@ -11,7 +11,8 @@ import type {
   DispatchWorkerCredentials,
 } from '../../../domain/services/taskDispatcher.js';
 import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
-import { generateNonce, generateWebhookSecret, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
+import { generateNonce, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
+import { generateWebhookSecret } from '../../../domain/utils/secrets.js';
 
 describe('taskDispatcherImpl', () => {
   let logger: Logger;
@@ -199,6 +200,36 @@ describe('taskDispatcherImpl', () => {
       expect(headers['X-Dispatch-Nonce']).toBeDefined();
     });
 
+    it('sends agentType derived from agentType for orchestrator compatibility', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'planning',
+      });
+
+      const fetchCall = vi.mocked(global.fetch).mock.calls[0];
+      if (!fetchCall) throw new Error('Fetch was not called');
+      const options = fetchCall[1];
+      if (!options || typeof options.body !== 'string') throw new Error('Missing body');
+      const body = JSON.parse(options.body) as Record<string, unknown>;
+      expect(body['agentType']).toBe('planning');
+    });
+
     it('falls back to second worker on 503', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
@@ -235,7 +266,7 @@ describe('taskDispatcherImpl', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
-    it('returns error when all workers fail', async () => {
+    it('returns at_capacity when all workers return 503', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -259,7 +290,7 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('worker_unavailable');
+        expect(result.error.code).toBe('at_capacity');
       }
     });
 
@@ -568,6 +599,144 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
+    it('returns at_capacity when one worker returns 503 and other returns 502', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // home-mac returns 503 (at capacity)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+      // cloud-vm returns 502 (infrastructure error — neutral)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 502, json: async () => ({}) } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('at_capacity');
+      }
+    });
+
+    it('returns at_capacity when one worker returns 503 and other returns 504', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // home-mac returns 503
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+      // cloud-vm returns 504 (gateway timeout — neutral)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 504, json: async () => ({}) } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('at_capacity');
+      }
+    });
+
+    it('returns worker_unavailable when 503 mixed with explicit rejection', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // home-mac returns 503 (at capacity)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+      // cloud-vm returns 200 but rejects the task
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'rejected', reason: 'Worker overloaded' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_unavailable');
+      }
+    });
+
+    it('returns worker_unavailable when HMAC failure mixed with 503', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // Use credentials where first worker has empty signing secret (HMAC fail)
+      // and second worker returns 503
+      const mixedCredentials: DispatchWorkerCredentials = {
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: '', // Will cause HMAC failure
+          },
+          {
+            name: 'cloud-vm',
+            url: 'https://cc-vm.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-dispatch-secret',
+          },
+        ],
+      };
+
+      // cloud-vm returns 503
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: mixedCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_unavailable');
+      }
+    });
+
     it('includes linearIssueId when provided', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
@@ -602,6 +771,40 @@ describe('taskDispatcherImpl', () => {
       const body = JSON.parse(options.body as string);
 
       expect(body.linearIssueId).toBe('INT-123');
+    });
+
+    it('includes planningPrBranch and planningPrUrl in body when provided', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+        planningPrBranch: 'plan/my-feature',
+        planningPrUrl: 'https://github.com/org/repo/pull/42',
+      });
+
+      const fetchCall = mockFetch.mock.calls[0];
+      if (!fetchCall) throw new Error('Fetch was not called');
+      const options = fetchCall[1];
+      if (!options) throw new Error('Fetch options not found');
+      const body = JSON.parse(options.body as string) as Record<string, unknown>;
+
+      expect(body['planningPrBranch']).toBe('plan/my-feature');
+      expect(body['planningPrUrl']).toBe('https://github.com/org/repo/pull/42');
     });
 
     it('omits linearIssueId when undefined', async () => {

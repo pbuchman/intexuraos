@@ -186,6 +186,31 @@ describe('FirestoreOAuthConnectionRepository', () => {
     });
   });
 
+  describe('findByProviderEmail', () => {
+    it('returns null when no connection matches provider and email', async () => {
+      const result = await repo.findByProviderEmail(OAuthProviders.GOOGLE, 'nonexistent@example.com');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns connection when matching provider and email exists', async () => {
+      await repo.saveConnection('user-123', OAuthProviders.GOOGLE, 'user@example.com', createTestTokens());
+
+      const result = await repo.findByProviderEmail(OAuthProviders.GOOGLE, 'user@example.com');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.userId).toBe('user-123');
+        expect(result.value.provider).toBe(OAuthProviders.GOOGLE);
+        expect(result.value.email).toBe('user@example.com');
+        expect(result.value.tokens.accessToken).toBe('test-access-token');
+      }
+    });
+  });
+
   describe('multiple providers', () => {
     it('stores connections for different providers separately', async () => {
       await repo.saveConnection('user-123', OAuthProviders.GOOGLE, 'user@gmail.com', createTestTokens());

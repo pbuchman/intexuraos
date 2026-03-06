@@ -48,7 +48,7 @@ import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
-import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 
 // Helper function to generate orchestrator HMAC signature for heartbeat endpoint
@@ -209,6 +209,10 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -231,6 +235,10 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
+      gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     // Set up worker settings for the test user
@@ -813,7 +821,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'designed',
+          status: 'planned',
           result: {
             branch: 'fix-branch',
             commits: 3,
@@ -825,7 +833,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data.task.status).toBe('designed');
+      expect(body.data.task.status).toBe('planned');
     });
 
     it('returns 404 when task not found', async () => {
@@ -836,7 +844,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'designed',
+          status: 'planned',
         },
       });
 
@@ -850,7 +858,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'PATCH',
         url: '/internal/code-tasks/task-123',
         payload: {
-          status: 'designed',
+          status: 'planned',
         },
       });
 
@@ -878,7 +886,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'designed',
+          status: 'planned',
         },
       });
 
@@ -916,7 +924,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         url: `/internal/code-tasks/${task.id}`,
         headers: { 'x-internal-auth': 'test-internal-token' },
         payload: {
-          status: 'designed',
+          status: 'planned',
           result: { branch: 'test', commits: 1, summary: 'Done' },
         },
       });
@@ -988,6 +996,58 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(body.error.message).toBe('Database connection failed');
+    });
+
+    it('returns 400 INVALID_REQUEST for prompt containing a base64 blob (injection sanitization)', async () => {
+      // Mock workerSettingsRepo to return valid settings (so we reach sanitization)
+      const mockWorkerSettingsRepo = {
+        getSettings: vi.fn().mockResolvedValue({
+          ok: true,
+          value: {
+            userId: 'user-123',
+            workers: [
+              {
+                name: 'home-mac',
+                url: 'https://cc-mac.intexuraos.cloud',
+                cfAccessClientId: 'test-client-id',
+                cfAccessClientSecret: 'test-client-secret',
+                dispatchSigningSecret: 'test-dispatch-secret',
+                enabled: true,
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        }),
+      } as unknown as WorkerSettingsRepository;
+
+      setServices({
+        ...getServices(),
+        workerSettingsRepo: mockWorkerSettingsRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/process',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          actionId: 'action-123',
+          approvalEventId: 'approval-123',
+          userId: 'user-123',
+          payload: {
+            prompt: 'A'.repeat(3500),
+            repository: 'test/repo',
+            baseBranch: 'main',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
     });
   });
 
@@ -1559,6 +1619,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           detected: 2,
           interrupted: 1,
           errors: [],
+          locksToCleanup: [],
         },
       });
 
@@ -2392,6 +2453,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         },
         payload: {
           taskId,
+          workerType: 'opus',
         },
       });
 
@@ -2723,6 +2785,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'POST',
         url: '/code/tasks/non-existent-task/implement',
         headers: { authorization: 'Bearer test-token' },
+        body: {},
       });
 
       expect(response.statusCode).toBe(404);
@@ -2731,13 +2794,13 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('NOT_FOUND');
     });
 
-    it('returns 200 with correct response shape on successful Phase 2 dispatch', async () => {
+    it('returns 200 with correct response shape on successful execution-agent dispatch', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      // Create a completed Phase 1 design task owned by the test JWT user
+      // Create a completed planning-agent task owned by the test JWT user
       const created = await repo.create({
         userId: 'test-user-id',
         prompt: 'Design feature X',
@@ -2747,16 +2810,15 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         workerLocation: 'home-dev',
         repository: 'test/repo',
         baseBranch: 'main',
-        traceId: 'trace-phase1',
-        executionPhase: 'design',
+        traceId: 'trace-planning',
+        agentType: 'planning',
         linearIssueId: 'INT-100',
-        linearIssueTitle: 'Feature X',
       });
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 
-      // Mark task as designed (Phase 1 complete)
-      await repo.update(created.value.id, { status: 'designed' });
+      // Mark task as planned (planning-agent complete)
+      await repo.update(created.value.id, { status: 'planned' });
 
       // Override linearAgentClient and workerSettingsRepo for this test
       const mockLinearClient: LinearAgentClient = {
@@ -2768,6 +2830,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
             url: 'https://linear.app/intexuraos/issue/INT-100',
             labels: ['code-task'],
             childCount: 0,
+            parentId: null,
           }),
         updateIssueState: async () => ok({}),
         addComment: async () => ok({}),
@@ -2799,6 +2862,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'POST',
         url: `/code/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
+        body: { workerType: 'sonnet' },
       });
 
       const body = JSON.parse(response.body);
@@ -2806,8 +2870,90 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toMatch(/^task_/);
       expect(body.data.implementationOf).toBe(created.value.id);
-      expect(body.data.resourceUrl).toContain('/code/tasks/');
+      expect(body.data.resourceUrl).toContain('/#/code-tasks/');
       expect(body.data.workerLocation).toBe('mac');
+    });
+
+    it('accepts qwen3.5-plus as workerType without 400 validation error', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Design feature Y',
+        sanitizedPrompt: 'Design feature Y (sanitized)',
+        systemPromptHash: 'abc123',
+        workerType: 'auto',
+        workerLocation: 'home-dev',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-planning-qwen',
+        agentType: 'planning',
+        linearIssueId: 'INT-200',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'planned' });
+
+      const mockLinearClient: LinearAgentClient = {
+        validateIssue: async () =>
+          ok({
+            id: 'INT-200',
+            identifier: 'INT-200',
+            title: 'Feature Y',
+            url: 'https://linear.app/intexuraos/issue/INT-200',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          }),
+        updateIssueState: async () => ok({}),
+        addComment: async () => ok({}),
+      } as unknown as LinearAgentClient;
+
+      const mockWorkerSettings: WorkerSettingsRepository = {
+        getSettings: async () =>
+          ok({
+            workers: [
+              {
+                name: 'home-dev',
+                url: 'https://worker.dev',
+                enabled: true,
+                cfAccessClientId: '',
+                cfAccessClientSecret: '',
+                dispatchSigningSecret: '',
+              },
+            ],
+          }),
+      } as unknown as WorkerSettingsRepository;
+
+      setServices({
+        ...getServices(),
+        linearAgentClient: mockLinearClient,
+        workerSettingsRepo: mockWorkerSettings,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/code/tasks/${created.value.id}/implement`,
+        headers: { authorization: 'Bearer test-token' },
+        body: { workerType: 'qwen3.5-plus' },
+      });
+
+      // Must NOT return 400 validation error — schema must accept qwen3.5-plus
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+      expect(body.data.implementationOf).toBe(created.value.id);
+
+      // Verify qwen3.5-plus actually flows through the runtime guard to the stored task
+      const executionTask = await repo.findById(body.data.codeTaskId);
+      expect(executionTask.ok).toBe(true);
+      if (!executionTask.ok) return;
+      expect(executionTask.value.workerType).toBe('qwen3.5-plus');
     });
   });
 
@@ -2913,5 +3059,91 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('NOT_FOUND');
     });
   });
-});
 
+  describe('POST /internal/drain-queue', () => {
+    it('returns 401 when internal auth header is missing', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 401 when internal auth header is invalid', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'wrong-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 200 with drain result on success', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+
+    it('returns 200 when authenticated via OIDC bearer token', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          authorization: 'Bearer fake-oidc-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+
+    it('returns 500 when drain use case fails', async () => {
+      const services = getServices();
+      const failingRepo = {
+        ...services.codeTaskRepo,
+        findOldestQueued: async (): Promise<Result<null, { code: 'FIRESTORE_ERROR'; message: string }>> => err({ code: 'FIRESTORE_ERROR' as const, message: 'DB unavailable' }),
+      };
+      setServices({
+        ...services,
+        codeTaskRepo: failingRepo as unknown as CodeTaskRepository,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+});

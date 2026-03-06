@@ -228,6 +228,59 @@ export function createFirestoreGitHubPREventsRepository(deps: {
       }
     },
 
+    async findReviewComments(
+      repository: string,
+      pullRequestNumber: number,
+      reviewId: number
+    ): Promise<Result<GitHubPREvent[], RepositoryError>> {
+      try {
+        const query = collection
+          .where('repository', '==', repository)
+          .where('pullRequestNumber', '==', pullRequestNumber)
+          .where('eventType', '==', 'pull_request_review_comment')
+          .orderBy('createdAt', 'asc')
+          .limit(50);
+
+        const snapshot = await query.get();
+
+        const events: GitHubPREvent[] = [];
+        for (const doc of snapshot.docs) {
+          const data = doc.data() as Omit<GitHubPREvent, 'id'> & {
+            createdAt: unknown;
+            processedAt: unknown;
+            mergedAt: unknown;
+          };
+
+          const payload = data.payload as Record<string, unknown> | undefined;
+          const comment = payload?.['comment'] as Record<string, unknown> | undefined;
+          const commentReviewId = comment?.['pull_request_review_id'];
+
+          if (commentReviewId === reviewId) {
+            events.push({
+              ...data,
+              id: doc.id,
+              createdAt: toDate(data.createdAt),
+              processedAt: toDate(data.processedAt),
+              /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */
+              mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
+              /* v8 ignore stop @preserve */
+            });
+          }
+        }
+
+        return ok(events);
+      } catch (error) {
+        logger.error(
+          { error, repository, pullRequestNumber, reviewId },
+          'Failed to find review comments'
+        );
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
     async findAll(limit = 50): Promise<Result<GitHubPREvent[], RepositoryError>> {
       try {
         const query = collection.orderBy('createdAt', 'desc').limit(limit);

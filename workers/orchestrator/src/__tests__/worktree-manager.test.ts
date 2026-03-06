@@ -25,9 +25,6 @@ const defaultExecAsync = async (
   if (command.includes('git worktree list')) {
     return { stdout: '', stderr: '' };
   }
-  if (command.includes('pnpm install')) {
-    return { stdout: '', stderr: '' };
-  }
   return { stdout: '', stderr: '' };
 };
 
@@ -121,8 +118,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should copy MCP config template with env var substitution', async () => {
-      process.env['LINEAR_API_KEY'] = 'test-linear-key';
-      process.env['SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
+      process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
+      process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
 
       const WM = await loadWorktreeManager();
       const manager = new WM(mockConfig, mockLogger);
@@ -136,8 +133,8 @@ describe('WorktreeManager', () => {
       expect(config.linear.apiKey).toBe('test-linear-key');
       expect(config.sentry.authToken).toBe('test-sentry-token');
 
-      delete process.env['LINEAR_API_KEY'];
-      delete process.env['SENTRY_AUTH_TOKEN'];
+      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
+      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
     });
 
     it('should handle missing env vars gracefully', async () => {
@@ -214,6 +211,21 @@ describe('WorktreeManager', () => {
       expect(existsSync(settingsPath)).toBe(false);
     });
 
+    it('should warn when settings.local.json template path configured but file not found', async () => {
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+      const missingPath = join(tempDir, 'missing-template.json');
+      const WM = await loadWorktreeManager();
+      const manager = new WM({ ...mockConfig, settingsLocalTemplatePath: missingPath }, mockLogger);
+
+      await manager.createWorktree('task-warn-settings', 'feature-branch');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        { templatePath: missingPath },
+        'settings.local.json template path configured but file not found on disk'
+      );
+      warnSpy.mockRestore();
+    });
+
     it('should skip MCP config if template does not exist', async () => {
       const WM = await loadWorktreeManager();
       const manager = new WM(
@@ -230,8 +242,8 @@ describe('WorktreeManager', () => {
 
     it('should handle missing env vars with warning', async () => {
       // Clear env vars
-      delete process.env['LINEAR_API_KEY'];
-      delete process.env['SENTRY_AUTH_TOKEN'];
+      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
+      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
 
       const warnSpy = vi.spyOn(mockLogger, 'warn');
 
@@ -242,6 +254,44 @@ describe('WorktreeManager', () => {
 
       // Should have warned about missing keys twice (linear + sentry)
       expect(warnSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('lifecycle logging', () => {
+    it('should log start and end of createWorktree', async () => {
+      const infoSpy = vi.spyOn(mockLogger, 'info');
+
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.createWorktree('task-log-create', 'feature-branch');
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        { taskId: 'task-log-create', baseBranch: 'feature-branch' },
+        'Creating worktree'
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        { taskId: 'task-log-create', worktreePath: join(worktreeBasePath, 'task-log-create') },
+        'Worktree created'
+      );
+    });
+
+    it('should log start and end of removeWorktree', async () => {
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.createWorktree('task-log-remove', 'feature-branch');
+
+      const infoSpy = vi.spyOn(mockLogger, 'info');
+      infoSpy.mockClear();
+
+      await manager.removeWorktree('task-log-remove');
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        { taskId: 'task-log-remove', worktreePath: join(worktreeBasePath, 'task-log-remove') },
+        'Removing worktree'
+      );
+      expect(infoSpy).toHaveBeenCalledWith({ taskId: 'task-log-remove' }, 'Worktree removed');
     });
   });
 
@@ -319,8 +369,8 @@ describe('WorktreeManager', () => {
 
   describe('copyMcpConfig error handling', () => {
     it('should handle non-Error objects thrown during MCP config copy', async () => {
-      process.env['LINEAR_API_KEY'] = 'test-key';
-      process.env['SENTRY_AUTH_TOKEN'] = 'test-token';
+      process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-key';
+      process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-token';
 
       const WM = await loadWorktreeManager();
       // Create a worktree without MCP config template to test error path
@@ -337,8 +387,8 @@ describe('WorktreeManager', () => {
         managerWithoutTemplate.createWorktree('task-no-template', 'feature-branch')
       ).resolves.toBe(join(worktreeBasePath, 'task-no-template'));
 
-      delete process.env['LINEAR_API_KEY'];
-      delete process.env['SENTRY_AUTH_TOKEN'];
+      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
+      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
     });
   });
 
@@ -354,20 +404,6 @@ describe('WorktreeManager', () => {
     });
   });
 
-  describe('installDependencies edge cases', () => {
-    it('should handle worktree without pnpm-lock.yaml', async () => {
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      // Create a worktree - the mock exec succeeds regardless of lock file
-      // The installDependencies function checks for pnpm-lock.yaml with access()
-      // and returns early if not found (no error thrown)
-      const result = await manager.createWorktree('task-no-lock-file', 'feature-branch');
-
-      expect(result).toBe(join(worktreeBasePath, 'task-no-lock-file'));
-    });
-  });
-
   describe('listWorktrees filtering', () => {
     it('should filter worktrees by base path', async () => {
       const WM = await loadWorktreeManager();
@@ -376,6 +412,115 @@ describe('WorktreeManager', () => {
       // The mock returns empty output, so we just verify the function works
       const worktrees = await manager.listWorktrees();
       expect(Array.isArray(worktrees)).toBe(true);
+    });
+  });
+
+  describe('mergePlanningBranch', () => {
+    it('should fetch and merge the planning branch successfully', async () => {
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.createWorktree('task-merge', 'development');
+
+      const result = await manager.mergePlanningBranch(
+        join(worktreeBasePath, 'task-merge'),
+        'plan/my-feature'
+      );
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('should return error when merge conflicts occur', async () => {
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git merge')) {
+          throw new Error('CONFLICT (content): Merge conflict in file.ts');
+        }
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      mkdirSync(join(worktreeBasePath, 'task-conflict'), { recursive: true });
+
+      const result = await manager.mergePlanningBranch(
+        join(worktreeBasePath, 'task-conflict'),
+        'plan/conflicting'
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('CONFLICT');
+      }
+    });
+
+    it('should return error when branch does not exist', async () => {
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git fetch')) {
+          throw new Error("fatal: couldn't find remote ref plan/nonexistent");
+        }
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      mkdirSync(join(worktreeBasePath, 'task-no-branch'), { recursive: true });
+
+      const result = await manager.mergePlanningBranch(
+        join(worktreeBasePath, 'task-no-branch'),
+        'plan/nonexistent'
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('nonexistent');
+      }
+    });
+
+    it('should return Unknown error when a non-Error is thrown', async () => {
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git fetch') || command.includes('git merge')) {
+          throw 'some string error';
+        }
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      mkdirSync(join(worktreeBasePath, 'task-non-error'), { recursive: true });
+
+      const result = await manager.mergePlanningBranch(
+        join(worktreeBasePath, 'task-non-error'),
+        'plan/throws-string'
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toBe('Unknown error');
+      }
     });
   });
 });

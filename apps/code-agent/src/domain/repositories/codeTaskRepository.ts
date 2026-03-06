@@ -13,7 +13,7 @@ export interface CreateTaskInput {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   workerLocation: string;
   repository: string;
   baseBranch: string;
@@ -21,9 +21,6 @@ export interface CreateTaskInput {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearFallback?: boolean;
   webhookSecret?: string;
   /**
    * For retried tasks: points to the original task ID that this task is retrying.
@@ -37,8 +34,8 @@ export interface CreateTaskInput {
 
   // Follow-up tracking (INT-465)
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
-  executionPhase?: 'design' | 'execution';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
+  agentType?: 'planning' | 'execution' | 'pull_request';
 }
 
 export interface UpdateTaskInput {
@@ -48,6 +45,7 @@ export interface UpdateTaskInput {
   statusSummary?: CodeTask['statusSummary'];
   workerLocation?: string;
   callbackReceived?: boolean;
+  queuedAt?: Date;               // When task entered queue (INT-619)
   dispatchedAt?: Date;
   completedAt?: Date;
   logChunksDropped?: number;
@@ -165,4 +163,16 @@ export interface CodeTaskRepository {
    * Returns NOT_FOUND if the task does not exist or belongs to a different user.
    */
   deleteTask(taskId: string, userId: string): Promise<Result<void, RepositoryError>>;
+
+  /**
+   * Find oldest queued task for drain (INT-619).
+   * Returns null if no queued tasks exist.
+   */
+  findOldestQueued(): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * Count currently queued tasks (INT-619).
+   * Used to check queue capacity before adding new tasks.
+   */
+  countQueued(): Promise<Result<number, RepositoryError>>;
 }

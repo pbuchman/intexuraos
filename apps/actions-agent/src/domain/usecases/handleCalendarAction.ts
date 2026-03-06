@@ -1,16 +1,18 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { ActionRepository } from '../ports/actionRepository.js';
-import type { WhatsAppSendPublisher, CalendarPreviewPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { CalendarServiceClient, CalendarPreview } from '../ports/calendarServiceClient.js';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import type { ExecuteCalendarActionUseCase } from './executeCalendarAction.js';
 import { shouldAutoExecute } from './shouldAutoExecute.js';
 import { buildApprovalButtons } from '../utils/approvalButtons.js';
+import { formatCalendarApprovalMessage } from '../utils/formatCalendarApprovalMessage.js';
 
 export interface HandleCalendarActionDeps {
   actionRepository: ActionRepository;
   whatsappPublisher: WhatsAppSendPublisher;
-  calendarPreviewPublisher: CalendarPreviewPublisher;
+  calendarServiceClient: CalendarServiceClient;
   webAppUrl: string;
   logger: Logger;
   executeCalendarAction?: ExecuteCalendarActionUseCase;
@@ -26,7 +28,7 @@ export function createHandleCalendarActionUseCase(
   const {
     actionRepository: _actionRepository,
     whatsappPublisher,
-    calendarPreviewPublisher,
+    calendarServiceClient,
     webAppUrl,
     logger,
     executeCalendarAction,
@@ -62,17 +64,19 @@ export function createHandleCalendarActionUseCase(
         return ok({ actionId: event.actionId });
       }
 
-      // Trigger preview generation asynchronously via Pub/Sub
+      // Generate preview synchronously via HTTP call to calendar-agent
       // Include day of week so LLM can calculate relative dates like "następny czwartek" (next Thursday)
       const now = new Date();
       const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
       const currentDate = `${now.toISOString().substring(0, 10)} ${dayOfWeek}`;
-      const previewResult = await calendarPreviewPublisher.publishGeneratePreview({
+
+      let previewForMessage: CalendarPreview | null = null;
+
+      const previewResult = await calendarServiceClient.generatePreview({
         actionId: event.actionId,
         userId: event.userId,
         text: event.payload.prompt,
         currentDate,
-        correlationId: `action-calendar-preview-${event.actionId}`,
       });
 
       if (!previewResult.ok) {
@@ -82,18 +86,23 @@ export function createHandleCalendarActionUseCase(
             userId: event.userId,
             error: previewResult.error.message,
           },
-          'Failed to trigger preview generation (non-fatal, preview may not be available)'
+          'Failed to generate preview synchronously (non-fatal, will use basic message)'
         );
       } else {
+        previewForMessage = previewResult.value;
         logger.info(
-          { actionId: event.actionId },
-          'Calendar preview generation triggered'
+          { actionId: event.actionId, previewStatus: previewForMessage?.status },
+          'Calendar preview generated synchronously'
         );
       }
 
-      // Idempotency check and status update handled by registerActionHandler decorator
-      const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `📅 New calendar event ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
+      // Build approval message with rich preview (or fallback)
+      const message = formatCalendarApprovalMessage({
+        preview: previewForMessage,
+        actionTitle: event.title,
+        actionId: event.actionId,
+        webAppUrl,
+      });
       const buttons = buildApprovalButtons({ actionId: event.actionId });
 
       logger.info(

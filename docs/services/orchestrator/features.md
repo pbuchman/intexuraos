@@ -17,10 +17,10 @@ A startup CTO has a workstation sitting idle after an office move — a machine 
 1. She installs the orchestrator on the idle workstation and connects it to IntexuraOS through a Cloudflare tunnel — an outbound-only encrypted connection. The machine never accepts inbound traffic from the internet.
 2. A developer files a Linear issue describing a new API endpoint. The platform dispatches the task to her orchestrator.
 3. The orchestrator creates a dedicated copy of the repository on its own branch and spins up a Docker container scoped to that workspace — its own credentials, its own resource limits, its own log stream.
-4. The worker enters its design phase: it analyzes the issue, enriches it with context, designs an approach, and adds labels to Linear. No code is committed yet.
+4. The worker enters the Planning Agent flow: it analyzes the issue, enriches it with context, designs an approach, and adds labels to Linear. No code is committed yet.
 5. The CTO reviews the design from her dashboard, watching logs stream in real time. She sends a mid-task message clarifying a requirement.
-6. The worker moves to its execution phase: it writes tests, implements the endpoint, runs the automated test suite, and opens a pull request on GitHub.
-7. An independent verifier checks the result. Did the tests pass? Is there a pull request? Does it meet the completion criteria? The worker did not self-report — the orchestrator confirmed independently.
+6. The worker moves to the Execution Agent flow: it writes tests, implements the endpoint, runs the automated test suite, and opens a pull request on GitHub.
+7. An independent verifier checks the result. The Execution Agent path is verified semantically from Claude responses (including the `EXECUTION_AGENT_FINAL` contract), and `code-agent` performs deterministic Linear enforcement on success. The worker did not self-report — the platform confirmed independently.
 8. The CTO reviews a clean pull request. Her source code never left the building.
 
 ## How It Helps
@@ -43,7 +43,7 @@ A sensitive file guard scans every commit for credential patterns — over twent
 
 ### Verify Completion Independently
 
-Autonomous agents have a persistent habit: declaring the work done when it is not. The orchestrator addresses this with an independent verification step after every attempt. The verifier runs a fixed checklist — did the worker exit cleanly? Is there a pull request? Did the automated tests pass? — and then submits the last 120 lines of output to an independent AI that makes the final call. The worker's own assessment of its performance is not consulted.
+Autonomous agents have a persistent habit: declaring the work done when it is not. The orchestrator addresses this with an independent verification step after every attempt. For Planning and Pull Request agents, the verifier runs deterministic contract checks — did the worker exit cleanly? Is there a pull request? Did the automated tests pass? — and then submits the evidence to an independent AI that makes the final call. For the Execution Agent, verification is entirely LLM-driven: a Gemini model evaluates the semantic completeness of the worker's final block from Claude responses alone, with no runtime-signal gating. In all cases, the worker's own assessment of its performance is not consulted.
 
 If verification fails and the attempt count has not reached the configurable maximum (three by default), the orchestrator automatically launches a follow-up attempt with a resume prompt listing exactly which criteria were not met. If the verifier itself is unavailable, the task fails outright rather than allowing an unverified result through. The system prefers a failed task over a false positive.
 
@@ -57,13 +57,13 @@ A heartbeat pings the platform every ten minutes. If the orchestrator goes silen
 
 **Example:** A team lead watches the orchestrator work through a complex refactoring task. Forty minutes in, she notices the worker is heading down the wrong path. She sends a mid-task message with a clarification, which the orchestrator queues and delivers when the current attempt finishes — triggering a follow-up with her feedback incorporated. Without real-time visibility, she would have discovered the problem only after reviewing a flawed pull request.
 
-### Split Design From Execution
+### Split Planning From Execution
 
-Tasks follow a deliberate two-phase workflow. In the design phase, the worker analyzes the issue, enriches it with context, designs an approach, and adds labels — but commits no code. In the execution phase, the worker writes tests, implements the solution, runs the automated test suite, and creates a pull request. This separation prevents the failure mode that plagues most autonomous agents: charging into implementation before the approach is sound.
+Tasks follow a deliberate agent-based workflow. In the Planning Agent flow, the worker analyzes the issue, enriches it with context, designs an approach, and adds labels — but commits no code. In the Execution Agent flow, the worker writes tests, implements the solution, runs the automated test suite, and creates a pull request. This separation prevents the failure mode that plagues most autonomous agents: charging into implementation before the approach is sound.
 
-The two phases can run as separate tasks, giving you a natural review checkpoint. Approve the design, then let the worker execute. Or let both phases run automatically if the task is straightforward enough.
+The planning and execution flows can run as separate tasks, giving you a natural review checkpoint. Approve the plan, then let the worker execute. Or let both run automatically if the task is straightforward enough.
 
-**Example:** A developer files an issue to add OAuth support to an existing API. The worker's design phase produces an enriched issue with the proposed approach: which endpoints change, which new dependencies are needed, which tests cover the integration. The developer reviews the design, spots a missing edge case, and adds a comment. Only then does the execution phase begin — with the edge case already accounted for.
+**Example:** A developer files an issue to add OAuth support to an existing API. The worker's Planning Agent flow produces an enriched issue with the proposed approach: which endpoints change, which new dependencies are needed, which tests cover the integration. The developer reviews the plan, spots a missing edge case, and adds a comment. Only then does the Execution Agent flow begin — with the edge case already accounted for.
 
 ### Survive Crashes and Restarts
 

@@ -9,6 +9,7 @@ Unlike single-service rewrites, this workflow uses ALL 24 features.md files as i
 ### 1.1 Read All Features
 
 Read every `docs/services/*/features.md` file. For each, extract:
+
 - Title and subtitle (line 1 and 3)
 - The Problem section (first paragraph only)
 - Key Benefits section (full)
@@ -89,6 +90,7 @@ Write the writer's output to `docs/overview.md`.
 > **Round {{ROUND}} overview draft written to `docs/overview.md`.**
 >
 > Options:
+>
 > 1. "Proceed to critics" — send to 6 critics for evaluation
 > 2. "Redirect" — provide feedback to incorporate before critics see it
 
@@ -110,6 +112,7 @@ All 6 critics receive the same roles as single-service reviews, but with adapted
 ### 3.2 Spawn 6 Critics
 
 Same parallel spawn pattern as `rewrite-single.md` Phase 3.2, but:
+
 - PA prompt includes `{{ALL_FEATURES}}` instead of `{{TECHNICAL_MD}}`
 - All critic prompts include `{{PLATFORM_VISION}}` instead of per-service vision
 - Draft is the full overview.md
@@ -137,6 +140,7 @@ Same as `rewrite-single.md` Phase 5, but edits apply to `docs/overview.md`.
 ### 6.1 Display Final Output
 
 Show the user:
+
 1. The final overview.md content
 2. The most recent convergence table
 3. Services mentioned vs total services (completeness check)
@@ -146,6 +150,7 @@ Show the user:
 > **Final overview draft ready.**
 >
 > Options:
+>
 > 1. "Accept" — overview.md is done
 > 2. "Additional direction" — provide feedback for another pass
 

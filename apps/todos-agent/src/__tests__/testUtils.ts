@@ -76,6 +76,10 @@ export class FakeUserServiceClient implements UserServiceClient {
       message: 'OAuth not configured in fake',
     });
   }
+
+  async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, import('@intexuraos/internal-clients').UserServiceError>> {
+    return ok(null);
+  }
 }
 
 export class FakeTodoItemExtractionService implements TodoItemExtractionService {

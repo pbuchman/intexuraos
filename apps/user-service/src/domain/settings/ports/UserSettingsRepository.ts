@@ -59,4 +59,10 @@ export interface UserSettingsRepository {
    * Creates the settings document if it doesn't exist.
    */
   updateLlmPreferences(userId: string, defaultModel: LLMModel): Promise<Result<void, SettingsError>>;
+
+  /**
+   * Clear the user's LLM preferences (remove defaultModel).
+   * Used when a provider's API key is deleted and the default model belongs to that provider.
+   */
+  clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>>;
 }

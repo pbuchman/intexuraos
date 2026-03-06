@@ -278,7 +278,7 @@ interface GeneratePreviewMessage {
 | Google Calendar API v3   | Event CRUD and free/busy queries                                 |
 | Gemini 2.5 Flash         | Primary LLM for natural language event extraction                |
 | Gemini 2.5 Pro           | Secondary LLM (fallback)                                         |
-| GLM-4.7 / GLM-4.7 Flash | Tertiary LLM via platform Zai (fallback when Gemini unavailable) |
+| GLM-4.7 / GLM-4.7 Flash  | Tertiary LLM via platform Zai (fallback when Gemini unavailable) |
 
 ## Configuration
 
@@ -291,7 +291,7 @@ interface GeneratePreviewMessage {
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth         |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                   |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service URL for pricing    |
-| `INTEXURAOS_SENTRY_DSN`              | Yes      | Sentry DSN for error reporting          |
+| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry DSN for error reporting          |
 | `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai LLM API key (fallback)     |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini LLM API key (fallback)  |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (default: development) |

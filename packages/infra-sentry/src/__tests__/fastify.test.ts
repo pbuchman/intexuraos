@@ -119,6 +119,26 @@ describe('setupSentryErrorHandler', () => {
     expect(Sentry.captureException).toHaveBeenCalled();
   });
 
+  it('handles FST_ERR_CTP_EMPTY_JSON_BODY error', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error: Partial<FastifyError> = new Error(
+        "Body cannot be empty when content-type is set to 'application/json'"
+      );
+      error.code = 'FST_ERR_CTP_EMPTY_JSON_BODY';
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
   it('handles validation error with non-array validation property', async () => {
     setupSentryErrorHandler(app);
 

@@ -96,6 +96,7 @@ describe('LLM Keys Routes', () => {
       llmValidator: fakeLlmValidator,
       oauthConnectionRepository: new FakeOAuthConnectionRepository(),
       googleOAuthClient: null,
+      gitHubOAuthClient: null,
     });
   });
 
@@ -427,6 +428,7 @@ describe('LLM Keys Routes', () => {
         llmValidator: null,
         oauthConnectionRepository: new FakeOAuthConnectionRepository(),
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
       });
 
       app = await buildServer();
@@ -668,6 +670,145 @@ describe('LLM Keys Routes', () => {
       expect(stored?.llmApiKeys?.openai).toBeDefined();
     });
 
+    it('clears default model when deleting provider key used by default model', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-cascade-clear';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      // Verify llmPreferences was cleared
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.llmPreferences).toBeUndefined();
+    });
+
+    it('preserves default model when deleting a different provider key', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-cascade-preserve';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+        },
+        llmPreferences: { defaultModel: LlmModels.GPT4oMini },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      // Verify llmPreferences was NOT cleared (different provider)
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+    });
+
+    it('still returns 200 when cascade getSettings fails after deletion', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-cascade-get-fail';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      // Make getSettings fail AFTER deleteLlmApiKey succeeds
+      // deleteLlmApiKey doesn't call getSettings, so this will affect the cascade check
+      fakeSettingsRepo.setFailNextGet(true);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      // The delete still succeeds, cascade is best-effort
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+
+    it('still returns 200 when cascade clearLlmPreferences fails after deletion', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-cascade-clear-fail';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      // Make clearLlmPreferences fail — cascade should still not break the delete
+      fakeSettingsRepo.setFailNextClearLlmPreferences(true);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      // The delete still succeeds, cascade is best-effort
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+
     it('returns 500 when repository delete fails', { timeout: 20000 }, async () => {
       fakeSettingsRepo.setFailNextDeleteLlmKey(true);
 
@@ -780,6 +921,7 @@ describe('LLM Keys Routes', () => {
         llmValidator: null,
         oauthConnectionRepository: new FakeOAuthConnectionRepository(),
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
       });
 
       app = await buildServer();
@@ -824,6 +966,7 @@ describe('LLM Keys Routes', () => {
         llmValidator: null,
         oauthConnectionRepository: new FakeOAuthConnectionRepository(),
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
       });
 
       app = await buildServer();

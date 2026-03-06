@@ -55,12 +55,12 @@ All prompts pass through `sanitizePrompt()` before reaching the worker. This str
 ### Task Lifecycle
 
 ```typescript
-// 'designed' = Phase 1 design task completed; 'implemented' = Phase 2 execution task completed
-// 'completed' is NOT used -- tasks finish as 'designed' or 'implemented'
+// 'planned' = planning agent completed; 'implemented' = execution agent completed
+// 'completed' is NOT used -- tasks finish as 'planned' or 'implemented'
 type TaskStatus =
   | 'dispatched'
   | 'running'
-  | 'designed'
+  | 'planned'
   | 'implemented'
   | 'failed'
   | 'interrupted'
@@ -68,11 +68,11 @@ type TaskStatus =
 
 // Transitions:
 // dispatched -> running (on first log chunk)
-// dispatched -> designed | implemented | failed | interrupted (on webhook)
+// dispatched -> planned | implemented | failed | interrupted (on webhook)
 // dispatched | running -> cancelled (on cancel)
-// running -> designed | implemented | failed | interrupted (on webhook)
+// running -> planned | implemented | failed | interrupted (on webhook)
 // dispatched | running -> interrupted (zombie detection after 30 min)
-// designed | implemented | failed -> running (on sendTaskMessage with 'resumed' action)
+// planned | implemented | failed -> running (on sendTaskMessage with 'resumed' action)
 ```
 
 ### Task Completion Webhook
@@ -137,7 +137,7 @@ interface SubmitTaskFeedbackRequest {
 }
 
 // Constraints:
-// - Original must be 'designed' or 'implemented' (completed phase)
+// - Original must be 'planned' or 'implemented' (completed phase)
 // - No active task on same Linear issue
 // - User must have configured workers
 ```
@@ -156,22 +156,22 @@ interface SendTaskMessageResult {
 }
 
 // 'queued'  -- task is running; message held in pendingUserMessages, delivered at turn end
-// 'resumed' -- task is in terminal state (designed/implemented/failed); task re-dispatched via --continue
+// 'resumed' -- task is in terminal state (planned/implemented/failed); task re-dispatched via --continue
 // Constraints:
 // - Task must be owned by userId
 // - Status must NOT be 'cancelled' or 'dispatched'
 // - User must have configured workers
 ```
 
-### Phase 2 Implementation
+### Execution Agent Implementation
 
 ```typescript
-interface SubmitToPhase2Request {
+interface SubmitToExecutionAgentRequest {
   originalTaskId: string;
   userId: string;
 }
 
-interface SubmitToPhase2Result {
+interface SubmitToExecutionAgentResult {
   codeTaskId: string;
   resourceUrl: string;
   workerLocation: string;
@@ -179,11 +179,11 @@ interface SubmitToPhase2Result {
 }
 
 // Constraints:
-// - Original task must have status 'designed' and executionPhase 'design'
+// - Original task must have status 'planned' and agentType 'planning'
 // - Original task must have a linked Linear issue
-// - Linear issue must have 'code-task' label (set by Phase 1)
+// - Linear issue must have 'code-task' label (set by planning agent)
 // - Linear issue must NOT have 'unclear' label
-// - No existing implementationTaskId on Phase 1 task (optimistic lock)
+// - No existing implementationTaskId on planning task (optimistic lock)
 // - No active task on same Linear issue
 // - User must have configured workers
 ```
@@ -368,14 +368,14 @@ Authorization: Bearer <auth0-jwt>
 
 Note: The `status` parameter accepts comma-separated values (e.g., `running,dispatched`) to filter by multiple statuses simultaneously.
 
-### Start Phase 2 implementation
+### Start execution agent implementation
 
 ```
 POST /code/tasks/:taskId/implement
 Authorization: Bearer <auth0-jwt>
 
 -> 200: { "success": true, "data": { "codeTaskId": "uuid", "resourceUrl": "/code/tasks/uuid", "workerLocation": "home-mac", "implementationOf": "original-task-id" } }
--> 400: { "success": false, "error": { "code": "invalid_status", "message": "Task must be a completed design task to start implementation" } }
+-> 400: { "success": false, "error": { "code": "invalid_status", "message": "Task must be a completed planning task to start implementation" } }
 -> 400: { "success": false, "error": { "code": "label_not_ready", "message": "The code-task label hasn't been added yet." } }
 -> 409: { "success": false, "error": { "code": "already_implemented", "message": "Implementation already started" } }
 ```
@@ -563,9 +563,9 @@ All errors follow the IntexuraOS contract:
 | Target        | Endpoint                                      | When                 |
 | ------------- | --------------------------------------------- | -------------------- |
 | Worker        | `POST {workerUrl}/tasks`                      | Task dispatch        |
-| Worker        | `DELETE {workerUrl}/tasks/{taskId}`            | Task cancellation    |
-| Worker        | `POST {workerUrl}/tasks/{taskId}/messages`     | Send message         |
-| Worker        | `GET {workerUrl}/health`                       | Connectivity test    |
+| Worker        | `DELETE {workerUrl}/tasks/{taskId}`           | Task cancellation    |
+| Worker        | `POST {workerUrl}/tasks/{taskId}/messages`    | Send message         |
+| Worker        | `GET {workerUrl}/health`                      | Connectivity test    |
 | linear-agent  | `POST /internal/linear/issues`                | Issue creation       |
 | linear-agent  | `PATCH /internal/linear/issues/{id}/state`    | State transition     |
 | linear-agent  | `POST /internal/linear/issues/validate`       | Issue validation     |
@@ -581,12 +581,12 @@ All errors follow the IntexuraOS contract:
 
 ### Incoming Webhooks
 
-| Source       | Path                              | Trigger                            |
-| ------------ | --------------------------------- | ---------------------------------- |
-| Orchestrator | `/internal/webhooks/task-complete` | Task finished (completed/failed)  |
-| Orchestrator | `/internal/logs`                  | Log chunks during execution        |
-| Orchestrator | `/internal/turn-metrics`          | Per-turn resource metrics          |
-| GitHub       | `/webhooks/github`                | PR events (push, review, comment)  |
+| Source       | Path                               | Trigger                            |
+| ------------ | ---------------------------------- | ---------------------------------- |
+| Orchestrator | `/internal/webhooks/task-complete` | Task finished (completed/failed)   |
+| Orchestrator | `/internal/logs`                   | Log chunks during execution        |
+| Orchestrator | `/internal/turn-metrics`           | Per-turn resource metrics          |
+| GitHub       | `/webhooks/github`                 | PR events (push, review, comment)  |
 
 ### Metrics (Cloud Monitoring)
 

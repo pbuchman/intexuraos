@@ -18,6 +18,7 @@ import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 import type { RateLimitService } from './domain/services/rateLimitService.js';
 import type { WorkerSettingsRepository } from './domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from './domain/ports/workerHealthProbe.js';
+import type { UserLookupService } from './domain/ports/userLookupService.js';
 import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from './infra/repositories/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from './infra/repositories/firestoreLogLineRepository.js';
@@ -36,12 +37,22 @@ import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './dom
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
+import { createUserLookupService } from './infra/services/userLookupServiceImpl.js';
 import type { GitHubPREventRepository } from './domain/repositories/gitHubPREventRepository.js';
 import { createFirestoreGitHubPREventsRepository } from './infra/firestore/gitHubPREventsRepository.js';
 import type { TurnMetricsRepository } from './domain/repositories/turnMetricsRepository.js';
 import { createFirestoreTurnMetricsRepository } from './infra/repositories/firestoreTurnMetricsRepository.js';
 import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
+import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
+import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+import { createUserServiceClient } from '@intexuraos/internal-clients';
+import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
+import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
+import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
+import { ALLOWED_BOTS } from './routes/webhooks/github.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -65,6 +76,11 @@ export interface ServiceContainer {
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   turnMetricsRepo: TurnMetricsRepository;
+  userServiceClient: UserServiceClient;
+  gitHubPRClient: GitHubPRClient;
+  userLookupService?: UserLookupService;
+  webhookRules: WebhookRulesService;
+  dispatchService: WebhookDispatchService;
 }
 
 // Configuration required to initialize services
@@ -77,6 +93,9 @@ export interface ServiceConfig {
   linearAgentUrl: string;
   actionsAgentUrl: string;
   webhookVerifySecret: string;
+  orchestratorSecret: string;
+  serviceUrl: string;
+  userServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -122,6 +141,7 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         url: `https://linear.app/intexura/issue/${request.identifier}`,
         labels: [],
         childCount: 0,
+        parentId: null,
       }));
     },
     generateTitle(request): ReturnType<LinearAgentClient['generateTitle']> {
@@ -137,6 +157,28 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         commentId: `comment-${String(Date.now())}`,
       }));
     },
+    fetchIssueTree(request): ReturnType<LinearAgentClient['fetchIssueTree']> {
+      logger.info({ issueId: request.issueId }, '[E2E] Mock Linear issue tree fetch');
+      return Promise.resolve(ok({
+        root: {
+          id: request.issueId,
+          identifier: `INT-${request.issueId}`,
+          url: `https://linear.app/intexuraos/issue/${request.issueId}`,
+          parentId: null,
+          labels: [],
+          assigneeId: null,
+          state: 'Backlog',
+        },
+        descendants: [],
+      }));
+    },
+    updateIssueMetadata(request): ReturnType<LinearAgentClient['updateIssueMetadata']> {
+      logger.info(
+        { issueId: request.issueId, addLabels: request.addLabels, removeLabels: request.removeLabels, assigneeId: request.assigneeId },
+        '[E2E] Mock Linear metadata update'
+      );
+      return Promise.resolve(ok(undefined));
+    },
     fetchIssueForDisplay(request): ReturnType<LinearAgentClient['fetchIssueForDisplay']> {
       logger.info({ identifier: request.identifier }, '[E2E] Mock Linear issue fetch for display');
       return Promise.resolve(ok({
@@ -150,6 +192,22 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         commentCount: 0,
         lastCommentAt: null,
       }));
+    },
+    fetchIssuesForDisplay(request): ReturnType<LinearAgentClient['fetchIssuesForDisplay']> {
+      logger.info({ issueCount: request.identifiers.length }, '[E2E] Mock Linear issues fetch for display');
+      return Promise.resolve(ok(
+        request.identifiers.map((identifier) => ({
+          identifier,
+          title: `Mock ${identifier}`,
+          state: { name: 'In Progress', type: 'started' as const },
+          priority: 2,
+          assignee: null,
+          labels: [],
+          url: `https://linear.app/intexura/issue/${identifier}`,
+          commentCount: 0,
+          lastCommentAt: null,
+        }))
+      ));
     },
   };
 }
@@ -209,47 +267,103 @@ export function initServices(config: ServiceConfig): void {
         logger: createAppLogger({ name: 'whatsapp-publisher' }),
       });
 
+  const userServiceClient = createUserServiceClient({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger,
+    pricingContext: {
+      getPricing() { throw new Error('code-agent does not use LLM pricing'); },
+      hasPricing() { return false; },
+      validateModels() { throw new Error('code-agent does not use LLM pricing'); },
+      validateAllModels() { throw new Error('code-agent does not use LLM pricing'); },
+      getModelsWithPricing() { return []; },
+    },
+  });
+
+  const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
+  const logLineRepo = createFirestoreLogLineRepository({ firestore, logger });
+  const workerSettingsRepo = createWorkerSettingsRepository({ firestore, logger });
+  const taskDispatcher = createTaskDispatcherService({ logger });
+  const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher, linearAgentClient });
+  const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000 });
+
+  const statusMirrorService = createStatusMirrorService({
+    actionsAgentClient,
+    logger,
+  });
+
+  const userLookupService = createUserLookupService({
+    gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient, logger }),
+    workerSettingsRepo,
+    logger,
+  });
+
   container = {
     firestore,
     logger,
-    codeTaskRepo: createFirestoreCodeTaskRepository({ firestore, logger }),
+    codeTaskRepo,
     logChunkRepo: createFirestoreLogChunkRepository({ firestore, logger }),
-    logLineRepo: createFirestoreLogLineRepository({ firestore, logger }),
-    taskDispatcher: createTaskDispatcherService({
-      logger,
-    }),
-    whatsappNotifier: createWhatsAppNotifier({
-      whatsappPublisher,
-    }),
+    logLineRepo,
+    taskDispatcher,
+    whatsappNotifier,
     actionsAgentClient,
     linearAgentClient,
-    statusMirrorService: createStatusMirrorService({
-      actionsAgentClient,
-      logger,
-    }),
+    statusMirrorService,
     rateLimitService: createRateLimitService({
       userUsageRepository: createUserUsageFirestoreRepository(firestore, logger),
       logger,
     }),
     linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({
-      codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
+      codeTaskRepository: codeTaskRepo,
       logger,
     }),
     detectZombieTasks: createDetectZombieTasksUseCase({
-      codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
+      codeTaskRepository: codeTaskRepo,
       logger,
     }),
     cleanupTaskLogs: createCleanupTaskLogsUseCase({
-      codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
+      codeTaskRepository: codeTaskRepo,
       logger,
     }),
     metricsClient,
-    workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
+    workerSettingsRepo,
     workerHealthProbe: createWorkerHealthProbe(),
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
+    userServiceClient,
+    gitHubPRClient,
+    userLookupService,
+    webhookRules: createWebhookRulesService([
+      // Note: RepositoryScopeRule is NOT included here because the route handler
+      // already filters via shouldProcessRepository() which correctly handles
+      // both intexuraos/* and */intexuraos patterns. Adding it here would be
+      // redundant and risks scope mismatch (see PR #997 review).
+      new ActionableEventRule(ALLOWED_BOTS),
+      new SenderWhitelistRule(ALLOWED_BOTS),
+      new SkipPrefixRule(['@claude', '@codex', '@ignore']),
+      // Note: BotReviewEditRule is NOT included here because it introduces
+      // new "meaningful changes" filtering not present in the original code.
+      // The original dispatched all edited bot comments without payload inspection.
+    ]),
+    dispatchService: createWebhookDispatchService({
+      codeTaskRepo,
+      logLineRepo,
+      userLookupService,
+      linearIssueService,
+      taskDispatcher,
+      whatsappNotifier,
+      workerSettingsRepo,
+      statusMirrorService,
+      gitHubPRClient,
+      userServiceClient,
+      firestore,
+      messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
+      allowedBots: ALLOWED_BOTS,
+      orchestratorSecret: config.orchestratorSecret,
+      serviceUrl: config.serviceUrl,
+    }),
   };
 }
 

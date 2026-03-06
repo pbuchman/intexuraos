@@ -114,6 +114,64 @@ describe('Routes', () => {
       });
     });
 
+    it('should pass planningPrBranch and planningPrUrl through to dispatcher', async () => {
+      const taskPayload = {
+        taskId: 'test-planning-pr',
+        workerType: 'auto',
+        prompt: 'Implement the plan',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        agentType: 'execution',
+        planningPrBranch: 'plan/my-feature',
+        planningPrUrl: 'https://github.com/org/repo/pull/42',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          planningPrBranch: 'plan/my-feature',
+          planningPrUrl: 'https://github.com/org/repo/pull/42',
+          agentType: 'execution',
+        })
+      );
+    });
+
+    it('should accept task without planningPr fields', async () => {
+      const taskPayload = {
+        taskId: 'test-no-planning-pr',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(202);
+      const dispatchCall = vi.mocked(dispatcher.submitTask).mock.calls[0]?.[0] as
+        | Record<string, unknown>
+        | undefined;
+      expect(dispatchCall).toBeDefined();
+      expect(dispatchCall?.['planningPrBranch']).toBeUndefined();
+      expect(dispatchCall?.['planningPrUrl']).toBeUndefined();
+    });
+
     it('should reject without authentication headers', async () => {
       const response = await app.inject({
         method: 'POST',

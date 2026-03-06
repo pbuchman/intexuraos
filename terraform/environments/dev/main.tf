@@ -483,15 +483,20 @@ module "secret_manager" {
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"     = "Google OAuth client ID for calendar integration"
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET" = "Google OAuth client secret for calendar integration"
     "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"  = "Google OAuth redirect URI (full callback URL)"
+    # GitHub OAuth secrets for GitHub integration
+    "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID"     = "GitHub OAuth App Client ID"
+    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET" = "GitHub OAuth App Client Secret"
     # Sentry error monitoring
     "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
     # Crawl4AI Cloud API
     "INTEXURAOS_CRAWL4AI_APP_API_KEY" = "Crawl4AI Cloud API key for web-agent"
     # LLM API keys
-    "INTEXURAOS_OPENAI_APP_API_KEY" = "OpenAI API key for chat-agent"
-    "INTEXURAOS_ZAI_APP_API_KEY"    = "Platform ZAI API key for all services"
-    "INTEXURAOS_GEMINI_APP_API_KEY" = "Gemini API key for orchestrator completion verifier"
+    "INTEXURAOS_OPENAI_APP_API_KEY"    = "OpenAI API key for chat-agent"
+    "INTEXURAOS_ZAI_APP_API_KEY"       = "Platform ZAI API key for all services"
+    "INTEXURAOS_MINIMAX_APP_API_KEY"   = "MiniMax API key for orchestrator worker containers"
+    "INTEXURAOS_GEMINI_APP_API_KEY"    = "Gemini API key for orchestrator completion verifier"
+    "INTEXURAOS_DASHSCOPE_APP_API_KEY" = "Dashscope API key for orchestrator qwen3.5-plus worker containers"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to Claude worker containers"
     "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to Claude worker containers"
@@ -551,15 +556,17 @@ module "claude_code_dev" {
 locals {
   # Secrets that ALL services need
   common_service_secrets = {
-    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_SENTRY_DSN          = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-    INTEXURAOS_ZAI_APP_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_ZAI_APP_API_KEY"]
-    INTEXURAOS_GEMINI_APP_API_KEY  = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
-    INTEXURAOS_DASH0_OTLP_ENDPOINT = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
-    INTEXURAOS_DASH0_AUTH_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
+    INTEXURAOS_AUTH_JWKS_URL         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER           = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN   = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_SENTRY_DSN            = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+    INTEXURAOS_ZAI_APP_API_KEY       = module.secret_manager.secret_ids["INTEXURAOS_ZAI_APP_API_KEY"]
+    INTEXURAOS_MINIMAX_APP_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
+    INTEXURAOS_GEMINI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
+    INTEXURAOS_DASHSCOPE_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
+    INTEXURAOS_DASH0_OTLP_ENDPOINT   = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
+    INTEXURAOS_DASH0_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
   }
 }
 
@@ -844,6 +851,8 @@ module "user_service" {
     INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"]
     INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET"]
     INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI  = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"]
+    INTEXURAOS_GITHUB_OAUTH_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_OAUTH_CLIENT_ID"]
+    INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
@@ -992,6 +1001,9 @@ module "api_docs_hub" {
     INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL              = "${module.bookmarks_agent.service_url}/openapi.json"
     INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL               = "${module.calendar_agent.service_url}/openapi.json"
     INTEXURAOS_CHAT_AGENT_OPENAPI_URL                   = "${module.chat_agent.service_url}/openapi.json"
+    INTEXURAOS_CODE_AGENT_OPENAPI_URL                   = "${module.code_agent.service_url}/openapi.json"
+    INTEXURAOS_LINEAR_AGENT_OPENAPI_URL                 = "${module.linear_agent.service_url}/openapi.json"
+    INTEXURAOS_WEB_AGENT_OPENAPI_URL                    = "${module.web_agent.service_url}/openapi.json"
   })
 
   depends_on = [
@@ -1417,6 +1429,8 @@ module "code_agent" {
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_QUEUE_MAX_SIZE             = "10"
+    INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
   })
 
   depends_on = [
@@ -1737,6 +1751,49 @@ resource "google_cloud_scheduler_job" "retry_pending_actions" {
     module.actions_agent,
   ]
 }
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Drain Task Queue (INT-619)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_code_agent" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.code_agent.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.code_agent]
+}
+
+resource "google_cloud_scheduler_job" "drain_task_queue" {
+  name        = "intexuraos-drain-task-queue-${var.environment}"
+  description = "Drain queued code tasks when workers become available"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/drain-queue"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Firebase Authentication (Identity Platform)
 # -----------------------------------------------------------------------------

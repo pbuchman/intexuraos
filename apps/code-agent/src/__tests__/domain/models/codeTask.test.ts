@@ -6,11 +6,13 @@ describe('CodeTask model', () => {
     const validStatuses: TaskStatus[] = [
       'dispatched',
       'running',
-      'designed',
+      'queued',
+      'planned',
       'implemented',
       'failed',
       'interrupted',
       'cancelled',
+      'archived',
     ];
 
     // Type-level validation - if this compiles, types are correct
@@ -20,7 +22,7 @@ describe('CodeTask model', () => {
   });
 
   it('has correct worker types', () => {
-    const validTypes: WorkerType[] = ['opus', 'auto', 'glm'];
+    const validTypes: WorkerType[] = ['opus', 'auto', 'sonnet', 'minimax', 'glm'];
     validTypes.forEach((type) => {
       expect(typeof type).toBe('string');
     });

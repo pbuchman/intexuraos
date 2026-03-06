@@ -409,18 +409,18 @@ Allows users to correct AI classification. Validates the action is in a mutable 
 
 ### Internal Services
 
-| Service              | Purpose                                                                          |
-| -------------------- | -------------------------------------------------------------------------------- |
-| `commands-agent`     | Fetch command text for type transitions, create new commands                     |
-| `research-agent`     | Execute research actions                                                         |
-| `todos-agent`        | Execute todo actions                                                             |
-| `notes-agent`        | Execute note actions                                                             |
-| `bookmarks-agent`    | Execute link actions, force-refresh duplicate bookmarks                          |
-| `calendar-agent`     | Execute calendar actions, fetch calendar previews                                |
-| `linear-agent`       | Execute Linear issue creation actions                                            |
-| `code-agent`         | Execute code tasks (Claude Code) via submitTask and cancelTaskWithNonce (v3.0.0) |
-| `user-service`       | Fetch user API keys for LLM (via `@intexuraos/internal-clients/user-service`)    |
-| `app-settings-service` | Fetch LLM pricing configuration at startup                                     |
+| Service                | Purpose                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `commands-agent`       | Fetch command text for type transitions, create new commands                     |
+| `research-agent`       | Execute research actions                                                         |
+| `todos-agent`          | Execute todo actions                                                             |
+| `notes-agent`          | Execute note actions                                                             |
+| `bookmarks-agent`      | Execute link actions, force-refresh duplicate bookmarks                          |
+| `calendar-agent`       | Execute calendar actions, fetch calendar previews                                |
+| `linear-agent`         | Execute Linear issue creation actions                                            |
+| `code-agent`           | Execute code tasks (Claude Code) via submitTask and cancelTaskWithNonce (v3.0.0) |
+| `user-service`         | Fetch user API keys for LLM (via `@intexuraos/internal-clients/user-service`)    |
+| `app-settings-service` | Fetch LLM pricing configuration at startup                                       |
 
 ### Infrastructure
 

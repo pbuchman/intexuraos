@@ -39,6 +39,7 @@ interface StreamJsonMessage {
 export interface FormatterState {
   toolCallsById: Map<string, string>;
   lastToolName: string | undefined; // @allow-undefined-type -- mutable state field, always present but nullable
+  partialLine?: string; // Buffered incomplete JSON from previous chunk
 }
 
 export function createFormatterState(): FormatterState {
@@ -49,6 +50,15 @@ export function createFormatterState(): FormatterState {
 }
 
 const SYSTEM_REMINDER_BLOCK = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
+const TOOL_USE_ERROR_BLOCK = /<tool_use_error>([\s\S]*?)<\/tool_use_error>/gi;
+const DIFF_HEADER_RE = /^diff --git a\/(.+?) b\/(.+)$/;
+
+interface DiffFileStats {
+  path: string;
+  added: number;
+  removed: number;
+  changeType: 'A' | 'D' | 'M';
+}
 
 export function formatLogChunk(
   raw: string,
@@ -61,9 +71,21 @@ export function formatLogChunk(
   const lines = raw.split('\n');
   const result: FormattedLogLine[] = [];
   let seq = startSequence * 1000;
+  const hasExternalState = state !== undefined;
   const s = state ?? createFormatterState();
 
-  for (const line of lines) {
+  // Prepend buffered partial line from previous chunk
+  if (s.partialLine !== undefined && lines.length > 0) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; lines[0] always exists when length > 0 @preserve */
+    lines[0] = s.partialLine + (lines[0] ?? '');
+    /* v8 ignore stop @preserve */
+    delete s.partialLine;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; i is bounded by lines.length @preserve */
+    const line = lines[i] ?? '';
+    /* v8 ignore stop @preserve */
     const trimmed = line.trim();
     if (trimmed === '') continue;
 
@@ -85,6 +107,13 @@ export function formatLogChunk(
       const formatted = formatJsonMessage(obj, s);
       text = formatted !== '' && prefix !== '' ? `${prefix}${formatted}` : formatted;
     } catch {
+      // If this is the last line and looks like incomplete JSON, buffer it for reassembly
+      // Only buffer when external state is provided — stateless calls cannot reassemble
+      if (hasExternalState && i === lines.length - 1 && body.startsWith('{"') && !body.endsWith('}')) {
+        s.partialLine = trimmed;
+        continue; // Skip — will be completed by next chunk
+      }
+
       /* v8 ignore start -- ts-type: catch block handles unparseable JSON; short-line branch not triggered by test fixtures @preserve */
       text = trimmed.length > 2048
         ? trimmed.slice(0, 1024) + '\n[... TRUNCATED from ' + String(trimmed.length) + ' chars ...]\n' + trimmed.slice(-512)
@@ -120,7 +149,10 @@ function formatJsonMessage(obj: StreamJsonMessage, state: FormatterState): strin
     case 'result':
       return formatResult(obj);
     default:
-      return JSON.stringify(obj);
+      // Suppress known internal protocol events
+      if (obj.type === 'rate_limit_event') return '';
+      // Compact fallback for truly unknown types — show type name, not raw JSON
+      return `[event] ${obj.type}`;
   }
 }
 
@@ -220,12 +252,212 @@ const MAX_TOOL_RESULT_CHARS = 2048;
 const HEAD_LINES = 10;
 const TAIL_LINES = 40;
 
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 3) + '...' : s;
+}
+
+function formatObjectKeysSummary(keys: string[], charCount: number): string {
+  return `{${String(keys.length)} keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', ...' : ''}} [${String(charCount)} chars]`;
+}
+
+function summarizeJsonContent(content: string): string | undefined {
+  if (content.length < 200) return undefined; // Short JSON is fine as-is
+
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return undefined; // Not JSON, let existing handling deal with it
+  }
+
+  // GitHub PR data (gh pr view --json)
+  if ('state' in obj && 'title' in obj && 'headRefName' in obj) {
+    const number = typeof obj['number'] === 'number' ? `#${String(obj['number'])} ` : '';
+    const title = typeof obj['title'] === 'string' ? truncate(obj['title'], 60) : '';
+    const state = typeof obj['state'] === 'string' ? obj['state'] : '';
+    const adds = typeof obj['additions'] === 'number' ? `+${String(obj['additions'])}` : '';
+    const dels = typeof obj['deletions'] === 'number' ? `-${String(obj['deletions'])}` : '';
+    const addsDels = adds !== '' || dels !== '' ? `${adds}/${dels}` : '';
+    const files = typeof obj['changedFiles'] === 'number' ? `${String(obj['changedFiles'])} files` : '';
+    return [number + title, state, addsDels, files].filter(Boolean).join(' | ');
+  }
+
+  // GitHub comment/issue data (gh api .../comments)
+  if ('html_url' in obj && 'id' in obj && 'body' in obj) {
+    const url = typeof obj['html_url'] === 'string' ? obj['html_url'] : '';
+    const id = typeof obj['id'] === 'number' ? String(obj['id']) : '';
+    // Extract issue number from url: .../issues/909#issuecomment-...
+    const issueMatch = /\/issues\/(\d+)/.exec(url);
+    const issue = issueMatch !== null ? ` on #${String(issueMatch[1])}` : '';
+    return `Created comment ${id}${issue}`;
+  }
+
+  // Generic JSON fallback: show key count and truncated preview
+  return formatObjectKeysSummary(Object.keys(obj), content.length);
+}
+
+function extractLogin(obj: Record<string, unknown>): string {
+  const user = obj['user'];
+  if (typeof user === 'object' && user !== null) {
+    const login = (user as Record<string, unknown>)['login'];
+    if (typeof login === 'string') return login;
+  }
+  return '?';
+}
+
+function collapseLogins(logins: string[]): string {
+  const counts = new Map<string, number>();
+  for (const l of logins) counts.set(l, (counts.get(l) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([l, n]) => (n > 1 ? `${l} (×${String(n)})` : l))
+    .join(', ');
+}
+
+function summarizeJsonArray(content: string): string | undefined {
+  if (content.length < 200) return undefined;
+
+  let arr: unknown[];
+  try {
+    arr = JSON.parse(content) as unknown[];
+  } catch {
+    return undefined;
+  }
+  /* v8 ignore start -- ts-type: JSON.parse of bracket-prefixed content always produces an array; empty array is <200 chars so filtered earlier @preserve */
+  if (!Array.isArray(arr) || arr.length === 0) return undefined;
+  /* v8 ignore stop @preserve */
+
+  const first = arr[0];
+  if (typeof first !== 'object' || first === null) return undefined;
+  const el = first as Record<string, unknown>;
+  const n = arr.length;
+
+  // PR reviews — gh api .../reviews
+  if ('submitted_at' in el && 'state' in el && 'html_url' in el) {
+    const state = typeof el['state'] === 'string' ? el['state'] : '?';
+    const login = extractLogin(el);
+    return `${String(n)} PR review${n !== 1 ? 's' : ''}: ${login} ${state}`;
+  }
+
+  // PR review comments — gh api .../comments (review-level)
+  if ('pull_request_review_id' in el && 'path' in el) {
+    const login = extractLogin(el);
+    /* v8 ignore start -- ts-type: split('/').pop() on non-empty string always returns a value; ?? fallback is unreachable @preserve */
+    const path = typeof el['path'] === 'string' ? el['path'].split('/').pop() ?? el['path'] : '?';
+    /* v8 ignore stop @preserve */
+    const line = typeof el['line'] === 'number' ? `:${String(el['line'])}` : '';
+    return `${String(n)} review comment${n !== 1 ? 's' : ''} by ${login} on ${path}${line}`;
+  }
+
+  // Issue/PR comments — gh api .../comments (issue-level)
+  if ('issue_url' in el && 'body' in el && 'html_url' in el) {
+    const logins = (arr as Record<string, unknown>[]).map(extractLogin);
+    const summary = collapseLogins(logins);
+    return `${String(n)} issue comment${n !== 1 ? 's' : ''}: ${summary}`;
+  }
+
+  // Generic fallback
+  const keys = Object.keys(el);
+  const typeHint = keys.length > 0 ? ` (${keys.slice(0, 3).join(', ')})` : '';
+  return `[${String(arr.length)} items${typeHint}]`;
+}
+
+function summarizeDiff(text: string): string | undefined {
+  const lines = text.split('\n');
+
+  const files: DiffFileStats[] = [];
+  let current: DiffFileStats | undefined;
+  let totalAdded = 0;
+  let totalRemoved = 0;
+
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      const match = DIFF_HEADER_RE.exec(line);
+      if (match?.[2] !== undefined) {
+        current = { path: match[2], added: 0, removed: 0, changeType: 'M' };
+        files.push(current);
+      }
+      continue;
+    }
+
+    if (current === undefined) continue;
+
+    if (line.startsWith('--- ')) {
+      if (line === '--- /dev/null') {
+        current.changeType = 'A';
+      }
+      continue;
+    }
+
+    if (line.startsWith('+++ ')) {
+      if (line === '+++ /dev/null') {
+        current.changeType = 'D';
+      }
+      continue;
+    }
+
+    if (line.startsWith('+')) {
+      current.added++;
+      totalAdded++;
+    } else if (line.startsWith('-')) {
+      current.removed++;
+      totalRemoved++;
+    }
+  }
+
+  if (files.length === 0) return undefined;
+
+  const fileWord = files.length === 1 ? 'file' : 'files';
+  const header = `diff: ${String(files.length)} ${fileWord} changed (+${String(totalAdded)}, -${String(totalRemoved)})`;
+
+  const fileLines = files.map((f) => {
+    const shortPath = shortenPath(f.path);
+    const stats = formatFileStats(f.added, f.removed);
+    return `      ${f.changeType} ${shortPath}${stats}`;
+  });
+
+  return [header, ...fileLines].join('\n');
+}
+
+function shortenPath(p: string): string {
+  const parts = p.split('/');
+  if (parts.length <= 6) return p;
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, parts.length > 6 guaranteed @preserve */
+  const file = parts[parts.length - 1] ?? '';
+  /* v8 ignore stop @preserve */
+  return [...parts.slice(0, 4), '...', file].join('/');
+}
+
+function formatFileStats(added: number, removed: number): string {
+  const parts: string[] = [];
+  if (added > 0) parts.push(`+${String(added)}`);
+  if (removed > 0) parts.push(`-${String(removed)}`);
+  if (parts.length === 0) return '';
+  return ` (${parts.join(', ')})`;
+}
+
 function formatToolResult(content: string, isError: boolean, toolName?: string): string {
-  const trimmed = stripSystemReminders(content).trim();
+  const trimmed = stripSystemReminders(content).replace(TOOL_USE_ERROR_BLOCK, '$1').trim();
   if (trimmed === '') return '';
   if (toolName === 'Read' && !isError) return '';
 
   const prefix = isError ? '  \u2717 ' : '  \u2192 ';
+
+  // Summarize JSON tool results (gh pr view, gh api, etc.)
+  if (!isError && trimmed.startsWith('{')) {
+    const summary = summarizeJsonContent(trimmed);
+    if (summary !== undefined) return `${prefix}${summary}`;
+  }
+
+  if (!isError && trimmed.startsWith('[')) {
+    const summary = summarizeJsonArray(trimmed);
+    if (summary !== undefined) return `${prefix}${summary}`;
+  }
+
+  if (!isError && trimmed.startsWith('diff --git ')) {
+    const summary = summarizeDiff(trimmed);
+    if (summary !== undefined) return `${prefix}${summary}`;
+  }
+
   let lines = trimmed.split('\n');
 
   /* v8 ignore start -- ts-type: combined condition branch where length exceeds chars but not lines @preserve */
@@ -258,7 +490,25 @@ function formatResult(obj: StreamJsonMessage): string {
 }
 
 function collapseOutput(output: string): string {
-  const lines = stripSystemReminders(output)
+  const cleaned = stripSystemReminders(output);
+  const trimmed = cleaned.trim();
+
+  // Summarize large JSON hook output into a compact one-liner
+  if (trimmed.length >= 200) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return `  hook output: [${String(parsed.length)} items] [${String(trimmed.length)} chars]`;
+      }
+      if (typeof parsed === 'object' && parsed !== null) {
+        return `  hook output: ${formatObjectKeysSummary(Object.keys(parsed), trimmed.length)}`;
+      }
+    } catch {
+      // Not JSON — fall through to line-by-line indenting
+    }
+  }
+
+  const lines = cleaned
     .split('\n')
     .filter((l) => l.trim() !== '');
   return lines.map((l) => `  ${l}`).join('\n');

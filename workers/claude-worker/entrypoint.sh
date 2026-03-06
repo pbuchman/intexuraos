@@ -34,6 +34,76 @@ setup_github_token() {
     fi
 }
 
+forensics_enabled() {
+    [ "${CLAUDE_FORENSICS:-0}" = "1" ]
+}
+
+forensics_prepare_attempt_dir() {
+    local base_dir="${CLAUDE_FORENSICS_DIR:-/var/crash}"
+    local stamp
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    local out_dir="${base_dir}/attempt-${stamp}-$$"
+    mkdir -p "$out_dir" || return 1
+    printf '%s\n' "$out_dir"
+}
+
+capture_claude_crash_forensics() {
+    local out_dir="$1"
+
+    mkdir -p "$out_dir" 2>/dev/null || true
+
+    {
+        echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "task_id=${TASK_ID:-unknown}"
+        echo "continue_flag=${CLAUDE_CONTINUE:-0}"
+        echo "pwd=$(pwd)"
+        echo "uid=$(id -u 2>/dev/null || true)"
+        echo "gid=$(id -g 2>/dev/null || true)"
+        echo "user=$(whoami 2>/dev/null || true)"
+        echo "uname=$(uname -a 2>/dev/null || true)"
+        echo
+        echo "[ulimit]"
+        (ulimit -a 2>/dev/null || true)
+        echo
+        echo "[proc limits]"
+        (cat /proc/self/limits 2>/dev/null || true)
+        echo
+        echo "[core settings]"
+        (cat /proc/sys/kernel/core_pattern 2>/dev/null || true)
+        (cat /proc/sys/kernel/dmesg_restrict 2>/dev/null || true)
+        echo
+        echo "[claude binary]"
+        (claude --version 2>/dev/null || true)
+        (file /usr/local/bin/claude 2>/dev/null || true)
+    } > "${out_dir}/crash-summary.txt" 2>&1 || true
+
+    (cp -a /tmp/claude-cmd-timing "${out_dir}/claude-cmd-timing" 2>/dev/null || true)
+    (cp -a /home/claude/.claude/debug "${out_dir}/claude-debug" 2>/dev/null || true)
+    (cp -a /home/claude/.claude/projects/-repo "${out_dir}/claude-projects-repo" 2>/dev/null || true)
+    (cp -a /home/claude/.claude/shell-snapshots "${out_dir}/shell-snapshots" 2>/dev/null || true)
+    (cp -a /home/claude/.claude.json "${out_dir}/.claude.json" 2>/dev/null || true)
+
+    {
+        find /repo /var/crash -maxdepth 3 -type f -name 'core*' 2>/dev/null || true
+    } > "${out_dir}/core-files.txt" 2>&1 || true
+
+    for core_file in /repo/core* /var/crash/core*; do
+        [ -f "$core_file" ] || continue
+        cp -a "$core_file" "$out_dir/" 2>/dev/null || true
+    done
+
+    if command -v gdb >/dev/null 2>&1; then
+        for core_file in "${out_dir}"/core*; do
+            [ -f "$core_file" ] || continue
+            gdb -batch \
+                -ex "set pagination off" \
+                -ex "thread apply all bt full" \
+                /usr/local/bin/claude "$core_file" \
+                > "${out_dir}/$(basename "$core_file").gdb.txt" 2>&1 || true
+        done
+    fi
+}
+
 run_claude_attempt() {
     if [ ! -d "/repo" ]; then
         echo "[entrypoint] ERROR: /repo directory not mounted" >&2
@@ -58,6 +128,22 @@ run_claude_attempt() {
     system_prompt=$(cat /secrets/system-prompt.txt)
     echo "[entrypoint] System prompt loaded (${#system_prompt} chars)"
     echo "[entrypoint] User prompt loaded ($(wc -c < /secrets/user-prompt.txt | tr -d ' ') bytes)"
+    local attempt_forensics_dir=""
+
+    if forensics_enabled; then
+        ulimit -c unlimited 2>/dev/null || true
+        if attempt_forensics_dir=$(forensics_prepare_attempt_dir); then
+            echo "[entrypoint] Forensics enabled; writing artifacts to ${attempt_forensics_dir}"
+            {
+                echo "started_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                echo "task_id=${TASK_ID:-unknown}"
+                echo "claude_continue=${CLAUDE_CONTINUE:-0}"
+                echo "repo=/repo"
+            } > "${attempt_forensics_dir}/attempt-meta.txt" 2>/dev/null || true
+        else
+            echo "[entrypoint] WARNING: Forensics enabled but failed to create output dir" >&2
+        fi
+    fi
 
     local continue_flag="${CLAUDE_CONTINUE:-0}"
     if [ "$continue_flag" = "1" ]; then
@@ -67,20 +153,43 @@ run_claude_attempt() {
     echo "[entrypoint] Starting Claude in --print mode..."
 
     set +e
-    if [ "$continue_flag" = "1" ]; then
-        claude --print --verbose --output-format stream-json \
-            --dangerously-skip-permissions \
-            --system-prompt "$system_prompt" \
-            --continue \
-            < /secrets/user-prompt.txt
+    if [ -n "$attempt_forensics_dir" ]; then
+        if [ "$continue_flag" = "1" ]; then
+            claude --print --verbose --output-format stream-json \
+                --dangerously-skip-permissions \
+                --system-prompt "$system_prompt" \
+                --continue \
+                < /secrets/user-prompt.txt 2>&1 | tee -a "${attempt_forensics_dir}/claude-stream.log"
+        else
+            claude --print --verbose --output-format stream-json \
+                --dangerously-skip-permissions \
+                --system-prompt "$system_prompt" \
+                < /secrets/user-prompt.txt 2>&1 | tee -a "${attempt_forensics_dir}/claude-stream.log"
+        fi
     else
-        claude --print --verbose --output-format stream-json \
-            --dangerously-skip-permissions \
-            --system-prompt "$system_prompt" \
-            < /secrets/user-prompt.txt
+        if [ "$continue_flag" = "1" ]; then
+            claude --print --verbose --output-format stream-json \
+                --dangerously-skip-permissions \
+                --system-prompt "$system_prompt" \
+                --continue \
+                < /secrets/user-prompt.txt
+        else
+            claude --print --verbose --output-format stream-json \
+                --dangerously-skip-permissions \
+                --system-prompt "$system_prompt" \
+                < /secrets/user-prompt.txt
+        fi
     fi
     local exit_code=$?
     set -e
+
+    if [ -n "$attempt_forensics_dir" ]; then
+        printf '%s\n' "$exit_code" > "${attempt_forensics_dir}/claude-exit-code.txt" 2>/dev/null || true
+        if [ "$exit_code" = "139" ]; then
+            echo "[entrypoint] Claude segfault detected; collecting crash artifacts..."
+            capture_claude_crash_forensics "$attempt_forensics_dir"
+        fi
+    fi
 
     echo "[entrypoint] Claude attempt finished with exit code: ${exit_code}"
     return "$exit_code"
@@ -134,6 +243,23 @@ if [ -d "/opt/claude-defaults" ]; then
 fi
 
 # ------------------------------------------------------------------------------
+# Restore pre-installed plugin cache into the bind-mounted .claude/ directory
+# Plugins were installed at build time into /opt/claude-plugins/.claude/plugins/
+# The bind mount at /home/claude/.claude is initially empty per-task.
+# ------------------------------------------------------------------------------
+if [ -d "/opt/claude-plugins/.claude/plugins" ]; then
+    cp -r /opt/claude-plugins/.claude/plugins /home/claude/.claude/
+    # Rewrite staging paths to match runtime HOME
+    if [ -f "/home/claude/.claude/plugins/installed_plugins.json" ]; then
+        sed -i 's|/opt/claude-plugins/.claude|/home/claude/.claude|g' /home/claude/.claude/plugins/installed_plugins.json
+    fi
+    if [ -f "/home/claude/.claude/plugins/known_marketplaces.json" ]; then
+        sed -i 's|/opt/claude-plugins/.claude|/home/claude/.claude|g' /home/claude/.claude/plugins/known_marketplaces.json
+    fi
+    echo "[entrypoint] Plugin cache restored ($(ls /home/claude/.claude/plugins/cache/ 2>/dev/null | wc -l) marketplaces)"
+fi
+
+# ------------------------------------------------------------------------------
 # Verify mounts
 # ------------------------------------------------------------------------------
 if [ ! -d "/repo" ]; then
@@ -162,6 +288,28 @@ if [ -f "/secrets/gcp-sa.json" ]; then
     else
         echo "[entrypoint] GCP auth failed (non-fatal)"
     fi
+fi
+
+# ------------------------------------------------------------------------------
+# Sync secrets from GCP Secret Manager (writes /repo/.envrc)
+# ------------------------------------------------------------------------------
+if [ -f "/secrets/gcp-sa.json" ] && [ -f "/repo/scripts/sync-secrets.sh" ]; then
+    SYNC_PROJECT_ID="$(jq -r .project_id /secrets/gcp-sa.json)"
+    echo "[entrypoint] Syncing secrets from GCP Secret Manager (project: ${SYNC_PROJECT_ID})..."
+    if bash /repo/scripts/sync-secrets.sh dev --project-id "${SYNC_PROJECT_ID}"; then
+        echo "[entrypoint] Secret sync complete"
+    else
+        echo "[entrypoint] Secret sync failed (non-fatal, will use existing .envrc if available)"
+    fi
+fi
+
+# ------------------------------------------------------------------------------
+# Load environment variables from .envrc (synced from GCP Secret Manager)
+# ------------------------------------------------------------------------------
+if [ -f "/repo/.envrc" ]; then
+    source /repo/.envrc
+    direnv allow /repo
+    echo "[entrypoint] Loaded environment from /repo/.envrc ($(grep -c '^export ' /repo/.envrc) vars)"
 fi
 
 # ------------------------------------------------------------------------------

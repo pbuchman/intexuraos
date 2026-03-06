@@ -6,6 +6,7 @@ import type {
   CalendarServiceClient,
   ProcessCalendarRequest,
   CalendarPreview,
+  GeneratePreviewRequest,
 } from '../domain/ports/calendarServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
@@ -35,7 +36,7 @@ import type {
   ForceRefreshBookmarkResponse,
 } from '../domain/ports/bookmarksServiceClient.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
-import type { CodeAgentClient, CancelTaskWithNonceInput, CancelTaskWithNonceOutput, CancelTaskError } from '../domain/ports/codeAgentClient.js';
+import type { CodeAgentClient, CancelTaskWithNonceInput, CancelTaskWithNonceOutput, CancelTaskError, SubmitToPhase2Input, SubmitToPhase2Output, SubmitToPhase2Error } from '../domain/ports/codeAgentClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -64,7 +65,6 @@ import type {
   PublishError,
   WhatsAppInteractiveButton,
   WhatsAppSendPublisher,
-  CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
 import type { Logger } from 'pino';
@@ -378,6 +378,10 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     return this.sentMessages;
   }
 
+  clearSentMessages(): void {
+    this.sentMessages = [];
+  }
+
   setFailNext(fail: boolean, error?: PublishError): void {
     this.failNext = fail;
     this.failError = error ?? null;
@@ -412,48 +416,6 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
       messageEntry.buttons = params.buttons;
     }
     this.sentMessages.push(messageEntry);
-    return ok(undefined);
-  }
-}
-
-export class FakeCalendarPreviewPublisher implements CalendarPreviewPublisher {
-  private publishedRequests: {
-    actionId: string;
-    userId: string;
-    text: string;
-    currentDate: string;
-    correlationId: string;
-  }[] = [];
-  private failNext = false;
-  private failError: PublishError | null = null;
-
-  getPublishedRequests(): typeof this.publishedRequests {
-    return this.publishedRequests;
-  }
-
-  setFailNext(fail: boolean, error?: PublishError): void {
-    this.failNext = fail;
-    this.failError = error ?? null;
-  }
-
-  async publishGeneratePreview(params: {
-    actionId: string;
-    userId: string;
-    text: string;
-    currentDate: string;
-    correlationId?: string;
-  }): Promise<Result<void, PublishError>> {
-    if (this.failNext) {
-      this.failNext = false;
-      return err(this.failError ?? { code: 'PUBLISH_FAILED', message: 'Simulated failure' });
-    }
-    this.publishedRequests.push({
-      actionId: params.actionId,
-      userId: params.userId,
-      text: params.text,
-      currentDate: params.currentDate,
-      correlationId: params.correlationId ?? '',
-    });
     return ok(undefined);
   }
 }
@@ -634,6 +596,7 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
 export class FakeCalendarServiceClient implements CalendarServiceClient {
   private processedActions: ProcessCalendarRequest[] = [];
   private previews = new Map<string, CalendarPreview>();
+  private generatePreviewRequests: GeneratePreviewRequest[] = [];
   private nextResponse: ServiceFeedback = {
     status: 'completed',
     message: 'Calendar event created successfully',
@@ -641,9 +604,18 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   };
   private failNext = false;
   private failError: Error | null = null;
+  private failGeneratePreview = false;
+  private failGeneratePreviewError: Error | null = null;
+  private generatePreviewResult: CalendarPreview | null = null;
+  private failGetPreview = false;
+  private failGetPreviewError: Error | null = null;
 
   getProcessedActions(): ProcessCalendarRequest[] {
     return this.processedActions;
+  }
+
+  getGeneratePreviewRequests(): GeneratePreviewRequest[] {
+    return this.generatePreviewRequests;
   }
 
   setNextResponse(response: ServiceFeedback): void {
@@ -659,6 +631,20 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
     this.previews.set(actionId, preview);
   }
 
+  setFailGeneratePreview(fail: boolean, error?: Error): void {
+    this.failGeneratePreview = fail;
+    this.failGeneratePreviewError = error ?? null;
+  }
+
+  setFailGetPreview(fail: boolean, error?: Error): void {
+    this.failGetPreview = fail;
+    this.failGetPreviewError = error ?? null;
+  }
+
+  setGeneratePreviewResult(preview: CalendarPreview | null): void {
+    this.generatePreviewResult = preview;
+  }
+
   async processAction(request: ProcessCalendarRequest): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
       this.failNext = false;
@@ -669,11 +655,20 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   }
 
   async getPreview(actionId: string): Promise<Result<CalendarPreview | null>> {
-    if (this.failNext) {
-      this.failNext = false;
-      return err(this.failError ?? new Error('Simulated failure'));
+    if (this.failGetPreview) {
+      this.failGetPreview = false;
+      return err(this.failGetPreviewError ?? new Error('Simulated getPreview failure'));
     }
     return ok(this.previews.get(actionId) ?? null);
+  }
+
+  async generatePreview(request: GeneratePreviewRequest): Promise<Result<CalendarPreview | null>> {
+    this.generatePreviewRequests.push(request);
+    if (this.failGeneratePreview) {
+      this.failGeneratePreview = false;
+      return err(this.failGeneratePreviewError ?? new Error('Preview generation failed'));
+    }
+    return ok(this.generatePreviewResult);
   }
 }
 
@@ -732,7 +727,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     approvalEventId: string;
     payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'glm';
+      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
@@ -749,6 +744,14 @@ export class FakeCodeAgentClient implements CodeAgentClient {
   private failNext = false;
   private cancelledTasks: CancelTaskWithNonceInput[] = [];
   private nextCancelError: CancelTaskError | null = null;
+  private submittedPhase2Tasks: SubmitToPhase2Input[] = [];
+  private nextPhase2Response = {
+    codeTaskId: 'phase2-task-123',
+    resourceUrl: 'https://app.intexuraos.com/code-tasks/phase2-123',
+    workerLocation: 'us-central1',
+    implementationOf: 'task-123',
+  };
+  private nextPhase2Error: SubmitToPhase2Error | null = null;
 
   getSubmittedTasks(): typeof this.submittedTasks {
     return this.submittedTasks;
@@ -777,7 +780,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     approvalEventId: string;
     payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'glm';
+      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
@@ -847,6 +850,43 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     return {
       ok: true,
       value: { cancelled: true },
+    };
+  }
+
+  getSubmittedPhase2Tasks(): SubmitToPhase2Input[] {
+    return this.submittedPhase2Tasks;
+  }
+
+  setNextPhase2Response(response: SubmitToPhase2Output): void {
+    this.nextPhase2Response = response;
+    this.nextPhase2Error = null;
+  }
+
+  setNextPhase2Error(error: SubmitToPhase2Error): void {
+    this.nextPhase2Error = error;
+  }
+
+  async submitToPhase2(input: SubmitToPhase2Input): Promise<{
+    ok: true;
+    value: SubmitToPhase2Output;
+  } | {
+    ok: false;
+    error: SubmitToPhase2Error;
+  }> {
+    this.submittedPhase2Tasks.push(input);
+
+    if (this.nextPhase2Error !== null) {
+      const error = this.nextPhase2Error;
+      this.nextPhase2Error = null;
+      return {
+        ok: false,
+        error,
+      };
+    }
+
+    return {
+      ok: true,
+      value: this.nextPhase2Response,
     };
   }
 }
@@ -1205,6 +1245,10 @@ export class FakeUserServiceClient implements UserServiceClient {
       message: 'OAuth not configured in fake',
     });
   }
+
+  async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, UserServiceError>> {
+    return ok(null);
+  }
 }
 
 // Fake HandleApprovalReplyUseCase
@@ -1264,7 +1308,6 @@ export function createFakeServices(deps: {
   codeAgentClient?: FakeCodeAgentClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
-  calendarPreviewPublisher?: FakeCalendarPreviewPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
   executeTodoActionUseCase?: FakeExecuteTodoActionUseCase;
   executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
@@ -1279,8 +1322,6 @@ export function createFakeServices(deps: {
   handleApprovalReplyUseCase?: HandleApprovalReplyUseCase;
 }): Services {
   const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
-  const calendarPreviewPublisher =
-    deps.calendarPreviewPublisher ?? new FakeCalendarPreviewPublisher();
   const actionRepository = deps.actionRepository ?? new FakeActionRepository();
   const actionTransitionRepository =
     deps.actionTransitionRepository ?? new FakeActionTransitionRepository();
@@ -1342,7 +1383,7 @@ export function createFakeServices(deps: {
     {
       actionRepository,
       whatsappPublisher,
-      calendarPreviewPublisher,
+      calendarServiceClient,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
     }
@@ -1392,7 +1433,6 @@ export function createFakeServices(deps: {
     codeAgentClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
-    calendarPreviewPublisher,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,

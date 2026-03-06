@@ -9,7 +9,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
-import type { OAuthConnectionRepository, GoogleOAuthClient } from './domain/oauth/index.js';
+import type { OAuthConnectionRepository, GoogleOAuthClient, GitHubOAuthClient } from './domain/oauth/index.js';
 
 /**
  * Silent logger used when no logger is provided to initializeServices.
@@ -27,6 +27,7 @@ import {
 } from './infra/auth0/index.js';
 import { LlmValidatorImpl } from './infra/llm/index.js';
 import { GoogleOAuthClientImpl } from './infra/google/index.js';
+import { GitHubOAuthClientImpl } from './infra/github/index.js';
 
 /**
  * Service container holding all adapter instances.
@@ -37,6 +38,7 @@ export interface ServiceContainer {
   oauthConnectionRepository: OAuthConnectionRepository;
   auth0Client: Auth0Client | null;
   googleOAuthClient: GoogleOAuthClient | null;
+  gitHubOAuthClient: GitHubOAuthClient | null;
   encryptor: Encryptor | null;
   llmValidator: LlmValidator | null;
 }
@@ -68,6 +70,21 @@ function loadGoogleOAuthClient(): GoogleOAuthClient | null {
   }
 
   return new GoogleOAuthClientImpl({ clientId, clientSecret });
+}
+
+/**
+ * Load GitHub OAuth config from environment.
+ * Returns null if not configured.
+ */
+function loadGitHubOAuthClient(): GitHubOAuthClient | null {
+  const clientId = process.env['INTEXURAOS_GITHUB_OAUTH_CLIENT_ID'];
+  const clientSecret = process.env['INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET'];
+
+  if (clientId === undefined || clientId === '' || clientSecret === undefined || clientSecret === '') {
+    return null;
+  }
+
+  return new GitHubOAuthClientImpl({ clientId, clientSecret });
 }
 
 /**
@@ -108,6 +125,7 @@ export function initializeServices(pricingContext?: PricingContext, logger: Logg
     oauthConnectionRepository: new FirestoreOAuthConnectionRepository(),
     auth0Client: auth0Config !== null ? new Auth0ClientImpl(auth0Config) : null,
     googleOAuthClient: loadGoogleOAuthClient(),
+    gitHubOAuthClient: loadGitHubOAuthClient(),
     encryptor: loadEncryptor(),
     llmValidator,
   };

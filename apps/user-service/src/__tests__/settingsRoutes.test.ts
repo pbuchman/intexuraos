@@ -87,6 +87,7 @@ describe('Settings Routes', () => {
       llmValidator: null,
       oauthConnectionRepository: new FakeOAuthConnectionRepository(),
       googleOAuthClient: null,
+      gitHubOAuthClient: null,
     });
   });
 
@@ -335,10 +336,43 @@ describe('Settings Routes', () => {
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
-    it('returns 200 and saves valid fast model', { timeout: 20000 }, async () => {
+    it('returns 400 when no API key for model provider', { timeout: 20000 }, async () => {
       app = await buildServer();
 
+      const userId = 'auth0|user-no-api-key';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { defaultModel: LlmModels.Gemini25Flash },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('no API key configured');
+      expect(body.error.message).toContain('google');
+    });
+
+    it('returns 200 and saves valid fast model when API key is configured', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-set-model';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
       const token = await createToken({ sub: userId });
 
       const response = await app.inject({
@@ -360,12 +394,20 @@ describe('Settings Routes', () => {
       expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
     });
 
-    it('returns 500 when repository fails', { timeout: 20000 }, async () => {
+    it('returns 500 when repository update fails', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-repo-fail';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
       fakeSettingsRepo.setFailNextUpdateLlmPreferences(true);
 
       app = await buildServer();
 
-      const userId = 'auth0|user-repo-fail';
       const token = await createToken({ sub: userId });
 
       const response = await app.inject({
@@ -373,6 +415,30 @@ describe('Settings Routes', () => {
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
         payload: { defaultModel: LlmModels.Gemini20Flash },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when getSettings fails during API key check', { timeout: 20000 }, async () => {
+      fakeSettingsRepo.setFailNextGet(true);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-get-fail';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { defaultModel: LlmModels.Gemini25Flash },
       });
 
       expect(response.statusCode).toBe(500);

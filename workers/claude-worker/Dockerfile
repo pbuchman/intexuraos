@@ -16,6 +16,9 @@ RUN apk add --no-cache \
     curl \
     bash \
     jq \
+    file \
+    strace \
+    gdb \
     python3 \
     py3-pip \
     && rm -rf /var/cache/apk/*
@@ -27,10 +30,12 @@ RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/c
     fd \
     bat \
     github-cli \
-    chromium
+    chromium \
+    direnv
 
-# Install terraform from hashicorp
-RUN curl -fsSL https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_amd64.zip -o /tmp/terraform.zip \
+# Install terraform from hashicorp (TARGETARCH is set automatically by BuildKit)
+ARG TARGETARCH
+RUN curl -fsSL "https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_${TARGETARCH}.zip" -o /tmp/terraform.zip \
     && unzip /tmp/terraform.zip -d /usr/local/bin/ \
     && rm /tmp/terraform.zip \
     && chmod +x /usr/local/bin/terraform
@@ -58,17 +63,35 @@ RUN npm install -g \
     @sentry/mcp-server \
     @playwright/mcp
 
+# Pre-install Claude Code plugins into staging directory.
+# At runtime, /home/claude is tmpfs (wiped) and /home/claude/.claude is a bind mount
+# from a per-task session dir (initially empty). The entrypoint copies plugin cache
+# from /opt/claude-plugins/ into the bind mount so plugins resolve immediately.
+# HOME is set to /opt/claude-plugins so plugin files land in the staging directory.
+RUN mkdir -p /opt/claude-plugins/.claude \
+    && HOME=/opt/claude-plugins claude plugin marketplace add anthropics/claude-plugins-official \
+    && HOME=/opt/claude-plugins claude plugin marketplace add obra/superpowers-marketplace \
+    && HOME=/opt/claude-plugins claude plugin install superpowers@superpowers-marketplace --scope user \
+    && HOME=/opt/claude-plugins claude plugin install context7@claude-plugins-official --scope user \
+    && HOME=/opt/claude-plugins claude plugin install commit-commands@claude-plugins-official --scope user \
+    && HOME=/opt/claude-plugins claude plugin install pr-review-toolkit@claude-plugins-official --scope user \
+    && HOME=/opt/claude-plugins claude plugin install playwright@claude-plugins-official --scope user \
+    && HOME=/opt/claude-plugins claude plugin install frontend-design@claude-plugins-official --scope user
+
 # Create non-root user (use UID 1001 since 1000 is taken by 'node' in base image)
 RUN addgroup -S claude && adduser -S claude -G claude -u 1001
 
 # Set up directories (including .config/gcloud for gcloud auth)
 RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gcloud \
-    && chown -R claude:claude /repo /secrets /tmp /home/claude
+    && chown -R claude:claude /repo /secrets /tmp /home/claude /opt/claude-plugins
 
 # Bake Claude default config to skip onboarding on fresh tmpfs
 # /home/claude is tmpfs so image contents are wiped — entrypoint.sh copies these at startup
 # NOTE: Build context is workspace root (.), so paths are root-relative
 COPY --chown=claude:claude workers/claude-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
+
+# Hook direnv into bash so env vars auto-load when entering /repo
+RUN echo 'eval "$(direnv hook bash)"' >> /opt/claude-defaults/.bashrc
 
 # Copy entrypoint
 COPY --chown=claude:claude workers/claude-worker/entrypoint.sh /entrypoint.sh

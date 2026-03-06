@@ -1,7 +1,7 @@
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
-import type { Result, Logger } from '@intexuraos/common-core';
+import { type Result, type Logger, hasCodeTaskLabel } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
@@ -11,16 +11,22 @@ import type { WorktreeManager } from './worktree-manager.js';
 import type { LogForwarder } from './log-forwarder.js';
 import type { WebhookClient } from './webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
-import type { IsolationProvider, WorkerConfig, WorkerType } from './isolation/types.js';
+import type { IsolationProvider, WorkerConfig } from './isolation/types.js';
 import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
-import { type CompletionVerifier, type CompletionVerifierVerdict } from './completion-verifier.js';
+import {
+  type CompletionAgentType,
+  type CompletionVerifier,
+  type CompletionVerifierVerdict,
+  getLast50Lines,
+} from './completion-verifier.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const TASK_TIMEOUT_WARNING_MS = 115 * 60 * 1000; // 1h 55m
 const TASK_TIMEOUT_KILL_MS = 120 * 60 * 1000; // 2h
@@ -28,7 +34,7 @@ const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 
 export interface DispatchError {
-  type: 'at_capacity' | 'invalid_request' | 'service_error';
+  type: 'at_capacity' | 'invalid_request' | 'invalid_status' | 'service_error';
   message: string;
   originalError?: unknown;
 }
@@ -48,6 +54,8 @@ export interface IsolationConfig {
     LINEAR_API_KEY: string;
     SENTRY_AUTH_TOKEN: string;
     ZAI_API_KEY: string;
+    MINIMAX_API_KEY: string;
+    DASHSCOPE_API_KEY: string;
   };
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
@@ -115,6 +123,81 @@ export class TaskDispatcher {
     return { ok: true, value: undefined };
   }
 
+  async adoptTask(task: Task): Promise<Result<void, DispatchError>> {
+    // Check if task is already at maxAttempts
+    if ((task.attemptCount ?? 0) >= (task.maxAttempts ?? this.completionMaxAttempts)) {
+      return {
+        ok: false,
+        error: { type: 'invalid_status', message: 'Task at max attempts' },
+      };
+    }
+
+    // Atomic capacity check
+    const capacityCheck = await this.capacityMutex.runExclusive(() => {
+      if (this.runningCount >= this.config.capacity) {
+        return {
+          ok: false as const,
+          error: { type: 'at_capacity' as const, message: 'Service at capacity' },
+        };
+      }
+      this.runningCount++;
+      return { ok: true as const, value: undefined };
+    });
+
+    if (!capacityCheck.ok) {
+      return capacityCheck;
+    }
+
+    // Register with log forwarder
+    this.logForwarder.registerTask(task.taskId, task.webhookSecret);
+
+    // Start worker attempt with continueSession: true
+    const startResult = await this.startWorkerAttempt(task, {
+      prompt: task.prompt,
+      continueSession: true,
+    });
+
+    if (!startResult.ok) {
+      this.runningCount--;
+      this.isolation.tokenRefresher.unregisterTask(task.taskId);
+      this.logForwarder.unregisterTask(task.taskId);
+      await this.isolation.provider.cleanupTaskSession?.(task.taskId);
+      return {
+        ok: false,
+        error: {
+          type: 'service_error',
+          message: 'Failed to start worker for adopted task',
+          originalError: startResult.error,
+        },
+      };
+    }
+
+    // Increment attempt count after successful start
+    task.attemptCount = (task.attemptCount ?? 0) + 1;
+    task.containerId = startResult.containerId;
+    await this.saveTask(task);
+
+    this.scheduleTimeoutWarning(task.taskId);
+    this.scheduleTimeoutKill(task.taskId);
+    this.startCompletionMonitoring(task.taskId);
+
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Task adopted after restart: attempt=${String(task.attemptCount)}/${String(task.maxAttempts ?? this.completionMaxAttempts)} containerId=${task.containerId}`
+    );
+
+    this.logger.info(
+      {
+        taskId: task.taskId,
+        attemptCount: task.attemptCount,
+        containerId: startResult.containerId,
+      },
+      `Task adopted: id=${task.taskId} attempt=${String(task.attemptCount)}/${String(task.maxAttempts ?? this.completionMaxAttempts)}`
+    );
+
+    return { ok: true, value: undefined };
+  }
+
   private async executeTaskSetup(request: CreateTaskRequest): Promise<void> {
     const taskId = request.taskId;
 
@@ -136,7 +219,25 @@ export class TaskDispatcher {
 
       this.logForwarder.registerTask(taskId, request.webhookSecret);
 
-      const workerTypeConfig = WORKER_TYPES[request.workerType as WorkerType];
+      if (request.agentType === 'execution' && request.planningPrBranch !== undefined) {
+        const mergeResult = await this.worktreeManager.mergePlanningBranch(
+          worktreePath,
+          request.planningPrBranch
+        );
+        if (!mergeResult.ok) {
+          this.logger.warn(
+            { taskId, branch: request.planningPrBranch, error: mergeResult.error },
+            'Failed to merge planning branch — proceeding without plan files'
+          );
+        }
+      } else if (request.agentType === 'execution') {
+        this.logger.info(
+          { taskId },
+          'No planning branch to merge — dispatched without planningPrBranch'
+        );
+      }
+
+      const workerTypeConfig = WORKER_TYPES[request.workerType];
       if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
         const validation = await this.isolation.apiKeyValidator.validate('anthropic');
         if (!validation.valid) {
@@ -174,6 +275,11 @@ export class TaskDispatcher {
         ...(request.slug !== undefined && { slug: request.slug }),
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
+        ...(request.agentType !== undefined && { agentType: request.agentType }),
+        ...(request.planningPrBranch !== undefined && {
+          planningPrBranch: request.planningPrBranch,
+        }),
+        ...(request.planningPrUrl !== undefined && { planningPrUrl: request.planningPrUrl }),
         startedAt: new Date().toISOString(),
         attemptCount: 1,
         maxAttempts: this.completionMaxAttempts,
@@ -182,7 +288,6 @@ export class TaskDispatcher {
 
       const startResult = await this.startWorkerAttempt(task, {
         prompt: request.prompt,
-        hasChildren: request.hasChildren,
         continueSession: false,
       });
       if (!startResult.ok) {
@@ -241,12 +346,27 @@ export class TaskDispatcher {
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
       /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'Phase 2' : 'Phase 1';
-      const phaseDesc =
-        phase === 'Phase 2'
-          ? 'Strict Execution \u2014 implement autonomously, run CI, create PR'
-          : 'Design & Validation \u2014 analyze and enrich the Linear issue, do not execute code';
-      this.appendTaggedTaskLog(taskId, 'instructions', `${phase}: ${phaseDesc}`);
+      const isPRComment = task.linearIssueLabels.some(
+        (l) => l.trim().toLowerCase() === 'pr-comment'
+      );
+      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all three agents @preserve */
+      const agentLabel = isPRComment
+        ? 'Pull Request Agent'
+        : task.agentType === 'execution'
+          ? 'Execution Agent'
+          : task.agentType === 'planning'
+            ? 'Planning Agent'
+            : hasCodeTaskLabel(task.linearIssueLabels)
+              ? 'Execution Agent'
+              : 'Planning Agent';
+      const agentDesc =
+        agentLabel === 'Pull Request Agent'
+          ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
+          : agentLabel === 'Execution Agent'
+            ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
+            : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
+      /* v8 ignore stop @preserve */
+      this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
       /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
@@ -406,7 +526,6 @@ export class TaskDispatcher {
       const preamble = this.buildResumePreamble();
       const resumeResult = await this.startWorkerAttempt(task, {
         prompt: preamble + message,
-        hasChildren: task.hasChildren ?? false,
         continueSession: true,
         injectActiveGoal: true,
       });
@@ -477,9 +596,9 @@ export class TaskDispatcher {
   }
 
   private async saveTask(task: Task): Promise<void> {
-    const state = await this.statePersistence.load();
-    state.tasks[task.taskId] = task;
-    await this.statePersistence.save(state);
+    await this.statePersistence.modify((state) => {
+      state.tasks[task.taskId] = task;
+    });
   }
 
   private scheduleTimeoutWarning(taskId: string): void {
@@ -625,17 +744,26 @@ export class TaskDispatcher {
     }
 
     const attempt = task.attemptCount ?? 1;
-    const maxAttempts = task.maxAttempts ?? this.completionMaxAttempts;
-    const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'phase2' : 'phase1';
+    const maxAttempts = task.maxAttempts ?? 5;
+    const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
+    const completionAgentType: CompletionAgentType = isPRComment
+      ? 'pull_request'
+      : task.agentType === 'execution'
+        ? 'execution'
+        : task.agentType === 'planning'
+          ? 'planning'
+          : hasCodeTaskLabel(task.linearIssueLabels)
+            ? 'execution'
+            : 'planning';
     this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(
       {},
-      `Worker attempt finished: taskId=${task.taskId} attempt=${String(attempt)}/${String(maxAttempts)} phase=${phase}`
+      `Worker attempt finished: taskId=${task.taskId} attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Attempt finished: attempt=${String(attempt)}/${String(maxAttempts)} phase=${phase}`
+      `Attempt finished: attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
     );
 
     try {
@@ -648,44 +776,52 @@ export class TaskDispatcher {
     }
 
     const result = await this.checkForResult(task);
-    const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
+    if (result !== undefined) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
+      );
+    }
+    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Running completion verification: exitCode=${String(exitCode ?? 'unknown')} claudeError=${claudeError ?? 'none'} detectedPr=${result?.prUrl ?? 'none'}`
+      `Running completion verification: attempt=${String(attempt)}/${String(maxAttempts)}`
     );
-    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
     const verification = await this.completionVerifier.verify({
       taskId: task.taskId,
       attempt,
       maxAttempts,
-      phase,
-      originalPrompt: task.prompt,
+      agentType: completionAgentType,
       rawLogs,
-      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-      linearIssueLabels: task.linearIssueLabels,
-      ...(result !== undefined && { taskResult: result }),
-      ...(typeof exitCode === 'number' && { workerExitCode: exitCode }),
-      ...(claudeError !== undefined && { claudeError }),
     });
-    this.appendOrchestratorTaskLog(task.taskId, `━━━ Verification Result ━━━`);
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `  Passed: ${String(verification.passed)} | Confidence: ${verification.confidence.toFixed(2)}`
+      `Passed: ${String(verification.passed)} | VerifierFailure: ${String(verification.verifierFailure)}`
     );
-    if (verification.reasons.length > 0) {
-      this.appendOrchestratorTaskLog(task.taskId, `  Reasons: ${verification.reasons.join(' | ')}`);
-    }
-    if (verification.missingCriteria.length > 0) {
+    if (verification.missingFields.length > 0) {
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `  Missing: ${verification.missingCriteria.join(' | ')}`
+        `Missing fields: ${verification.missingFields.join(' | ')}`
       );
     }
-    if (verification.resumeInstruction.length > 0) {
-      this.appendOrchestratorTaskLog(task.taskId, `  Resume: ${verification.resumeInstruction}`);
-    }
-    this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    const transcriptLines = verification.trace.transcript
+      .split('\n')
+      .filter((l) => l.trim() !== '');
+    const firstLine = transcriptLines[0] ?? '';
+    const lastLine = transcriptLines[transcriptLines.length - 1] ?? '';
+    const transcriptSummary =
+      transcriptLines.length <= 2
+        ? transcriptLines.join('\n')
+        : `${firstLine}\n  ... (${String(transcriptLines.length - 2)} lines omitted) ...\n${lastLine}`;
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `📋 Transcript (first + last):\n${transcriptSummary}`
+    );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `🤖 Gemini summary: ${verification.agentData?.summary ?? '(no summary extracted)'}`
+    );
 
     if (typeof exitCode === 'number') {
       task.lastExitCode = exitCode;
@@ -697,20 +833,52 @@ export class TaskDispatcher {
       {
         attempt,
         passed: verification.passed,
-        confidence: verification.confidence,
-        reasons: verification.reasons,
-        missingCriteria: verification.missingCriteria,
-        resumeInstruction: verification.resumeInstruction,
-        usedLlm: verification.usedLlm,
-        ...(verification.verifierFailure === true && { verifierFailure: true }),
+        missingFields: verification.missingFields,
+        verifierFailure: verification.verifierFailure,
         createdAt: new Date().toISOString(),
       },
     ];
 
-    if (verification.verifierFailure === true) {
+    // Verifier failure (Gemini down/parse error): retry Gemini immediately if attempts remain
+    if (verification.verifierFailure) {
+      if (attempt < maxAttempts) {
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Verifier failure; retrying Gemini (${String(attempt + 1)}/${String(maxAttempts)})`
+        );
+        // Re-call verifier with same logs — counts as an attempt
+        const retryVerification = await this.completionVerifier.verify({
+          taskId: task.taskId,
+          attempt: attempt + 1,
+          maxAttempts,
+          agentType: completionAgentType,
+          rawLogs,
+        });
+        task.verificationHistory = [
+          ...(task.verificationHistory ?? []),
+          {
+            attempt: attempt + 1,
+            passed: retryVerification.passed,
+            missingFields: retryVerification.missingFields,
+            verifierFailure: retryVerification.verifierFailure,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+        task.attemptCount = attempt + 1;
+
+        if (retryVerification.passed && retryVerification.agentData !== undefined) {
+          this.appendOrchestratorTaskLog(task.taskId, 'Verifier retry succeeded');
+          await this.flushTaskLogs(task.taskId);
+          await this.collectTurnMetrics(task, attempt + 1);
+          const finalResult = this.buildResultFromVerification(task, result, retryVerification);
+          await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
+          return;
+        }
+      }
+
       const error: TaskError = {
         code: 'TASK_COMPLETION_VERIFIER_FAILED',
-        message: verification.reasons.join('; '),
+        message: 'Gemini verifier unavailable',
         remediation: {
           action: 'contact_support',
           manualSteps: [
@@ -719,37 +887,80 @@ export class TaskDispatcher {
           ],
         },
       };
-
-      const failurePayload: { result?: TaskResult; error: TaskError } = { error };
-      /* v8 ignore start -- source-map: binary-expr branch coverage is misreported on strict undefined guard @preserve */
-      if (result !== undefined) {
-        failurePayload.result = result;
-      }
-      /* v8 ignore stop @preserve */
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Terminal failure: verifier unavailable (${verification.reasons.join(' | ')})`
-      );
+      this.appendOrchestratorTaskLog(task.taskId, 'Terminal failure: verifier unavailable');
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'failed', failurePayload);
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
       return;
     }
 
-    if (!verification.passed && attempt < maxAttempts) {
+    // Verification passed
+    if (verification.passed && verification.agentData !== undefined) {
+      const pendingQueue = this.pendingMessages.get(task.taskId);
+      if (pendingQueue !== undefined && pendingQueue.length > 0) {
+        this.pendingMessages.delete(task.taskId);
+        const combinedPrompt = pendingQueue.join('\n\n');
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
+        );
+        this.appendTaggedTaskLog(
+          task.taskId,
+          'prompt',
+          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
+        );
+        await this.flushTaskLogs(task.taskId);
+        await this.teardownAttempt(task.taskId, true);
+        const resumeResult = await this.startWorkerAttempt(task, {
+          prompt: combinedPrompt,
+          continueSession: true,
+          injectActiveGoal: true,
+        });
+        if (resumeResult.ok) {
+          task.containerId = resumeResult.containerId;
+          await this.saveTask(task);
+          this.claudeErrors.delete(task.taskId);
+          this.taskExitCodes.delete(task.taskId);
+          return;
+        }
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Failed to deliver queued messages, finalizing normally`
+        );
+      }
+
+      this.appendOrchestratorTaskLog(task.taskId, 'Completion verification passed');
+      await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
+      const finalResult = this.buildResultFromVerification(task, result, verification);
+      await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
+      return;
+    }
+
+    // Missing fields: re-launch Claude with adjusted prompt if attempts remain
+    if (verification.missingFields.length > 0 && attempt < maxAttempts) {
       this.logForwarder.appendChunk(task.taskId, '\n\n');
+      const nextAttempt = attempt + 1;
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `Verification failed; continuing with next attempt (${String(attempt + 1)}/${String(maxAttempts)})`
+        `Missing fields; re-launching Claude (${String(nextAttempt)}/${String(maxAttempts)}): ${verification.missingFields.join(', ')}`
       );
       await this.flushTaskLogs(task.taskId);
       await this.teardownAttempt(task.taskId, true);
 
-      const resumePrompt = this.buildResumePrompt(task.prompt, verification);
-      const nextAttempt = attempt + 1;
+      const resumePrompt = this.buildMissingFieldsPrompt(
+        completionAgentType,
+        verification.missingFields,
+        rawLogs
+      );
+      const resumePreview =
+        resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '\u2026' : resumePrompt;
+      this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
       const resumeStart = await this.startWorkerAttempt(task, {
         prompt: resumePrompt,
-        hasChildren: task.hasChildren ?? false,
         continueSession: true,
       });
 
@@ -763,7 +974,7 @@ export class TaskDispatcher {
         );
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Resume attempt started successfully: attempt=${String(nextAttempt)}/${String(maxAttempts)}`
+          `Resume attempt started: attempt=${String(nextAttempt)}/${String(maxAttempts)}`
         );
         this.claudeErrors.delete(task.taskId);
         this.taskExitCodes.delete(task.taskId);
@@ -788,100 +999,170 @@ export class TaskDispatcher {
       return;
     }
 
-    if (verification.passed) {
-      const pendingQueue = this.pendingMessages.get(task.taskId);
-      if (pendingQueue !== undefined && pendingQueue.length > 0) {
-        this.pendingMessages.delete(task.taskId);
-        const combinedPrompt = pendingQueue.join('\n\n');
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-        );
-        this.appendTaggedTaskLog(
-          task.taskId,
-          'prompt',
-          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
-        );
-        await this.flushTaskLogs(task.taskId);
-        await this.teardownAttempt(task.taskId, true);
-        const resumeResult = await this.startWorkerAttempt(task, {
-          prompt: combinedPrompt,
-          hasChildren: task.hasChildren ?? false,
-          continueSession: true,
-          injectActiveGoal: true,
-        });
-        if (resumeResult.ok) {
-          task.containerId = resumeResult.containerId;
-          await this.saveTask(task);
-          this.claudeErrors.delete(task.taskId);
-          this.taskExitCodes.delete(task.taskId);
-          return;
-        }
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Failed to deliver queued messages, finalizing normally`
-        );
-      }
-
-      this.appendOrchestratorTaskLog(task.taskId, 'Completion verification passed');
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'completed', {
-        ...(result !== undefined && { result }),
-      });
-      return;
-    }
-
+    // Terminal failure: no attempts left
     const error: TaskError = {
       code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-      message: verification.reasons.join('; '),
+      message:
+        verification.missingFields.length > 0
+          ? `Missing fields: ${verification.missingFields.join(', ')}`
+          : 'Completion verification failed',
       remediation: {
         action: 'retry',
-        ...(verification.missingCriteria.length > 0 && {
-          manualSteps: verification.missingCriteria,
+        ...(verification.missingFields.length > 0 && {
+          manualSteps: verification.missingFields,
         }),
       },
     };
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Terminal failure: completion criteria not met (${verification.reasons.join(' | ')})`
+      `Terminal failure: completion criteria not met after ${String(attempt)} attempts`
     );
     await this.flushTaskLogs(task.taskId);
     await this.collectTurnMetrics(task, attempt);
-
     await this.finalizeTask(task, 'failed', {
       ...(result !== undefined && { result }),
       error,
     });
   }
 
-  private buildResumePrompt(
-    originalPrompt: string,
-    verification: CompletionVerifierVerdict
+  private buildMissingFieldsPrompt(
+    agentType: CompletionAgentType,
+    missingFields: string[],
+    rawLogs: string
   ): string {
-    const missingCriteria =
-      verification.missingCriteria.length > 0
-        ? verification.missingCriteria.map((criteria) => `- ${criteria}`).join('\n')
-        : '- Completion criteria not met';
-
+    const transcript = getLast50Lines(rawLogs);
     return [
-      originalPrompt,
-      '',
       '[AUTO-CONTINUE ATTEMPT]',
-      'Previous attempt did not meet completion criteria.',
-      'Address the exact gaps below, then finish.',
+      'Your last response was missing required fields for the completion verifier.',
       '',
-      'Missing criteria:',
-      missingCriteria,
+      `Missing fields: ${missingFields.join(', ')}`,
       '',
-      'Required action:',
-      verification.resumeInstruction,
+      'Please ensure your final message includes all required information.',
+      `Agent type: ${agentType}`,
+      '',
+      'Last 50 lines of transcript for reference:',
+      transcript,
       '',
       'Constraints:',
       '- Do not restart from scratch.',
       '- Continue from current repository/worktree state.',
-      '- Your last message must satisfy the required phase final block contract.',
     ].join('\n');
+  }
+
+  private buildResultFromVerification(
+    task: Task,
+    gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
+    verification: CompletionVerifierVerdict
+  ): TaskResult {
+    const base: TaskResult = { ...(gitResult ?? {}) };
+    const agentData = verification.agentData;
+    if (agentData === undefined) return base;
+
+    base.summary = agentData.summary;
+
+    if (agentData.agentType === 'planning') {
+      base.planning_outcome_label = agentData.outcome;
+      base.planning_superpowers_writing_plans_used =
+        agentData.superpowers_writing_plans === 'used' ? '1' : '0';
+      base.planning_linear_url = agentData.linear_url;
+      base.planning_is_complex = agentData.is_complex;
+      base.planning_subtask_urls = agentData.subtask_urls;
+      if (agentData.pr_url !== '') {
+        base.planning_pr_url = agentData.pr_url;
+      }
+      base.planning_unclear_clarification = agentData.unclear_clarification;
+    } else if (agentData.agentType === 'execution') {
+      base.execution_outcome_label = 'implemented';
+      base.execution_superpowers_executing_plans_used =
+        agentData.superpowers_executing_plans === 'used' ? '1' : '0';
+      base.execution_superpowers_requesting_code_review_used =
+        agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
+      if (agentData.gh_pr_url !== '') {
+        base.prUrl = agentData.gh_pr_url;
+      }
+      if (task.linearIssueId !== undefined) {
+        base.execution_linear_issue_url = `https://linear.app/intexuraos/issue/${task.linearIssueId}`;
+      }
+    } else {
+      if (agentData.gh_pr_url !== '') {
+        base.prUrl = agentData.gh_pr_url;
+      }
+      base.comment_replied = agentData.comments_replied === 'yes';
+    }
+
+    return base;
+  }
+
+  private enrichResultForResumedTask(
+    task: Task,
+    result: TaskResult | undefined // @allow-undefined-type -- function parameter, not optional property
+  ): TaskResult | undefined {
+    if (result === undefined) return undefined;
+    if (task.agentType === 'execution' && task.linearIssueId !== undefined) {
+      result.execution_linear_issue_url = `https://linear.app/intexuraos/issue/${task.linearIssueId}`;
+    }
+    return result;
+  }
+
+  private async finalizeTaskWithResult(
+    task: Task,
+    agentType: CompletionAgentType,
+    finalResult: TaskResult
+  ): Promise<void> {
+    if (agentType === 'planning' && finalResult.planning_outcome_label === 'unclear') {
+      await this.finalizeTask(task, 'failed', {
+        result: finalResult,
+        error: {
+          code: 'PLANNING_AGENT_UNCLEAR',
+          message:
+            finalResult.planning_unclear_clarification ?? 'Planning agent reported unclear outcome',
+        },
+      });
+      return;
+    }
+    await this.finalizeTask(task, 'completed', { result: finalResult });
+
+    if (agentType === 'execution' && task.planningPrUrl !== undefined) {
+      await this.closePlanningPr(task.planningPrUrl, task.taskId);
+    }
+  }
+
+  private async closePlanningPr(prUrl: string, taskId: string): Promise<void> {
+    try {
+      const parsed = parsePrUrl(prUrl);
+      if (parsed === undefined) {
+        this.logger.warn({ prUrl, taskId }, 'Could not parse planning PR URL');
+        return;
+      }
+
+      const comment = `Closed automatically — implementation completed in execution task ${taskId}`;
+      await execFileAsync(
+        'gh',
+        [
+          'pr',
+          'close',
+          String(parsed.number),
+          '--repo',
+          `${parsed.owner}/${parsed.repo}`,
+          '--comment',
+          comment,
+        ],
+        { cwd: this.config.worktreeBasePath }
+      );
+
+      this.logger.info(
+        { prUrl, taskId, prNumber: parsed.number },
+        'Planning PR closed after successful execution'
+      );
+    } catch (error: unknown) {
+      /* v8 ignore start -- upstream: gh CLI failure requires external process @preserve */
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
+      this.logger.warn(
+        { prUrl, taskId, error: message },
+        'Failed to close planning PR (best-effort)'
+      );
+    }
   }
 
   private buildResumePreamble(): string {
@@ -961,18 +1242,8 @@ export class TaskDispatcher {
       {
         attempt,
         passed: !hasHardError,
-        confidence: 1,
-        reasons: hasHardError
-          ? [
-              ...(typeof exitCode === 'number' && exitCode !== 0
-                ? [`Non-zero exit code: ${String(exitCode)}`]
-                : []),
-              ...(claudeError !== undefined ? [`Claude error: ${claudeError}`] : []),
-            ]
-          : ['Loosened verification passed (resumed after success)'],
-        missingCriteria: [],
-        resumeInstruction: hasHardError ? 'Resolve the error and retry.' : '',
-        usedLlm: false,
+        missingFields: [],
+        verifierFailure: false,
         createdAt: new Date().toISOString(),
       },
     ];
@@ -996,8 +1267,9 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       delete task.resumedAfterSuccess;
+      const enrichedErrorResult = this.enrichResultForResumedTask(task, result);
       await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
+        ...(enrichedErrorResult !== undefined && { result: enrichedErrorResult }),
         error,
       });
       return;
@@ -1021,7 +1293,6 @@ export class TaskDispatcher {
       await this.teardownAttempt(task.taskId, true);
       const resumeResult = await this.startWorkerAttempt(task, {
         prompt: combinedPrompt,
-        hasChildren: task.hasChildren ?? false,
         continueSession: true,
         injectActiveGoal: true,
       });
@@ -1042,8 +1313,17 @@ export class TaskDispatcher {
     await this.flushTaskLogs(task.taskId);
     await this.collectTurnMetrics(task, attempt);
     delete task.resumedAfterSuccess;
+
+    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
+    const geminiSummary = await this.completionVerifier.extractResumeSummary(task.taskId, rawLogs);
+
+    const enrichedResult = this.enrichResultForResumedTask(task, result);
+    if (enrichedResult !== undefined && geminiSummary !== undefined) {
+      enrichedResult.summary = geminiSummary;
+    }
     await this.finalizeTask(task, 'completed', {
-      ...(result !== undefined && { result }),
+      ...(enrichedResult !== undefined && { result: enrichedResult }),
+      resumedCompletion: true,
     });
   }
 
@@ -1051,7 +1331,6 @@ export class TaskDispatcher {
     task: Task,
     params: {
       prompt: string;
-      hasChildren: boolean;
       continueSession: boolean;
       injectActiveGoal?: boolean;
     }
@@ -1059,7 +1338,7 @@ export class TaskDispatcher {
     this.attemptCompletionSignals.delete(task.taskId);
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Starting worker attempt: continueSession=${String(params.continueSession)} hasChildren=${String(params.hasChildren)}`
+      `Starting worker attempt: continueSession=${String(params.continueSession)}`
     );
     const workerTypeConfig = WORKER_TYPES[task.workerType];
     this.appendOrchestratorTaskLog(
@@ -1095,7 +1374,8 @@ export class TaskDispatcher {
           ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
           taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
           linearIssueLabels: task.linearIssueLabels,
-          hasChildren: params.hasChildren,
+          workerType: task.workerType,
+          ...(task.agentType !== undefined && { agentType: task.agentType }),
         }) +
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
@@ -1124,6 +1404,16 @@ export class TaskDispatcher {
         });
       },
     };
+
+    this.logger.info(
+      {
+        taskId: task.taskId,
+        agentType: task.agentType ?? 'default',
+        systemPromptLength: workerConfig.systemPrompt.length,
+        userPromptLength: params.prompt.length,
+      },
+      'System prompt built'
+    );
 
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
@@ -1161,7 +1451,7 @@ export class TaskDispatcher {
   private async finalizeTask(
     task: Task,
     statusParam: TaskStatus,
-    payload: { result?: TaskResult; error?: TaskError }
+    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean }
   ): Promise<void> {
     const finalStatus = statusParam;
     const shouldPreserve =
@@ -1222,6 +1512,7 @@ export class TaskDispatcher {
         ...(payload.result !== undefined && { result: payload.result }),
         ...(payload.error !== undefined && { error: payload.error }),
         duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
+        ...(payload.resumedCompletion === true && { resumedCompletion: true }),
       },
       taskId: task.taskId,
     });
@@ -1260,20 +1551,6 @@ export class TaskDispatcher {
         }
         const branch = pr.headRefName;
         const commits = Array.isArray(pr.commits) ? pr.commits.length : 0;
-        /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
-
-        // Check CI status
-        let ciFailed: boolean | undefined;
-        try {
-          const { stdout: ciOutput } = await execAsync(
-            /* v8 ignore stop @preserve */
-            `gh pr checks ${String(pr.number)} --json state --jq '[.[] | select(.state == "FAILURE")] | length'`,
-            execOptions
-          );
-          ciFailed = parseInt(ciOutput.trim(), 10) > 0;
-        } catch {
-          this.logger.warn({ taskId: task.taskId }, 'Failed to check CI status for PR');
-        }
 
         // Check for rebase result
         let rebaseResult: TaskResult['rebaseResult'] | undefined;
@@ -1309,7 +1586,6 @@ export class TaskDispatcher {
           commits,
           prUrl: pr.url,
           summary: pr.title,
-          ...(ciFailed !== undefined && { ciFailed }),
           /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
           ...(rebaseResult !== undefined && { rebaseResult }),
           /* v8 ignore stop @preserve */
@@ -1325,13 +1601,6 @@ export class TaskDispatcher {
       this.logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
       return undefined;
     }
-  }
-
-  private hasCodeTaskLabel(labels: string[]): boolean {
-    return labels.some((label) => {
-      const normalized = label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
-      return normalized === 'code-task';
-    });
   }
 
   private detectClaudeError(taskId: string, chunk: string): void {
@@ -1388,6 +1657,7 @@ export class TaskDispatcher {
   /**
    * Convert Claude Code JSON system messages into readable log lines.
    * Replaces hook_started/hook_response JSON blobs with concise summaries.
+   * Strips redundant tool_use_result from user messages (bulk diffs).
    * Non-JSON lines pass through unchanged.
    */
   private formatClaudeSystemMessages(text: string): string {
@@ -1412,11 +1682,37 @@ export class TaskDispatcher {
           return jsonLine;
         }
 
+        if (type === 'user' && 'tool_use_result' in obj) {
+          delete obj['tool_use_result'];
+          return JSON.stringify(obj);
+        }
+
+        if (type === 'rate_limit_event') {
+          return this.formatRateLimitEvent(obj);
+        }
+
         return jsonLine;
       } catch {
         return jsonLine;
       }
     });
+  }
+
+  private formatRateLimitEvent(obj: Record<string, unknown>): string {
+    const info = (obj['rate_limit_info'] as Record<string, unknown> | undefined) ?? {};
+    const status = (info['status'] as string | undefined) ?? 'unknown';
+    const rateLimitType = (info['rateLimitType'] as string | undefined) ?? '';
+    const resetsAt = info['resetsAt'] as number | undefined;
+    const overageStatus = info['overageStatus'] as string | undefined;
+    const overageDisabledReason = info['overageDisabledReason'] as string | undefined;
+
+    const parts = [`[rate-limit] status=${status}`];
+    if (rateLimitType !== '') parts.push(`type=${rateLimitType}`);
+    if (resetsAt !== undefined) parts.push(`resets=${new Date(resetsAt * 1000).toISOString()}`);
+    if (overageStatus !== undefined) parts.push(`overage=${overageStatus}`);
+    if (overageDisabledReason !== undefined) parts.push(`reason=${overageDisabledReason}`);
+
+    return parts.join(' ');
   }
 
   private formatInitMessage(obj: Record<string, unknown>): string {
@@ -1499,4 +1795,18 @@ export class TaskDispatcher {
     this.completionInProgress.delete(taskId);
     this.attemptCompletionSignals.delete(taskId);
   }
+}
+
+export function parsePrUrl(
+  prUrl: string
+): { owner: string; repo: string; number: number } | undefined {
+  const match =
+    /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(prUrl) ??
+    /\/repos\/([^/]+)\/([^/]+)\/pull\/(\d+)$/.exec(prUrl);
+  if (match === null) return undefined;
+  return {
+    owner: match[1] ?? '',
+    repo: match[2] ?? '',
+    number: Number(match[3] ?? '0'),
+  };
 }

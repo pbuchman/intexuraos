@@ -8,6 +8,7 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
+import { getProviderForModel } from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '../infra/encryption.js';
 import { getServices } from '../services.js';
 import { type LlmProvider, type LlmTestResult, maskApiKey } from '../domain/settings/index.js';
@@ -559,6 +560,21 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!deleteResult.ok) {
         return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);
+      }
+
+      // Cascade: clear defaultModel if it belongs to the deleted provider
+      const settingsResult = await userSettingsRepository.getSettings(params.uid);
+      if (settingsResult.ok) {
+        const currentDefault = settingsResult.value?.llmPreferences?.defaultModel;
+        if (currentDefault !== undefined) {
+          const defaultProvider = getProviderForModel(currentDefault);
+          if (defaultProvider === params.provider) {
+            const clearResult = await userSettingsRepository.clearLlmPreferences(params.uid);
+            if (!clearResult.ok) {
+              request.log.warn({ userId: params.uid }, 'Failed to cascade-clear LLM preferences after key deletion');
+            }
+          }
+        }
       }
 
       return await reply.ok({});

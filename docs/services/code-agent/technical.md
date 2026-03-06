@@ -105,21 +105,21 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                     | Date         |
-| ---------- | --------------------------------------------------------------- | ------------ |
-| `c33321e4` | Use Date.now() for metrics log line sequences                   | 52 min ago   |
-| `9be25162` | Dynamic CPU cores from cgroup + metrics in task logs            | 5 hours ago  |
-| `878c08b9` | Implement prompt sanitization for worker inputs (INT-612)       | 6 hours ago  |
-| `483c476a` | Replace scattered webhook filters with sender whitelist         | 6 hours ago  |
-| `95161acb` | Dispatch and triage edited claude[bot] review comments          | 7 hours ago  |
+| Commit     | Description                                                       | Date         |
+| ---------- | ----------------------------------------------------------------- | ------------ |
+| `c33321e4` | Use Date.now() for metrics log line sequences                     | 52 min ago   |
+| `9be25162` | Dynamic CPU cores from cgroup + metrics in task logs              | 5 hours ago  |
+| `878c08b9` | Implement prompt sanitization for worker inputs (INT-612)         | 6 hours ago  |
+| `483c476a` | Replace scattered webhook filters with sender whitelist           | 6 hours ago  |
+| `95161acb` | Dispatch and triage edited claude[bot] review comments            | 7 hours ago  |
 | `d5810213` | Use unique actionId for webhook dedup, propagate all dedup errors | 22 hours ago |
-| `1db69f2a` | Transition Linear to In Review on task-complete webhook         | 28 hours ago |
-| `bcbd5075` | Add multi-status filtering and fix pagination for code tasks    | 28 hours ago |
-| `f6420f4b` | Populate prNumber and prBranch on task completion (INT-465)     | 2 days ago   |
-| `2e7039c3` | Simplify PR comment auto-response (INT-465)                     | 2 days ago   |
-| `e5637ce5` | Deduplicate PR body across pull_request events                  | 3 days ago   |
-| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)     | 3 days ago   |
-| `c1bc9883` | Truncate oversized tool results and unparseable log lines       | 3 days ago   |
+| `1db69f2a` | Transition Linear to In Review on task-complete webhook           | 28 hours ago |
+| `bcbd5075` | Add multi-status filtering and fix pagination for code tasks      | 28 hours ago |
+| `f6420f4b` | Populate prNumber and prBranch on task completion (INT-465)       | 2 days ago   |
+| `2e7039c3` | Simplify PR comment auto-response (INT-465)                       | 2 days ago   |
+| `e5637ce5` | Deduplicate PR body across pull_request events                    | 3 days ago   |
+| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)       | 3 days ago   |
+| `c1bc9883` | Truncate oversized tool results and unparseable log lines         | 3 days ago   |
 
 ## API Endpoints
 
@@ -134,7 +134,7 @@ sequenceDiagram
 | POST   | `/code/tasks/:taskId/retry`                | Retry a failed/cancelled task      | Auth0 |
 | POST   | `/code/tasks/:taskId/feedback`             | Submit feedback on completed task  | Auth0 |
 | POST   | `/code/tasks/:taskId/messages`             | Send message to running/ended task | Auth0 |
-| POST   | `/code/tasks/:taskId/implement`            | Start Phase 2 from design task     | Auth0 |
+| POST   | `/code/tasks/:taskId/implement`            | Start execution from planning task | Auth0 |
 | GET    | `/code/github-pr-events`                   | Query GitHub PR events             | Auth0 |
 | GET    | `/code/github-pr-summaries`                | List PRs active in last 30 days    | Auth0 |
 | GET    | `/code/worker-settings`                    | Get worker settings (masked)       | Auth0 |
@@ -159,12 +159,12 @@ sequenceDiagram
 
 ### Webhook Routes (HMAC Signature)
 
-| Method | Path                               | Description                          | Auth          |
-| ------ | ---------------------------------- | ------------------------------------ | ------------- |
-| POST   | `/internal/webhooks/task-complete` | Task completion callback             | Internal+HMAC |
-| POST   | `/internal/logs`                   | Log chunk upload from orchestrator   | Internal+HMAC |
+| Method | Path                               | Description                           | Auth          |
+| ------ | ---------------------------------- | ------------------------------------- | ------------- |
+| POST   | `/internal/webhooks/task-complete` | Task completion callback              | Internal+HMAC |
+| POST   | `/internal/logs`                   | Log chunk upload from orchestrator    | Internal+HMAC |
 | POST   | `/internal/turn-metrics`           | Turn metrics upload from orchestrator | Internal+HMAC |
-| POST   | `/webhooks/github`                 | GitHub webhook events                | GitHub HMAC   |
+| POST   | `/webhooks/github`                 | GitHub webhook events                 | GitHub HMAC   |
 
 ### Utility Routes
 
@@ -193,8 +193,8 @@ interface CodeTask {
   status:
     | 'dispatched'
     | 'running'
-    | 'designed'     // Phase 1 design completed
-    | 'implemented'  // Phase 2 execution completed
+    | 'planned'      // planning agent completed
+    | 'implemented'  // execution agent completed
     | 'failed'
     | 'interrupted'
     | 'cancelled';
@@ -212,7 +212,7 @@ interface CodeTask {
   prBranch?: string;
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
-  executionPhase?: 'design' | 'execution';
+  agentType?: 'planning' | 'execution';
   implementationTaskId?: string;
   result?: TaskResult;
   error?: TaskError;
@@ -341,29 +341,29 @@ Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 
 ## Firestore Collections Owned
 
-| Collection             | Description                                                        |
-| ---------------------- | ------------------------------------------------------------------ |
+| Collection             | Description                                                                |
+| ---------------------- | -------------------------------------------------------------------------- |
 | `code_tasks`           | Code execution tasks (subcollections: `logs`, `log_lines`, `turn_metrics`) |
-| `user_spend`           | User cost tracking for rate limiting                               |
-| `user_usage`           | Rate limiting counters (concurrent, hourly, cost)                  |
-| `code_worker_settings` | Per-user worker configs with encrypted credentials                 |
-| `github-pr-events`     | GitHub PR webhook events for timeline display                      |
-| `github-pr-summaries`  | Per-PR rollup documents for O(PRs) list view (30-day window)       |
-| `pr_task_locks`        | Per-PR task locks preventing concurrent modifications              |
+| `user_spend`           | User cost tracking for rate limiting                                       |
+| `user_usage`           | Rate limiting counters (concurrent, hourly, cost)                          |
+| `code_worker_settings` | Per-user worker configs with encrypted credentials                         |
+| `github-pr-events`     | GitHub PR webhook events for timeline display                              |
+| `github-pr-summaries`  | Per-PR rollup documents for O(PRs) list view (30-day window)               |
+| `pr_task_locks`        | Per-PR task locks preventing concurrent modifications                      |
 
 ## Use Cases
 
-| Use Case            | File                                     | Description                                              |
-| ------------------- | ---------------------------------------- | -------------------------------------------------------- |
-| processCodeAction   | `domain/usecases/processCodeAction.ts`   | Create task with dedup, sanitize prompt, dispatch        |
-| cancelTaskWithNonce | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation                     |
-| processHeartbeat    | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection         |
-| detectZombieTasks   | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)                  |
-| cleanupTaskLogs     | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                          |
-| retryTask           | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context         |
-| submitTaskFeedback  | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback               |
-| sendTaskMessage     | `domain/usecases/sendTaskMessage.ts`     | Send message to running task (queued) or resume ended    |
-| submitToPhase2      | `domain/usecases/submitToPhase2.ts`      | Start Phase 2 implementation from completed design task  |
+| Use Case               | File                                        | Description                                              |
+| ---------------------- | ------------------------------------------- | -------------------------------------------------------- |
+| processCodeAction      | `domain/usecases/processCodeAction.ts`      | Create task with dedup, sanitize prompt, dispatch        |
+| cancelTaskWithNonce    | `domain/usecases/cancelTaskWithNonce.ts`    | Cancel via WhatsApp nonce validation                     |
+| processHeartbeat       | `domain/usecases/processHeartbeat.ts`       | Update heartbeat timestamps for zombie detection         |
+| detectZombieTasks      | `domain/usecases/detectZombieTasks.ts`      | Find and interrupt stale tasks (30 min)                  |
+| cleanupTaskLogs        | `domain/usecases/cleanupTaskLogs.ts`        | Archive logs older than 90 days                          |
+| retryTask              | `domain/usecases/retryTask.ts`              | Retry failed/cancelled with cool-off and context         |
+| submitTaskFeedback     | `domain/usecases/submitTaskFeedback.ts`     | Follow-up on completed tasks with feedback               |
+| sendTaskMessage        | `domain/usecases/sendTaskMessage.ts`        | Send message to running task (queued) or resume ended    |
+| submitToExecutionAgent | `domain/usecases/submitToExecutionAgent.ts` | Start execution agent from completed planning task       |
 
 ## Domain Services
 
@@ -378,10 +378,10 @@ Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 
 ## Domain Utilities
 
-| Utility             | File                                     | Purpose                                                    |
-| ------------------- | ---------------------------------------- | ---------------------------------------------------------- |
-| sanitizePrompt      | `domain/utils/promptSanitization.ts`     | Strip secrets (AWS, API keys, PEM, env vars) from prompts  |
-| labelUtils          | `domain/utils/labelUtils.ts`             | Check Linear issue labels for code-task/unclear markers    |
+| Utility             | File                                       | Purpose                                                    |
+| ------------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| sanitizePrompt      | `domain/utils/promptSanitization.ts`       | Strip secrets (AWS, API keys, PEM, env vars) from prompts  |
+| labelUtils          | `domain/utils/labelUtils.ts`               | Check Linear issue labels for code-task/unclear markers    |
 | metricsLogFormatter | `domain/formatters/metricsLogFormatter.ts` | Format TurnMetrics as visual log blocks for the transcript |
 
 ## Dependencies (Service-to-Service)
@@ -411,7 +411,7 @@ Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 | Variable                                 | Description                                  |
 | ---------------------------------------- | -------------------------------------------- |
 | `INTEXURAOS_WHATSAPP_SERVICE_URL`        | WhatsApp service URL                         |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Pub/Sub topic for WhatsApp messages          |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`  | Pub/Sub topic for WhatsApp messages          |
 | `INTEXURAOS_LINEAR_AGENT_URL`            | linear-agent service URL                     |
 | `INTEXURAOS_ACTIONS_AGENT_URL`           | actions-agent service URL                    |
 | `INTEXURAOS_SERVICE_URL`                 | This service's public URL (for webhook URLs) |
@@ -498,7 +498,7 @@ apps/code-agent/src/
       retryTask.ts                  # Task retry with cool-off
       sendTaskMessage.ts            # Send message to running/ended task
       submitTaskFeedback.ts         # Feedback follow-up
-      submitToPhase2.ts             # Phase 2 execution from design
+      submitToExecutionAgent.ts     # Execution agent from planning
     utils/
       labelUtils.ts                 # Linear label checks (code-task, unclear)
       promptSanitization.ts         # Secret stripping and whitespace normalization

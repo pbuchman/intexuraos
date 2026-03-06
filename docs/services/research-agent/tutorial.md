@@ -511,12 +511,12 @@ The export creates:
 | Issue                        | Symptom                           | Solution                                                                       |
 | ---------------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
 | Research stuck in processing | Status never changes to completed | Check Pub/Sub configuration; verify LLM call queue is being processed          |
-| Synthesis fails              | Research shows `synthesisError`   | Check synthesis model API key; verify context does not exceed limits            |
-| High costs                   | Unexpected `totalCostUsd`         | Review model selection; use smaller models (flash/mini) for initial queries     |
-| Missing attribution          | Some sections lack source links   | Attribution repair runs automatically; if it fails, content is still available  |
+| Synthesis fails              | Research shows `synthesisError`   | Check synthesis model API key; verify context does not exceed limits           |
+| High costs                   | Unexpected `totalCostUsd`         | Review model selection; use smaller models (flash/mini) for initial queries    |
+| Missing attribution          | Some sections lack source links   | Attribution repair runs automatically; if it fails, content is still available |
 | Share URL 404s               | Public URL does not work          | Verify `shareInfo` exists; check GCS bucket configuration                      |
-| Model extraction fails       | Draft has empty selectedModels    | Check if you have API keys; extraction gracefully degrades to manual selection  |
-| Zod validation errors        | Research fails with schema error  | Check logs for specific field errors; repair pattern may have failed            |
+| Model extraction fails       | Draft has empty selectedModels    | Check if you have API keys; extraction gracefully degrades to manual selection |
+| Zod validation errors        | Research fails with schema error  | Check logs for specific field errors; repair pattern may have failed           |
 | Notion export missing        | `notionExportInfo` is undefined   | Check Notion is connected and page ID is configured in settings                |
 | Notion export fails          | Error on export-notion endpoint   | Verify Notion token is valid; check NOTION_NOT_CONNECTED or RATE_LIMITED error |
 | Already exported             | `ALREADY_EXPORTED` error          | Each research can only be exported once; delete the Notion page manually       |

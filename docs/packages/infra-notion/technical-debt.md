@@ -42,9 +42,9 @@
 
 ## TypeScript Issues
 
-| File            | Issue                                                                    | Count |
-| --------------- | ------------------------------------------------------------------------ | ----- |
-| `src/notion.ts` | Block data cast: `block[type as keyof typeof block] as ... \| undefined` | 1     |
+| File            | Issue                                                                    | Count      |
+| --------------- | ------------------------------------------------------------------------ | ---------- |
+| `src/notion.ts` | Block data cast: `block[type as keyof typeof block] as ... \             | undefined` | 1 |
 
 The Notion SDK block type is a complex discriminated union; the cast is pragmatic. Non-`rich_text` blocks (images, embeds, code) yield empty content in the preview.
 

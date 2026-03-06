@@ -1,8 +1,26 @@
 /**
  * Parser for data analysis LLM responses (attribution-style validation).
+ *
+ * Chart ID validation uses a canonical source (DEFAULT_CHART_IDS) that can be
+ * overridden at runtime via the validChartIds parameter. This ensures the parser
+ * and prompt builder stay in sync when chart catalogs change.
  */
 
-const VALID_CHART_TYPES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'] as const;
+import type { ChartTypeInfo } from './dataAnalysisPrompt.js';
+
+/**
+ * Canonical chart IDs shared across parser, prompt, schema, and repair prompt.
+ * This is the single source of truth for the default chart ID set.
+ */
+export const DEFAULT_CHART_IDS: readonly string[] = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+
+/**
+ * Extract valid chart IDs from a ChartTypeInfo array.
+ * Use this to derive parser-compatible IDs from the same input passed to the prompt builder.
+ */
+export function extractValidChartIds(chartTypes: ChartTypeInfo[]): string[] {
+  return chartTypes.map((ct) => ct.id);
+}
 
 export interface ParsedDataInsight {
   title: string;
@@ -16,7 +34,11 @@ export interface ParseInsightResult {
   noInsightsReason?: string;
 }
 
-function parseInsightLine(line: string, lineNumber: number): ParsedDataInsight {
+function parseInsightLine(
+  line: string,
+  lineNumber: number,
+  validChartIds: readonly string[]
+): ParsedDataInsight {
   const match = /^INSIGHT_\d+:\s*(.+)$/.exec(line);
   if (!match) {
     throw new Error(
@@ -112,9 +134,9 @@ function parseInsightLine(line: string, lineNumber: number): ParsedDataInsight {
   }
   const suggestedChartType = chartTypeRaw[1].trim();
 
-  if (!VALID_CHART_TYPES.includes(suggestedChartType as (typeof VALID_CHART_TYPES)[number])) {
+  if (!validChartIds.includes(suggestedChartType)) {
     throw new Error(
-      `Line ${String(lineNumber)}: Invalid ChartType '${suggestedChartType}', must be one of: ${VALID_CHART_TYPES.join(', ')}`
+      `Line ${String(lineNumber)}: Invalid ChartType '${suggestedChartType}', must be one of: ${validChartIds.join(', ')}`
     );
   }
 
@@ -146,7 +168,17 @@ function parseNoInsightsLine(line: string, lineNumber: number): string {
   return reason;
 }
 
-export function parseInsightResponse(response: string): ParseInsightResult {
+/**
+ * Parse an LLM insight response, validating chart IDs against the provided set.
+ *
+ * @param response - Raw LLM response text
+ * @param validChartIds - Accepted chart IDs. Defaults to DEFAULT_CHART_IDS.
+ *   Pass extractValidChartIds(chartTypes) to use the same IDs as the prompt builder.
+ */
+export function parseInsightResponse(
+  response: string,
+  validChartIds: readonly string[] = DEFAULT_CHART_IDS
+): ParseInsightResult {
   const lines = response
     .split('\n')
     .map((l) => l.trim())
@@ -188,7 +220,7 @@ export function parseInsightResponse(response: string): ParseInsightResult {
         `Line ${String(i + 1)}: Expected INSIGHT_N or NO_INSIGHTS, got: '${line.substring(0, 20)}...'`
       );
     }
-    const insight = parseInsightLine(line, i + 1);
+    const insight = parseInsightLine(line, i + 1, validChartIds);
     insights.push(insight);
   }
 

@@ -178,7 +178,7 @@ sequenceDiagram
 | Field             | Type                         | Description             |
 | ----------------- | ---------------------------- | ----------------------- |
 | `id`              | `string`                     | Unique message ID       |
-| `role`            | `'user' \| 'assistant' \| 'system'` | Message sender role |
+| `role`            | `'user' \                    | 'assistant' \           | 'system'` | Message sender role |
 | `content`         | `string`                     | Message text content    |
 | `timestamp`       | `number`                     | Unix timestamp          |
 | `sources`         | `DocSource[]` (optional)     | Documentation citations |
@@ -193,7 +193,7 @@ sequenceDiagram
 | `embedding` | `number[]`                   | 1536-dimension OpenAI embedding vector |
 | `filePath`  | `string`                     | Source file path                       |
 | `section`   | `string`                     | Section heading within the source file |
-| `docType`   | `'markdown' \| 'openapi'`   | Document type                          |
+| `docType`   | `'markdown' \                | 'openapi'`                             | Document type |
 | `createdAt` | `Firestore.Timestamp`        | Creation timestamp                     |
 
 ### SuggestedAction
@@ -208,7 +208,7 @@ sequenceDiagram
 
 | Field     | Type                       | Description    |
 | --------- | -------------------------- | -------------- |
-| `role`    | `'user' \| 'assistant'`   | Message sender |
+| `role`    | `'user' \                  | 'assistant'`   | Message sender |
 | `content` | `string`                   | Message text   |
 
 ## Pub/Sub Events
@@ -276,8 +276,8 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 
 The following models are validated at startup for pricing availability:
 
-| Model              | Provider | Role                                       |
-| ------------------ | -------- | ------------------------------------------ |
+| Model              | Provider | Role                                        |
+| ------------------ | -------- | ------------------------------------------- |
 | Gemini 2.5 Flash   | Google   | Default for authenticated users             |
 | GLM-4.7            | Zai      | Alternative for authenticated users         |
 | GLM-4.7-Flash      | Zai      | Guest sessions (platform-provided, no cost) |

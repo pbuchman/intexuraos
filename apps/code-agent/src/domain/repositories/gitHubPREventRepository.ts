@@ -39,4 +39,15 @@ export interface GitHubPREventRepository {
    * Returns empty array if no events found.
    */
   findAll(limit?: number): Promise<Result<GitHubPREvent[], RepositoryError>>;
+
+  /**
+   * Find review comments for a specific pull request review.
+   * Queries pull_request_review_comment events and filters by review ID in memory.
+   * Returns empty array if no matching comments found.
+   */
+  findReviewComments(
+    repository: string,
+    pullRequestNumber: number,
+    reviewId: number
+  ): Promise<Result<GitHubPREvent[], RepositoryError>>;
 }

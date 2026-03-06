@@ -18,16 +18,27 @@ interface CreateIssueBody {
 }
 
 interface UpdateStateBody {
-  state: 'backlog' | 'in_progress' | 'in_review' | 'qa';
+  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa';
 }
 
 interface IssueIdParams {
   issueId: string;
 }
 
+interface AddCommentBody {
+  body: string;
+}
+
+interface UpdateIssueMetadataBody {
+  assigneeId?: string | null;
+  addLabels?: string[];
+  removeLabels?: string[];
+}
+
 // State name mapping for Linear workflow states
 const STATE_NAME_MAP: Record<string, string> = {
   backlog: 'Backlog',
+  todo: 'Todo',
   in_progress: 'In Progress',
   in_review: 'In Review',
   qa: 'QA',
@@ -39,6 +50,59 @@ interface IssueResponse {
   identifier: string;
   title: string;
   url: string;
+}
+
+interface IssueDisplayResponse {
+  identifier: string;
+  title: string;
+  state: { name: string; type: string };
+  priority: number;
+  assignee: { id: string; name: string } | null;
+  labels: { id: string; name: string }[];
+  url: string;
+  commentCount: number;
+  lastCommentAt: string | null;
+}
+
+function buildIssueDisplayResponse(
+  issue: {
+    id: string;
+    identifier: string;
+    title: string;
+    state: string;
+    stateType: string;
+    priority: number;
+    assigneeId: string | null;
+    assigneeName: string | null;
+    labels: { id: string; name: string; color: string }[];
+    url: string;
+  },
+  comments: { createdAt: string }[]
+): IssueDisplayResponse {
+  const commentCount = comments.length;
+  let lastCommentAt: string | null = null;
+  if (commentCount > 0) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
+    const lastComment = comments[commentCount - 1];
+    if (lastComment !== undefined) {
+      lastCommentAt = lastComment.createdAt;
+    }
+    /* v8 ignore stop @preserve */
+  }
+
+  return {
+    identifier: issue.identifier,
+    title: issue.title,
+    state: { name: issue.state, type: issue.stateType },
+    priority: issue.priority,
+    /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
+    assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
+    /* v8 ignore stop @preserve */
+    labels: issue.labels.map((label) => ({ id: label.id, name: label.name })),
+    url: issue.url,
+    commentCount,
+    lastCommentAt,
+  };
 }
 
 /* v8 ignore start -- test-infra: error paths require Linear API fault injection testing @preserve */
@@ -225,6 +289,108 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
     }
   );
 
+  // POST /internal/linear/issues/:issueId/comments - Add comment to issue (internal)
+  fastify.post<{ Params: IssueIdParams; Body: AddCommentBody }>(
+    '/internal/linear/issues/:issueId/comments',
+    async (request, reply) => {
+      /* v8 ignore start -- test-infra: internal auth/header/error branches require exhaustive route fixtures @preserve */
+      logIncomingRequest(request);
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const { issueId } = request.params;
+      const services = getServices();
+
+      const apiKeyResult = await services.connectionRepository.getApiKey(userId);
+      if (!apiKeyResult.ok) return await handleLinearError(apiKeyResult.error, reply);
+      if (apiKeyResult.value === null) {
+        return await handleLinearError({ code: 'NOT_CONNECTED', message: 'User not connected to Linear' }, reply);
+      }
+
+      const commentResult = await services.linearApiClient.createComment(
+        apiKeyResult.value,
+        issueId,
+        request.body.body
+      );
+      if (!commentResult.ok) return await handleLinearError(commentResult.error, reply);
+      return await reply.ok({ id: commentResult.value.id });
+      /* v8 ignore stop @preserve */
+    }
+  );
+
+  // PATCH /internal/linear/issues/:issueId/metadata - Update assignee/labels by name (internal)
+  fastify.patch<{ Params: IssueIdParams; Body: UpdateIssueMetadataBody }>(
+    '/internal/linear/issues/:issueId/metadata',
+    async (request, reply) => {
+      /* v8 ignore start -- test-infra: internal auth/repository/error/label normalization branches require exhaustive route fixtures @preserve */
+      logIncomingRequest(request);
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const { issueId } = request.params;
+      const services = getServices();
+      const issueResult = await services.issueRepository.findById(issueId);
+      if (!issueResult.ok) return await handleLinearError(issueResult.error, reply);
+      if (issueResult.value === null) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
+      }
+      const syncedIssue = issueResult.value;
+
+      // Ownership check: return 404 (not 403) to prevent information leakage
+      if (syncedIssue.userId !== userId) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
+      }
+
+      const apiKeyResult = await services.connectionRepository.getApiKey(userId);
+      if (!apiKeyResult.ok) return await handleLinearError(apiKeyResult.error, reply);
+      if (apiKeyResult.value === null) {
+        return await handleLinearError({ code: 'NOT_CONNECTED', message: 'User not connected to Linear' }, reply);
+      }
+
+      const labelsResult = await services.linearApiClient.listIssueLabels(apiKeyResult.value, syncedIssue.teamId);
+      if (!labelsResult.ok) return await handleLinearError(labelsResult.error, reply);
+
+      const currentLabelNames = new Set(syncedIssue.labels.map((l) => l.name));
+      for (const label of request.body.addLabels ?? []) currentLabelNames.add(label);
+      for (const label of request.body.removeLabels ?? []) currentLabelNames.delete(label);
+
+      const desiredLabelIds = labelsResult.value
+        .filter((label) => currentLabelNames.has(label.name))
+        .map((label) => label.id);
+
+      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, issueId, {
+        ...(request.body.assigneeId !== undefined && { assigneeId: request.body.assigneeId }),
+        labelIds: desiredLabelIds,
+      });
+      if (!updateResult.ok) return await handleLinearError(updateResult.error, reply);
+
+      return await reply.ok({
+        id: updateResult.value.id,
+        labels: updateResult.value.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+        assignee: updateResult.value.assignee ?? null,
+      });
+      /* v8 ignore stop @preserve */
+    }
+  );
+
   // PATCH /internal/issues/:issueId/state - Update issue state
   fastify.patch<{ Params: IssueIdParams; Body: UpdateStateBody }>(
     '/internal/issues/:issueId/state',
@@ -247,7 +413,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
           properties: {
             state: {
               type: 'string',
-              enum: ['backlog', 'in_progress', 'in_review', 'qa'],
+              enum: ['backlog', 'todo', 'in_progress', 'in_review', 'qa'],
               description: 'Target workflow state',
             },
           },
@@ -394,6 +560,145 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
     }
   );
 
+  fastify.post<{ Body: { identifiers: string[] } }>(
+    '/internal/linear/issues/display-batch',
+    {
+      schema: {
+        operationId: 'getLinearIssuesDisplayBatchInternal',
+        summary: 'Get multiple Linear issues for display (internal)',
+        description: 'Fetches multiple Linear issues with display data. Missing identifiers are omitted.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          required: ['identifiers'],
+          properties: {
+            identifiers: {
+              type: 'array',
+              minItems: 1,
+              items: { type: 'string' },
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  issues: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        identifier: { type: 'string' },
+                        title: { type: 'string' },
+                        state: {
+                          type: 'object',
+                          properties: {
+                            name: { type: 'string' },
+                            type: { type: 'string' },
+                          },
+                          required: ['name', 'type'],
+                        },
+                        priority: { type: 'number' },
+                        assignee: {
+                          type: ['object', 'null'],
+                          properties: {
+                            id: { type: 'string' },
+                            name: { type: 'string' },
+                          },
+                        },
+                        labels: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string' },
+                              name: { type: 'string' },
+                            },
+                            required: ['id', 'name'],
+                          },
+                        },
+                        url: { type: 'string' },
+                        commentCount: { type: 'number' },
+                        lastCommentAt: { type: ['string', 'null'] },
+                      },
+                      required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
+                    },
+                  },
+                },
+                required: ['issues'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { identifiers: string[] } }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const services = getServices();
+      const issues: IssueDisplayResponse[] = [];
+
+      for (const identifier of request.body.identifiers) {
+        const issueResult = await services.issueRepository.findByIdentifier(identifier, userId);
+        if (!issueResult.ok) {
+          reply.status(500);
+          return await handleLinearError(issueResult.error, reply);
+        }
+
+        const issue = issueResult.value;
+        if (issue === null) {
+          continue;
+        }
+
+        const commentsResult = await services.commentRepository.listByIssueId(issue.id);
+        if (!commentsResult.ok) {
+          reply.status(500);
+          return await handleLinearError(commentsResult.error, reply);
+        }
+
+        issues.push(buildIssueDisplayResponse(issue, commentsResult.value));
+      }
+
+      return await reply.ok({ issues });
+    }
+  );
+
   // GET /internal/linear/issues/:identifier - Get issue with comment data
   fastify.get<{ Params: { identifier: string } }>(
     '/internal/linear/issues/:identifier',
@@ -497,14 +802,20 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
       const { identifier } = request.params;
       const services = getServices();
       const logger = request.log as unknown as Logger;
 
-      logger.info({ identifier }, 'internal/getLinearIssue: fetching issue');
+      logger.info({ identifier, userId }, 'internal/getLinearIssue: fetching issue');
 
-      // Find issue by identifier
-      const issueResult = await services.issueRepository.findByIdentifier(identifier);
+      // Find issue by identifier, scoped to the requesting user
+      const issueResult = await services.issueRepository.findByIdentifier(identifier, userId);
       if (!issueResult.ok) {
         logger.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
         reply.status(500);
@@ -527,35 +838,94 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
       /* v8 ignore stop @preserve */
 
-      const commentCount = commentsResult.value.length;
-      let lastCommentAt: string | null = null;
-      if (commentCount > 0) {
-        // Comments are ordered by createdAt ASC, so last is at the end
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
-        const lastComment = commentsResult.value[commentCount - 1];
-        if (lastComment !== undefined) {
-          lastCommentAt = lastComment.createdAt;
-        }
-        /* v8 ignore stop @preserve */
-      }
+      const displayIssue = buildIssueDisplayResponse(issue, commentsResult.value);
 
       return await reply.ok({
         id: issue.id,
         identifier: issue.identifier,
         title: issue.title,
         description: issue.description,
-        state: { name: issue.state, type: issue.stateType },
-        priority: issue.priority,
-        /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
-        assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
-        /* v8 ignore stop @preserve */
-        labels: issue.labels.map((label) => ({ id: label.id, name: label.name, color: label.color })),
-        url: issue.url,
+        state: displayIssue.state,
+        priority: displayIssue.priority,
+        assignee: displayIssue.assignee,
+        labels: displayIssue.labels,
+        url: displayIssue.url,
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt,
-        commentCount,
-        lastCommentAt,
+        commentCount: displayIssue.commentCount,
+        lastCommentAt: displayIssue.lastCommentAt,
       });
+    }
+  );
+
+  // GET /internal/issues/:issueId/tree - Return issue + recursive descendants from local sync
+  fastify.get<{ Params: IssueIdParams }>(
+    '/internal/issues/:issueId/tree',
+    async (request, reply) => {
+      /* v8 ignore start -- test-infra: auth/header/not-found/tree traversal branches require exhaustive route fixtures @preserve */
+      logIncomingRequest(request);
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      const { issueId } = request.params;
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const services = getServices();
+      const allIssuesResult = await services.issueRepository.listByUserId(userId);
+      if (!allIssuesResult.ok) return await handleLinearError(allIssuesResult.error, reply);
+
+      const allIssues = allIssuesResult.value;
+      const root = allIssues.find((issue) => issue.id === issueId);
+      if (root === undefined) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
+      }
+
+      const byParent = new Map<string, typeof allIssues>();
+      for (const issue of allIssues) {
+        if (issue.parentId === null) continue;
+        const list = byParent.get(issue.parentId) ?? [];
+        list.push(issue);
+        byParent.set(issue.parentId, list);
+      }
+
+      const descendants: typeof allIssues = [];
+      const queue = [...(byParent.get(root.id) ?? [])];
+      while (queue.length > 0) {
+        const next = queue.shift();
+        if (next === undefined) continue;
+        descendants.push(next);
+        const children = byParent.get(next.id);
+        if (children !== undefined) queue.push(...children);
+      }
+
+      return await reply.ok({
+        root: {
+          id: root.id,
+          identifier: root.identifier,
+          url: root.url,
+          parentId: root.parentId,
+          labels: root.labels.map((l) => l.name),
+          assigneeId: root.assigneeId,
+          state: root.state,
+        },
+        descendants: descendants.map((issue) => ({
+          id: issue.id,
+          identifier: issue.identifier,
+          url: issue.url,
+          parentId: issue.parentId,
+          labels: issue.labels.map((l) => l.name),
+          assigneeId: issue.assigneeId,
+          state: issue.state,
+        })),
+      });
+      /* v8 ignore stop @preserve */
     }
   );
 

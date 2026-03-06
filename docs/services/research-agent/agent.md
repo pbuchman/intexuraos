@@ -441,8 +441,8 @@ draft --approve--> pending --process--> processing --all_complete--> synthesizin
                       |              awaiting_confirmation            failed
                       |                     |
                       |                     | proceed/retry/cancel
-                      |                     v
-                      +--------------> [varies by decision]
+| v |
+|  |
 ```
 
 ---

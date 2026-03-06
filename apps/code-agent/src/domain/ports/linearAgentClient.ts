@@ -24,7 +24,7 @@ export interface CreateIssueResponse {
 export interface UpdateIssueStateRequest {
   userId: string;
   issueId: string;
-  state: 'backlog' | 'in_progress' | 'in_review' | 'qa';
+  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa';
 }
 
 export interface ValidateIssueRequest {
@@ -41,6 +41,8 @@ export interface ValidatedIssue {
   labels: string[];
   /** Number of child issues */
   childCount: number;
+  /** Parent issue UUID (null for top-level issues) */
+  parentId: string | null;
 }
 
 export interface GenerateTitleRequest {
@@ -61,6 +63,21 @@ export interface AddCommentRequest {
 
 export interface AddCommentResponse {
   commentId: string;
+}
+
+export interface IssueTreeNode {
+  id: string;
+  identifier: string;
+  url: string;
+  parentId: string | null;
+  labels: string[];
+  assigneeId: string | null;
+  state: string;
+}
+
+export interface IssueTreeResponse {
+  root: IssueTreeNode;
+  descendants: IssueTreeNode[];
 }
 
 export interface LinearIssueForDisplay {
@@ -111,9 +128,31 @@ export interface LinearAgentClient {
    */
   addComment(request: AddCommentRequest): Promise<Result<AddCommentResponse, LinearAgentError>>;
 
+  fetchIssueTree(request: {
+    userId: string;
+    issueId: string;
+  }): Promise<Result<IssueTreeResponse, LinearAgentError>>;
+
+  updateIssueMetadata(request: {
+    userId: string;
+    issueId: string;
+    assigneeId?: string | null;
+    addLabels?: string[];
+    removeLabels?: string[];
+  }): Promise<Result<void, LinearAgentError>>;
+
   /**
    * Fetch Linear issue data for display in task detail view.
    * Returns structured issue data from linear-agent's internal API.
    */
   fetchIssueForDisplay(request: ValidateIssueRequest): Promise<Result<LinearIssueForDisplay, LinearAgentError>>;
+
+  /**
+   * Fetch multiple Linear issues for display in task list views.
+   * Missing identifiers are omitted from the response.
+   */
+  fetchIssuesForDisplay(request: {
+    userId: string;
+    identifiers: string[];
+  }): Promise<Result<LinearIssueForDisplay[], LinearAgentError>>;
 }

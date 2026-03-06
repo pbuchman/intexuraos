@@ -28,12 +28,12 @@ FAILED_SUITES=0
 for test_file in "$SCRIPT_DIR"/*.test.sh; do
     [[ -f "$test_file" ]] || continue
 
-    ((TOTAL_SUITES++))
+    ((TOTAL_SUITES++)) || true
 
     if bash "$test_file"; then
-        ((PASSED_SUITES++))
+        ((PASSED_SUITES++)) || true
     else
-        ((FAILED_SUITES++))
+        ((FAILED_SUITES++)) || true
     fi
 done
 

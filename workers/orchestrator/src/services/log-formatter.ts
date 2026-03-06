@@ -35,3 +35,29 @@ function isDockerHeaderAt(str: string, pos: number): boolean {
     str.charCodeAt(pos + 1) === 0 && str.charCodeAt(pos + 2) === 0 && str.charCodeAt(pos + 3) === 0
   );
 }
+
+/**
+ * Strip heavyweight metadata fields from JSONL lines that inflate lines
+ * to 64KB+. Targets `tool_use_result` which contains the entire original
+ * file content for Edit/Write undo and is never consumed by logFormatter.
+ */
+export function stripBulkMetadata(content: string): string {
+  if (!content.includes('"tool_use_result"')) return content;
+
+  return content
+    .split('\n')
+    .map((line) => {
+      if (!line.includes('"tool_use_result"')) return line;
+      try {
+        const obj = JSON.parse(line) as Record<string, unknown>;
+        if ('tool_use_result' in obj) {
+          const { tool_use_result: _, ...rest } = obj;
+          return JSON.stringify(rest);
+        }
+      } catch {
+        // Partial/invalid JSON — pass through unchanged
+      }
+      return line;
+    })
+    .join('\n');
+}

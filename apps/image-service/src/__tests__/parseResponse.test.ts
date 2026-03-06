@@ -9,12 +9,9 @@ describe('parseThumbnailPromptResponse', () => {
       prompt: 'A detailed prompt',
       negativePrompt: 'blurry, low quality',
       parameters: {
-        aspectRatio: '16:9',
         framing: 'center subject',
-        textOnImage: 'none',
         realism: 'photorealistic',
         people: 'generic silhouettes',
-        logosTrademarks: 'none',
       },
     });
 
@@ -26,7 +23,6 @@ describe('parseThumbnailPromptResponse', () => {
       expect(result.value.visualSummary).toBe('A visual summary');
       expect(result.value.prompt).toBe('A detailed prompt');
       expect(result.value.negativePrompt).toBe('blurry, low quality');
-      expect(result.value.parameters.aspectRatio).toBe('16:9');
       expect(result.value.parameters.realism).toBe('photorealistic');
     }
   });
@@ -39,12 +35,9 @@ describe('parseThumbnailPromptResponse', () => {
   "prompt": "A detailed prompt",
   "negativePrompt": "blurry",
   "parameters": {
-    "aspectRatio": "16:9",
     "framing": "center",
-    "textOnImage": "none",
     "realism": "cinematic illustration",
-    "people": "none",
-    "logosTrademarks": "none"
+    "people": "none"
   }
 }
 \`\`\``;
@@ -60,7 +53,7 @@ describe('parseThumbnailPromptResponse', () => {
 
   it('parses JSON wrapped in plain code block', () => {
     const response = `\`\`\`
-{"title":"Title","visualSummary":"Summary","prompt":"Prompt","negativePrompt":"Negative","parameters":{"aspectRatio":"16:9","framing":"center","textOnImage":"none","realism":"clean vector","people":"none","logosTrademarks":"none"}}
+{"title":"Title","visualSummary":"Summary","prompt":"Prompt","negativePrompt":"Negative","parameters":{"framing":"center","realism":"clean vector","people":"none"}}
 \`\`\``;
 
     const result = parseThumbnailPromptResponse(response);
@@ -251,5 +244,63 @@ describe('parseThumbnailPromptResponse', () => {
     if (!result.ok) {
       expect(result.error.message).toBe('Missing or invalid parameters.people');
     }
+  });
+
+  describe('F-011 contract alignment', () => {
+    it('output contract only contains consumed fields (no aspectRatio, textOnImage, logosTrademarks)', () => {
+      const response = JSON.stringify({
+        title: 'Title',
+        visualSummary: 'Summary',
+        prompt: 'Prompt',
+        negativePrompt: 'Negative',
+        parameters: {
+          framing: 'center',
+          realism: 'photorealistic',
+          people: 'none',
+        },
+      });
+
+      const result = parseThumbnailPromptResponse(response);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const paramKeys = Object.keys(result.value.parameters);
+        expect(paramKeys).toEqual(['framing', 'realism', 'people']);
+        expect(paramKeys).not.toContain('aspectRatio');
+        expect(paramKeys).not.toContain('textOnImage');
+        expect(paramKeys).not.toContain('logosTrademarks');
+      }
+    });
+
+    it('parser gracefully handles model responses that include removed fields (regression)', () => {
+      const response = JSON.stringify({
+        title: 'Title With Extras',
+        visualSummary: 'Summary',
+        prompt: 'Prompt',
+        negativePrompt: 'Negative',
+        parameters: {
+          aspectRatio: '16:9',
+          framing: 'wide shot',
+          textOnImage: 'none',
+          realism: 'cinematic illustration',
+          people: 'silhouettes',
+          logosTrademarks: 'none',
+        },
+      });
+
+      const result = parseThumbnailPromptResponse(response);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const params = result.value.parameters;
+        expect(params.framing).toBe('wide shot');
+        expect(params.realism).toBe('cinematic illustration');
+        expect(params.people).toBe('silhouettes');
+        const paramKeys = Object.keys(params);
+        expect(paramKeys).not.toContain('aspectRatio');
+        expect(paramKeys).not.toContain('textOnImage');
+        expect(paramKeys).not.toContain('logosTrademarks');
+      }
+    });
   });
 });

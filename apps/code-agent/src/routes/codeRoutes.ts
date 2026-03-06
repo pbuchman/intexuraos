@@ -11,12 +11,14 @@ import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
-import { submitToPhase2 } from '../domain/usecases/submitToPhase2.js';
+import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
+import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { randomUUID } from 'node:crypto';
-import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
+import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
 
@@ -34,6 +36,46 @@ export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
 }
 
+const linearIssueForDisplaySchema = {
+  type: 'object',
+  properties: {
+    identifier: { type: 'string' },
+    title: { type: 'string' },
+    state: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        type: { type: 'string' },
+      },
+      required: ['name', 'type'],
+    },
+    priority: { type: 'number' },
+    assignee: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+      },
+    },
+    labels: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+        },
+        required: ['id', 'name'],
+      },
+    },
+    url: { type: 'string' },
+    commentCount: { type: 'number' },
+    lastCommentAt: { type: 'string', nullable: true },
+  },
+  required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
+} as const;
+
 // Response schema for created task
 const codeTaskSchema = {
   type: 'object',
@@ -43,14 +85,14 @@ const codeTaskSchema = {
     prompt: { type: 'string' },
     sanitizedPrompt: { type: 'string' },
     systemPromptHash: { type: 'string' },
-    workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+    workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
     workerLocation: { type: 'string' },
     repository: { type: 'string' },
     baseBranch: { type: 'string' },
     traceId: { type: 'string' },
     status: {
       type: 'string',
-      enum: ['dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled'],
+      enum: ['dispatched', 'running', 'queued', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled'],
     },
     dedupKey: { type: 'string' },
     callbackReceived: { type: 'boolean' },
@@ -59,10 +101,11 @@ const codeTaskSchema = {
     actionId: { type: 'string', nullable: true },
     approvalEventId: { type: 'string', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
-    linearIssueTitle: { type: 'string', nullable: true },
-    linearIssueUrl: { type: 'string', nullable: true },
-    linearFallback: { type: 'boolean', nullable: true },
-    executionPhase: { type: 'string', enum: ['design', 'execution'] },
+    linearIssue: {
+      ...linearIssueForDisplaySchema,
+      nullable: true,
+    },
+    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
     implementationTaskId: { type: 'string' },
     parentTaskId: { type: 'string' },
     followUpReason: { type: 'string' },
@@ -144,12 +187,12 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   workerLocation: string;
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
+  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: unknown;
@@ -157,18 +200,15 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearFallback?: boolean;
-  executionPhase?: 'design' | 'execution';
+  agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: string;
   result?: {
     prUrl?: string;
-    branch: string;
-    commits: number;
-    summary: string;
+    branch?: string;
+    commits?: number;
+    summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
@@ -193,12 +233,12 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   workerLocation: string;
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
+  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;
@@ -206,18 +246,15 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearFallback?: boolean;
-  executionPhase?: 'design' | 'execution';
+  agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: string;
   result?: {
     prUrl?: string;
-    branch: string;
-    commits: number;
-    summary: string;
+    branch?: string;
+    commits?: number;
+    summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
@@ -261,16 +298,7 @@ function taskToApiResponse(task: {
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearIssueUrl !== undefined && { linearIssueUrl: task.linearIssueUrl }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearFallback !== undefined && { linearFallback: task.linearFallback }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.executionPhase !== undefined && { executionPhase: task.executionPhase }),
+    ...(task.agentType !== undefined && { agentType: task.agentType }),
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.implementationTaskId !== undefined && { implementationTaskId: task.implementationTaskId }),
@@ -304,7 +332,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       userId: string;
       payload: {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'glm';
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -328,7 +356,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               type: 'object',
               properties: {
                 prompt: { type: 'string' },
-                workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+                workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
                 linearIssueId: { type: 'string' },
                 repository: { type: 'string' },
                 baseBranch: { type: 'string' },
@@ -371,6 +399,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               },
             },
             required: ['success', 'error'],
+          },
+          400: {
+            description: 'Invalid request — prompt failed injection sanitization',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
           },
           409: {
             description: 'Duplicate task (deduplication triggered)',
@@ -423,7 +467,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/code/process',
       });
@@ -458,7 +502,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         approvalEventId: string;
         userId: string;
         prompt: string;
-        workerType: 'opus' | 'auto' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -493,6 +537,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         processRequest
       );
@@ -543,6 +588,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           return await reply.fail('MISCONFIGURED', 'Worker unavailable');
         }
 
+        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
+        if (error.code === 'validation_error') {
+        /* v8 ignore stop @preserve */
+          return await reply.fail('INVALID_REQUEST', error.message);
+        }
+
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
@@ -572,7 +623,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
   fastify.patch<{
     Params: { taskId: string };
     Body: {
-      status?: 'designed' | 'implemented' | 'failed' | 'interrupted';
+      status?: 'planned' | 'implemented' | 'failed' | 'interrupted';
       result?: {
         branch: string;
         commits: number;
@@ -618,7 +669,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             status: {
               type: 'string',
-              enum: ['designed', 'implemented', 'failed', 'interrupted'],
+              enum: ['planned', 'implemented', 'failed', 'interrupted'],
             },
             result: {
               type: 'object',
@@ -631,7 +682,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 partialWork: { type: 'boolean', nullable: true },
                 rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'], nullable: true },
               },
-              required: ['branch', 'commits', 'summary'],
+              required: [],
             },
             error: {
               type: 'object',
@@ -719,7 +770,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request: FastifyRequest<{
         Params: { taskId: string };
         Body: {
-          status?: 'designed' | 'implemented' | 'failed' | 'interrupted';
+          status?: 'planned' | 'implemented' | 'failed' | 'interrupted';
           result?: {
             branch: string;
             commits: number;
@@ -795,7 +846,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Record task completion for rate limiting (decrement concurrent, update cost)
       // Do this for terminal states: completed, failed, cancelled, interrupted
       /* v8 ignore start -- ts-type: optional chaining and array includes create type narrowing branches @preserve */
-      const terminalStatuses = ['designed', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
+      const terminalStatuses = ['planned', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
       /* v8 ignore stop @preserve */
       /* v8 ignore start -- ts-type: terminal status includes check @preserve */
       if (body.status !== undefined && terminalStatuses.includes(body.status)) {
@@ -891,9 +942,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active code task check complete');
-
-      return await reply.ok(result.value);
+      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active code task check complete'); // @allow-result-access -- .ok checked at line 891
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 891
     }
   );
 
@@ -986,10 +1036,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ count: result.value.length }, 'Zombie code tasks found');
-
+      request.log.info({ count: result.value.length }, 'Zombie code tasks found'); // @allow-result-access -- .ok checked at line 986
       return await reply.ok({
-        tasks: result.value.map(taskToApiResponse),
+        tasks: result.value.map(taskToApiResponse), // @allow-result-access -- .ok checked at line 986
       });
     }
   );
@@ -1003,10 +1052,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
   fastify.post<{
     Body: {
       prompt: string;
-      workerType?: 'opus' | 'auto' | 'glm';
+      workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
       workerLocation?: string;
       linearIssueId?: string;
-      linearIssueTitle?: string;
     };
   }>(
     '/code/submit',
@@ -1021,10 +1069,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           type: 'object',
           properties: {
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
-            workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+            workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
             workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
-            linearIssueTitle: { type: 'string' },
           },
           required: ['prompt'],
         },
@@ -1103,7 +1150,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 properties: {
                   code: {
                     type: 'string',
-                    enum: ['concurrent_limit', 'hourly_limit', 'daily_cost_limit', 'monthly_cost_limit', 'prompt_too_long'],
+                    enum: ['concurrent_limit', 'hourly_limit', 'monthly_cost_limit', 'prompt_too_long'],
                   },
                   message: { type: 'string' },
                   retryAfter: { type: 'string' },
@@ -1148,7 +1195,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/submit',
         includeParams: true,
@@ -1157,10 +1204,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo } = getServices();
       const body = request.body as {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'glm';
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         workerLocation?: string;
         linearIssueId?: string;
-        linearIssueTitle?: string;
       };
 
       /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
@@ -1207,17 +1253,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         prompt: string;
         sanitizedPrompt: string;
         systemPromptHash: string;
-        workerType: 'opus' | 'auto' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         workerLocation: string;
         repository: string;
         baseBranch: string;
         traceId: string;
         webhookSecret: string;
         linearIssueId?: string;
-        linearIssueTitle?: string;
-        linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
-        linearFallback?: boolean;
-        executionPhase: 'design' | 'execution';
+        agentType: 'planning' | 'execution';
       } = {
         id: taskId,
         userId,
@@ -1230,7 +1273,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         webhookSecret,
-        executionPhase: hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'design',
+        agentType: hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning',
       };
 
       // Save linearIssueId if available (linking to existing issue)
@@ -1238,20 +1281,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (issueResult.linearIssueId !== undefined) {
       /* v8 ignore stop @preserve */
         createInput.linearIssueId = issueResult.linearIssueId;
-      }
-      // Save linearIssueTitle (always present in result, even in fallback mode)
-      createInput.linearIssueTitle = issueResult.linearIssueTitle;
-      // Save linearIssueType if available (from LLM classification)
-      /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-      if (issueResult.linearIssueType !== undefined) {
-      /* v8 ignore stop @preserve */
-        createInput.linearIssueType = issueResult.linearIssueType;
-      }
-      // Save fallback flag
-      /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-      if (issueResult.linearFallback) {
-      /* v8 ignore stop @preserve */
-        createInput.linearFallback = true;
       }
       const createResult = await codeTaskRepo.create(createInput);
 
@@ -1356,11 +1385,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         systemPromptHash: string;
         repository: string;
         baseBranch: string;
-        workerType: 'opus' | 'auto' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         webhookUrl: string;
         webhookSecret: string;
         linearIssueLabels: string[];
         hasChildren: boolean;
+        agentType: 'planning' | 'execution' | 'pull_request';
         workerCredentials: { workers: Array<{ name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }> };
       } = {
         taskId: task.id,
@@ -1373,6 +1403,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         webhookSecret,
         linearIssueLabels: issueResult.linearIssueLabels,
         hasChildren: issueResult.hasChildren,
+        /* v8 ignore start -- ts-type: nullish coalescing on optional agentType with label fallback @preserve */
+        agentType: task.agentType ?? (hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning'),
+        /* v8 ignore stop @preserve */
         workerCredentials,
       };
 
@@ -1513,13 +1546,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo } = getServices();
+      const { codeTaskRepo, linearAgentClient } = getServices();
       /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
       // Parse comma-separated status filter (matching actions-agent pattern)
-      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled'];
+      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'queued', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled', 'archived'];
       let statusFilter: TaskStatus[] | undefined;
       if (request.query.status !== undefined) {
         statusFilter = request.query.status
@@ -1561,8 +1594,51 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', listResult.error.message);
       }
 
+      const apiTasks = listResult.value.tasks.map(taskToApiResponse);
+      const linearIssueIds = Array.from(
+        new Set(
+          listResult.value.tasks
+            .map((task) => task.linearIssueId)
+            .filter((issueId): issueId is string => issueId !== undefined)
+        )
+      );
+
+      let hydratedIssuesByIdentifier = new Map<string, {
+        identifier: string;
+        title: string;
+        state: { name: string; type: string };
+        priority: number;
+        assignee: { id: string; name: string } | null;
+        labels: Array<{ id: string; name: string }>;
+        url: string;
+        commentCount: number;
+        lastCommentAt: string | null;
+      }>();
+      if (linearIssueIds.length > 0) {
+        const linearIssuesResult = await linearAgentClient.fetchIssuesForDisplay({
+          userId,
+          identifiers: linearIssueIds,
+        });
+
+        if (linearIssuesResult.ok) {
+          hydratedIssuesByIdentifier = new Map(
+            linearIssuesResult.value.map((issue) => [issue.identifier, issue])
+          );
+        } else {
+          request.log.warn(
+            { userId, error: linearIssuesResult.error, issueCount: linearIssueIds.length },
+            'Failed to hydrate Linear issues for code task list'
+          );
+        }
+      }
+
       return await reply.ok({
-        tasks: listResult.value.tasks.map(taskToApiResponse),
+        tasks: apiTasks.map((task) => ({
+          ...task,
+          ...(task.linearIssueId !== undefined && hydratedIssuesByIdentifier.has(task.linearIssueId)
+            ? { linearIssue: hydratedIssuesByIdentifier.get(task.linearIssueId) }
+            : {}),
+        })),
         /* v8 ignore start -- ts-type: spread operator with optional property creates type narrowing branch @preserve */
         ...(listResult.value.nextCursor !== undefined && { nextCursor: listResult.value.nextCursor }),
         /* v8 ignore stop @preserve */
@@ -1612,9 +1688,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   dedupKey: { type: 'string' },
                   callbackReceived: { type: 'boolean' },
                   linearIssueId: { type: 'string' },
-                  linearIssueTitle: { type: 'string' },
-                  linearFallback: { type: 'boolean' },
-                  executionPhase: { type: 'string', enum: ['design', 'execution'] },
+                  linearIssue: {
+                    ...linearIssueForDisplaySchema,
+                    nullable: true,
+                  },
+                  agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
                   implementationTaskId: { type: 'string' },
                   parentTaskId: { type: 'string' },
                   followUpReason: { type: 'string' },
@@ -1653,43 +1731,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     },
                   },
                   statusSummary: { type: 'object', nullable: true },
-                  linearIssue: {
-                    type: 'object',
-                    nullable: true,
-                    properties: {
-                      identifier: { type: 'string' },
-                      title: { type: 'string' },
-                      state: {
-                        type: 'object',
-                        properties: {
-                          name: { type: 'string' },
-                          type: { type: 'string' },
-                        },
-                      },
-                      priority: { type: 'number' },
-                      assignee: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          id: { type: 'string' },
-                          name: { type: 'string' },
-                        },
-                      },
-                      labels: {
-                        type: 'array',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            id: { type: 'string' },
-                            name: { type: 'string' },
-                          },
-                        },
-                      },
-                      url: { type: 'string' },
-                      commentCount: { type: 'number' },
-                      lastCommentAt: { type: 'string', nullable: true },
-                    },
-                  },
                 },
               },
             },
@@ -2032,9 +2073,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       // Step 3: Check task is cancellable
-      if (!['dispatched', 'running'].includes(task.status)) {
-        request.log.info({ taskId, status: task.status }, 'Cannot cancel task - not in running state');
-        return await reply.fail('CONFLICT', 'Task is not running');
+      if (!['dispatched', 'running', 'queued'].includes(task.status)) {
+        request.log.info({ taskId, status: task.status }, 'Cannot cancel task - not in cancellable state');
+        return await reply.fail('CONFLICT', 'Task is not in a cancellable state');
       }
 
       // Step 4: Update Firestore status to cancelled (source of truth)
@@ -2521,7 +2562,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', 'Failed to process heartbeat');
       }
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 2523
     }
   );
 
@@ -2592,7 +2633,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', 'Failed to detect zombie tasks');
       }
 
-      return await reply.ok(result.value);
+      // Best-effort: clean up PR task locks for interrupted zombie tasks
+      for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by !result.ok guard above
+        await deletePRTaskLock(getServices().firestore, lock.repository, lock.prNumber, request.log);
+      }
+
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 2594
     }
   );
 
@@ -2735,6 +2781,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         { taskId, nonce, userId }
       );
 
+      if (result.ok) {
+        for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by result.ok check
+          await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+        }
+      }
+
       if (!result.ok) {
         const error = result.error;
         request.log.warn({ taskId, errorCode: error.code, errorMessage: error.message }, 'Cancel-with-nonce failed');
@@ -2768,6 +2820,131 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ taskId }, 'Task cancelled via nonce successfully');
       return await reply.ok({ cancelled: true });
+    }
+  );
+
+  // POST /internal/code/submit-phase2 - Submit Phase 2 from WhatsApp button (INT-628)
+  fastify.post<{
+    Body: {
+      taskId: string;
+      userId: string;
+    };
+  }>(
+    '/internal/code/submit-phase2',
+    {
+      schema: {
+        operationId: 'submitToExecutionAgentInternal',
+        summary: 'Submit Phase 2 implementation from WhatsApp button',
+        description: 'Internal endpoint for submitting Phase 2 from WhatsApp button callback. Requires internal authentication.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string' },
+            userId: { type: 'string' },
+          },
+          required: ['taskId', 'userId'],
+        },
+        response: {
+          200: {
+            description: 'Phase 2 submitted successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  codeTaskId: { type: 'string' },
+                  resourceUrl: { type: 'string' },
+                  workerLocation: { type: 'string' },
+                  implementationOf: { type: 'string' },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Body: { taskId: string; userId: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/code/submit-phase2',
+      });
+
+      // Validate internal auth
+      const authResult = validateInternalAuth(request);
+      /* v8 ignore start -- test-infra: internal auth validation branch covered by other tests @preserve */
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for submit-phase2');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      /* v8 ignore stop @preserve */
+
+      const services = getServices();
+      const { taskId, userId } = request.body;
+
+      request.log.info({ taskId, userId }, 'Processing submit-phase2 request');
+
+      // Call existing submitToExecutionAgent use case
+      /* v8 ignore start -- test-infra: submitToExecutionAgent use case has its own tests @preserve */
+      const result = await submitToExecutionAgent(
+        {
+          logger: services.logger,
+          codeTaskRepo: services.codeTaskRepo,
+          linearAgentClient: services.linearAgentClient,
+          taskDispatcher: services.taskDispatcher,
+          whatsappNotifier: services.whatsappNotifier,
+          metricsClient: services.metricsClient,
+          workerSettingsRepo: services.workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
+        },
+        { originalTaskId: taskId, userId }
+      );
+      /* v8 ignore stop @preserve */
+
+      /* v8 ignore start -- test-infra: error handling branches covered by submitToExecutionAgent tests @preserve */
+      if (!result.ok) {
+        const error = result.error;
+        request.log.warn({ taskId, errorCode: error.code, errorMessage: error.message }, 'Submit-phase2 failed');
+
+        switch (error.code) {
+          case 'task_not_found':
+            return await reply.fail('NOT_FOUND', error.message);
+          case 'invalid_status':
+          case 'no_linear_issue':
+          case 'label_not_ready':
+            return await reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
+          case 'worker_not_configured':
+            return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
+          case 'already_implemented':
+            return await reply.code(409).send({ // @allow-raw-send: 409 with existingTaskId details
+              success: false,
+              error: {
+                code: error.code,
+                message: error.message,
+                details: { existingTaskId: error.existingTaskId, serverCode: error.code },
+              },
+            });
+          case 'active_task_exists':
+            return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
+          case 'internal_error':
+          default:
+            return await reply.fail('INTERNAL_ERROR', error.message);
+        }
+      }
+      /* v8 ignore stop @preserve */
+
+      request.log.info({ taskId, phase2TaskId: result.value.codeTaskId }, 'Phase 2 submitted successfully'); // @allow-result-access -- .ok checked above in the v8-ignore block
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked above in the v8-ignore block
     }
   );
 
@@ -2910,14 +3087,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info(
         {
-          tasksProcessed: result.value.tasksProcessed,
-          logsDeleted: result.value.logsDeleted,
-          durationMs: result.value.durationMs,
+          tasksProcessed: result.value.tasksProcessed, // @allow-result-access -- .ok checked at line 3035
+          logsDeleted: result.value.logsDeleted, // @allow-result-access -- .ok checked at line 3035
+          durationMs: result.value.durationMs, // @allow-result-access -- .ok checked at line 3035
         },
         'Task log cleanup completed'
       );
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 3035
     }
   );
 
@@ -2943,6 +3120,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               type: 'string',
               description: 'Optional additional context to help with the retry',
               maxLength: 5000,
+            },
+            workerType: {
+              type: 'string',
+              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'],
+              description: 'Optional worker type to use for the retry',
             },
           },
         },
@@ -3051,15 +3233,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       /* v8 ignore stop @preserve */
 
-      const { taskId, additionalContext } = request.body as { taskId: string; additionalContext?: string };
+      const { taskId, additionalContext, workerType } = request.body as { taskId: string; additionalContext?: string; workerType?: string };
 
-      request.log.info({ taskId, userId, hasAdditionalContext: additionalContext !== undefined }, 'Processing task retry');
+      request.log.info({ taskId, userId, hasAdditionalContext: additionalContext !== undefined, workerType }, 'Processing task retry');
 
       // Build retry request - only include additionalContext if defined
       const retryRequest: {
         originalTaskId: string;
         userId: string;
         additionalContext?: string;
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
       } = {
         originalTaskId: taskId,
         userId,
@@ -3067,6 +3250,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Only add additionalContext if provided
       if (additionalContext !== undefined) {
         retryRequest.additionalContext = additionalContext;
+      }
+      // Only add workerType if provided and valid
+      if (workerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'].includes(workerType)) {
+        retryRequest.workerType = workerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
       }
 
       const result = await retryTask(
@@ -3079,6 +3266,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         retryRequest
       );
@@ -3270,6 +3458,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         {
           originalTaskId: taskId,
@@ -3315,15 +3504,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
-  // POST /code/tasks/:taskId/implement - Start Phase 2 implementation from a completed design task
+  // POST /code/tasks/:taskId/implement - Start Execution Agent implementation from a completed planning task
   fastify.post(
     '/code/tasks/:taskId/implement',
     {
       onRequest: jwtValidator,
       schema: {
-        operationId: 'submitToPhase2',
-        summary: 'Start Phase 2 implementation from a completed design task',
-        description: 'Dispatches a Phase 2 strict-execution task from a completed Phase 1 design task. Requires Auth0 JWT.',
+        operationId: 'submitToExecutionAgent',
+        summary: 'Start Execution Agent implementation from a completed planning task',
+        description: 'Dispatches an Execution Agent task from a completed planning task. Route path remains stable for UI compatibility. Requires Auth0 JWT.',
         tags: ['public'],
         params: {
           type: 'object',
@@ -3331,13 +3520,23 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             taskId: {
               type: 'string',
-              description: 'The ID of the completed Phase 1 design task',
+                  description: 'The ID of the completed planning task',
+            },
+          },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            workerType: {
+              type: 'string',
+              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'],
+              description: 'Optional worker type to use for the implementation',
             },
           },
         },
         response: {
           200: {
-            description: 'Phase 2 task dispatched successfully',
+            description: 'Execution Agent task dispatched successfully',
             type: 'object',
             required: ['success', 'data'],
             properties: {
@@ -3444,6 +3643,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
 
       const { taskId } = request.params as { taskId: string };
+      const body = request.body as { workerType?: string } | undefined;
+      const requestedWorkerType = body?.workerType;
 
       // Check rate limits before dispatching (prompt length 0 — reuses existing task prompt)
       const limitCheck = await rateLimitService.checkLimits(userId, 0);
@@ -3458,9 +3659,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       /* v8 ignore stop @preserve */
 
-      request.log.info({ taskId, userId }, 'Processing Phase 2 implementation request');
+      request.log.info({ taskId, userId, workerType: requestedWorkerType }, 'Processing Execution Agent implementation request');
 
-      const result = await submitToPhase2(
+      // Only add workerType if provided and valid
+      const executionAgentRequest: { originalTaskId: string; userId: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus' } = { originalTaskId: taskId, userId };
+      if (requestedWorkerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'].includes(requestedWorkerType)) {
+        executionAgentRequest.workerType = requestedWorkerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+      }
+
+      const result = await submitToExecutionAgent(
         {
           logger: request.log,
           codeTaskRepo,
@@ -3470,8 +3677,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
-        { originalTaskId: taskId, userId }
+        executionAgentRequest
       );
 
       /* v8 ignore start -- test-infra: error handling paths covered by use case tests @preserve */
@@ -3483,21 +3691,21 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'invalid_status':
           case 'no_linear_issue':
           case 'label_not_ready':
-            return reply.fail('INVALID_REQUEST', error.message);
+            return reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
-            // Include existingTaskId in details so frontend can navigate
+            // @allow-raw-send: 409 with existingTaskId details for frontend navigation
             return reply.code(409).send({
               success: false,
               error: {
                 code: error.code,
                 message: error.message,
-                details: { existingTaskId: error.existingTaskId },
+                details: { existingTaskId: error.existingTaskId, serverCode: error.code },
               },
-            }); // @allow-raw-send: 409 with structured error payload containing existingTaskId
+            });
           case 'active_task_exists':
-            return reply.fail('CONFLICT', error.message);
+            return reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'internal_error':
           default:
             return reply.fail('INTERNAL_ERROR', error.message);
@@ -3607,6 +3815,119 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
 
       return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
+    }
+  );
+
+  // POST /internal/drain-queue - triggered by Cloud Scheduler (INT-619)
+  fastify.post(
+    '/internal/drain-queue',
+    {
+      schema: {
+        operationId: 'drainTaskQueue',
+        summary: 'Drain task queue by dispatching oldest queued task',
+        description: 'Called by Cloud Scheduler every minute to drain the task queue.',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Drain completed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped', 'failed'] },
+                  taskId: { type: 'string' },
+                },
+                required: ['action'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/drain-queue',
+      });
+
+      // Auth strategy: Cloud Scheduler sends OIDC tokens; direct service calls use x-internal-auth.
+      //
+      // SECURITY NOTE: The OIDC token is NOT validated at the application layer. In production,
+      // Cloud Run validates the OIDC token at the infrastructure level before the request reaches
+      // this handler. In the current Terraform config, code-agent uses allow_unauthenticated=true
+      // (required for external webhooks), so this OIDC trust relies on Cloud Run's ingress settings
+      // and IAM invoker configuration — NOT on the Bearer header alone. If Cloud Run ingress is
+      // changed to allow all traffic, this endpoint would need application-level OIDC validation.
+      //
+      // For defense in depth, internal callers should prefer the x-internal-auth header path.
+      const authHeader = request.headers.authorization;
+      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+
+      if (isOidcAuth) {
+        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn({ reason: authResult.reason }, 'Internal auth failed for drain-queue');
+          return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+        }
+      }
+
+      const services = getServices();
+
+      const result = await drainTaskQueue({
+        logger: services.logger,
+        codeTaskRepo: services.codeTaskRepo,
+        taskDispatcher: services.taskDispatcher,
+        linearAgentClient: services.linearAgentClient,
+        whatsappNotifier: services.whatsappNotifier,
+        workerSettingsRepo: services.workerSettingsRepo,
+      });
+
+      if (!result.ok) {
+        request.log.error({ error: result.error }, 'Drain queue failed');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      for (const lock of result.value.locksToCleanup ?? []) { // @allow-result-access -- narrowed by !result.ok guard above
+        await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+      }
+
+      return await reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }
   );
 

@@ -1,3 +1,5 @@
+import type { WorkerType } from '../services/isolation/types.js';
+
 export type TaskStatus =
   | 'queued'
   | 'running'
@@ -9,18 +11,14 @@ export type TaskStatus =
 export interface TaskVerificationRecord {
   attempt: number;
   passed: boolean;
-  confidence: number;
-  reasons: string[];
-  missingCriteria: string[];
-  resumeInstruction: string;
-  usedLlm: boolean;
-  verifierFailure?: boolean;
+  missingFields: string[];
+  verifierFailure: boolean;
   createdAt: string;
 }
 
 export interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: WorkerType;
   prompt: string;
   repository: string;
   baseBranch: string;
@@ -42,6 +40,12 @@ export interface Task {
    * Used for tracking retry chains and debugging.
    */
   retriedFrom?: string;
+  /** Agent type from code-agent. When set, used instead of recalculating from labels. */
+  agentType?: 'planning' | 'execution' | 'pull_request';
+  /** Branch name of planning PR to merge into execution worktree. */
+  planningPrBranch?: string;
+  /** PR URL to close after successful execution. */
+  planningPrUrl?: string;
   /**
    * Current execution attempt (starts at 1).
    */
@@ -68,10 +72,22 @@ export interface Task {
 
 export interface TaskResult {
   prUrl?: string;
-  branch: string;
-  commits: number;
+  branch?: string;
+  commits?: number;
   summary?: string;
   ciFailed?: boolean;
+  comment_replied?: boolean;
+  planning_outcome_label?: 'planned' | 'unclear';
+  planning_superpowers_writing_plans_used?: '0' | '1';
+  planning_linear_url?: string;
+  planning_is_complex?: '0' | '1';
+  planning_subtask_urls?: string;
+  planning_pr_url?: string;
+  planning_unclear_clarification?: string;
+  execution_outcome_label?: 'implemented';
+  execution_superpowers_executing_plans_used?: '0' | '1';
+  execution_superpowers_requesting_code_review_used?: '0' | '1';
+  execution_linear_issue_url?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;

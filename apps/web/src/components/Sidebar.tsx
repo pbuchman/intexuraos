@@ -16,6 +16,7 @@ import {
   DollarSign,
   FileText,
   Filter,
+  GitBranch,
   GitPullRequest,
   Inbox,
   Key,
@@ -48,7 +49,8 @@ const settingsItems: NavItem[] = [
   { to: '/settings/notion', label: 'Notion', icon: FileText },
   { to: '/settings/calendar', label: 'Google Calendar', icon: Calendar },
   { to: '/settings/linear', label: 'Linear', icon: LayoutList },
-  { to: '/settings/workers', label: 'Workers', icon: Server },
+  { to: '/settings/github', label: 'GitHub', icon: GitBranch },
+  { to: '/settings/code', label: 'Code Settings', icon: Server },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
   { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
   { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
@@ -313,10 +315,65 @@ export function Sidebar(): React.JSX.Element {
             {!isCollapsed ? <span>Inbox</span> : null}
           </NavLink>
 
-          {/* Research Agent section (collapsible) */}
+          {/* Code Tasks section (collapsible) */}
           <div className="pt-2">
             <button
               onClick={(): void => {
+                if (!isCodeTasksOpen) {
+                  void navigate(codeTasksItems[0]?.to ?? '/code-tasks');
+                }
+                setIsCodeTasksOpen(!isCodeTasksOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/code-tasks')
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`}
+            >
+              <Code2 className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Code Tasks</span>
+                  {isCodeTasksOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Code Tasks sub-items */}
+            {isCodeTasksOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
+                {codeTasksItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/code-tasks'}
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Research Studio section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                if (!isResearchAgentOpen) {
+                  void navigate(researchAgentItems[0]?.to ?? '/research');
+                }
                 setIsResearchAgentOpen(!isResearchAgentOpen);
               }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -366,6 +423,9 @@ export function Sidebar(): React.JSX.Element {
           <div className="pt-2">
             <button
               onClick={(): void => {
+                if (!isDataInsightsOpen) {
+                  void navigate(dataInsightsItems[0]?.to ?? '/data-insights');
+                }
                 setIsDataInsightsOpen(!isDataInsightsOpen);
               }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -411,58 +471,9 @@ export function Sidebar(): React.JSX.Element {
             ) : null}
           </div>
 
-          {/* Code Tasks section (collapsible) */}
-          <div className="pt-2">
-            <button
-              onClick={(): void => {
-                setIsCodeTasksOpen(!isCodeTasksOpen);
-              }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                location.pathname.startsWith('/code-tasks')
-                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
-              }`}
-            >
-              <Code2 className="h-5 w-5 shrink-0" />
-              {!isCollapsed ? (
-                <>
-                  <span className="flex-1 text-left">Code Tasks</span>
-                  {isCodeTasksOpen ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </>
-              ) : null}
-            </button>
-
-            {/* Code Tasks sub-items */}
-            {isCodeTasksOpen && !isCollapsed ? (
-              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
-                {codeTasksItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === '/code-tasks'}
-                    className={({ isActive }): string =>
-                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
-                      }`
-                    }
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          {/* My Notes */}
+          {/* Linear Issues */}
           <NavLink
-            to="/my-notes"
+            to="/linear"
             end
             className={({ isActive }): string =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -472,40 +483,8 @@ export function Sidebar(): React.JSX.Element {
               }`
             }
           >
-            <StickyNote className="h-5 w-5 shrink-0" />
-            {!isCollapsed ? <span>My Notes</span> : null}
-          </NavLink>
-
-          {/* My Todos */}
-          <NavLink
-            to="/my-todos"
-            end
-            className={({ isActive }): string =>
-              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
-              }`
-            }
-          >
-            <CheckSquare className="h-5 w-5 shrink-0" />
-            {!isCollapsed ? <span>My Todos</span> : null}
-          </NavLink>
-
-          {/* My Bookmarks */}
-          <NavLink
-            to="/my-bookmarks"
-            end
-            className={({ isActive }): string =>
-              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
-              }`
-            }
-          >
-            <Bookmark className="h-5 w-5 shrink-0" />
-            {!isCollapsed ? <span>My Bookmarks</span> : null}
+            <LayoutList className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Linear Issues</span> : null}
           </NavLink>
 
           {/* Calendar */}
@@ -524,9 +503,9 @@ export function Sidebar(): React.JSX.Element {
             {!isCollapsed ? <span>Calendar</span> : null}
           </NavLink>
 
-          {/* Linear Issues */}
+          {/* Bookmarks */}
           <NavLink
-            to="/linear"
+            to="/my-bookmarks"
             end
             className={({ isActive }): string =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -536,8 +515,8 @@ export function Sidebar(): React.JSX.Element {
               }`
             }
           >
-            <LayoutList className="h-5 w-5 shrink-0" />
-            {!isCollapsed ? <span>Linear Issues</span> : null}
+            <Bookmark className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Bookmarks</span> : null}
           </NavLink>
 
           {/* WhatsApp */}
@@ -556,18 +535,25 @@ export function Sidebar(): React.JSX.Element {
             {!isCollapsed ? <span>WhatsApp</span> : null}
           </NavLink>
 
-          {/* Notifications section (collapsible with saved filters) */}
+          {/* Mobile (notifications with saved filters) */}
           <div className="pt-2">
             <button
               onClick={(): void => {
+                if (!isNotificationsOpen) {
+                  void navigate('/notifications');
+                }
                 setIsNotificationsOpen(!isNotificationsOpen);
               }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/notifications')
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`}
             >
               <BellRing className="h-5 w-5 shrink-0" />
               {!isCollapsed ? (
                 <>
-                  <span className="flex-1 text-left">Notifications</span>
+                  <span className="flex-1 text-left">Mobile</span>
                   {isNotificationsOpen ? (
                     <ChevronUp className="h-4 w-4" />
                   ) : (
@@ -621,6 +607,38 @@ export function Sidebar(): React.JSX.Element {
               </div>
             ) : null}
           </div>
+
+          {/* Notes */}
+          <NavLink
+            to="/my-notes"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`
+            }
+          >
+            <StickyNote className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Notes</span> : null}
+          </NavLink>
+
+          {/* Checklists */}
+          <NavLink
+            to="/my-todos"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`
+            }
+          >
+            <CheckSquare className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Checklists</span> : null}
+          </NavLink>
 
           {/* Settings section (collapsible) */}
           <div className="pt-2">

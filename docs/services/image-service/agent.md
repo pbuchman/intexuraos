@@ -223,14 +223,14 @@ interface DeleteImageOutput {
 
 ## Error Handling
 
-| Error Code         | HTTP Status | Meaning                      | Recovery Action                           |
-| ------------------ | ----------- | ---------------------------- | ----------------------------------------- |
-| `UNAUTHORIZED`     | 401         | Invalid internal auth header | Fix X-Internal-Auth header value          |
-| `INVALID_REQUEST`  | 400         | Missing API key for provider | User must add API key or configure fallback |
-| `RATE_LIMITED`     | 429         | Provider rate limit exceeded | Retry with exponential backoff            |
-| `DOWNSTREAM_ERROR` | 502         | Provider or user-service failure | Check provider/service status, retry    |
-| `INTERNAL_ERROR`   | 500         | Firestore save failed        | GCS image cleaned up; retry full operation |
-| `PARSE_ERROR`      | 502         | LLM response malformed       | Retry with same or different model        |
+| Error Code         | HTTP Status | Meaning                          | Recovery Action                             |
+| ------------------ | ----------- | -------------------------------- | ------------------------------------------- |
+| `UNAUTHORIZED`     | 401         | Invalid internal auth header     | Fix X-Internal-Auth header value            |
+| `INVALID_REQUEST`  | 400         | Missing API key for provider     | User must add API key or configure fallback |
+| `RATE_LIMITED`     | 429         | Provider rate limit exceeded     | Retry with exponential backoff              |
+| `DOWNSTREAM_ERROR` | 502         | Provider or user-service failure | Check provider/service status, retry        |
+| `INTERNAL_ERROR`   | 500         | Firestore save failed            | GCS image cleaned up; retry full operation  |
+| `PARSE_ERROR`      | 502         | LLM response malformed           | Retry with same or different model          |
 
 ---
 
@@ -253,13 +253,13 @@ None. Image-service does not publish Pub/Sub events.
 
 ## Dependencies
 
-| Service        | Why Needed                            | Failure Behavior                                |
-| -------------- | ------------------------------------- | ----------------------------------------------- |
-| user-service   | Fetch encrypted API keys per provider | Rejects request with 502 DOWNSTREAM_ERROR       |
-| GCS            | Store generated images and thumbnails | Returns STORAGE_ERROR; image generation reverted |
-| Firestore      | Persist image metadata for tracking   | Cleans up GCS image, returns 500 INTERNAL_ERROR |
-| OpenAI API     | GPT Image 1 generation, GPT-4.1 prompts | Returns DOWNSTREAM_ERROR to caller           |
-| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro prompts | Returns DOWNSTREAM_ERROR to caller       |
+| Service           | Why Needed                                 | Failure Behavior                                 |
+| ----------------- | ------------------------------------------ | ------------------------------------------------ |
+| user-service      | Fetch encrypted API keys per provider      | Rejects request with 502 DOWNSTREAM_ERROR        |
+| GCS               | Store generated images and thumbnails      | Returns STORAGE_ERROR; image generation reverted |
+| Firestore         | Persist image metadata for tracking        | Cleans up GCS image, returns 500 INTERNAL_ERROR  |
+| OpenAI API        | GPT Image 1 generation, GPT-4.1 prompts    | Returns DOWNSTREAM_ERROR to caller               |
+| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro prompts | Returns DOWNSTREAM_ERROR to caller               |
 
 ---
 
