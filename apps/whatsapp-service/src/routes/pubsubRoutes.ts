@@ -563,9 +563,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
           eventData = JSON.parse(decoded) as TranscriptionCompletedEvent;
-        /* v8 ignore start -- test-infra: tests send valid base64 messages @preserve */
         } catch {
-        /* v8 ignore stop @preserve */
           request.log.error(
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
@@ -574,12 +572,10 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         }
 
         const parsedType = eventData.type as string;
-        /* v8 ignore start -- test-infra: tests send correct event types @preserve */
         if (parsedType !== 'srt.transcription.completed') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
           return await reply.ok({});
         }
-        /* v8 ignore stop @preserve */
 
         request.log.info(
           {
@@ -678,9 +674,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
           eventData = JSON.parse(decoded) as WebhookProcessEvent;
-        /* v8 ignore start -- test-infra: tests send valid base64 messages @preserve */
         } catch {
-        /* v8 ignore stop @preserve */
           request.log.error(
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
