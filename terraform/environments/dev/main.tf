@@ -634,18 +634,6 @@ resource "google_pubsub_topic" "audio_stored" {
   depends_on = [google_project_service.apis]
 }
 
-# Dead-letter topic for audio-stored events.
-# Eventarc-triggered Cloud Functions have no built-in DLQ — if the function
-# exhausts its retry budget the message is lost. This topic captures those
-# failures for inspection and replay.
-resource "google_pubsub_topic" "audio_stored_dlq" {
-  name    = "intexuraos-audio-stored-${var.environment}-dlq"
-  project = var.project_id
-  labels  = local.common_labels
-
-  depends_on = [google_project_service.apis]
-}
-
 # Grant whatsapp-service permission to publish to audio-stored topic
 resource "google_pubsub_topic_iam_member" "whatsapp_publishes_audio_stored" {
   project = var.project_id
@@ -2250,9 +2238,8 @@ module "function_transcription" {
     INTEXURAOS_ENVIRONMENT                          = var.environment
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
-    # User-service URL is needed for internal auth token validation on callback
-    INTEXURAOS_USER_SERVICE_URL      = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_WHATSAPP_MEDIA_BUCKET = module.whatsapp_media_bucket.bucket_name
+    INTEXURAOS_USER_SERVICE_URL                     = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
   }
 
   secrets = {
