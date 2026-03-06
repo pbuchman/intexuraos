@@ -395,6 +395,32 @@ function isActiveStatus(status: CodeTaskStatus): boolean {
   return status === 'queued' || status === 'dispatched' || status === 'running';
 }
 
+function GitHubButton({ href }: { href: string }): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
+    >
+      GitHub
+    </a>
+  );
+}
+
+function LinearButton({ href }: { href: string }): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
+    >
+      Linear
+    </a>
+  );
+}
+
 function TaskActions({
   isActive, cancelling, cancelError, onCancel,
   isRetryable, retrying, retryError,
@@ -441,26 +467,8 @@ function TaskActions({
             <StopCircle className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Cancel Task</span>
           </Button>
-          {prUrl !== undefined ? (
-            <a
-              href={prUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
-            >
-              GitHub
-            </a>
-          ) : null}
-          {linearIssueUrl !== undefined ? (
-            <a
-              href={linearIssueUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
-            >
-              Linear
-            </a>
-          ) : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
         </>
       ) : null}
       {isRetryable ? (
@@ -534,26 +542,8 @@ function TaskActions({
                 </div>
               ) : null}
             </div>
-            {prUrl !== undefined ? (
-              <a
-                href={prUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
-              >
-                GitHub
-              </a>
-            ) : null}
-            {linearIssueUrl !== undefined ? (
-              <a
-                href={linearIssueUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
-              >
-                Linear
-              </a>
-            ) : null}
+            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+            {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
             <button
               type="button"
               onClick={onShowDeleteConfirm}
@@ -568,26 +558,8 @@ function TaskActions({
       ) : null}
       {!isActive && !isRetryable ? (
         <>
-          {prUrl !== undefined ? (
-            <a
-              href={prUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
-            >
-              GitHub
-            </a>
-          ) : null}
-          {linearIssueUrl !== undefined ? (
-            <a
-              href={linearIssueUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
-            >
-              Linear
-            </a>
-          ) : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
         </>
       ) : null}
       {cancelError !== null ? (
