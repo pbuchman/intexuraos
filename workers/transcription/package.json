@@ -1,0 +1,32 @@
+{
+  "name": "@intexuraos/transcription",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-service.mjs transcription",
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
+    "start": "node dist/index.js",
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.0.0",
+    "@google-cloud/storage": "^7.14.0",
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/infra-pubsub": "workspace:*",
+    "@speechmatics/batch-client": "^5.1.0",
+    "pino": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.16"
+  }
+}
