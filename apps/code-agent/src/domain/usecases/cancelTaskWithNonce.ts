@@ -10,6 +10,7 @@ import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 
 export interface CancelTaskWithNonceRequest {
   taskId: string;
@@ -52,7 +53,7 @@ export interface CancelTaskWithNonceDeps {
 export async function cancelTaskWithNonce(
   deps: CancelTaskWithNonceDeps,
   request: CancelTaskWithNonceRequest
-): Promise<Result<{ cancelled: true }, CancelTaskWithNonceError>> {
+): Promise<Result<{ cancelled: true; locksToCleanup: LockCleanupInfo[] }, CancelTaskWithNonceError>> {
   const { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo } = deps;
   const { taskId, nonce, userId } = request;
 
@@ -105,6 +106,8 @@ export async function cancelTaskWithNonce(
     return err({ code: 'internal_error', message: 'Failed to cancel task' });
   }
 
+  const locksToCleanup = buildLockCleanups(task);
+
   // Step 7: Notify worker to stop (best effort)
   try {
     // Fetch user's worker credentials for the cancellation request
@@ -129,5 +132,5 @@ export async function cancelTaskWithNonce(
   }
 
   logger.info({ taskId }, 'Task cancelled via nonce');
-  return ok({ cancelled: true });
+  return ok({ cancelled: true, locksToCleanup });
 }

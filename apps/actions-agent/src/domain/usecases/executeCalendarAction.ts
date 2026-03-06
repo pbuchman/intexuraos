@@ -2,8 +2,9 @@ import type { Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
-import type { CalendarServiceClient } from '../ports/calendarServiceClient.js';
+import type { CalendarServiceClient, CalendarPreview } from '../ports/calendarServiceClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { formatCalendarCompletionMessage } from '../utils/formatCalendarCompletionMessage.js';
 import type { Logger } from 'pino';
 
 export interface ExecuteCalendarActionDeps {
@@ -147,7 +148,24 @@ export function createExecuteCalendarActionUseCase(
     if (resourceUrl !== undefined) {
       const isAbsoluteUrl = resourceUrl.startsWith('http');
       const fullUrl = isAbsoluteUrl ? resourceUrl : `${webAppUrl}${resourceUrl}`;
-      const whatsappMessage = `📅 ${message} View it here: ${fullUrl}`;
+
+      // Fetch cached preview for rich message (best-effort)
+      let previewForMessage: CalendarPreview | null = null;
+      const previewResult = await calendarServiceClient.getPreview(actionId);
+      if (previewResult.ok) {
+        previewForMessage = previewResult.value; // @allow-result-access -- guarded by previewResult.ok check above
+      } else {
+        logger.warn(
+          { actionId, error: previewResult.error.message },
+          'Failed to fetch preview for completion message (non-fatal, using basic message)'
+        );
+      }
+
+      const whatsappMessage = formatCalendarCompletionMessage({
+        preview: previewForMessage,
+        fallbackMessage: message,
+        eventUrl: fullUrl,
+      });
 
       logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 

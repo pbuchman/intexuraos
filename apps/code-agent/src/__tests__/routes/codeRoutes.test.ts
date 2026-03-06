@@ -997,6 +997,58 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(body.error.message).toBe('Database connection failed');
     });
+
+    it('returns 400 INVALID_REQUEST for prompt containing a base64 blob (injection sanitization)', async () => {
+      // Mock workerSettingsRepo to return valid settings (so we reach sanitization)
+      const mockWorkerSettingsRepo = {
+        getSettings: vi.fn().mockResolvedValue({
+          ok: true,
+          value: {
+            userId: 'user-123',
+            workers: [
+              {
+                name: 'home-mac',
+                url: 'https://cc-mac.intexuraos.cloud',
+                cfAccessClientId: 'test-client-id',
+                cfAccessClientSecret: 'test-client-secret',
+                dispatchSigningSecret: 'test-dispatch-secret',
+                enabled: true,
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        }),
+      } as unknown as WorkerSettingsRepository;
+
+      setServices({
+        ...getServices(),
+        workerSettingsRepo: mockWorkerSettingsRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/process',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          actionId: 'action-123',
+          approvalEventId: 'approval-123',
+          userId: 'user-123',
+          payload: {
+            prompt: 'A'.repeat(3500),
+            repository: 'test/repo',
+            baseBranch: 'main',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
   });
 
   describe('timestampToIso', () => {
@@ -1567,6 +1619,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           detected: 2,
           interrupted: 1,
           errors: [],
+          locksToCleanup: [],
         },
       });
 

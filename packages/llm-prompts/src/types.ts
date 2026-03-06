@@ -18,6 +18,10 @@ export interface PromptDeps {
  * Generic prompt builder interface with injectable dependencies.
  * Prompts are objects with metadata and a build() method that returns the prompt string.
  *
+ * A simplified single-generic variant of this interface exists at
+ * workers/orchestrator/src/services/prompt-builder.ts for orchestrator
+ * system prompts (kept local to avoid coupling orchestrator to this package).
+ *
  * @example
  * const titlePrompt: PromptBuilder<TitleInput, TitleDeps> = {
  *   name: 'title-generation',

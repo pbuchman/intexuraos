@@ -1367,4 +1367,65 @@ describe('processCodeAction', () => {
       expect(result.error.code).toBe('queue_full');
     }
   });
+
+  // ─── Prompt injection sanitization (INT-413) ──────────────────────
+  it('returns validation_error for empty prompt', async () => {
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: '   ',
+        workerType: 'auto',
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('validation_error');
+    }
+  });
+
+  it('returns validation_error for prompt containing a base64 blob', async () => {
+    const base64Blob = 'A'.repeat(3500);
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: base64Blob,
+        workerType: 'auto',
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('validation_error');
+    }
+  });
+
+  it('passes a normal prompt through sanitization unchanged', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'Firestore unavailable' })
+    );
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: 'Fix the login bug',
+        workerType: 'auto',
+      }
+    );
+
+    // Should fail at Firestore, not at validation
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('internal_error');
+    }
+  });
 });
