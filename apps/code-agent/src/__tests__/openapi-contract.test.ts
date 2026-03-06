@@ -45,7 +45,7 @@ import { createNoOpMetricsClient, type MetricsClient } from '../infra/metrics.js
 import { createWorkerSettingsRepository } from '../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
-import { mockWorkerHealthProbe } from './helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockUserServiceClient } from './helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../infra/repositories/firestoreTurnMetricsRepository.js';
 
@@ -150,6 +150,10 @@ describe('OpenAPI contract', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -172,6 +176,10 @@ describe('OpenAPI contract', () => {
       gitHubPREventRepo: import('../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
+      gitHubPRClient: import('../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     app = await buildServer();

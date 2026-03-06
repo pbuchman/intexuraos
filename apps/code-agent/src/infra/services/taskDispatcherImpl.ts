@@ -39,7 +39,7 @@ interface WorkerTaskRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   webhookUrl: string;
   webhookSecret: string;
   /** Labels from the validated Linear issue */
@@ -48,6 +48,9 @@ interface WorkerTaskRequest {
   hasChildren: boolean;
   linearIssueId?: string;
   traceId?: string;
+  agentType?: 'planning' | 'execution' | 'pull_request';
+  planningPrBranch?: string;
+  planningPrUrl?: string;
 }
 
 /**
@@ -108,6 +111,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     if (request.traceId !== undefined) {
       taskRequest.traceId = request.traceId;
     }
+    if (request.agentType !== undefined) {
+      taskRequest.agentType = request.agentType;
+    }
+    if (request.planningPrBranch !== undefined) {
+      taskRequest.planningPrBranch = request.planningPrBranch;
+    }
+    if (request.planningPrUrl !== undefined) {
+      taskRequest.planningPrUrl = request.planningPrUrl;
+    }
 
     const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();
@@ -159,6 +171,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     timestamp: number,
     workers: WorkerConfigWithCredentials[]
   ): Promise<Result<DispatchResult, DispatchError>> {
+    let sawCapacity503 = false;
+    let sawExplicitRejection = false;
+
     for (const worker of workers) {
       // Generate nonce for replay protection
       const nonce = generateNonce();
@@ -173,6 +188,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           { taskId: taskRequest.taskId, workerLocation: worker.location },
           'Failed to sign dispatch request'
         );
+        sawExplicitRejection = true;
         continue;
       }
 
@@ -203,6 +219,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           { taskId: taskRequest.taskId, workerLocation: worker.location, reason: workerResponse.reason },
           'Worker rejected task'
         );
+        sawExplicitRejection = true;
         continue;
       } catch (error) {
         this.logger.error(
@@ -210,7 +227,13 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           'Failed to dispatch to worker'
         );
 
-        if (error instanceof Error && /50[234]/.test(error.message)) {
+        if (error instanceof Error && error.message.includes('503')) {
+          sawCapacity503 = true;
+          continue;
+        }
+
+        // 502/504 are infrastructure errors — neutral (don't affect capacity decision)
+        if (error instanceof Error && (error.message.includes('502') || error.message.includes('504'))) {
           continue;
         }
 
@@ -219,6 +242,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           message: `Network error: ${getErrorMessage(error)}`,
         });
       }
+    }
+
+    // INT-619/INT-624: Distinguish capacity-related failures from other failures.
+    // Infrastructure errors (502/504) are neutral — they don't count for or against capacity.
+    if (sawCapacity503 && !sawExplicitRejection) {
+      return err({
+        code: 'at_capacity',
+        message: 'All available workers are busy (returned 503)',
+      });
     }
 
     return err({

@@ -443,7 +443,7 @@ describe('codeAgentHttpClient', () => {
     });
 
     it('handles different worker types (opus, glm, auto)', async () => {
-      const workerTypes: ('opus' | 'auto' | 'glm')[] = ['opus', 'auto', 'glm'];
+      const workerTypes: ('opus' | 'auto' | 'sonnet' | 'minimax' | 'glm')[] = ['opus', 'auto', 'sonnet', 'minimax', 'glm'];
 
       for (const workerType of workerTypes) {
         nock(baseUrl)
@@ -705,6 +705,289 @@ describe('codeAgentHttpClient', () => {
         if (isErr(result)) {
           expect(result.error.code).toBe('NETWORK_ERROR');
           expect(result.error.message).toContain('aborted');
+        }
+      });
+    });
+  });
+
+  describe('submitToPhase2', () => {
+    const phase2Input = { taskId: 'task-123', userId: 'user-456' };
+
+    describe('successful responses', () => {
+      it('returns phase2 result on 200 response', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/submit-phase2', {
+            taskId: 'task-123',
+            userId: 'user-456',
+          })
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, {
+            success: true,
+            data: {
+              codeTaskId: 'phase2-task-789',
+              resourceUrl: 'https://app.intexuraos.com/code-tasks/789',
+              workerLocation: 'us-central1',
+              implementationOf: 'task-123',
+            },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isOk(result)).toBe(true);
+        if (isOk(result)) {
+          expect(result.value.codeTaskId).toBe('phase2-task-789');
+          expect(result.value.resourceUrl).toBe('https://app.intexuraos.com/code-tasks/789');
+          expect(result.value.workerLocation).toBe('us-central1');
+          expect(result.value.implementationOf).toBe('task-123');
+        }
+      });
+
+      it('returns UNKNOWN for invalid 200 response body', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(200, { success: false });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('UNKNOWN');
+        }
+      });
+
+      it('returns UNKNOWN for malformed JSON response', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(200, 'not json', { 'Content-Type': 'text/plain' });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('UNKNOWN');
+        }
+      });
+    });
+
+    describe('error responses', () => {
+      it('returns TASK_NOT_FOUND on 404', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(404, { success: false, error: { code: 'NOT_FOUND', message: 'Task not found' } });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('TASK_NOT_FOUND');
+          expect(result.error.message).toBe('Task not found');
+        }
+      });
+
+      it('maps 400 with serverCode invalid_status to INVALID_STATUS', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(400, {
+            success: false,
+            error: { code: 'INVALID_REQUEST', message: 'Not in designed status', details: { serverCode: 'invalid_status' } },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('INVALID_STATUS');
+        }
+      });
+
+      it('maps 400 with serverCode no_linear_issue to NO_LINEAR_ISSUE', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(400, {
+            success: false,
+            error: { code: 'INVALID_REQUEST', message: 'No Linear issue', details: { serverCode: 'no_linear_issue' } },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('NO_LINEAR_ISSUE');
+        }
+      });
+
+      it('maps 400 with serverCode label_not_ready to LABEL_NOT_READY', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(400, {
+            success: false,
+            error: { code: 'INVALID_REQUEST', message: 'Label missing', details: { serverCode: 'label_not_ready' } },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('LABEL_NOT_READY');
+        }
+      });
+
+      it('falls back to INVALID_STATUS for 400 INVALID_REQUEST without serverCode', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(400, {
+            success: false,
+            error: { code: 'INVALID_REQUEST', message: 'Bad request' },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('INVALID_STATUS');
+        }
+      });
+
+      it('returns UNKNOWN for 400 with unrecognized error code', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(400, {
+            success: false,
+            error: { code: 'SOMETHING_ELSE', message: 'Weird error' },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('UNKNOWN');
+        }
+      });
+
+      it('returns ALREADY_IMPLEMENTED on 409 with existingTaskId', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(409, {
+            success: false,
+            error: { code: 'already_implemented', message: 'Already done', details: { existingTaskId: 'existing-task-999' } },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('ALREADY_IMPLEMENTED');
+          expect(result.error.existingTaskId).toBe('existing-task-999');
+        }
+      });
+
+      it('returns ALREADY_IMPLEMENTED on 409 without existingTaskId', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(409, {
+            success: false,
+            error: { code: 'already_implemented', message: 'Already done' },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('ALREADY_IMPLEMENTED');
+          expect(result.error.existingTaskId).toBeUndefined();
+        }
+      });
+
+      it('returns ACTIVE_TASK_EXISTS on 409 with serverCode active_task_exists', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(409, {
+            success: false,
+            error: { code: 'CONFLICT', message: 'Active task exists', details: { serverCode: 'active_task_exists' } },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('ACTIVE_TASK_EXISTS');
+        }
+      });
+
+      it('returns WORKER_NOT_CONFIGURED on 503', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(503, {
+            success: false,
+            error: { message: 'No workers' },
+          });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('WORKER_NOT_CONFIGURED');
+        }
+      });
+
+      it('returns UNKNOWN on unexpected status code', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(502, 'Bad Gateway');
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('UNKNOWN');
+          expect(result.error.message).toContain('502');
+        }
+      });
+
+      it('handles unparseable error response body', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .reply(400, 'not json', { 'Content-Type': 'text/plain' });
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          // Falls through to UNKNOWN because errorCode is '' (parse failed)
+          expect(result.error.code).toBe('UNKNOWN');
+        }
+      });
+    });
+
+    describe('network errors', () => {
+      it('returns NETWORK_ERROR on connection failure', async () => {
+        nock(baseUrl)
+          .post('/internal/code/submit-phase2')
+          .replyWithError('Connection refused');
+
+        const client = createClient();
+        const result = await client.submitToPhase2(phase2Input);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('NETWORK_ERROR');
+          expect(result.error.message).toContain('Connection refused');
         }
       });
     });

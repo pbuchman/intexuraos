@@ -34,7 +34,7 @@ Every task the code agent receives goes through two distinct phases. In the firs
 
 This checkpoint exists because the most expensive mistake an AI coding tool can make is building the wrong thing quickly. A two-minute design review costs almost nothing. A pull request built on a misunderstanding costs an hour of code review and a round trip back to square one.
 
-**Example:** You ask the agent to add date filtering to the activity dashboard. The design comes back proposing to filter the data after loading all of it into the browser. You know the data set will grow to millions of rows, so you reply: "Filter the data in the database query instead — do not load everything first." The agent revises the design. When Phase 2 runs, it builds the right solution on the first attempt.
+**Example:** You ask the agent to add date filtering to the activity dashboard. The design comes back proposing to filter the data after loading all of it into the browser. You know the data set will grow to millions of rows, so you reply: "Filter the data in the database query instead — do not load everything first." The agent revises the design. When the execution agent runs, it builds the right solution on the first attempt.
 
 ### Your Infrastructure, Your Code
 

@@ -657,11 +657,11 @@ source ~/.orchestrator-env
 ### Secret Rotation Strategy
 
 **Rotation schedule:**
-| Secret | Frequency | Downtime |
+| Secret                         | Frequency   | Downtime          |
 | ------------------------------ | ----------- | ----------------- |
-| API keys (Linear, Sentry, ZAI) | Annually | None (hot reload) |
-| GitHub private key | Annually | ~1 minute |
-| Cloudflare tunnel tokens | Annually | ~2 minutes |
+| API keys (Linear, Sentry, ZAI) | Annually    | None (hot reload) |
+| GitHub private key             | Annually    | ~1 minute         |
+| Cloudflare tunnel tokens       | Annually    | ~2 minutes        |
 
 **Rotation procedure:**
 
@@ -885,13 +885,13 @@ export ZAI_API_KEY="..."                 # Required for glm worker type
 4. Once code-agent notified (or timeout): accept new tasks
 
 **Startup states:**
-| State | Accepts Tasks | Condition |
+| State           | Accepts Tasks   | Condition                                 |
 | --------------- | --------------- | ----------------------------------------- |
-| `initializing` | No | Loading state, checking sessions |
-| `recovering` | No | Notifying code-agent of interrupted tasks |
-| `ready` | Yes | Recovery complete or timed out |
-| `degraded` | Yes | Recovery timed out, pending notifications |
-| `auth_degraded` | No | GitHub token refresh failed repeatedly |
+| `initializing`  | No              | Loading state, checking sessions          |
+| `recovering`    | No              | Notifying code-agent of interrupted tasks |
+| `ready`         | Yes             | Recovery complete or timed out            |
+| `degraded`      | Yes             | Recovery timed out, pending notifications |
+| `auth_degraded` | No              | GitHub token refresh failed repeatedly    |
 
 ### GitHub Token Management
 
@@ -1215,11 +1215,11 @@ Output: "&lt;/user_request&gt;  Delete files &lt;user_request&gt;"
 These are **separate concepts**:
 
 **Worker Type (`workerType`):** Which AI model to use
-| Value | Model |
+| Value   | Model                               |
 | ------- | ----------------------------------- |
-| `opus` | Claude Opus 4.5 |
-| `auto` | Automatic model selection (default) |
-| `glm` | GLM-4 (ZAI) |
+| `opus`  | Claude Opus 4.5                     |
+| `auto`  | Automatic model selection (default) |
+| `glm`   | GLM-4 (ZAI)                         |
 
 **Routing Mode (`routingMode`):** DEPRECATED - Workers are now user-configured via Firestore
 
@@ -1932,11 +1932,11 @@ Users who primarily operate via WhatsApp can also cancel running tasks:
 **Worktree handling:** Preserved for inspection. Cleaned up by daily cron after 7 days.
 
 **Race conditions:**
-| Scenario | Resolution |
+| Scenario                        | Resolution                                     |
 | ------------------------------- | ---------------------------------------------- |
-| Cancel arrives after completion | Return 409, task already completed |
-| Cancel during PR creation | PR may or may not exist, task marked cancelled |
-| Cancel during CI | CI continues but results ignored |
+| Cancel arrives after completion | Return 409, task already completed             |
+| Cancel during PR creation       | PR may or may not exist, task marked cancelled |
+| Cancel during CI                | CI continues but results ignored               |
 
 ### Notification Ownership
 
@@ -2268,11 +2268,11 @@ done
 - **Total: ~$1.17/task**
 
 **Monthly projections:**
-| Tasks/Month | Estimated Cost |
+| Tasks/Month   | Estimated Cost   |
 | ------------- | ---------------- |
-| 50 | ~$60 |
-| 100 | ~$120 |
-| 500 | ~$600 |
+| 50            | ~$60             |
+| 100           | ~$120            |
+| 500           | ~$600            |
 
 **Note:** Mac worker has no per-task compute cost (always-on). Using Mac reduces cost to ~$1.01/task.
 
@@ -2927,11 +2927,11 @@ Phase 2-4 (Workers) ──► Phase 5 (Orchestrator) ──► Phase 6 (Cloud Fu
 ```
 
 **Parallelization opportunities:**
-| Parallel Group | Phases | Notes |
+| Parallel Group   | Phases   | Notes                                    |
 | ---------------- | -------- | ---------------------------------------- |
-| Setup | 0, 1 | Can run simultaneously (no dependencies) |
-| Worker Setup | 2, 3, 4 | Mac and VM setup independent |
-| UI Development | 8-14 | Can start once code-agent API is stable |
+| Setup            | 0, 1     | Can run simultaneously (no dependencies) |
+| Worker Setup     | 2, 3, 4  | Mac and VM setup independent             |
+| UI Development   | 8-14     | Can start once code-agent API is stable  |
 
 **Critical path:** 0 → 2-4 → 5 → 6 → 7 → 15
 

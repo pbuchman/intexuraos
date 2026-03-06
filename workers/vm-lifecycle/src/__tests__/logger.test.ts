@@ -18,7 +18,7 @@ describe('logger', () => {
     const { logger } = await import('../logger.js');
 
     expect(logger).toBeDefined();
-    expect(logger.level).toBe('info');
+    expect((logger as unknown as { level: string }).level).toBe('info');
   });
 
   it('should create a logger with custom level from LOG_LEVEL env var', async () => {
@@ -27,7 +27,7 @@ describe('logger', () => {
     const { logger } = await import('../logger.js');
 
     expect(logger).toBeDefined();
-    expect(logger.level).toBe('debug');
+    expect((logger as unknown as { level: string }).level).toBe('debug');
   });
 
   it('should have correct formatter for level', async () => {

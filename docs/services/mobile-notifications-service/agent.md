@@ -275,7 +275,7 @@ interface CreateSavedFilterInput {
 | **Pagination**     | Public list maximum 100, internal maximum 1000 per request |
 | **Single Sig**     | Only one active signature per user; reconnect replaces it  |
 | **Android Only**   | Requires Tasker/Automate on Android device                 |
-| **Idempotency**    | Duplicate `notification_id` per user is silently ignored    |
+| **Idempotency**    | Duplicate `notification_id` per user is silently ignored   |
 | **Filter Options** | Populated dynamically from received notifications          |
 | **No Push-back**   | Captures and stores only; does not push to devices         |
 

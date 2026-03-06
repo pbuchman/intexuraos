@@ -2,7 +2,42 @@
 
 ## Overview
 
-The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running Claude Code in interactive mode, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens, persists state atomically to disk, and recovers interrupted tasks on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its phase-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent.
+The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running Claude Code in interactive mode, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens, persists state atomically to disk, and recovers interrupted tasks on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent.
+
+## Agent-Based Routing and Contracts (2026-02-26)
+
+### Agent selection precedence
+
+1. PR / issue comment / review event -> `pull_request`
+2. Linear issue without `code-task` -> `planning`
+3. Linear issue with `code-task` -> `execution`
+
+### Prompt markers and final blocks
+
+- Preserved marker: `[WORKER-MODE]`
+- Exactly one injected marker: `[AGENT:PLANNING]` / `[AGENT:EXECUTION]` / `[AGENT:PULL_REQUEST]`
+- Final block names: `PLANNING_AGENT_FINAL`, `EXECUTION_AGENT_FINAL`, `PULL_REQUEST_AGENT_FINAL`
+
+### Planning Agent webhook semantics
+
+- `planned` -> webhook `status=completed`
+- `unclear` -> webhook `status=failed`, `error.code=PLANNING_AGENT_UNCLEAR`
+
+Flattened Planning Agent `result` fields:
+
+- `planning_outcome_label`
+- `planning_superpowers_writing_plans_used`
+- `planning_linear_url`
+- `planning_is_complex`
+- `planning_pr_url`
+- `planning_clarification_message`
+
+Ownership split:
+
+- Orchestrator: routing, prompts, completion verification, flattened `planning_*` metadata
+- `code-agent`: deterministic Linear issue mutations after webhook receipt
+
+> **Note:** UI enhancements for displaying execution-agent verifier results and execution metadata are deferred to a future step. Current implementation covers backend orchestrator and code-agent contracts only.
 
 ## Architecture
 
@@ -28,7 +63,7 @@ graph TB
             TD --> LF[LogForwarder<br/>3s chunked upload]
             TD --> WC[WebhookClient<br/>HMAC-signed callbacks]
             TD --> SP[StatePersistence<br/>atomic JSON file]
-            TD --> SYS[SystemPrompt<br/>Phase 1 / Phase 2]
+            TD --> SYS[SystemPrompt<br/>Planning / Execution / PR]
             TD --> TMC[TurnMetricsCollector<br/>cgroup + session JSONL]
 
             GTS[GitHubTokenService<br/>JWT + installation token]
@@ -80,7 +115,7 @@ graph TB
 
 Added `OrchestratorCompletionVerifier` and integrated it into `TaskDispatcher`:
 
-- After each container exit, runs deterministic checks (worker exit code, PHASE1/PHASE2_FINAL contract blocks, PR URL presence, CI status)
+- After each container exit, runs deterministic checks (worker exit code, agent final contract blocks, PR URL presence, CI status)
 - Then calls Gemini 2.5 Flash to adjudicate completion with the last 120 log lines and the last assistant message
 - If the verifier returns `passed=false` and `attempt < maxAttempts`, the dispatcher automatically continues the session with a resume prompt listing missing criteria
 - If the verifier itself is unavailable (Gemini API error), the task is marked `failed` with `TASK_COMPLETION_VERIFIER_FAILED` — prevents false-positive completions
@@ -127,13 +162,14 @@ Added `repo-manager.ts` with `ensureRepository()`:
 - Normalizes SSH vs HTTPS URLs for comparison
 - `INTEXURAOS_REPOSITORY_URL` and `INTEXURAOS_REPOSITORY_PATH` env vars control behavior
 
-### INT-486: Two-Phase Execution Model (2026-02-06)
+### INT-486: Two-Phase Execution Model (Historical, superseded by agent-based routing) (2026-02-06)
 
-Split system prompt into Phase 1 (Design & Validation) and Phase 2 (Strict Execution):
+Originally split system prompt into Phase 1 (Design & Validation) and Phase 2 (Strict Execution):
 
 - Phase determined by presence of `code-task` label in `linearIssueLabels`
 - Phase 1: Agent enriches the Linear issue description, creates sub-issues, adds labels
 - Phase 2: Agent executes autonomously (tests, code, CI, PR, Linear update); includes PR description format instructions
+- Superseded by explicit `agentType` routing (`planning` / `execution` / `pull_request`) and agent-specific final blocks
 - Parent execution mode for issues with child tasks
 
 ### INT-524: Retry Mechanism (2026-02-05)
@@ -177,7 +213,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
   baseBranch?: string;          // Branch to fork from (default: development)
   linearIssueId?: string;       // Linear issue for tracking
   linearIssueTitle?: string;
-  linearIssueLabels: string[];  // Determines Phase 1 vs Phase 2
+  linearIssueLabels: string[];  // Legacy label signal; orchestrator now also accepts explicit agentType routing
   hasChildren: boolean;         // Enables parent execution mode
   slug?: string;
   webhookUrl: string;           // Callback URL for results
@@ -415,14 +451,21 @@ Collects per-task resource and cost metrics after container exit:
 
 ### OrchestratorCompletionVerifier
 
-Evaluates whether a task attempt met its phase-specific contract using a two-stage pipeline:
+Evaluates whether a task attempt met its agent-specific contract using a two-stage pipeline:
 
-**Stage 1 — Deterministic checks:**
+**Stage 1 — Deterministic checks (Planning and Pull Request agents):**
 
 - Non-zero worker exit code → `passed=false`
 - Missing assistant final message in logs → `passed=false`
-- Phase 1: validates `PHASE1_FINAL:` block with `Linear label set`, `Phase 2 ready`, `Linear issue URL`, and `Summary`
-- Phase 2: validates `PHASE2_FINAL:` block, presence of PR URL in task result, and absence of CI failures
+- Planning Agent: validates `PLANNING_AGENT_FINAL:` block and planning outcome contract fields
+- Pull Request Agent: validates `PULL_REQUEST_AGENT_FINAL:` block and PR result expectations
+
+**Execution Agent — Gemini-only semantic verification (no deterministic Stage 1):**
+
+- Skips exit-code and runtime-signal checks entirely
+- Gemini evaluates `EXECUTION_AGENT_FINAL:` semantics from Claude responses (latest first, prior-response fallback)
+- Extracts flattened `execution_*` metadata for webhook delivery
+- Hard-fails on wrong-issue mismatch (reported vs routed Linear issue)
 
 **Stage 2 — LLM adjudication (Gemini 2.5 Flash):**
 
@@ -443,10 +486,11 @@ Prevents accidental secret leaks in commits:
 
 ### SystemPrompt
 
-Constructs phase-specific instructions for Claude Code workers:
+Constructs agent-specific instructions for Claude Code workers:
 
-- **Phase 1 (no `code-task` label):** Design agent mode, enriches Linear issue, adds labels
-- **Phase 2 (has `code-task` label):** Execution mode, writes tests/code, runs CI, creates PR; includes PR description format template
+- **Planning Agent (`agentType=planning` or no `code-task` label):** planning mode, enriches Linear issue, adds labels
+- **Execution Agent (`agentType=execution` or `code-task` label present):** execution mode, writes tests/code, runs CI, creates PR with `gh` CLI, runs code-review loop, and emits `EXECUTION_AGENT_FINAL` with superpower/subagent proofs
+- **Pull Request Agent (`agentType=pull_request`):** PR-follow-up mode for comment-driven work on an existing branch/PR
 - Sanitizes user prompts by stripping XML tags and forbidden keywords (prompt injection defense)
 - Parent execution mode section injected when `hasChildren` is true
 - Uses `/repo` (container path) not the host worktree path in system prompt instructions
@@ -593,7 +637,7 @@ workers/orchestrator/
       sensitive-file-guard.ts         # Secret file detection + revert
       worktree-manager.ts             # Git worktree CRUD + MCP config
       repo-manager.ts                 # Repository clone/validate/fetch
-      system-prompt.ts                # Phase 1/2 prompt builder
+      system-prompt.ts                # Agent-specific prompt builder
       turn-metrics-collector.ts       # Per-task cgroup + token metrics
       orchestrator-audit-sink.ts      # LLM audit log file sink
       completion-verifier.ts          # LLM-backed task completion verification (Gemini)

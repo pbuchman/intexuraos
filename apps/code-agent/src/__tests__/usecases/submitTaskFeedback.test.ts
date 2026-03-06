@@ -125,7 +125,6 @@ describe('submitTaskFeedback use case', () => {
       updatedAt: now,
       completedAt: now,
       linearIssueId,
-      linearIssueTitle: 'Feedback mechanism test',
     };
 
     // Apply overrides, but skip undefined values to avoid exactOptionalPropertyTypes issues
@@ -148,6 +147,7 @@ describe('submitTaskFeedback use case', () => {
       metricsClient: mockMetricsClient as unknown as SubmitTaskFeedbackDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitTaskFeedbackDeps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
+      serviceUrl: 'https://test.example.com',
     };
   }
 
@@ -311,6 +311,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
@@ -347,9 +348,9 @@ describe('submitTaskFeedback use case', () => {
       );
     });
 
-    it('should set executionPhase to design when validateIssue returns no code-task label', async () => {
+    it('should set agentType to design when validateIssue returns no code-task label', async () => {
       // Default beforeEach mock returns labels: ['feature', 'backend'] — no code-task label.
-      // executionPhase should be 'design'.
+      // agentType should be 'design'.
       const deps = createDeps();
       const result = await submitTaskFeedback(deps, {
         originalTaskId,
@@ -359,15 +360,15 @@ describe('submitTaskFeedback use case', () => {
 
       expect(result.ok).toBe(true);
 
-      // executionPhase is 'design' because validateIssue returns labels without 'code-task'
+      // agentType is 'design' because validateIssue returns labels without 'code-task'
       expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          executionPhase: 'design',
+          agentType: 'planning',
         })
       );
     });
 
-    it('should set executionPhase to execution when validateIssue returns code-task label', async () => {
+    it('should set agentType to execution when validateIssue returns code-task label', async () => {
       mockLinearAgentClient.validateIssue.mockResolvedValue(
         ok({
           id: linearIssueId,
@@ -376,6 +377,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
 
@@ -390,12 +392,12 @@ describe('submitTaskFeedback use case', () => {
 
       expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          executionPhase: 'execution',
+          agentType: 'execution',
         })
       );
     });
 
-    it('stores executionPhase in Firestore at create() call time when code-task label is present', async () => {
+    it('stores agentType in Firestore at create() call time when code-task label is present', async () => {
       // toHaveBeenCalledWith evaluates object references at assertion time, not at call time.
       // This test uses mockImplementation to capture the value synchronously at create() time,
       // proving the value is correct before the Firestore write (not just after).
@@ -407,13 +409,14 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
+          parentId: null,
         })
       );
 
       const mockTask = createMockTask();
-      let executionPhaseAtCreateTime: unknown;
+      let agentTypeAtCreateTime: unknown;
       mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
-        executionPhaseAtCreateTime = input['executionPhase'];
+        agentTypeAtCreateTime = input['agentType'];
         return ok({ ...mockTask, id: 'feedback-task-123', parentTaskId: originalTaskId });
       });
 
@@ -421,8 +424,88 @@ describe('submitTaskFeedback use case', () => {
       const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
 
       expect(result.ok).toBe(true);
-      // executionPhase must be 'execution' at Firestore write time, not just after post-create mutation
-      expect(executionPhaseAtCreateTime).toBe('execution');
+      // agentType must be 'execution' at Firestore write time, not just after post-create mutation
+      expect(agentTypeAtCreateTime).toBe('execution');
+    });
+
+    it('should preserve pull_request agentType from original task instead of using label-based routing', async () => {
+      const mockTask = createMockTask({ agentType: 'pull_request' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      // Even if labels say 'code-task' (execution), pull_request must be preserved
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      let createInputAgentType: unknown;
+      mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        return ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+          agentType: input['agentType'],
+        });
+      });
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
+
+      expect(result.ok).toBe(true);
+      // createInput must use pull_request, not execution (even though code-task label exists)
+      expect(createInputAgentType).toBe('pull_request');
+      // dispatchRequest must also carry pull_request
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'pull_request' })
+      );
+    });
+
+    it('should fall back to label-based routing when original task is not pull_request', async () => {
+      // agentType is undefined (legacy task) — should use labels to decide
+      const mockTask = createMockTask();
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      // Labels contain code-task → should pick execution
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      let createInputAgentType: unknown;
+      mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        return ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+          agentType: input['agentType'],
+        });
+      });
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
+
+      expect(result.ok).toBe(true);
+      // createInput must use label-based routing (execution) when no pull_request
+      expect(createInputAgentType).toBe('execution');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'execution' })
+      );
     });
 
     it('should include feedback in follow-up prompt', async () => {
@@ -521,11 +604,37 @@ describe('submitTaskFeedback use case', () => {
       if (result.ok) {
         expect(result.value).toEqual({
           codeTaskId: 'feedback-task-123',
-          resourceUrl: '/code/tasks/feedback-task-123',
+          resourceUrl: '/#/code-tasks/feedback-task-123',
           workerLocation: 'home-mac',
           followUpFor: originalTaskId,
         });
       }
+    });
+
+    it('persists only linearIssueId on the follow-up task', async () => {
+      const deps = createDeps();
+
+      await submitTaskFeedback(deps, {
+        originalTaskId,
+        userId,
+        feedback,
+      });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueId,
+        })
+      );
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueTitle: expect.anything(),
+        })
+      );
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearFallback: expect.anything(),
+        })
+      );
     });
 
     it('should dispatch with empty labels when task has no Linear issue', async () => {
@@ -661,6 +770,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(
@@ -732,6 +842,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
@@ -803,6 +914,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
@@ -872,6 +984,7 @@ describe('submitTaskFeedback use case', () => {
           url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
+          parentId: null,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));

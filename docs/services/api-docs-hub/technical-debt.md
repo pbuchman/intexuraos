@@ -32,8 +32,8 @@
 
 ### Low Priority
 
-| File                               | Issue                            | Impact                                                                                 |
-| ---------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------- |
+| File                               | Issue                                   | Impact                                                                                             |
+| ---------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `apps/api-docs-hub/src/server.ts`  | Health endpoint uses raw `reply.send()` | Bypasses the `reply.ok()` / `reply.fail()` response contract; intentional but undocumented in code |
 
 The `/health` endpoint uses `reply.send()` directly rather than `reply.ok()`. This is a deliberate exception: health check response format must be stable for infrastructure monitoring, independent of app-level response envelope changes. Adding a `// @allow-raw-send: health check format must be stable` comment would make the intent explicit and pass the `verify:reply-send` check.
@@ -83,11 +83,11 @@ None.
 
 | Date       | Issue                                | Resolution                                                                |
 | ---------- | ------------------------------------ | ------------------------------------------------------------------------- |
-| 2026-02-16 | Dash0 OTel integration              | `@intexuraos/infra-otel` added; log pipeline forwards to Dash0 via OTLP  |
+| 2026-02-16 | Dash0 OTel integration               | `@intexuraos/infra-otel` added; log pipeline forwards to Dash0 via OTLP   |
 | 2026-02-16 | Dev-mode log formatting              | `createLogStream()` now emits human-readable output under PM2             |
 | 2026-02-14 | Broken start:local script            | Fixed to use `tsx` instead of `node --experimental-strip-types`           |
-| 2026-02-01 | Chat Agent spec missing              | Added `INTEXURAOS_CHAT_AGENT_OPENAPI_URL` env var (INT-431)              |
-| 2026-01-26 | PromptVault reference after removal  | Removed `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` env var (INT-319)   |
+| 2026-02-01 | Chat Agent spec missing              | Added `INTEXURAOS_CHAT_AGENT_OPENAPI_URL` env var (INT-431)               |
+| 2026-01-26 | PromptVault reference after removal  | Removed `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` env var (INT-319)    |
 
 ---
 

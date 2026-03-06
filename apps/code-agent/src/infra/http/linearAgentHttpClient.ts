@@ -20,6 +20,7 @@ import type {
   GeneratedTitle,
   AddCommentRequest,
   AddCommentResponse,
+  IssueTreeResponse,
   LinearAgentError,
   LinearIssueForDisplay,
 } from '../../domain/ports/linearAgentClient.js';
@@ -202,6 +203,7 @@ export function createLinearAgentHttpClient(
             url: string;
             labels: string[];
             childCount: number;
+            parentId?: string | null;
           };
         };
 
@@ -221,6 +223,7 @@ export function createLinearAgentHttpClient(
           url: body.data.url,
           labels: body.data.labels,
           childCount: body.data.childCount,
+          parentId: body.data.parentId ?? null,
         });
       } catch (error) {
         /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
@@ -374,6 +377,84 @@ export function createLinearAgentHttpClient(
       }
     },
 
+    async fetchIssueTree(request: { userId: string; issueId: string }): Promise<Result<IssueTreeResponse, LinearAgentError>> {
+      const url = `${baseUrl}/internal/issues/${encodeURIComponent(request.issueId)}/tree`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
+          },
+          signal: controller.signal,
+        });
+        /* v8 ignore start -- test-infra: error response branches require HTTP mock variants @preserve */
+        if (!response.ok) {
+          const errorText = await response.text();
+          return err({ code: response.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: errorText });
+        }
+        const body = await response.json() as { success: boolean; data?: IssueTreeResponse };
+        if (!body.success || body.data === undefined) {
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+        return ok(body.data);
+      } catch (error) {
+        return err({ code: 'UNKNOWN', message: String(error) });
+        /* v8 ignore stop @preserve */
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
+    async updateIssueMetadata(request: {
+      userId: string;
+      issueId: string;
+      assigneeId?: string | null;
+      addLabels?: string[];
+      removeLabels?: string[];
+    }): Promise<Result<void, LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.issueId)}/metadata`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+      try {
+        const response = await fetch(url, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
+          },
+          /* v8 ignore start -- ts-type: conditional object spreads for optional metadata fields @preserve */
+          body: JSON.stringify({
+            ...(request.assigneeId !== undefined && { assigneeId: request.assigneeId }),
+            ...(request.addLabels !== undefined && { addLabels: request.addLabels }),
+            ...(request.removeLabels !== undefined && { removeLabels: request.removeLabels }),
+          }),
+          /* v8 ignore stop @preserve */
+          signal: controller.signal,
+        });
+        /* v8 ignore start -- test-infra: error response branches require HTTP mock variants @preserve */
+        if (!response.ok) {
+          const errorText = await response.text();
+          return err({ code: response.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: errorText });
+        }
+        const body = await response.json() as { success: boolean };
+        if (!body.success) return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        return ok(undefined);
+      } catch (error) {
+        return err({ code: 'UNKNOWN', message: String(error) });
+        /* v8 ignore stop @preserve */
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
     async fetchIssueForDisplay(request: ValidateIssueRequest): Promise<Result<LinearIssueForDisplay, LinearAgentError>> {
       const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.identifier)}`;
 
@@ -446,6 +527,69 @@ export function createLinearAgentHttpClient(
         /* v8 ignore stop @preserve */
 
         logger.error({ error }, 'linear-agent fetchIssueForDisplay request failed');
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
+    async fetchIssuesForDisplay(request: {
+      userId: string;
+      identifiers: string[];
+    }): Promise<Result<LinearIssueForDisplay[], LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/display-batch`;
+
+      logger.info({ issueCount: request.identifiers.length }, 'Fetching Linear issues for display');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
+          },
+          body: JSON.stringify({
+            identifiers: request.identifiers,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.warn({ status: response.status, error: errorText }, 'linear-agent fetchIssuesForDisplay failed');
+          return err({ code: 'UNAVAILABLE', message: errorText });
+        }
+
+        const body = await response.json() as {
+          success: boolean;
+          data?: {
+            issues: LinearIssueForDisplay[];
+          };
+        };
+
+        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
+        if (!body.success || body.data === undefined) {
+          logger.error({ body }, 'Invalid response from linear-agent');
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+        /* v8 ignore stop @preserve */
+
+        return ok(body.data.issues);
+      } catch (error) {
+        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.error({ timeoutMs }, 'linear-agent request timed out');
+          return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
+        }
+        /* v8 ignore stop @preserve */
+
+        logger.error({ error }, 'linear-agent fetchIssuesForDisplay request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
       } finally {
         clearTimeout(timeoutId);

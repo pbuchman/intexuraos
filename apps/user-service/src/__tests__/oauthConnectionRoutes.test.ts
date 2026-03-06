@@ -93,6 +93,7 @@ describe('OAuth Connection Routes', () => {
       oauthConnectionRepository: fakeOAuthRepo,
       auth0Client: null,
       googleOAuthClient: fakeGoogleOAuthClient,
+      gitHubOAuthClient: null,
       encryptor: null,
       llmValidator: null,
     });
@@ -143,6 +144,7 @@ describe('OAuth Connection Routes', () => {
         oauthConnectionRepository: fakeOAuthRepo,
         auth0Client: null,
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
         encryptor: null,
         llmValidator: null,
       });
@@ -264,6 +266,7 @@ describe('OAuth Connection Routes', () => {
         oauthConnectionRepository: fakeOAuthRepo,
         auth0Client: null,
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
         encryptor: null,
         llmValidator: null,
       });
@@ -490,6 +493,7 @@ describe('OAuth Connection Routes', () => {
         oauthConnectionRepository: fakeOAuthRepo,
         auth0Client: null,
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
         encryptor: null,
         llmValidator: null,
       });

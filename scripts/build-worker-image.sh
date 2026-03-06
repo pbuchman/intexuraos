@@ -27,34 +27,48 @@ echo ""
 # Change to project root for correct context
 cd "$PROJECT_ROOT"
 
-# Build from root context (Dockerfile uses root-relative COPY paths)
-docker build \
-    -t "${IMAGE_NAME}:${IMAGE_TAG}" \
-    -f workers/claude-worker/Dockerfile \
-    .
+# Multi-arch build: produces amd64 + arm64 manifest so the image runs natively
+# on both x86_64 (home-dev) and Apple Silicon (local Mac) without Rosetta.
+PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 
-echo ""
-echo "Build complete: ${IMAGE_NAME}:${IMAGE_TAG}"
-echo ""
+# Ensure buildx builder exists
+docker buildx inspect multiarch >/dev/null 2>&1 || \
+    docker buildx create --name multiarch --driver docker-container --use
+docker buildx use multiarch
 
-# Verify the image
-echo "Verifying image..."
-docker run --rm "${IMAGE_NAME}:${IMAGE_TAG}" --help 2>/dev/null || echo "(Claude help check - may fail without full setup)"
-
-# Show image size
-echo ""
-echo "Image size:"
-docker images "${IMAGE_NAME}:${IMAGE_TAG}" --format "{{.Size}}"
-
-# Push if requested
 if [ "${PUSH:-false}" = "true" ]; then
+    echo "Building + pushing multi-arch image (${PLATFORMS})..."
+    docker buildx build \
+        --platform "${PLATFORMS}" \
+        -t "${IMAGE_NAME}:${IMAGE_TAG}" \
+        --push \
+        -f workers/claude-worker/Dockerfile \
+        .
     echo ""
-    echo "Pushing to Artifact Registry..."
-    docker push "${IMAGE_NAME}:${IMAGE_TAG}"
-    echo "Push complete."
+    echo "Push complete: ${IMAGE_NAME}:${IMAGE_TAG}"
+else
+    echo "Building multi-arch image (${PLATFORMS}) — local load..."
+    # --load only works with a single platform; build for host arch only
+    docker buildx build \
+        -t "${IMAGE_NAME}:${IMAGE_TAG}" \
+        --load \
+        -f workers/claude-worker/Dockerfile \
+        .
+    echo ""
+    echo "Build complete: ${IMAGE_NAME}:${IMAGE_TAG}"
+    echo ""
+
+    # Verify the image
+    echo "Verifying image..."
+    docker run --rm "${IMAGE_NAME}:${IMAGE_TAG}" --help 2>/dev/null || echo "(Claude help check - may fail without full setup)"
+
+    # Show image size
+    echo ""
+    echo "Image size:"
+    docker images "${IMAGE_NAME}:${IMAGE_TAG}" --format "{{.Size}}"
 fi
 
 echo ""
 echo "Done: ${IMAGE_NAME}:${IMAGE_TAG}"
 echo ""
-echo "To push: PUSH=true $0 ${IMAGE_TAG}"
+echo "To build + push multi-arch: PUSH=true $0 ${IMAGE_TAG}"

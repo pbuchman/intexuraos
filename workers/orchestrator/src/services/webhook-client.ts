@@ -60,6 +60,16 @@ export class WebhookClient {
       } catch (error) {
         lastError = this.classifyError(error);
 
+        this.logger.warn(
+          {
+            taskId,
+            errorType: lastError.type,
+            errorMessage: lastError.message,
+            attempt: attempt + 1,
+          },
+          'Webhook delivery attempt failed'
+        );
+
         // Don't retry on 4xx errors (client errors)
         if (lastError.type === '4xx') {
           return { ok: false, error: lastError };
@@ -130,6 +140,17 @@ export class WebhookClient {
           break;
         } catch (error) {
           const errorType = this.classifyError(error);
+
+          this.logger.warn(
+            {
+              taskId: pending.taskId,
+              errorType: errorType.type,
+              errorMessage: errorType.message,
+              attempt: attempt + 1,
+            },
+            'Pending webhook retry attempt failed'
+          );
+
           if (errorType.type === '4xx') {
             break; // Don't retry 4xx
           }
@@ -149,8 +170,9 @@ export class WebhookClient {
     }
 
     // Update state
-    state.pendingWebhooks = updatedPending;
-    await this.statePersistence.save(state);
+    await this.statePersistence.modify((s) => {
+      s.pendingWebhooks = updatedPending;
+    });
   }
 
   async getPendingCount(): Promise<number> {
@@ -243,9 +265,8 @@ export class WebhookClient {
   }
 
   private async addToPendingQueue(webhook: PendingWebhook): Promise<void> {
-    const state = await this.statePersistence.load();
-
-    state.pendingWebhooks.push(webhook);
-    await this.statePersistence.save(state);
+    await this.statePersistence.modify((state) => {
+      state.pendingWebhooks.push(webhook);
+    });
   }
 }

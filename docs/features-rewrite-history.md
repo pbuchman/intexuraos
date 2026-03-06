@@ -73,18 +73,18 @@ All 24 services scored through the full 6-critic panel. Existing drafts presente
 
 ### Key PA Corrections Applied
 
-| Service                      | Correction                                                                                          |
-| ---------------------------- | --------------------------------------------------------------------------------------------------- |
-| claude-worker                | "nothing shared" contradicts shared credentials mode; "no tokens through third-party" false for GLM workers routing through api.z.ai |
-| orchestrator                 | 8GB/4CPU not in Docker config; mid-task messages queued until attempt finishes, not real-time        |
+| Service                      | Correction                                                                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| claude-worker                | "nothing shared" contradicts shared credentials mode; "no tokens through third-party" false for GLM workers routing through api.z.ai                                |
+| orchestrator                 | 8GB/4CPU not in Docker config; mid-task messages queued until attempt finishes, not real-time                                                                       |
 | code-agent                   | Doesn't transcribe/classify (that's actions-agent/whatsapp-service); PR comments via sendTaskMessage not new tasks; cancel button on start notification not failure |
-| calendar-agent               | OAuth via user-service not direct Google sign-in; attendees not in LLM extraction schema; retry uses stored data |
-| research-agent               | Max 5 providers (not 6); attribution repair can fail; platform fallback only covers Gemini + Zai    |
-| linear-agent                 | Corrected label sync direction; enrichment scope clarified                                          |
-| actions-agent                | Classification routes to agents, doesn't execute actions itself                                     |
-| image-service                | Storage backend details corrected                                                                   |
-| data-insights-agent          | Auto-refresh not wired to any route/scheduler — manual refresh only                                 |
-| notes-agent                  | Sync direction and conflict resolution corrected                                                    |
+| calendar-agent               | OAuth via user-service not direct Google sign-in; attendees not in LLM extraction schema; retry uses stored data                                                    |
+| research-agent               | Max 5 providers (not 6); attribution repair can fail; platform fallback only covers Gemini + Zai                                                                    |
+| linear-agent                 | Corrected label sync direction; enrichment scope clarified                                                                                                          |
+| actions-agent                | Classification routes to agents, doesn't execute actions itself                                                                                                     |
+| image-service                | Storage backend details corrected                                                                                                                                   |
+| data-insights-agent          | Auto-refresh not wired to any route/scheduler — manual refresh only                                                                                                 |
+| notes-agent                  | Sync direction and conflict resolution corrected                                                                                                                    |
 
 ### Patterns Observed
 

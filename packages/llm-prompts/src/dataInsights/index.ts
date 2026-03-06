@@ -11,6 +11,8 @@ export {
 
 export {
   parseInsightResponse,
+  DEFAULT_CHART_IDS,
+  extractValidChartIds,
   type ParsedDataInsight,
   type ParseInsightResult,
 } from './parseInsightResponse.js';
@@ -27,6 +29,7 @@ export { VegaLiteConfigSchema, type VegaLiteConfig } from './contextSchemas.js';
 
 export {
   DataInsightSchema,
+  createDataInsightSchema,
   TransformedDataSchema,
   type DataInsight,
   type TransformedData,

@@ -152,7 +152,7 @@ interface Todo {
 | **Cancel Restriction**  | Cannot cancel already completed todos               |
 | **Auto Status**         | Completing all items auto-completes the todo        |
 | **Ownership**           | Users can only access their own todos               |
-| **Reorder**             | Item IDs must match existing items exactly           |
+| **Reorder**             | Item IDs must match existing items exactly          |
 | **Description Limit**   | Descriptions over 10,000 chars truncated for AI     |
 | **Max Items**           | AI extraction capped at 50 items per todo           |
 | **Default Priority**    | New todos default to `medium` priority if not set   |

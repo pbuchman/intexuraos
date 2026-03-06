@@ -268,14 +268,14 @@ Both the GCS objects (full-size PNG and thumbnail JPEG) and the Firestore metada
 
 ## Troubleshooting
 
-| Problem                  | Symptom                           | Solution                                              |
-| ------------------------ | --------------------------------- | ----------------------------------------------------- |
-| API key not found        | 400 INVALID_REQUEST               | User must add API key or configure platform fallback  |
-| GCS upload fails         | 500 INTERNAL_ERROR                | Check GCS bucket permissions and INTEXURAOS_IMAGE_BUCKET |
-| Image generation timeout | 502 DOWNSTREAM_ERROR              | Provider is slow; retry with backoff                  |
-| Auth failure             | 401 UNAUTHORIZED                  | Check X-Internal-Auth header value                    |
-| Prompt parse error       | 502 DOWNSTREAM_ERROR (PARSE_ERROR) | LLM returned malformed JSON; retry or switch model    |
-| User-service unreachable | 502 DOWNSTREAM_ERROR              | Check user-service health and INTEXURAOS_USER_SERVICE_URL |
+| Problem                  | Symptom                            | Solution                                                  |
+| ------------------------ | ---------------------------------- | --------------------------------------------------------- |
+| API key not found        | 400 INVALID_REQUEST                | User must add API key or configure platform fallback      |
+| GCS upload fails         | 500 INTERNAL_ERROR                 | Check GCS bucket permissions and INTEXURAOS_IMAGE_BUCKET  |
+| Image generation timeout | 502 DOWNSTREAM_ERROR               | Provider is slow; retry with backoff                      |
+| Auth failure             | 401 UNAUTHORIZED                   | Check X-Internal-Auth header value                        |
+| Prompt parse error       | 502 DOWNSTREAM_ERROR (PARSE_ERROR) | LLM returned malformed JSON; retry or switch model        |
+| User-service unreachable | 502 DOWNSTREAM_ERROR               | Check user-service health and INTEXURAOS_USER_SERVICE_URL |
 
 ---
 

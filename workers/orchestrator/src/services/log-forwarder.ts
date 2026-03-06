@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import type { Logger } from '@intexuraos/common-core';
-import { stripDockerHeaders } from './log-formatter.js';
+import { stripDockerHeaders, stripBulkMetadata } from './log-formatter.js';
 
 export interface LogForwarderConfig {
   logBasePath: string;
@@ -39,6 +39,23 @@ export class LogForwarder {
   ) {}
 
   /**
+   * Strip Docker headers and bulk metadata from raw log content in one pass.
+   */
+  private cleanContent(raw: string): string {
+    return stripBulkMetadata(stripDockerHeaders(raw));
+  }
+
+  /**
+   * Flush any remaining partial line into the buffer with formatting applied.
+   */
+  private drainPartialLine(state: ForwardingState): void {
+    if (state.partialLine === '') return;
+    const cleaned = this.cleanContent(state.partialLine + '\n');
+    state.buffer += this.prefixTimestamps(cleaned);
+    state.partialLine = '';
+  }
+
+  /**
    * Register a task's webhook secret before starting log forwarding.
    * Must be called before appendChunk or startForwarding.
    */
@@ -65,12 +82,7 @@ export class LogForwarder {
     }
     /* v8 ignore stop @preserve */
 
-    // Flush any remaining partial line through formatter
-    if (state.partialLine !== '') {
-      const cleaned = stripDockerHeaders(state.partialLine + '\n');
-      state.buffer += this.prefixTimestamps(cleaned);
-      state.partialLine = '';
-    }
+    this.drainPartialLine(state);
 
     // Flush any remaining buffer content (force bypasses limit checks)
     await this.flushBuffer(taskId, true);
@@ -158,11 +170,7 @@ export class LogForwarder {
     /* v8 ignore stop @preserve */
 
     /* v8 ignore start -- test-infra: partialLine only set via appendChunk (Docker mode), stopForwarding tests use file-based mode @preserve */
-    if (state.partialLine !== '') {
-      const cleaned = stripDockerHeaders(state.partialLine + '\n');
-      state.buffer += this.prefixTimestamps(cleaned);
-      state.partialLine = '';
-    }
+    this.drainPartialLine(state);
     /* v8 ignore stop @preserve */
 
     // Flush remaining buffer
@@ -224,8 +232,7 @@ export class LogForwarder {
     const complete = combined.slice(0, lastNewline + 1);
     state.partialLine = combined.slice(lastNewline + 1);
 
-    const cleaned = stripDockerHeaders(complete);
-    state.buffer += this.prefixTimestamps(cleaned);
+    state.buffer += this.prefixTimestamps(this.cleanContent(complete));
 
     // Flush if buffer exceeds max chunk size
     if (state.buffer.length >= MAX_CHUNK_SIZE) {
@@ -247,7 +254,7 @@ export class LogForwarder {
       if (newContent.length === 0) return;
 
       state.position = content.length;
-      state.buffer += stripDockerHeaders(newContent);
+      state.buffer += this.cleanContent(newContent);
 
       // Flush if buffer exceeds max chunk size
       if (state.buffer.length >= MAX_CHUNK_SIZE) {
@@ -343,8 +350,9 @@ export class LogForwarder {
       state.totalBytes += chunks.reduce((sum, c) => sum + c.length, 0);
     } else {
       state.droppedChunks += chunks.length;
+      const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
       this.logger.error(
-        { taskId, count: chunks.length },
+        { taskId, count: chunks.length, url: `${baseUrl}/internal/logs` },
         'Failed to upload log chunks after retries'
       );
     }
@@ -402,7 +410,7 @@ export class LogForwarder {
         /* v8 ignore stop @preserve */
         /* v8 ignore start -- test-infra: log statement that executes but branch coverage sees as untested @preserve */
         this.logger.warn(
-          { taskId: payload.taskId, attempt: i + 1, ...errorInfo },
+          { taskId: payload.taskId, attempt: i + 1, url, ...errorInfo },
           'Log upload failed, retrying'
         );
         /* v8 ignore stop @preserve */
@@ -471,12 +479,7 @@ export class LogForwarder {
     const state = this.forwarders.get(taskId);
     if (state === undefined) return;
 
-    if (state.partialLine !== '') {
-      const cleaned = stripDockerHeaders(state.partialLine + '\n');
-      state.buffer += this.prefixTimestamps(cleaned);
-      state.partialLine = '';
-    }
-
+    this.drainPartialLine(state);
     await this.flushBuffer(taskId, true);
   }
 

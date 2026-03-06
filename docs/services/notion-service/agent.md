@@ -240,12 +240,12 @@ interface WebhookOutput {
 
 ## Error Handling
 
-| Error Code         | HTTP | Meaning                           | Recovery Action                          |
-| ------------------ | ---- | --------------------------------- | ---------------------------------------- |
-| INVALID_REQUEST    | 400  | Missing or malformed token        | Check request body has notionToken field  |
-| UNAUTHORIZED       | 401  | Token rejected by Notion API      | Generate new token at notion.so          |
+| Error Code         | HTTP | Meaning                            | Recovery Action                               |
+| ------------------ | ---- | ---------------------------------- | --------------------------------------------- |
+| INVALID_REQUEST    | 400  | Missing or malformed token         | Check request body has notionToken field      |
+| UNAUTHORIZED       | 401  | Token rejected by Notion API       | Generate new token at notion.so               |
 | NOT_FOUND          | 404  | No connection or page inaccessible | Connect first, or share page with integration |
-| DOWNSTREAM_ERROR   | 502  | Notion API or Firestore error     | Retry with backoff                       |
+| DOWNSTREAM_ERROR   | 502  | Notion API or Firestore error      | Retry with backoff                            |
 
 ## Events Published
 

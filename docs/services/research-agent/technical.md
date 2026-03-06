@@ -48,20 +48,20 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                          | Date       |
-| ---------- | ---------------------------------------------------- | ---------- |
-| `b3f34d85` | Release v3.1.0 (version bump only)                   | 2026-02-22 |
-| `c8a42105` | Release v3.0.0 (version bump only)                   | 2026-02-19 |
-| `f451d51a` | Audit and improve 27 LLM prompts across all domains  | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability      | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                  | 2026-02-16 |
+| Commit     | Description                                           | Date       |
+| ---------- | ----------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0 (version bump only)                    | 2026-02-22 |
+| `c8a42105` | Release v3.0.0 (version bump only)                    | 2026-02-19 |
+| `f451d51a` | Audit and improve 27 LLM prompts across all domains   | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability       | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                   | 2026-02-16 |
 | `e60eafc1` | Standardize API key secrets to APP naming convention  | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback    | 2026-02-15 |
-| `d7c6a061` | Add consistent icons to all WhatsApp messages        | 2026-02-10 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback     | 2026-02-15 |
+| `d7c6a061` | Add consistent icons to all WhatsApp messages         | 2026-02-10 |
 | `0f69a74b` | Add default model selector with platform Zai fallback | 2026-02-08 |
-| `308ba74e` | Add v8 ignore for JWT claims type guards             | 2026-02-08 |
-| `f33b6251` | Fix: Read namespaced Auth0 claims for user profile   | 2026-02-08 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)    | 2026-02-01 |
+| `308ba74e` | Add v8 ignore for JWT claims type guards              | 2026-02-08 |
+| `f33b6251` | Fix: Read namespaced Auth0 claims for user profile    | 2026-02-08 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)     | 2026-02-01 |
 
 ## Data Flow
 
@@ -248,7 +248,7 @@ const SynthesisContextSchema = z.object({
 | `synthesisModel`    | ResearchModel     | Model for synthesis                  |
 | `status`            | ResearchStatus    | Current state                        |
 | `llmResults`        | LlmResult[]       | Results from each model              |
-| `inputContexts`     | InputContext[]     | User-provided context                |
+| `inputContexts`     | InputContext[]    | User-provided context                |
 | `synthesizedResult` | string            | Final synthesized content            |
 | `synthesisError`    | string            | Synthesis failure message            |
 | `partialFailure`    | PartialFailure    | Partial failure metadata             |
@@ -321,7 +321,7 @@ const SynthesisContextSchema = z.object({
 | `mainPageId`       | string                                | Notion main research page ID |
 | `mainPageUrl`      | string                                | Notion main page URL         |
 | `llmReportPageIds` | `{ model: string; pageId: string }[]` | LLM report child page IDs    |
-| `exportedAt`       | string (ISO 8601)                     | Export timestamp              |
+| `exportedAt`       | string (ISO 8601)                     | Export timestamp             |
 
 ### ResearchExportSettings
 
@@ -382,7 +382,7 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 
 | Service          | Purpose                                                             |
 | ---------------- | ------------------------------------------------------------------- |
-| `user-service`   | API keys, LLM usage, LLM client via `@intexuraos/internal-clients` |
+| `user-service`   | API keys, LLM usage, LLM client via `@intexuraos/internal-clients`  |
 | `image-service`  | Cover image generation                                              |
 | `notion-service` | Notion OAuth tokens and page previews                               |
 
@@ -404,10 +404,10 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 | Provider   | Models                                                                     |
 | ---------- | -------------------------------------------------------------------------- |
 | Anthropic  | `claude-opus-4.5`, `claude-sonnet-4.5`                                     |
-| OpenAI     | `gpt-5.2`, `o4-mini-deep-research`                                        |
+| OpenAI     | `gpt-5.2`, `o4-mini-deep-research`                                         |
 | Google     | `gemini-2.5-pro`, `gemini-2.5-flash` (research); `gemini-2.0-flash` (fast) |
 | Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research`                                |
-| Zai        | `glm-4.7`, `glm-4.7-flash`                                                |
+| Zai        | `glm-4.7`, `glm-4.7-flash`                                                 |
 
 **Fast model** (`gemini-2.0-flash`): Used for title generation and context inference via the platform Gemini key. Not available as a user-selectable research model.
 
@@ -442,15 +442,15 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 | `INTEXURAOS_NOTION_SERVICE_URL`            | Yes      | Notion-service base URL                                   |
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Yes      | Public base URL for images                                |
 | `INTEXURAOS_IMAGE_SERVICE_URL`             | Yes      | Image-service base URL                                    |
-| `INTEXURAOS_SHARE_BASE_URL`               | Yes      | Base URL for shared research                              |
+| `INTEXURAOS_SHARE_BASE_URL`                | Yes      | Base URL for shared research                              |
 | `INTEXURAOS_SHARED_CONTENT_BUCKET`         | Yes      | GCS bucket for shared research                            |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`   | Yes      | WhatsApp send topic                                       |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes      | WhatsApp send topic                                       |
 | `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | Yes      | Research process queue topic                              |
-| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`        | Yes      | LLM call queue topic                                      |
+| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Yes      | LLM call queue topic                                      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`            | No       | Platform Gemini key; enables `gemini-2.0-flash` fallback  |
-| `INTEXURAOS_ZAI_APP_API_KEY`              | No       | Platform Zai key; enables `glm-4.7-flash` fallback        |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`          | No       | Dash0 OTLP endpoint; enables distributed tracing          |
-| `INTEXURAOS_SENTRY_DSN`                   | No       | Sentry DSN for error reporting                             |
+| `INTEXURAOS_ZAI_APP_API_KEY`               | No       | Platform Zai key; enables `glm-4.7-flash` fallback        |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`           | No       | Dash0 OTLP endpoint; enables distributed tracing          |
+| `INTEXURAOS_SENTRY_DSN`                    | No       | Sentry DSN for error reporting                            |
 
 ## Gotchas
 

@@ -21,6 +21,7 @@ describe('titleGenerationService', () => {
         getApiKeys: vi.fn(),
         reportLlmSuccess: vi.fn(),
           getOAuthToken: vi.fn(),
+          resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
       };
     }
     const mockLlmClient: LlmGenerateClient = {
@@ -31,6 +32,7 @@ describe('titleGenerationService', () => {
       getApiKeys: vi.fn(),
       reportLlmSuccess: vi.fn(),
           getOAuthToken: vi.fn(),
+          resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
     };
   }
 

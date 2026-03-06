@@ -6,6 +6,7 @@ export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
 export { NotionConnectionPage } from './NotionConnectionPage.js';
 export { GoogleCalendarConnectionPage } from './GoogleCalendarConnectionPage.js';
+export { GitHubConnectionPage } from './GitHubConnectionPage.js';
 export { LinearConnectionPage } from './LinearConnectionPage.js';
 export { LinearIssuesPage } from './LinearIssuesPage.js';
 export { WhatsAppConnectionPage } from './WhatsAppConnectionPage.js';

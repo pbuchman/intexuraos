@@ -50,6 +50,7 @@ const COMMON_OPTIONAL_ENV = new Set([
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_ACTIONS_AGENT_URL',
+  'INTEXURAOS_USER_SERVICE_URL',
   // Auth0 JWT vars (optional in E2E mode)
   'INTEXURAOS_AUTH0_AUDIENCE',
   'INTEXURAOS_AUTH0_ISSUER',
@@ -65,6 +66,9 @@ const COMMON_OPTIONAL_ENV = new Set([
   // Dash0 OpenTelemetry (optional — no-op when not configured)
   'INTEXURAOS_DASH0_OTLP_ENDPOINT',
   'INTEXURAOS_DASH0_AUTH_TOKEN',
+  // Queue config (optional — have sensible defaults: maxSize=10, ttlMinutes=30)
+  'INTEXURAOS_QUEUE_MAX_SIZE',
+  'INTEXURAOS_QUEUE_TTL_MINUTES',
 ]);
 
 /**

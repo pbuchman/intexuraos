@@ -183,7 +183,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               success: { type: 'boolean', enum: [true] },
               data: {
                 type: 'object',
-                required: ['id', 'identifier', 'title', 'url', 'labels', 'childCount'],
+                required: ['id', 'identifier', 'title', 'url', 'labels', 'childCount', 'parentId'],
                 properties: {
                   id: { type: 'string', description: 'Linear issue ID' },
                   identifier: { type: 'string', description: 'Issue identifier (e.g., INT-123)' },
@@ -191,6 +191,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   url: { type: 'string', description: 'URL to the issue in Linear' },
                   labels: { type: 'array', items: { type: 'string' }, description: 'Label names' },
                   childCount: { type: 'number', description: 'Number of child issues' },
+                  parentId: { type: ['string', 'null'], description: 'Parent issue UUID, null if top-level' },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },

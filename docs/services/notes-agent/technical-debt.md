@@ -69,9 +69,9 @@ The `findByUserId()` method returns all notes for a user in a single query with 
 
 ### Low Priority
 
-| File                                     | Issue                             | Impact                                          |
-| ---------------------------------------- | --------------------------------- | ----------------------------------------------- |
-| `src/infra/firestore/firestoreNoteRepository.ts` | Double-read on update and delete | Two Firestore reads per mutation (use case + repository both read the document) |
+| File                                             | Issue                             | Impact                                                                          |
+| ------------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------- |
+| `src/infra/firestore/firestoreNoteRepository.ts` | Double-read on update and delete  | Two Firestore reads per mutation (use case + repository both read the document) |
 
 ---
 
@@ -113,12 +113,12 @@ No `TODO:`, `FIXME:`, `HACK:`, or `XXX:` comments in the source code.
 
 All source files are within reasonable size limits:
 
-| File                           | Lines | Assessment               |
-| ------------------------------ | ----- | ------------------------ |
-| `routes/noteRoutes.ts`         | 330   | Within limit (5 routes)  |
-| `server.ts`                    | 237   | Within limit (setup)     |
-| `infra/firestoreNoteRepository.ts` | 169 | Within limit (5 methods) |
-| All other files                | <55   | Well within limits       |
+| File                               | Lines | Assessment               |
+| ---------------------------------- | ----- | ------------------------ |
+| `routes/noteRoutes.ts`             | 330   | Within limit (5 routes)  |
+| `server.ts`                        | 237   | Within limit (setup)     |
+| `infra/firestoreNoteRepository.ts` | 169   | Within limit (5 methods) |
+| All other files                    | <55   | Well within limits       |
 
 ---
 
@@ -128,7 +128,7 @@ All source files are within reasonable size limits:
 
 | Pattern                               | Locations                                                      | Suggestion                                                |
 | ------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------- |
-| findById + null check + userId check  | `getNote.ts`, `updateNote.ts`, `deleteNote.ts` (3 files)      | Extract to a shared `verifyOwnership` helper function     |
+| findById + null check + userId check  | `getNote.ts`, `updateNote.ts`, `deleteNote.ts` (3 files)       | Extract to a shared `verifyOwnership` helper function     |
 
 The three use cases (`getNote`, `updateNote`, `deleteNote`) all repeat the same pattern: call `findById`, check for null, check `userId` ownership, return FORBIDDEN if not the owner. This could be extracted to a shared utility, though the current duplication is minor (each file is under 45 lines).
 
@@ -144,13 +144,13 @@ No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
 
-| Date       | Issue                               | Resolution                                  |
-| ---------- | ----------------------------------- | ------------------------------------------- |
+| Date       | Issue                               | Resolution                                             |
+| ---------- | ----------------------------------- | ------------------------------------------------------ |
 | 2026-02-16 | Dash0 OpenTelemetry integration     | Added distributed tracing via `@intexuraos/infra-otel` |
-| 2026-02-16 | Dev-mode log formatting for PM2     | Improved local log readability in PM2 output |
-| 2026-02-14 | PM2 ecosystem uses pnpm --filter    | Unified local start script across all services |
-| 2026-01-30 | Raw reply.send() in internal routes | Migrated to reply.fail() for auth errors     |
-| 2026-01-30 | Legacy notes missing status field   | Added default status fallback in repository  |
+| 2026-02-16 | Dev-mode log formatting for PM2     | Improved local log readability in PM2 output           |
+| 2026-02-14 | PM2 ecosystem uses pnpm --filter    | Unified local start script across all services         |
+| 2026-01-30 | Raw reply.send() in internal routes | Migrated to reply.fail() for auth errors               |
+| 2026-01-30 | Legacy notes missing status field   | Added default status fallback in repository            |
 
 ---
 

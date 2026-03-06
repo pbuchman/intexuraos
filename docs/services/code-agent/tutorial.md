@@ -129,7 +129,7 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-The task progresses through statuses: `dispatched` -> `running` -> `designed` or `implemented` (or `failed`). Tasks never reach a generic `completed` status -- they finish as `designed` (Phase 1) or `implemented` (Phase 2).
+The task progresses through statuses: `dispatched` -> `running` -> `planned` or `implemented` (or `failed`). Tasks never reach a generic `completed` status -- they finish as `planned` (planning agent) or `implemented` (execution agent).
 
 ### Step 3: List your tasks
 
@@ -207,16 +207,16 @@ Expected response when task has ended (task resumed):
 { "success": true, "data": { "action": "resumed" } }
 ```
 
-### Start Phase 2 implementation
+### Start execution agent implementation
 
-After a Phase 1 design task completes (`status: 'designed'`), you can trigger Phase 2 execution:
+After a planning agent task completes (`status: 'planned'`), you can trigger execution agent implementation:
 
 ```bash
-curl -X POST http://localhost:8128/code/tasks/<designedTaskId>/implement \
+curl -X POST http://localhost:8128/code/tasks/<plannedTaskId>/implement \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-Phase 2 tasks reuse the original prompt but run in strict execution mode, and the Linear issue must have the `code-task` label (set by Phase 1).
+Execution agent tasks reuse the original prompt but run in strict execution mode, and the Linear issue must have the `code-task` label (set by the planning agent).
 
 ### Query GitHub PR summaries
 

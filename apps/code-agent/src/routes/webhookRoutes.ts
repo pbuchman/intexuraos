@@ -9,6 +9,23 @@ import { formatLogChunk, createFormatterState, type FormatterState } from '../do
 import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
+import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
+
+export const parseLinearIdentifierFromUrl = (url: string): string | null => {
+  const mdMatch = /\[.*?\]\((.*?)\)/.exec(url);
+  const cleanUrl = mdMatch?.[1] ?? url;
+
+  try {
+    const parsed = new URL(cleanUrl);
+    if (parsed.hostname !== 'linear.app') return null;
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const identifier = segments[2];
+    if (segments.length < 3 || segments[1] !== 'issue' || identifier === undefined) return null;
+    return identifier;
+  } catch {
+    return null;
+  }
+};
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
@@ -20,26 +37,38 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // ============================================================
 
   // POST /internal/webhooks/task-complete - Task completion callback from orchestrator
-  fastify.post<{
-    Body: {
-      taskId: string;
-      status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
-      result?: {
-        prUrl?: string;
-        branch: string;
-        commits: number;
-        summary: string;
-        ciFailed?: boolean;
-        partialWork?: boolean;
-        rebaseResult?: 'success' | 'conflict' | 'skipped';
-      };
-      error?: {
-        code: string;
-        message: string;
-      };
-      duration?: number;
+  type TaskCompleteWebhookBody = {
+    taskId: string;
+    status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
+    result?: {
+      prUrl?: string;
+      branch?: string;
+      commits?: number;
+      summary?: string;
+      ciFailed?: boolean;
+      partialWork?: boolean;
+      rebaseResult?: 'success' | 'conflict' | 'skipped';
+      comment_replied?: boolean;
+      planning_outcome_label?: 'planned' | 'unclear';
+      planning_superpowers_writing_plans_used?: '0' | '1';
+      planning_linear_url?: string;
+      planning_is_complex?: '0' | '1';
+      planning_subtask_urls?: string;
+      planning_pr_url?: string;
+      planning_unclear_clarification?: string;
+      execution_outcome_label?: 'implemented';
+      execution_superpowers_executing_plans_used?: '0' | '1';
+      execution_superpowers_requesting_code_review_used?: '0' | '1';
+      execution_linear_issue_url?: string;
     };
-  }>(
+    error?: {
+      code: string;
+      message: string;
+    };
+    duration?: number;
+    resumedCompletion?: boolean;
+  };
+  fastify.post<{ Body: TaskCompleteWebhookBody }>(
     '/internal/webhooks/task-complete',
     {
       schema: {
@@ -58,12 +87,26 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 prUrl: { type: 'string' },
                 branch: { type: 'string' },
                 commits: { type: 'number' },
+                // --- Fields used in handler logic (strictly validated) ---
+                comment_replied: { type: 'boolean' },
+                planning_outcome_label: { type: 'string', enum: ['planned', 'unclear'] },
+                planning_is_complex: { type: 'string', enum: ['0', '1'] },
+                planning_subtask_urls: { type: 'string' },
+                planning_pr_url: { type: 'string' },
+                planning_unclear_clarification: { type: 'string' },
+                execution_linear_issue_url: { type: 'string' },
+                // --- Pass-through fields (stored to Firestore, not acted on) ---
                 summary: { type: 'string' },
                 ciFailed: { type: 'boolean' },
                 partialWork: { type: 'boolean' },
-                rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'] },
+                rebaseResult: { type: 'string' },
+                planning_superpowers_writing_plans_used: { type: 'string' },
+                planning_linear_url: { type: 'string' },
+                execution_outcome_label: { type: 'string' },
+                execution_superpowers_executing_plans_used: { type: 'string' },
+                execution_superpowers_requesting_code_review_used: { type: 'string' },
               },
-              required: ['branch', 'commits', 'summary'],
+              required: [],
             },
             error: {
               type: 'object',
@@ -74,6 +117,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               required: ['code', 'message'],
             },
             duration: { type: 'number' },
+            resumedCompletion: { type: 'boolean' },
           },
           required: ['taskId', 'status'],
         },
@@ -105,7 +149,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch: string; commits: number; summary: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped' }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: TaskCompleteWebhookBody }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/webhooks/task-complete',
       });
@@ -145,7 +189,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, logger } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, linearAgentClient, logger, firestore } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -177,8 +221,558 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const task = taskResult.value;
       const completedAt = new Date();
 
+      const enforcePlanningOutcome = async (
+        outcome: 'planned' | 'unclear',
+        planningResult: NonNullable<typeof result>,
+        taskErrorForUnclear?: { code: string; message: string }
+      ): Promise<{ ok: true } | { ok: false; message: string }> => {
+        if (task.linearIssueId === undefined) {
+          return { ok: false, message: 'Planning enforcement requires original linearIssueId' };
+        }
+
+        const originalIssueValidation = await linearAgentClient.validateIssue({
+          userId: task.userId,
+          identifier: task.linearIssueId,
+        });
+        if (!originalIssueValidation.ok) {
+          return { ok: false, message: `Failed to validate original issue: ${originalIssueValidation.error.message}` };
+        }
+
+        const originalIssue = originalIssueValidation.value;
+        const originalIssueUuid = originalIssue.id;
+
+        if (outcome === 'planned') {
+          const isComplex = planningResult.planning_is_complex === '1';
+
+          // Normalize original issue: state → todo, labels based on complexity
+          const [markTodo, parentLabels] = await Promise.all([
+            linearAgentClient.updateIssueState({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              state: 'todo',
+            }),
+            linearAgentClient.updateIssueMetadata({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              addLabels: isComplex ? ['planned'] : [],
+              removeLabels: isComplex ? ['unclear', 'code-task'] : ['unclear', 'planned'],
+            }),
+          ]);
+          if (!markTodo.ok) {
+            return { ok: false, message: `Failed to normalize original issue state: ${markTodo.error.message}` };
+          }
+          if (!parentLabels.ok) {
+            return { ok: false, message: `Failed to normalize original issue labels: ${parentLabels.error.message}` };
+          }
+
+          if (isComplex) {
+            const subtaskUrls = (planningResult.planning_subtask_urls ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s) => s !== '');
+
+            if (subtaskUrls.length > 0 && subtaskUrls.length >= originalIssue.childCount) {
+              for (const url of subtaskUrls) {
+                const identifier = parseLinearIdentifierFromUrl(url);
+                if (identifier === null) {
+                  return { ok: false, message: `Invalid subtask URL: ${url}` };
+                }
+
+                const subtaskValidation = await linearAgentClient.validateIssue({
+                  userId: task.userId,
+                  identifier,
+                });
+                if (!subtaskValidation.ok) {
+                  return { ok: false, message: `Failed to validate subtask ${identifier}: ${subtaskValidation.error.message}` };
+                }
+
+                const subtask = subtaskValidation.value;
+                if (subtask.parentId !== originalIssueUuid) {
+                  return { ok: false, message: `Subtask ${subtask.identifier} is not a direct child of the input issue — task rejected` };
+                }
+
+                const normalizeState = await linearAgentClient.updateIssueState({
+                  userId: task.userId,
+                  issueId: subtask.id,
+                  state: 'todo',
+                });
+                if (!normalizeState.ok) {
+                  return { ok: false, message: `Failed to normalize subtask ${subtask.identifier} state: ${normalizeState.error.message}` };
+                }
+
+                const normalizeMetadata = await linearAgentClient.updateIssueMetadata({
+                  userId: task.userId,
+                  issueId: subtask.id,
+                  assigneeId: null,
+                  removeLabels: ['planned', 'unclear'],
+                  addLabels: ['code-task'],
+                });
+                if (!normalizeMetadata.ok) {
+                  return { ok: false, message: `Failed to normalize subtask ${subtask.identifier} metadata: ${normalizeMetadata.error.message}` };
+                }
+              }
+
+              const planningPrUrl = planningResult.planning_pr_url ?? '';
+              if (planningPrUrl !== '') {
+                const prComment = await linearAgentClient.addComment({
+                  userId: task.userId,
+                  issueId: originalIssueUuid,
+                  body: `Planning PR: ${planningPrUrl}`,
+                });
+                if (!prComment.ok) {
+                  return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
+                }
+              }
+            } else {
+              const reason =
+                subtaskUrls.length === 0
+                  ? 'no subtask URLs provided'
+                  : `partial URL extraction (${String(subtaskUrls.length)} URLs < ${String(originalIssue.childCount)} children)`;
+              request.log.warn(
+                { taskId, linearIssueId: task.linearIssueId, subtaskUrlCount: subtaskUrls.length, childCount: originalIssue.childCount },
+                `Complex planning: ${reason} — falling back to fetchIssueTree`
+              );
+
+              const treeResult = await linearAgentClient.fetchIssueTree({
+                userId: task.userId,
+                issueId: originalIssueUuid,
+              });
+              if (!treeResult.ok) {
+                return { ok: false, message: `Failed to fetch issue tree: ${treeResult.error.message}` };
+              }
+
+              const directChildren = treeResult.value.descendants.filter(
+                (d) => d.parentId === originalIssueUuid
+              );
+
+              for (const child of directChildren) {
+                const normalizeState = await linearAgentClient.updateIssueState({
+                  userId: task.userId,
+                  issueId: child.id,
+                  state: 'todo',
+                });
+                if (!normalizeState.ok) {
+                  return { ok: false, message: `Failed to normalize subtask ${child.identifier} state: ${normalizeState.error.message}` };
+                }
+
+                const normalizeMetadata = await linearAgentClient.updateIssueMetadata({
+                  userId: task.userId,
+                  issueId: child.id,
+                  assigneeId: null,
+                  removeLabels: ['planned', 'unclear'],
+                  addLabels: ['code-task'],
+                });
+                if (!normalizeMetadata.ok) {
+                  return { ok: false, message: `Failed to normalize subtask ${child.identifier} metadata: ${normalizeMetadata.error.message}` };
+                }
+              }
+
+              const planningPrUrl = planningResult.planning_pr_url ?? '';
+              if (planningPrUrl !== '') {
+                const prComment = await linearAgentClient.addComment({
+                  userId: task.userId,
+                  issueId: originalIssueUuid,
+                  body: `Planning PR: ${planningPrUrl}`,
+                });
+                if (!prComment.ok) {
+                  return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
+                }
+              }
+            }
+          } else {
+            // LAST: stamp code-task on parent — proof of successful processing
+            const stampCodeTask = await linearAgentClient.updateIssueMetadata({
+              userId: task.userId,
+              issueId: originalIssueUuid,
+              assigneeId: null,
+              addLabels: ['code-task'],
+              removeLabels: ['unclear'],
+            });
+            if (!stampCodeTask.ok) {
+              return { ok: false, message: `Failed to add code-task label to original issue: ${stampCodeTask.error.message}` };
+            }
+          }
+
+          return { ok: true };
+        }
+
+        const clarificationMessage =
+          planningResult.planning_unclear_clarification ??
+          taskErrorForUnclear?.message ??
+          'Planning agent reported unclear outcome';
+
+        const unclearComment = await linearAgentClient.addComment({
+          userId: task.userId,
+          issueId: originalIssueUuid,
+          body: clarificationMessage,
+        });
+        if (!unclearComment.ok) {
+          return { ok: false, message: `Failed to comment unclear clarification: ${unclearComment.error.message}` };
+        }
+
+        const unclearLabels = await linearAgentClient.updateIssueMetadata({
+          userId: task.userId,
+          issueId: originalIssueUuid,
+          addLabels: ['unclear'],
+          removeLabels: ['planned', 'code-task'],
+        });
+        if (!unclearLabels.ok) {
+          return { ok: false, message: `Failed to enforce unclear labels: ${unclearLabels.error.message}` };
+        }
+
+        return { ok: true };
+      };
+
+      const enforceExecutionOutcome = async (
+        executionResult: NonNullable<typeof result>
+      ): Promise<{ ok: true } | { ok: false; message: string; code: string }> => {
+        if (task.linearIssueId === undefined) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+            message: 'Execution enforcement requires routed linearIssueId',
+          };
+        }
+        if (!executionResult.prUrl) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+            message: 'Execution enforcement requires result.prUrl',
+          };
+        }
+        const reportedIssueUrl = executionResult.execution_linear_issue_url;
+        if (!reportedIssueUrl) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_WRONG_ISSUE_MISMATCH',
+            message: 'Missing execution_linear_issue_url for execution completion',
+          };
+        }
+
+        const routedIssueValidation = await linearAgentClient.validateIssue({
+          userId: task.userId,
+          identifier: task.linearIssueId,
+        });
+        if (!routedIssueValidation.ok) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to validate routed issue: ${routedIssueValidation.error.message}`,
+          };
+        }
+
+        const reportedIdentifier = parseLinearIdentifierFromUrl(reportedIssueUrl);
+        if (reportedIdentifier === null) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_WRONG_ISSUE_MISMATCH',
+            message: `Invalid execution_linear_issue_url: ${reportedIssueUrl}`,
+          };
+        }
+
+        const reportedIssueValidation = await linearAgentClient.validateIssue({
+          userId: task.userId,
+          identifier: reportedIdentifier,
+        });
+        if (!reportedIssueValidation.ok) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to validate execution-reported issue: ${reportedIssueValidation.error.message}`,
+          };
+        }
+
+        if (reportedIssueValidation.value.id !== routedIssueValidation.value.id) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_WRONG_ISSUE_MISMATCH',
+            message:
+              `Execution agent reported different Linear issue (routed=${task.linearIssueId}, reported=${reportedIdentifier})`,
+          };
+        }
+
+        const commentResult = await linearAgentClient.addComment({
+          userId: task.userId,
+          issueId: routedIssueValidation.value.id,
+          body: `Implementation PR: ${executionResult.prUrl}`,
+        });
+        if (!commentResult.ok) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to comment executed issue with PR URL: ${commentResult.error.message}`,
+          };
+        }
+
+        const markReview = await linearAgentClient.updateIssueState({
+          userId: task.userId,
+          issueId: routedIssueValidation.value.id,
+          state: 'in_review',
+        });
+        if (!markReview.ok) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to move executed issue to In Review: ${markReview.error.message}`,
+          };
+        }
+
+        const keepCodeTaskLabel = await linearAgentClient.updateIssueMetadata({
+          userId: task.userId,
+          issueId: routedIssueValidation.value.id,
+          assigneeId: null,
+          addLabels: ['code-task'],
+          removeLabels: ['unclear'],
+        });
+        if (!keepCodeTaskLabel.ok) {
+          return {
+            ok: false,
+            code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to preserve code-task label on executed issue: ${keepCodeTaskLabel.error.message}`,
+          };
+        }
+
+        return { ok: true };
+      };
+
+      const enforcePullRequestOutcome = async (
+        pullRequestResult: NonNullable<typeof result>
+      ): Promise<{ ok: true } | { ok: false; message: string; code: string }> => {
+        if (task.linearIssueId === undefined) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: 'Pull request enforcement requires routed linearIssueId',
+          };
+        }
+        if (!pullRequestResult.prUrl) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: 'Pull request enforcement requires result.prUrl',
+          };
+        }
+        if (pullRequestResult.comment_replied === undefined) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: 'Pull request enforcement requires result.comment_replied',
+          };
+        }
+
+        const routedIssueValidation = await linearAgentClient.validateIssue({
+          userId: task.userId,
+          identifier: task.linearIssueId,
+        });
+        if (!routedIssueValidation.ok) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to validate routed issue: ${routedIssueValidation.error.message}`,
+          };
+        }
+
+        const commentResult = await linearAgentClient.addComment({
+          userId: task.userId,
+          issueId: routedIssueValidation.value.id,
+          body: `Pull request: ${pullRequestResult.prUrl}`,
+        });
+        if (!commentResult.ok) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to comment on issue with PR URL: ${commentResult.error.message}`,
+          };
+        }
+
+        const markReview = await linearAgentClient.updateIssueState({
+          userId: task.userId,
+          issueId: routedIssueValidation.value.id,
+          state: 'in_review',
+        });
+        if (!markReview.ok) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to move issue to In Review: ${markReview.error.message}`,
+          };
+        }
+
+        return { ok: true };
+      };
+
+      // Helper: clean up PR task lock for PR-originated tasks reaching terminal state.
+      // Only the original lock-owning task (parentTaskId === undefined) should delete the lock.
+      // Follow-up tasks copy prNumber but don't own the lock — deleting here could remove
+      // a lock that belongs to a different in-flight PR-comment task.
+      const cleanupLockIfPR = async (): Promise<void> => {
+        if (task.prNumber !== undefined && task.parentTaskId === undefined) {
+          await deletePRTaskLock(firestore, task.repository, task.prNumber, request.log);
+        }
+      };
+
       // Step 3: Update task based on status
       if (status === 'completed') {
+        // Trace which agent type is being handled for debugging
+        request.log.info({ taskId, agentType: task.agentType }, 'Processing completed task');
+
+        if (task.agentType === 'execution') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Execution completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+                message: 'Execution completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          const executionEnforcement = await enforceExecutionOutcome(result);
+          if (!executionEnforcement.ok) {
+            request.log.error(
+              {
+                taskId,
+                routedIssueId: task.linearIssueId,
+                reportedIssueUrl: result.execution_linear_issue_url,
+                prUrl: result.prUrl,
+                errorCode: executionEnforcement.code,
+                error: executionEnforcement.message,
+              },
+              'Execution deterministic enforcement failed'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: executionEnforcement.code,
+                message: executionEnforcement.message,
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+        }
+
+        if (task.agentType === 'pull_request') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Pull request completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+                message: 'Pull request completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          const pullRequestEnforcement = await enforcePullRequestOutcome(result);
+          if (!pullRequestEnforcement.ok) {
+            request.log.error(
+              {
+                taskId,
+                routedIssueId: task.linearIssueId,
+                prUrl: result.prUrl,
+                commentReplied: result.comment_replied,
+                errorCode: pullRequestEnforcement.code,
+                error: pullRequestEnforcement.message,
+              },
+              'Pull request deterministic enforcement failed'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: pullRequestEnforcement.code,
+                message: pullRequestEnforcement.message,
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+        }
+
+        if (task.agentType === 'planning') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Planning completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'PLANNING_AGENT_ENFORCEMENT_FAILED',
+                message: 'Planning completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          if (result.planning_outcome_label === 'planned') {
+            const planningEnforcement = await enforcePlanningOutcome('planned', result);
+            if (!planningEnforcement.ok) {
+              request.log.error({ taskId, error: planningEnforcement.message }, 'Planning deterministic enforcement failed');
+              const failResult = await codeTaskRepo.update(taskId, {
+                status: 'failed',
+                completedAt,
+                result,
+                error: {
+                  code: 'PLANNING_AGENT_ENFORCEMENT_FAILED',
+                  message: planningEnforcement.message,
+                },
+                callbackReceived: true,
+              });
+              if (!failResult.ok) {
+                return reply.fail('INTERNAL_ERROR', failResult.error.message);
+              }
+              await cleanupLockIfPR();
+              // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+              return await reply.send({ received: true });
+            }
+          }
+        }
+
         // Extract PR number from prUrl for findByPR correlation (INT-465)
         let prNumber: number | undefined;
         if (result?.prUrl) {
@@ -188,7 +782,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        const resolvedStatus = task.executionPhase === 'execution' ? 'implemented' : 'designed';
+        const resolvedStatus =
+          task.agentType === 'planning' ? 'planned' : 'implemented';
         const updateResult = await codeTaskRepo.update(taskId, {
           status: resolvedStatus,
           completedAt,
@@ -202,10 +797,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+        await cleanupLockIfPR();
 
-        // Transition Linear issue to In Review when PR is created (best-effort)
+        // Best-effort In Review transition for agent types without deterministic enforcement
+        // (planning, execution, and pull_request agents handle this in their own enforcement paths)
         /* v8 ignore start -- ts-type: optional property checks create type narrowing branches @preserve */
-        if (prNumber !== undefined && task.linearIssueId !== undefined) {
+        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && prNumber !== undefined && task.linearIssueId !== undefined) {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
         /* v8 ignore stop @preserve */
@@ -230,7 +827,33 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         /* v8 ignore start -- ts-type: spread with boolean shorthand creates complex type that requires assertion @preserve */
         const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
         /* v8 ignore stop @preserve */
-        await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
+
+        // INT-628: If planning agent completed, send notification with button to proceed to execution
+        if (task.agentType === 'planning') {
+          const notifyResult = await whatsappNotifier.notifyDesignComplete(task.userId, completedTask);
+          if (!notifyResult.ok) {
+            request.log.warn(
+              { taskId, errorCode: notifyResult.error.code, errorMessage: notifyResult.error.message },
+              'Failed to send design-complete notification — user may not receive Phase 2 button'
+            );
+          }
+        } else if (request.body.resumedCompletion === true) {
+          const resumedNotifyResult = await whatsappNotifier.notifyResumedTaskComplete(task.userId, completedTask);
+          if (!resumedNotifyResult.ok) {
+            request.log.warn(
+              { taskId, errorCode: resumedNotifyResult.error.code, errorMessage: resumedNotifyResult.error.message },
+              'Failed to send resumed-task-complete notification'
+            );
+          }
+        } else {
+          const completeNotifyResult = await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
+          if (!completeNotifyResult.ok) {
+            request.log.warn(
+              { taskId, errorCode: completeNotifyResult.error.code, errorMessage: completeNotifyResult.error.message },
+              'Failed to send task-complete notification'
+            );
+          }
+        }
 
         // Record task completion for rate limiting (fire and forget)
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
@@ -273,9 +896,32 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       /* v8 ignore start -- test-infra: status === 'failed' conditional requires specific webhook payload @preserve */
       if (status === 'failed') {
         const taskError = error ?? { code: 'UNKNOWN_FAILURE', message: 'Task failed without error details' };
+        if (taskError.code === 'PLANNING_AGENT_UNCLEAR' && result?.planning_outcome_label === 'unclear') {
+          const unclearEnforcement = await enforcePlanningOutcome('unclear', result, taskError);
+          if (!unclearEnforcement.ok) {
+            request.log.error({ taskId, error: unclearEnforcement.message }, 'Planning unclear deterministic enforcement failed');
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: 'PLANNING_AGENT_ENFORCEMENT_FAILED',
+                message: unclearEnforcement.message,
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+        }
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'failed',
           completedAt,
+          ...(result !== undefined && { result }),
           error: {
             code: taskError.code,
             message: taskError.message,
@@ -287,6 +933,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as failed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+        await cleanupLockIfPR();
 
         // Notify actions-agent if task has actionId
         /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
@@ -348,6 +995,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as interrupted');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+        await cleanupLockIfPR();
 
         // Notify actions-agent if task has actionId
         // Design line 328: interrupted → failed
@@ -416,6 +1064,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as cancelled');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+        await cleanupLockIfPR();
 
         /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (task.actionId) {

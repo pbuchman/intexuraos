@@ -193,4 +193,50 @@ export class FirestoreOAuthConnectionRepository implements OAuthConnectionReposi
       });
     }
   }
+
+  async findByProviderEmail(
+    provider: OAuthProvider,
+    email: string
+  ): Promise<Result<OAuthConnection | null, OAuthError>> {
+    try {
+      const db = getFirestore();
+      const snapshot = await db
+        .collection(COLLECTION_NAME)
+        .where('provider', '==', provider)
+        .where('email', '==', email)
+        .limit(1)
+        .get();
+
+      if (snapshot.empty) {
+        return ok(null);
+      }
+
+      const doc = snapshot.docs[0];
+      /* v8 ignore start -- ts-type: Firestore snapshot always has docs when !empty @preserve */
+      if (doc === undefined) {
+        return ok(null);
+      }
+      /* v8 ignore stop @preserve */
+      const data = doc.data() as OAuthConnectionDoc;
+
+      return ok({
+        userId: data.userId,
+        provider: data.provider,
+        email: data.email,
+        tokens: {
+          accessToken: decryptToken(data.accessToken),
+          refreshToken: decryptToken(data.refreshToken),
+          expiresAt: data.expiresAt,
+          scope: data.scope,
+        },
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      });
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to find OAuth connection by email: ${getErrorMessage(error, 'Unknown error')}`,
+      });
+    }
+  }
 }

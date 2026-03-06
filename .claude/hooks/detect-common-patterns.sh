@@ -16,6 +16,9 @@
 # Migration patterns:
 # - Modification of existing migration files (immutable)
 #
+# Coverage patterns:
+# - v8 ignore comment added without writing tests first
+#
 # BEHAVIOR: Soft block (JSON decision) - forces acknowledgment before continuing
 # SUPPRESSION: Use inline comments to suppress false positives:
 #   // @allow-missing-js -- reason
@@ -23,6 +26,7 @@
 #   // @allow-result-access -- reason
 #   // @allow-pino-import -- reason
 #   // @allow-raw-send -- reason
+#   (v8 ignore has no suppression - always reminds)
 
 set -euo pipefail
 
@@ -83,6 +87,12 @@ if [[ "$FILE_PATH" =~ \.(ts|tsx)$ ]] && [[ ! "$FILE_PATH" =~ \.d\.ts$ ]]; then
     # ─────────────────────────────────────────────────────────────────────────────
     REPLY_ISSUES=$(check_reply_send "$FILE_PATH")
     ISSUES+="$REPLY_ISSUES"
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Check: v8 ignore comment added (write test first)
+    # ─────────────────────────────────────────────────────────────────────────────
+    V8_IGNORE_ISSUES=$(check_v8_ignore_added "$FILE_PATH" "$TOOL_NAME" "$INPUT")
+    ISSUES+="$V8_IGNORE_ISSUES"
 
     # ─────────────────────────────────────────────────────────────────────────────
     # Check: Import from local files without .js extension

@@ -19,6 +19,7 @@ If any file is missing, STOP and inform the user.
 ### 1.2 Extract Vision
 
 Search `memory/feature-review-log.md` for the section matching `### <N>. <service-name>`. Extract the entire section including:
+
 - User's vision paragraph
 - Key emphasis bullets
 - De-emphasize bullets
@@ -27,11 +28,13 @@ Search `memory/feature-review-log.md` for the section matching `### <N>. <servic
 This entire section becomes `{{VISION}}`.
 
 If no vision entry exists for this service, use AskUserQuestion:
+
 > "No vision found for {{SERVICE_NAME}} in feature-review-log.md. Please describe: What is this service's core story? What should features.md emphasize?"
 
 ### 1.3 Extract Facts
 
 Read `technical.md` and filter to user-facing facts only. Remove:
+
 - Environment variable names and configurations
 - Terraform/infrastructure details
 - Internal architecture (DI containers, service patterns)
@@ -40,6 +43,7 @@ Read `technical.md` and filter to user-facing facts only. Remove:
 - Package dependency lists
 
 Keep:
+
 - Endpoints and what they do (in user terms)
 - Capabilities and features
 - Integrations with other services (what they enable for the user)
@@ -59,6 +63,7 @@ Set `{{ROUND}}` = 1, `{{FEEDBACK}}` = "This is the first draft. No prior feedbac
 ### 2.1 Prepare Writer Prompt
 
 Read `templates/writer-prompt.md` and substitute all placeholders:
+
 - `{{SERVICE_NAME}}` → service display name (title case, e.g., "Calendar Agent")
 - `{{VISION}}` → from Phase 1.2
 - `{{FACTS}}` → from Phase 1.3
@@ -91,6 +96,7 @@ Display the draft to the user. Ask:
 > **Round {{ROUND}} draft written to `docs/services/<name>/features.md`.**
 >
 > Options:
+>
 > 1. "Proceed to critics" — send to 6 critics for evaluation
 > 2. "Redirect" — provide feedback to incorporate before critics see it
 
@@ -103,6 +109,7 @@ If user provides feedback, incorporate it into `{{FEEDBACK}}` and return to Phas
 ### 3.1 Prepare Critic Prompts
 
 Read all 6 critic templates and substitute placeholders:
+
 - `{{SERVICE_NAME}}` → service display name
 - `{{DRAFT}}` → the current features.md content
 - `{{VISION}}` → from Phase 1.2
@@ -181,14 +188,15 @@ After all 6 return, display a summary table:
 
 Apply the decision matrix from `reference/convergence-criteria.md`:
 
-| Condition | Action | Next |
-|-----------|--------|------|
-| 6/6 SHIP | Done | → Phase 6 |
-| Mixed, avg >= 6.5 | Targeted edits | → Phase 5 |
-| 0/6 SHIP or avg < 6.5 | Full rewrite | → Phase 2 (increment round) |
-| Round 3 reached | Polish and present | → Phase 6 |
+| Condition             | Action             | Next                        |
+| --------------------- | ------------------ | --------------------------- |
+| 6/6 SHIP              | Done               | → Phase 6                   |
+| Mixed, avg >= 6.5     | Targeted edits     | → Phase 5                   |
+| 0/6 SHIP or avg < 6.5 | Full rewrite       | → Phase 2 (increment round) |
+| Round 3 reached       | Polish and present | → Phase 6                   |
 
 When looping back to Phase 2:
+
 - Increment `{{ROUND}}`
 - Consolidate feedback per `reference/convergence-criteria.md` priority tiers
 - Set `{{FEEDBACK}}` to the consolidated feedback
@@ -218,6 +226,7 @@ Use the Edit tool to make specific targeted changes to the existing draft in `do
 ### 6.1 Display Final Output
 
 Show the user:
+
 1. The final features.md content
 2. The most recent convergence table
 3. A brief summary of what changed across rounds
@@ -229,6 +238,7 @@ Ask:
 > **Final draft ready.**
 >
 > Options:
+>
 > 1. "Accept" — features.md is done
 > 2. "Additional direction" — provide feedback for another pass
 
@@ -296,6 +306,7 @@ Display the drift check result. If drift detected:
 > {{DISCREPANCIES}}
 >
 > Options:
+>
 > 1. "Rewrite overview now" — triggers `workflows/rewrite-overview.md`
 > 2. "Defer" — noted in rewrite history, overview rewrite deferred
 > 3. "Ignore" — no action needed

@@ -39,11 +39,11 @@ None detected.
 
 ### Low Priority
 
-| File                                              | Issue                            | Impact                               |
-| ------------------------------------------------- | -------------------------------- | ------------------------------------ |
-| `domain/compositeFeed/ports/index.ts`             | `listAll()` port has no consumer | Dead code after scheduler removal    |
-| `domain/snapshot/models/index.ts`                 | Comment references scheduler     | Misleading documentation             |
-| `domain/visualization/usecases/computeVisualization.ts` | Comment references scheduled refresh | Misleading documentation      |
+| File                                                    | Issue                                | Impact                               |
+| ------------------------------------------------------- | ------------------------------------ | ------------------------------------ |
+| `domain/compositeFeed/ports/index.ts`                   | `listAll()` port has no consumer     | Dead code after scheduler removal    |
+| `domain/snapshot/models/index.ts`                       | Comment references scheduler         | Misleading documentation             |
+| `domain/visualization/usecases/computeVisualization.ts` | Comment references scheduled refresh | Misleading documentation             |
 
 ---
 

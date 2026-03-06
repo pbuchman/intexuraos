@@ -2,6 +2,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { Logger } from 'pino';
+import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 
 /**
  * Minutes of inactivity before a task is considered a zombie.
@@ -18,6 +19,7 @@ export interface ZombieDetectionResult {
   detected: number;
   interrupted: number;
   errors: string[];
+  locksToCleanup: LockCleanupInfo[];
 }
 
 export type DetectZombieTasksUseCase = () => Promise<Result<ZombieDetectionResult>>;
@@ -39,6 +41,7 @@ export function createDetectZombieTasksUseCase(
       detected: 0,
       interrupted: 0,
       errors: [],
+      locksToCleanup: [],
     };
 
     // Calculate stale threshold
@@ -78,6 +81,7 @@ export function createDetectZombieTasksUseCase(
         } else {
           logger.info({ taskId: task.id }, 'Interrupted zombie task');
           result.interrupted++;
+          result.locksToCleanup.push(...buildLockCleanups(task));
         }
       } catch (error) {
         const message = getErrorMessage(error);

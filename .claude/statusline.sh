@@ -296,22 +296,6 @@ fi
 if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
   printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
 fi
-if [ -n "$api_display" ]; then
-  if [ -n "$api_bg_color" ]; then
-    # Use background color for special APIs (white for Z.AI, orange for anthropic)
-    # Need contrasting text color: black on white, white on orange
-    if [ "$api_bg_color" = "47" ]; then
-      # White background - use black text
-      printf '  🌐 \033[30;%sm %s \033[0m' "$api_bg_color" "$api_display"
-    else
-      # Orange background - use white text
-      printf '  🌐 \033[97;%sm %s \033[0m' "$api_bg_color" "$api_display"
-    fi
-  else
-    # Default styling for other APIs
-    printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
-  fi
-fi
 
 # Line 2: Context and hook metrics
 line2=""
@@ -361,7 +345,20 @@ if [ "$use_color" -eq 1 ]; then
     hostname_display=$(printf '\033[30;48;5;7m mac-dev \033[0m')
   fi
 fi
-line3="📈 ${hostname_display} $(load_color)${load_avg}  🧮 ${mem_usage}$(rst)"
+# Build API segment for line 3 (before hostname)
+api_segment=""
+if [ -n "$api_display" ]; then
+  if [ -n "$api_bg_color" ]; then
+    if [ "$api_bg_color" = "47" ]; then
+      api_segment=$(printf '🌐 \033[30;%sm %s \033[0m  ' "$api_bg_color" "$api_display")
+    else
+      api_segment=$(printf '🌐 \033[97;%sm %s \033[0m  ' "$api_bg_color" "$api_display")
+    fi
+  else
+    api_segment=$(printf '🌐 %s%s%s  ' "$(api_color)" "$api_display" "$(rst)")
+  fi
+fi
+line3="${api_segment}📈 ${hostname_display} $(load_color)${load_avg}  🧮 ${mem_usage}$(rst)"
 
 # Line 4: Cost and usage analytics (optional)
 line4=""

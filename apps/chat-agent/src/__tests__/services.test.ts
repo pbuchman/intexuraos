@@ -82,6 +82,9 @@ describe('chat-agent services', () => {
         async getOAuthToken() {
           return { ok: false as const, error: { code: 'CONNECTION_NOT_FOUND' as const, message: 'Not found' } };
         },
+        async resolveGitHubUsername() {
+          return ok(null);
+        },
       };
 
       const customServices: ServiceContainer = {

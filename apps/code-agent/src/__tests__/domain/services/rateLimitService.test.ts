@@ -97,22 +97,6 @@ describe('rateLimitService', () => {
       }
     });
 
-    it('should reject when daily cost limit reached', async () => {
-      mockRepo.getOrCreate = vi.fn().mockResolvedValue(
-        createUsage({ costToday: DEFAULT_LIMITS.dailyCostCap - ESTIMATED_COST_PER_TASK + 0.01 })
-      );
-      const service = createRateLimitService({ userUsageRepository: mockRepo, logger });
-
-      const result = await service.checkLimits('user-1', 1000);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('daily_cost_limit');
-        expect(result.error.message).toContain('$20');
-        expect(result.error.retryAfter).toBe('tomorrow');
-      }
-    });
-
     it('should reject when monthly cost limit reached', async () => {
       mockRepo.getOrCreate = vi.fn().mockResolvedValue(
         createUsage({ costThisMonth: DEFAULT_LIMITS.monthlyCostCap - ESTIMATED_COST_PER_TASK + 0.01 })
@@ -195,31 +179,6 @@ describe('rateLimitService', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('should allow when exactly at daily cost limit boundary minus estimated', async () => {
-      // costToday + ESTIMATED_COST_PER_TASK == dailyCostCap should reject
-      mockRepo.getOrCreate = vi.fn().mockResolvedValue(
-        createUsage({ costToday: DEFAULT_LIMITS.dailyCostCap - ESTIMATED_COST_PER_TASK })
-      );
-      const service = createRateLimitService({ userUsageRepository: mockRepo, logger });
-
-      const result = await service.checkLimits('user-1', 1000);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('daily_cost_limit');
-      }
-    });
-
-    it('should allow when daily cost has room for one more task', async () => {
-      mockRepo.getOrCreate = vi.fn().mockResolvedValue(
-        createUsage({ costToday: DEFAULT_LIMITS.dailyCostCap - ESTIMATED_COST_PER_TASK - 0.01 })
-      );
-      const service = createRateLimitService({ userUsageRepository: mockRepo, logger });
-
-      const result = await service.checkLimits('user-1', 1000);
-
-      expect(result.ok).toBe(true);
-    });
   });
 
   describe('recordTaskStart', () => {
@@ -291,7 +250,6 @@ describe('rateLimitService', () => {
       expect(DEFAULT_LIMITS.maxConcurrentTasks).toBe(3);
       expect(DEFAULT_LIMITS.maxTasksPerHour).toBe(10);
       expect(DEFAULT_LIMITS.maxPromptLength).toBe(10000);
-      expect(DEFAULT_LIMITS.dailyCostCap).toBe(20);
       expect(DEFAULT_LIMITS.monthlyCostCap).toBe(200);
     });
   });

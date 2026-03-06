@@ -2,6 +2,13 @@
  * Configuration loader for code-agent service.
  */
 
+export interface QueueConfig {
+  /** Maximum number of tasks in queue (default 10) */
+  maxSize: number;
+  /** TTL for queued tasks in minutes (default 30) */
+  ttlMinutes: number;
+}
+
 export interface Config {
   port: number;
   gcpProjectId: string;
@@ -14,11 +21,15 @@ export interface Config {
   webhookVerifySecret: string;
   tokenEncryptionKey: string;
   orchestratorSecret: string;
+  serviceUrl: string;
   githubWebhookSecret: string;
+  userServiceUrl: string;
   // Auth0 JWT validation
   auth0Audience: string;
   auth0Issuer: string;
   auth0JwksUri: string;
+  // Task queue configuration (INT-619)
+  queue: QueueConfig;
 }
 
 export function loadConfig(): Config {
@@ -32,11 +43,13 @@ export function loadConfig(): Config {
   const actionsAgentUrl = process.env['INTEXURAOS_ACTIONS_AGENT_URL'] ?? '';
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
   const orchestratorSecret = process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] ?? '';
+  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? ''; // validated in REQUIRED_ENV
   const auth0Audience = process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '';
   const auth0Issuer = process.env['INTEXURAOS_AUTH_ISSUER'] ?? '';
   const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
   const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
   const githubWebhookSecret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] ?? '';
+  const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
 
   return {
     port,
@@ -49,10 +62,16 @@ export function loadConfig(): Config {
     actionsAgentUrl,
     webhookVerifySecret,
     orchestratorSecret,
+    serviceUrl,
     tokenEncryptionKey,
     githubWebhookSecret,
+    userServiceUrl,
     auth0Audience,
     auth0Issuer,
     auth0JwksUri,
+    queue: {
+      maxSize: parseInt(process.env['INTEXURAOS_QUEUE_MAX_SIZE'] ?? '10', 10),
+      ttlMinutes: parseInt(process.env['INTEXURAOS_QUEUE_TTL_MINUTES'] ?? '30', 10),
+    },
   };
 }

@@ -20,17 +20,17 @@ Complete documentation for all IntexuraOS services, workers, and packages.
 
 ## v2.1.0 Highlights (Previous)
 
-| Service              | Key Changes                                             |
-| -------------------- | ------------------------------------------------------- |
-| **whatsapp-service** | Interactive approval buttons, phone verification, voice transcription |
+| Service              | Key Changes                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| **whatsapp-service** | Interactive approval buttons, phone verification, voice transcription              |
 | **actions-agent**    | Confidence-based auto-execution, Google Calendar linking, resource status tracking |
-| **calendar-agent**   | Preview generation before commit                        |
-| **research-agent**   | Natural language model selection, Zod schema validation |
-| **commands-agent**   | 5-step classification, URL isolation, Polish support    |
-| **bookmarks-agent**  | WhatsApp delivery for AI summaries                      |
-| **web-agent**        | @intexuraos/internal-clients integration (INT-269)      |
-| **linear-agent**     | 3-column dashboard with Todo/To Test categories         |
-| **user-service**     | Rate limit detection precedence fix                     |
+| **calendar-agent**   | Preview generation before commit                                                   |
+| **research-agent**   | Natural language model selection, Zod schema validation                            |
+| **commands-agent**   | 5-step classification, URL isolation, Polish support                               |
+| **bookmarks-agent**  | WhatsApp delivery for AI summaries                                                 |
+| **web-agent**        | @intexuraos/internal-clients integration (INT-269)                                 |
+| **linear-agent**     | 3-column dashboard with Todo/To Test categories                                    |
+| **user-service**     | Rate limit detection precedence fix                                                |
 
 ---
 
@@ -121,8 +121,8 @@ graph TB
 
 ### Voice & Transcription
 
-| Service                                          | AI Models    | Capability                                                    |
-| ------------------------------------------------ | ------------ | ------------------------------------------------------------- |
+| Service                                          | AI Models    | Capability                                                       |
+| ------------------------------------------------ | ------------ | ---------------------------------------------------------------- |
 | [whatsapp-service](whatsapp-service/features.md) | Speechmatics | Voice-to-text transcription, approval via buttons & text replies |
 
 ---

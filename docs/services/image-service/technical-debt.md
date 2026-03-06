@@ -49,9 +49,9 @@ Planned support for:
 
 ### Medium Priority
 
-| File        | Issue                          | Impact                                                                    |
-| ----------- | ------------------------------ | ------------------------------------------------------------------------- |
-| `index.ts` + `services.ts` | Pricing model mismatch | `REQUIRED_MODELS` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but prompt adapters use `gemini-2.5-pro` and `gpt-4.1`. Cost tracking may use incorrect per-token rates for prompt generation. |
+| File                       | Issue                          | Impact                                                                                                                                                                                                     |
+| -------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts` + `services.ts` | Pricing model mismatch         | `REQUIRED_MODELS` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but prompt adapters use `gemini-2.5-pro` and `gpt-4.1`. Cost tracking may use incorrect per-token rates for prompt generation. |
 
 ### Low Priority
 
@@ -114,10 +114,10 @@ All files are within reasonable size limits:
 
 ### Low Priority
 
-| Pattern               | Locations                                                  | Suggestion                        |
-| --------------------- | ---------------------------------------------------------- | --------------------------------- |
-| `mapError` function   | `GptPromptAdapter.ts` (exported), `GeminiPromptAdapter.ts` (private) | Extract to shared `mapError.ts` utility. Both implement identical switch logic over `INVALID_KEY`, `RATE_LIMITED`, `TIMEOUT`, `PARSE_ERROR` codes. |
-| `mapLlmError` function | `OpenAIImageGenerator.ts`, `GoogleImageGenerator.ts`       | Extract to shared utility. Both implement identical switch over `INVALID_KEY`, `RATE_LIMITED`, `TIMEOUT` codes. |
+| Pattern                | Locations                                                            | Suggestion                                                                                                                                         |
+| ---------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mapError` function    | `GptPromptAdapter.ts` (exported), `GeminiPromptAdapter.ts` (private) | Extract to shared `mapError.ts` utility. Both implement identical switch logic over `INVALID_KEY`, `RATE_LIMITED`, `TIMEOUT`, `PARSE_ERROR` codes. |
+| `mapLlmError` function | `OpenAIImageGenerator.ts`, `GoogleImageGenerator.ts`                 | Extract to shared utility. Both implement identical switch over `INVALID_KEY`, `RATE_LIMITED`, `TIMEOUT` codes.                                    |
 
 ---
 

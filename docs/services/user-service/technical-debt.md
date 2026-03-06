@@ -54,7 +54,7 @@ Currently only Google OAuth is implemented. Planned additions:
 
 | File                                  | Lines | Issue                                         | Suggestion                                   |
 | ------------------------------------- | ----- | --------------------------------------------- | -------------------------------------------- |
-| `src/routes/llmKeysRoutes.ts`         | 569   | Handles GET, PATCH, POST, DELETE in one file   | Acceptable: routes are cohesive by resource  |
+| `src/routes/llmKeysRoutes.ts`         | 569   | Handles GET, PATCH, POST, DELETE in one file  | Acceptable: routes are cohesive by resource  |
 
 The `llmKeysRoutes.ts` file is large but all routes are cohesive around the LLM keys resource. Splitting would scatter related logic across files without clear benefit.
 
@@ -94,22 +94,22 @@ Comprehensive test coverage across all layers with 100% branch coverage enforcem
 | `configRoutes.test.ts`                | Auth0 config endpoint                     |
 | `deviceRoutes.test.ts`                | Device code flow (start + poll)           |
 | `tokenRoutes.test.ts`                 | Token refresh                             |
-| `firebaseRoutes.test.ts`             | Firebase token exchange                   |
-| `frontendRoutes.test.ts`             | Login/logout/me endpoints                 |
-| `oauthRoutes.test.ts`               | OAuth2 token/authorize (ChatGPT Actions)  |
-| `oauthConnectionRoutes.test.ts`     | Google OAuth connection management        |
-| `settingsRoutes.test.ts`            | User settings + default model             |
-| `llmKeysRoutes.test.ts`             | LLM key CRUD + test                       |
-| `internalRoutes.test.ts`            | Service-to-service endpoints              |
-| `formatLlmError.test.ts`            | Provider error parsing                    |
-| `encryption.test.ts`                | AES-256-GCM encrypt/decrypt               |
-| `auth0Client.test.ts`               | Auth0 SDK wrapper                         |
-| `authTokenRepository.test.ts`       | Firestore token storage                   |
-| `userSettingsRepository.test.ts`    | Firestore settings storage                |
-| `oauthConnectionRepository.test.ts` | Firestore OAuth storage                   |
-| `googleOAuthClient.test.ts`         | Google OAuth client                       |
-| `llmValidator.test.ts`              | LLM key validation (5 providers)          |
-| `maskApiKey.test.ts`                | Key masking utility                       |
+| `firebaseRoutes.test.ts`              | Firebase token exchange                   |
+| `frontendRoutes.test.ts`              | Login/logout/me endpoints                 |
+| `oauthRoutes.test.ts`                 | OAuth2 token/authorize (ChatGPT Actions)  |
+| `oauthConnectionRoutes.test.ts`       | Google OAuth connection management        |
+| `settingsRoutes.test.ts`              | User settings + default model             |
+| `llmKeysRoutes.test.ts`               | LLM key CRUD + test                       |
+| `internalRoutes.test.ts`              | Service-to-service endpoints              |
+| `formatLlmError.test.ts`              | Provider error parsing                    |
+| `encryption.test.ts`                  | AES-256-GCM encrypt/decrypt               |
+| `auth0Client.test.ts`                 | Auth0 SDK wrapper                         |
+| `authTokenRepository.test.ts`         | Firestore token storage                   |
+| `userSettingsRepository.test.ts`      | Firestore settings storage                |
+| `oauthConnectionRepository.test.ts`   | Firestore OAuth storage                   |
+| `googleOAuthClient.test.ts`           | Google OAuth client                       |
+| `llmValidator.test.ts`                | LLM key validation (5 providers)          |
+| `maskApiKey.test.ts`                  | Key masking utility                       |
 
 ---
 

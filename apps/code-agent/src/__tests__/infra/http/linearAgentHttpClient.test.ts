@@ -335,6 +335,9 @@ describe('linearAgentHttpClient', () => {
           identifier: 'INT-123',
           title: 'Test Issue',
           url: 'https://linear.app/intexuraos/issue/INT-123',
+          labels: [],
+          childCount: 0,
+          parentId: null,
         },
       };
 
@@ -354,10 +357,43 @@ describe('linearAgentHttpClient', () => {
         expect(result.value.identifier).toBe('INT-123');
         expect(result.value.title).toBe('Test Issue');
         expect(result.value.url).toBe('https://linear.app/intexuraos/issue/INT-123');
+        expect(result.value.parentId).toBe(null);
         expect(mockLogger.info).toHaveBeenCalledWith(
           { identifier: 'INT-123', issueId: 'issue-123' },
           'Linear issue validated'
         );
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('should include parentId when issue is a subtask', async () => {
+      const mockResponse = {
+        success: true,
+        data: {
+          id: 'issue-456',
+          identifier: 'INT-456',
+          title: 'Subtask Issue',
+          url: 'https://linear.app/intexuraos/issue/INT-456',
+          labels: [],
+          childCount: 0,
+          parentId: 'parent-issue-id',
+        },
+      };
+
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-456/validate')
+        .query({ userId: 'test-user-123' })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, mockResponse);
+
+      const result = await client.validateIssue({
+        userId: 'test-user-123',
+        identifier: 'INT-456',
+      });
+
+      if (result.ok) {
+        expect(result.value.parentId).toBe('parent-issue-id');
       } else {
         expect.fail('Expected successful result');
       }
@@ -443,6 +479,9 @@ describe('linearAgentHttpClient', () => {
             identifier: 'INT-456',
             title: 'Validated Issue',
             url: 'https://linear.app/intexuraos/issue/INT-456',
+            labels: [],
+            childCount: 0,
+            parentId: null,
           },
         });
 
@@ -707,6 +746,102 @@ describe('linearAgentHttpClient', () => {
       } else {
         expect.fail('Expected error result');
       }
+    });
+  });
+
+  describe('fetchIssuesForDisplay', () => {
+    it('should fetch multiple issues for display successfully', async () => {
+      const mockResponse = {
+        success: true,
+        data: {
+          issues: [
+            {
+              identifier: 'INT-123',
+              title: 'First Issue',
+              state: { name: 'Backlog', type: 'backlog' },
+              priority: 0,
+              assignee: null,
+              labels: [{ id: 'label-1', name: 'backend' }],
+              url: 'https://linear.app/intexuraos/issue/INT-123',
+              commentCount: 1,
+              lastCommentAt: '2026-03-06T10:00:00.000Z',
+            },
+            {
+              identifier: 'INT-456',
+              title: 'Second Issue',
+              state: { name: 'In Progress', type: 'started' },
+              priority: 2,
+              assignee: { id: 'user-123', name: 'Test User' },
+              labels: [],
+              url: 'https://linear.app/intexuraos/issue/INT-456',
+              commentCount: 0,
+              lastCommentAt: null,
+            },
+          ],
+        },
+      };
+
+      nock(baseUrl)
+        .post('/internal/linear/issues/display-batch', {
+          identifiers: ['INT-123', 'INT-456'],
+        })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, mockResponse);
+
+      const result = await (client as unknown as {
+        fetchIssuesForDisplay: (request: {
+          userId: string;
+          identifiers: string[];
+        }) => Promise<{
+          ok: boolean;
+          value?: { identifier: string; title: string }[];
+          error?: { code: string; message: string };
+        }>;
+      }).fetchIssuesForDisplay({
+        userId: 'test-user-123',
+        identifiers: ['INT-123', 'INT-456'],
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value?.map((issue) => issue.identifier)).toEqual(['INT-123', 'INT-456']);
+        expect(result.value?.[0]?.title).toBe('First Issue');
+      }
+    });
+
+    it('should return UNAVAILABLE when batch fetch returns non-200', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/display-batch', {
+          identifiers: ['INT-999'],
+        })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(503, 'linear-agent unavailable');
+
+      const result = await (client as unknown as {
+        fetchIssuesForDisplay: (request: {
+          userId: string;
+          identifiers: string[];
+        }) => Promise<{
+          ok: boolean;
+          value?: { identifier: string; title: string }[];
+          error?: { code: string; message: string };
+        }>;
+      }).fetchIssuesForDisplay({
+        userId: 'test-user-123',
+        identifiers: ['INT-999'],
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok === false) {
+        expect(result.error?.code).toBe('UNAVAILABLE');
+        expect(result.error?.message).toBe('linear-agent unavailable');
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { status: 503, error: 'linear-agent unavailable' },
+        'linear-agent fetchIssuesForDisplay failed'
+      );
     });
   });
 });

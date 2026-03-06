@@ -282,24 +282,24 @@ interface ServiceFeedback {
 
 ```
         +----------+
-        |          |
-  +----->  pending |
-  |     |          |
-  |     +----+-----+
-  |          |
-  |          | LLM extraction
-  |          |
-  |     +----v-----+     +----------+
-  |     |          |     |          |
-  |     |  ready   |---->| deleted  | (after event creation)
-  |     |          |     |          |
-  |     +----------+     +----------+
-  |
-  |     +----------+
-  |     |          |
+|                               |
+|  |
+|                               |                |
+| ----------------------------- |
+|                               |
+|                               | LLM extraction |
+|                               |
+| +----v-----+     +----------+ |
+|                               |                |  |  |
+|                               | ready          | ----> | deleted | (after event creation) |
+|                               |                |  |  |
+| +----------+     +----------+ |
+|                               |                |
+| +----------+                  |
+|                               |                |
   +---->|  failed  | (extraction error)
-        |          |
-        +----------+
+|  |
+|  |
 ```
 
 ---
@@ -310,8 +310,8 @@ interface ServiceFeedback {
 | ------------------------------- | --------------------------------- | -------------------------- |
 | user-service                    | OAuth tokens, LLM API keys        | Reject request             |
 | Google Calendar                 | Event CRUD, free/busy             | Map error to CalendarError |
-| Gemini 2.5 Flash (primary LLM) | Event extraction from text        | Attempt fallback LLM       |
-| GLM-4.7 via Zai (fallback LLM) | Event extraction when Gemini down | Save to failed events      |
+| Gemini 2.5 Flash (primary LLM)  | Event extraction from text        | Attempt fallback LLM       |
+| GLM-4.7 via Zai (fallback LLM)  | Event extraction when Gemini down | Save to failed events      |
 | Firestore                       | Previews, processed actions       | Return INTERNAL_ERROR      |
 | app-settings-service            | LLM pricing context at startup    | Crash on startup           |
 

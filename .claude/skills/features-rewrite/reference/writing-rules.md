@@ -5,6 +5,7 @@ Rules for features.md prose quality. Inlined into the writer prompt.
 ## Voice
 
 New York Times feature article style:
+
 - Narrative-driven, user-facing, functional
 - Second person ("you") for the reader
 - Present tense for capabilities, past tense for problems
@@ -74,23 +75,23 @@ Use em dashes ( — ) with spaces on both sides for parenthetical asides and ben
 
 These words signal technical writing, not feature writing. Replace or remove them:
 
-| Banned | Why | Replace With |
-|--------|-----|--------------|
-| leverage | Corporate jargon | use, rely on, build on |
-| utilize | Same | use |
-| facilitate | Vague | enable, allow, handle |
-| robust | Meaningless without context | (describe what makes it strong) |
-| seamless | Overused, unprovable | smooth, invisible, automatic |
-| cutting-edge | Marketing cliché | (describe what's actually new) |
-| state-of-the-art | Same | (describe specifically) |
-| ensure | Often hides "we hope" | verify, confirm, guarantee |
-| paradigm | Academic jargon | approach, pattern, model |
-| synergy | Corporate cliché | combination, integration |
-| empower | Vague empowerment-washing | let, enable, give |
-| scalable | Technical jargon | grows with you, handles more |
-| ecosystem | Overused | system, platform |
-| next-generation | Meaningless | (describe the actual improvement) |
-| best-in-class | Unprovable claim | (describe specific advantage) |
+| Banned           | Why                         | Replace With                      |
+| ---------------- | --------------------------- | --------------------------------- |
+| leverage         | Corporate jargon            | use, rely on, build on            |
+| utilize          | Same                        | use                               |
+| facilitate       | Vague                       | enable, allow, handle             |
+| robust           | Meaningless without context | (describe what makes it strong)   |
+| seamless         | Overused, unprovable        | smooth, invisible, automatic      |
+| cutting-edge     | Marketing cliché            | (describe what's actually new)    |
+| state-of-the-art | Same                        | (describe specifically)           |
+| ensure           | Often hides "we hope"       | verify, confirm, guarantee        |
+| paradigm         | Academic jargon             | approach, pattern, model          |
+| synergy          | Corporate cliché            | combination, integration          |
+| empower          | Vague empowerment-washing   | let, enable, give                 |
+| scalable         | Technical jargon            | grows with you, handles more      |
+| ecosystem        | Overused                    | system, platform                  |
+| next-generation  | Meaningless                 | (describe the actual improvement) |
+| best-in-class    | Unprovable claim            | (describe specific advantage)     |
 
 ## Anti-Patterns
 

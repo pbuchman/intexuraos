@@ -6,7 +6,7 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
-import { isFastModel } from '@intexuraos/llm-contract';
+import { isFastModel, getProviderForModel } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { getUserSettings, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
 
@@ -230,6 +230,22 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const { userSettingsRepository } = getServices();
+
+      // Verify the user has an API key configured for the model's provider
+      const provider = getProviderForModel(body.defaultModel);
+      const settingsResult = await userSettingsRepository.getSettings(params.uid);
+
+      if (!settingsResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', settingsResult.error.message);
+      }
+
+      const hasKey = settingsResult.value?.llmApiKeys?.[provider] !== undefined;
+      if (!hasKey) {
+        return await reply.fail(
+          'INVALID_REQUEST',
+          `Cannot set default model to ${body.defaultModel}: no API key configured for provider '${provider}'`
+        );
+      }
 
       const result = await userSettingsRepository.updateLlmPreferences(params.uid, body.defaultModel);
 

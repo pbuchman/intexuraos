@@ -92,8 +92,8 @@ sequenceDiagram
 | `f00798da` | Add saved visualizations feature (full CRUD + auto-refresh) | 2026-02-17 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability             | 2026-02-16 |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration                         | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention         | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback      | 2026-02-15 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention        | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback       | 2026-02-15 |
 | `0f69a74b` | Add default model selector with platform Zai fallback       | 2026-02-08 |
 | `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement             | 2026-01-31 |
 
@@ -155,7 +155,7 @@ sequenceDiagram
 | `purpose`             | `string`                     | User-provided purpose (max 1K) |
 | `staticSourceIds`     | `string[]`                   | Data source IDs (max 5)        |
 | `notificationFilters` | `NotificationFilterConfig[]` | Notification filter configs    |
-| `dataInsights`        | `DataInsight[] \| null`      | AI analysis results            |
+| `dataInsights`        | `DataInsight[] \             | null`                          | AI analysis results |
 | `createdAt`           | `Date`                       | Creation timestamp             |
 | `updatedAt`           | `Date`                       | Last update timestamp          |
 
@@ -216,8 +216,8 @@ sequenceDiagram
 | `trackableMetric`       | `string`                                          | Metric being tracked            |
 | `chartConfig`           | `object`                                          | Vega-Lite spec (without data)   |
 | `transformInstructions` | `string`                                          | LLM data transform instructions |
-| `chartData`             | `unknown[] \| null`                               | Computed chart data             |
-| `status`                | `pending \| ready \| refreshing \| error`         | Computation lifecycle status    |
+| `chartData`             | `unknown[] \                                      | null`                           | Computed chart data |
+| `status`                | `pending \                                        | ready \                         | refreshing \ | error` | Computation lifecycle status |
 | `lastError`             | `string?`                                         | Last error message if any       |
 | `lastRefreshedAt`       | `Date?`                                           | Timestamp of last data refresh  |
 | `createdAt`             | `Date`                                            | Creation timestamp              |
