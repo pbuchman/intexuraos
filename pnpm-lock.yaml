@@ -1411,9 +1411,6 @@ importers:
       '@intexuraos/infra-whatsapp':
         specifier: workspace:*
         version: link:../../packages/infra-whatsapp
-      '@speechmatics/batch-client':
-        specifier: ^5.1.0
-        version: 5.1.0
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -6167,12 +6164,6 @@ packages:
     resolution:
       {
         integrity: sha512-/KiKkpHNOBgkFJwu9sh48LkHSMYGyuTcSFK/qMBdnOAlrRJzRSXAOFB5qwzaVQuDl8wAvHVMkaASQDReTahxuw==,
-      }
-
-  '@speechmatics/batch-client@5.1.0':
-    resolution:
-      {
-        integrity: sha512-L/FuI7G58p51NOTCHZo5ye2h9RtMPCZHBQoqYtGkAwmiBgBtCabaE8S3giaGUxCqeNKUoLdaRHwig2tO2C3fxg==,
       }
 
   '@standard-schema/spec@1.1.0':
@@ -19344,10 +19335,6 @@ snapshots:
     dependencies:
       color: 5.0.3
       text-hex: 1.0.0
-
-  '@speechmatics/batch-client@5.1.0':
-    dependencies:
-      zod: 3.25.76
 
   '@standard-schema/spec@1.1.0': {}
 
