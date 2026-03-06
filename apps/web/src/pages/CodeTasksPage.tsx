@@ -20,14 +20,6 @@ const LINEAR_STATE_STYLES: Record<string, string> = {
 
 const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
 
-const ISSUE_TYPE_STYLES: Record<string, string> = {
-  feature: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
-  bug: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
-  refactor: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
-};
-
-const DEFAULT_BADGE_STYLE = 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
-
 const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
   healthy: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-700 dark:text-emerald-100',
   'orchestrator-unreachable': 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100',
@@ -282,9 +274,9 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
       <div className="min-w-0">
         <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">
           {task.linearIssueId !== undefined ? (
-            (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+            task.linearIssue?.url !== undefined ? (
               <a
-                href={task.linearIssueUrl ?? task.linearIssue?.url}
+                href={task.linearIssue.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e): void => { e.stopPropagation(); }}
@@ -296,7 +288,7 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
               <span className="mr-2 text-blue-600 dark:text-blue-400">{task.linearIssueId}</span>
             )
           ) : null}
-          {task.linearIssueTitle ?? truncatePrompt(task.sanitizedPrompt, 80)}
+          {task.linearIssue?.title ?? truncatePrompt(task.sanitizedPrompt, 80)}
         </h3>
         <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">
           {truncatePrompt(task.sanitizedPrompt)}
@@ -327,13 +319,6 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
           {task.workerLocation}
         </span>
-        {task.linearIssueType !== undefined ? (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            ISSUE_TYPE_STYLES[task.linearIssueType] ?? DEFAULT_BADGE_STYLE
-          }`}>
-            {task.linearIssueType}
-          </span>
-        ) : null}
         {task.linearIssue !== undefined ? (
           <>
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE}`}>
@@ -350,9 +335,9 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
           </>
         ) : null}
         {task.linearIssueId !== undefined ? (
-          (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+          task.linearIssue?.url !== undefined ? (
             <a
-              href={task.linearIssueUrl ?? task.linearIssue?.url}
+              href={task.linearIssue.url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e): void => { e.stopPropagation(); }}
@@ -366,16 +351,16 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
             </span>
           )
         ) : null}
-        {task.linearIssue?.labels !== undefined && task.linearIssue.labels.length > 0 ? (
-          task.linearIssue.labels.map((label) => (
-            <span
-              key={label.id}
-              className="inline-flex items-center rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300"
-            >
-              {label.name}
-            </span>
-          ))
-        ) : null}
+        {task.linearIssue !== undefined && task.linearIssue.labels.length > 0
+          ? task.linearIssue.labels.map((label) => (
+              <span
+                key={label.id}
+                className="inline-flex items-center rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300"
+              >
+                {label.name}
+              </span>
+            ))
+          : null}
         {task.result?.prUrl !== undefined ? (
           <a
             href={task.result.prUrl}
@@ -418,7 +403,7 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
           onClick={(e): void => { e.stopPropagation(); }}
         >
           <p className="mb-3 text-sm text-red-800 dark:text-red-400">
-            Delete &quot;{task.linearIssueTitle ?? truncatePrompt(task.sanitizedPrompt, 60)}&quot;?
+            Delete &quot;{task.linearIssue?.title ?? truncatePrompt(task.sanitizedPrompt, 60)}&quot;?
           </p>
           <div className="flex gap-2">
             <Button

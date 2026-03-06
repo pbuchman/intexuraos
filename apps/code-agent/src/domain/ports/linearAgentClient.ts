@@ -146,4 +146,13 @@ export interface LinearAgentClient {
    * Returns structured issue data from linear-agent's internal API.
    */
   fetchIssueForDisplay(request: ValidateIssueRequest): Promise<Result<LinearIssueForDisplay, LinearAgentError>>;
+
+  /**
+   * Fetch multiple Linear issues for display in task list views.
+   * Missing identifiers are omitted from the response.
+   */
+  fetchIssuesForDisplay(request: {
+    userId: string;
+    identifiers: string[];
+  }): Promise<Result<LinearIssueForDisplay[], LinearAgentError>>;
 }

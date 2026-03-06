@@ -60,21 +60,12 @@ const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
   archived: { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-500 dark:text-slate-500', label: 'Archived', icon: Archive },
 };
 
-// --- Badge style lookup maps ---
-
-const ISSUE_TYPE_STYLES: Record<string, string> = {
-  feature: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
-  bug: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
-  refactor: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
-};
-
 const LINEAR_STATE_STYLES: Record<string, string> = {
   completed: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300',
   started: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
   cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
 };
 
-const DEFAULT_BADGE_STYLE = 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
 const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
 
 const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
@@ -299,14 +290,14 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
     <div className="mb-6">
       <div className="min-h-[2.5rem] mt-1 flex flex-wrap items-center gap-2">
         {task.linearIssueId !== undefined ? (
-          (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+          task.linearIssue?.url !== undefined ? (
             <a
-              href={task.linearIssueUrl ?? task.linearIssue?.url}
+              href={task.linearIssue.url}
               target="_blank"
               rel="noopener noreferrer"
               className="text-lg font-medium text-blue-600 hover:underline dark:text-blue-400"
             >
-              {task.linearIssue?.identifier ?? task.linearIssueId}
+              {task.linearIssue.identifier}
             </a>
           ) : (
             <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
@@ -315,7 +306,7 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
           )
         ) : null}
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          {task.linearIssue?.title ?? task.linearIssueTitle ?? 'Code Task'}
+          {task.linearIssue?.title ?? 'Code Task'}
         </h2>
         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}>
           <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
@@ -343,14 +334,6 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
           {task.workerLocation}
         </span>
-
-        {task.linearIssueType !== undefined ? (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            ISSUE_TYPE_STYLES[task.linearIssueType] ?? DEFAULT_BADGE_STYLE
-          }`}>
-            {task.linearIssueType}
-          </span>
-        ) : null}
         {task.linearIssue?.state !== undefined ? (
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
             LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE
