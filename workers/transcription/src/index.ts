@@ -9,7 +9,7 @@ import type { CloudEvent } from '@google-cloud/functions-framework';
 import { Storage } from '@google-cloud/storage';
 import { err, ok } from '@intexuraos/common-core';
 import { logger } from './logger.js';
-import { loadConfig } from './types.js';
+import { loadConfig, type AudioStoredEvent } from './types.js';
 import { transcribeAudio } from './main.js';
 import { createTranscriptionProvider } from './providers/provider-factory.js';
 import { createTranscriptionCompletedPublisher } from './publishers/transcription-completed-publisher.js';
@@ -79,6 +79,22 @@ const publisher = createTranscriptionCompletedPublisher({
 /* v8 ignore stop @preserve */
 
 /**
+ * Validate that a parsed Pub/Sub payload has all required AudioStoredEvent fields.
+ * Guards against schema drift between whatsapp-service and this worker.
+ */
+function isAudioStoredEvent(event: { type?: string }): event is AudioStoredEvent {
+  const obj = event as Record<string, unknown>;
+  return (
+    typeof obj['userId'] === 'string' &&
+    typeof obj['messageId'] === 'string' &&
+    typeof obj['mediaId'] === 'string' &&
+    typeof obj['gcsPath'] === 'string' &&
+    typeof obj['mimeType'] === 'string' &&
+    typeof obj['timestamp'] === 'string'
+  );
+}
+
+/**
  * Handle an audio stored event from Pub/Sub.
  */
 async function handleAudioStored(event: CloudEvent<PubSubData>): Promise<void> {
@@ -105,8 +121,16 @@ async function handleAudioStored(event: CloudEvent<PubSubData>): Promise<void> {
     return;
   }
 
+  if (!isAudioStoredEvent(audioEvent)) {
+    logger.warn(
+      { event: 'invalid_event_schema', eventId: event.id },
+      'Audio stored event is missing required fields, ignoring'
+    );
+    return;
+  }
+
   await transcribeAudio(
-    audioEvent as import('./types.js').AudioStoredEvent,
+    audioEvent,
     {
       fetchUserProvider: (userId: string) =>
         fetchUserProvider(userId, config.userServiceUrl, config.internalAuthToken),
@@ -126,7 +150,7 @@ async function handleAudioStored(event: CloudEvent<PubSubData>): Promise<void> {
         }
       },
       createProvider: (providerName: string) =>
-        createTranscriptionProvider(providerName, config.speechmaticsApiKey),
+        createTranscriptionProvider(providerName, config.speechmaticsApiKey, logger),
       publishEvent: (e) => publisher.publishCompleted(e),
     },
     logger
