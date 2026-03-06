@@ -275,6 +275,8 @@ export function CodeTaskViewPage(): React.JSX.Element {
         onShowDeleteConfirm={(): void => { setShowDeleteConfirm(true); }}
         onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); clearDeleteError(); }}
         onConfirmDelete={(): void => { void handleDelete(); }}
+        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
       />
     </Layout>
   );
@@ -400,6 +402,7 @@ function TaskActions({
   onRetry,
   deleting, deleteError, showDeleteConfirm,
   onShowDeleteConfirm, onCancelDeleteConfirm, onConfirmDelete,
+  prUrl, linearIssueUrl,
 }: {
   isActive: boolean;
   cancelling: boolean;
@@ -420,21 +423,45 @@ function TaskActions({
   onShowDeleteConfirm: () => void;
   onCancelDeleteConfirm: () => void;
   onConfirmDelete: () => void;
+  prUrl?: string;
+  linearIssueUrl?: string;
 }): React.JSX.Element | null {
-  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null) return null;
+  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null && prUrl === undefined && linearIssueUrl === undefined) return null;
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-3">
       {isActive ? (
-        <Button
-          variant="danger"
-          onClick={(): void => { void onCancel(); }}
-          disabled={cancelling}
-          isLoading={cancelling}
-        >
-          <StopCircle className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Cancel Task</span>
-        </Button>
+        <>
+          <Button
+            variant="danger"
+            onClick={(): void => { void onCancel(); }}
+            disabled={cancelling}
+            isLoading={cancelling}
+          >
+            <StopCircle className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Cancel Task</span>
+          </Button>
+          {prUrl !== undefined ? (
+            <a
+              href={prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
+            >
+              GitHub
+            </a>
+          ) : null}
+          {linearIssueUrl !== undefined ? (
+            <a
+              href={linearIssueUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
+            >
+              Linear
+            </a>
+          ) : null}
+        </>
       ) : null}
       {isRetryable ? (
         showDeleteConfirm ? (
@@ -507,6 +534,26 @@ function TaskActions({
                 </div>
               ) : null}
             </div>
+            {prUrl !== undefined ? (
+              <a
+                href={prUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
+              >
+                GitHub
+              </a>
+            ) : null}
+            {linearIssueUrl !== undefined ? (
+              <a
+                href={linearIssueUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
+              >
+                Linear
+              </a>
+            ) : null}
             <button
               type="button"
               onClick={onShowDeleteConfirm}
@@ -518,6 +565,30 @@ function TaskActions({
             </button>
           </>
         )
+      ) : null}
+      {!isActive && !isRetryable ? (
+        <>
+          {prUrl !== undefined ? (
+            <a
+              href={prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
+            >
+              GitHub
+            </a>
+          ) : null}
+          {linearIssueUrl !== undefined ? (
+            <a
+              href={linearIssueUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
+            >
+              Linear
+            </a>
+          ) : null}
+        </>
       ) : null}
       {cancelError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{cancelError}</p>
