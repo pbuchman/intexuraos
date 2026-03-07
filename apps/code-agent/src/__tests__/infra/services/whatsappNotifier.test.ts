@@ -99,7 +99,7 @@ describe('WhatsAppNotifier', () => {
   });
 
   describe('formatCompletionMessage', () => {
-    it('formats completion message with result containing PR', async () => {
+    it('formats completion message with result containing PR and passes ctaUrl', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
         result: createMockResult({
@@ -116,18 +116,19 @@ describe('WhatsAppNotifier', () => {
         expect.objectContaining({
           userId: 'user-123',
           message: expect.stringContaining('✅ Code task completed: Fix login bug'),
+          ctaUrl: { displayText: 'View Pull Request', url: 'https://github.com/pbuchman/intexuraos/pull/123' },
           correlationId: 'trace-123',
         })
       );
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
-      expect(callArgs.message).toContain('PR: https://github.com/pbuchman/intexuraos/pull/123');
+      expect(callArgs.message).not.toContain('PR:');
       expect(callArgs.message).toContain('Branch: fix/login-bug');
       expect(callArgs.message).toContain('Commits: 3');
       expect(callArgs.message).toContain('Fixed login redirect handling');
     });
 
-    it('formats completion message without PR URL', async () => {
+    it('formats completion message without PR URL and omits ctaUrl', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
         result: createMockResult({
@@ -142,11 +143,12 @@ describe('WhatsAppNotifier', () => {
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('PR:');
+      expect(callArgs.ctaUrl).toBeUndefined();
       expect(callArgs.message).toContain('Branch: fix/login-bug');
       expect(callArgs.message).toContain('Commits: 3');
     });
 
-    it('formats completion message with empty PR URL string', async () => {
+    it('formats completion message with empty PR URL string and omits ctaUrl', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
         result: createMockResult({
@@ -161,6 +163,7 @@ describe('WhatsAppNotifier', () => {
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('PR:');
+      expect(callArgs.ctaUrl).toBeUndefined();
     });
 
     it('truncates long prompt when Linear title is missing', async () => {
@@ -305,7 +308,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).not.toContain('PR:');
     });
 
-    it('formats completion with no summary', async () => {
+    it('formats completion with no summary and passes ctaUrl for PR', async () => {
       const task = createMockTask({
         linearIssueId: 'INT-125',
         linearIssueTitle: 'Quick fix',
@@ -323,9 +326,13 @@ describe('WhatsAppNotifier', () => {
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('✅ Code task completed: Quick fix');
-      expect(callArgs.message).toContain('PR: https://github.com/org/repo/pull/99');
+      expect(callArgs.message).not.toContain('PR:');
       expect(callArgs.message).toContain('Branch: fix/quick');
       expect(callArgs.message).toContain('Commits: 1');
+      expect(callArgs.ctaUrl).toEqual({
+        displayText: 'View Pull Request',
+        url: 'https://github.com/org/repo/pull/99',
+      });
     });
   });
 
@@ -1104,7 +1111,7 @@ describe('WhatsAppNotifier', () => {
       expect(params.message).toContain('Fix token refresh');
     });
 
-    it('includes PR URL in message when present', async () => {
+    it('passes ctaUrl when PR URL is present', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Update auth flow',
         result: createMockResult({
@@ -1119,8 +1126,12 @@ describe('WhatsAppNotifier', () => {
       await notifier.notifyResumedTaskComplete('user-123', task);
 
       const publishCall = getPublishSendMessageMock().mock.calls[0];
-      const params = publishCall?.[0] as { message: string };
-      expect(params.message).toContain('https://github.com/pbuchman/intexuraos/pull/202');
+      const params = publishCall?.[0] as { message: string; ctaUrl?: { displayText: string; url: string } };
+      expect(params.message).not.toContain('PR:');
+      expect(params.ctaUrl).toEqual({
+        displayText: 'View Pull Request',
+        url: 'https://github.com/pbuchman/intexuraos/pull/202',
+      });
     });
 
     it('includes summary in message when present', async () => {
@@ -1141,7 +1152,7 @@ describe('WhatsAppNotifier', () => {
       expect(params.message).toContain('The bug was fixed and tests pass.');
     });
 
-    it('omits summary when result has no summary field', async () => {
+    it('omits summary when result has no summary field but passes ctaUrl', async () => {
       const resultWithoutSummary: TaskResult = {
         prUrl: 'https://github.com/test/repo/pull/9',
         branch: 'fix/login',
@@ -1158,9 +1169,13 @@ describe('WhatsAppNotifier', () => {
       await notifier.notifyResumedTaskComplete('user-123', task);
 
       const publishCall = getPublishSendMessageMock().mock.calls[0];
-      const params = publishCall?.[0] as { message: string };
+      const params = publishCall?.[0] as { message: string; ctaUrl?: { displayText: string; url: string } };
       expect(params.message).toContain('🔁 Session continued: Fix login');
-      expect(params.message).toContain('PR: https://github.com/test/repo/pull/9');
+      expect(params.message).not.toContain('PR:');
+      expect(params.ctaUrl).toEqual({
+        displayText: 'View Pull Request',
+        url: 'https://github.com/test/repo/pull/9',
+      });
     });
 
     it('falls back to prompt slice when no linearIssueTitle', async () => {

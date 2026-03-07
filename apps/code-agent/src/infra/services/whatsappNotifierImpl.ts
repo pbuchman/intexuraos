@@ -46,15 +46,12 @@ function formatCompletionMessage(title: string, task: CodeTask): string {
     return `✅ Code task completed: ${title}`;
   }
 
-  const prLine = result.prUrl !== undefined && result.prUrl.length > 0
-    ? `PR: ${result.prUrl}\n`
-    : '';
   const branchLine = result.branch !== undefined ? `Branch: ${result.branch}\n` : '';
   const commitsLine = result.commits !== undefined ? `Commits: ${String(result.commits)}\n` : '';
   const summaryLine = result.summary ?? '';
   return `✅ Code task completed: ${title}
 
-${prLine}${branchLine}${commitsLine}${summaryLine}`;
+${branchLine}${commitsLine}${summaryLine}`;
 }
 
 function formatFailureMessage(title: string, error: TaskError): string {
@@ -90,13 +87,10 @@ function formatResumedCompletionMessage(title: string, task: CodeTask): string {
     return `🔁 Session continued: ${title}`;
   }
 
-  const prLine = result.prUrl !== undefined && result.prUrl.length > 0
-    ? `PR: ${result.prUrl}\n`
-    : '';
   const summaryLine = result.summary ?? '';
   return `🔁 Session continued: ${title}
 
-${prLine}${summaryLine}`;
+${summaryLine}`;
 }
 
 function formatDesignCompleteMessage(title: string, task: CodeTask, includeButtonPrompt: boolean): string {
@@ -128,11 +122,17 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
       const message = formatCompletionMessage(title, task);
 
-      const result = await whatsappPublisher.publishSendMessage({
+      const prUrl = task.result?.prUrl;
+      const publishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
         userId,
         message,
         correlationId: task.traceId,
-      });
+      };
+      if (prUrl !== undefined && prUrl.length > 0) {
+        publishParams.ctaUrl = { displayText: 'View Pull Request', url: prUrl };
+      }
+
+      const result = await whatsappPublisher.publishSendMessage(publishParams);
 
       if (!result.ok) {
         return err({
@@ -265,11 +265,17 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
       const message = formatResumedCompletionMessage(title, task);
 
-      const result = await whatsappPublisher.publishSendMessage({
+      const prUrl = task.result?.prUrl;
+      const resumedPublishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
         userId,
         message,
         correlationId: task.traceId,
-      });
+      };
+      if (prUrl !== undefined && prUrl.length > 0) {
+        resumedPublishParams.ctaUrl = { displayText: 'View Pull Request', url: prUrl };
+      }
+
+      const result = await whatsappPublisher.publishSendMessage(resumedPublishParams);
 
       if (!result.ok) {
         return err({
