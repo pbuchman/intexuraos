@@ -1,12 +1,12 @@
 # Website Suggestions Template
 
-Use this template when presenting website improvement suggestions in Phase 5.
+Use this template as a reference for auto-generating website improvements in Phase 5.
 
 ---
 
 ## Format
 
-Present EXACTLY 3 suggestions using this format:
+Auto-generate improvements from High-priority features using this format:
 
 ```markdown
 ### Suggestion 1: [TYPE] Title
@@ -88,31 +88,12 @@ Based on release v2.1.0, here are 3 website improvements:
 
 ---
 
-## Checkpoint Presentation
+## Automatic Implementation
 
-When presenting to user at checkpoint:
+Phase 5 auto-implements website improvements from High-priority features without user interaction:
 
-```
-Website Improvement Suggestions
+1. **Always update RecentUpdatesSection** with High-priority features from the release
+2. **Update hero statistics** if service/model counts changed
+3. **For major releases:** Create VersionHistorySection using marketing slogan from Phase 1
 
-Based on this release, here are 3 website improvements:
-
-1. [CONTENT] **Update RecentUpdatesSection**
-   What: Add v2.1.0 release highlights
-   Why: Homepage should showcase latest capabilities
-   Effort: Low
-
-2. [FIX] **Update hero statistics**
-   What: Update AI model and service counts
-   Why: Outdated stats understate capabilities
-   Effort: Low
-
-3. [FEATURE] **Add approval flow visualization**
-   What: Create animated diagram of approval workflow
-   Why: Key differentiator not currently visualized
-   Effort: Medium
-
-Which suggestions should I implement?
-```
-
-Options should use `multiSelect: true` to allow selecting multiple.
+All improvements are implemented automatically via the `/frontend-design` skill.

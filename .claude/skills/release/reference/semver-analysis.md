@@ -235,46 +235,18 @@ For each change, synthesize the best description by combining:
 
 Prefer user-facing language from Linear issues over technical language from commits.
 
-### 5.1 Prioritize Changes with User
+### 5.1 Prioritization (Handled by Phase 1 Touchpoint)
 
-**CRITICAL:** Before building the changelog, present each categorized change to the user for priority assignment. This determines ordering in the CHANGELOG and which items become GitHub Release highlights.
+**This step is executed as part of the Phase 1 single prioritization touchpoint in `full-release.md` step 1.7.** The categorized changes from Step 5 are presented to the user in a consolidated view. Do not use separate AskUserQuestion calls here.
 
-Use `AskUserQuestion` for each change (or batch related changes):
+**Priority assignments from the touchpoint:**
 
-```
-Change: [verb] [description]
-Source: PR #XXX / INT-XXX
-Category: [Feature | Bug Fix | Infrastructure]
-
-What priority should this have in the release notes?
-```
-
-**Options:**
-
-1. "High" — Top of changelog, candidate for GitHub Release highlights
-2. "Medium" — Included in changelog at standard position
-3. "Low" — Included at bottom of changelog
-4. "Skip" — Omit from changelog entirely
-
-**Batching rule:** If there are more than 8 changes, group related changes (e.g., "3 bug fixes for WhatsApp service") and ask about the group. Ask individually only for features and breaking changes.
-
-**After prioritization:**
-
-| Priority | CHANGELOG position          | GitHub Release Highlights |
-| -------- | --------------------------- | ------------------------- |
-| High     | First within its verb group | Top 3 become Highlights   |
-| Medium   | Standard position           | Not in Highlights         |
-| Low      | Last within its verb group  | Not in Highlights         |
-| Skip     | Omitted entirely            | Not in Highlights         |
-
-**Ordering within the CHANGELOG:**
-
-```
-1. Breaking changes (Removed) — always first, regardless of priority
-2. High-priority entries — ordered by verb: Added → Changed → Fixed → Improved
-3. Medium-priority entries — same verb ordering
-4. Low-priority entries — same verb ordering
-```
+| Priority | CHANGELOG position                | GitHub Release Highlights |
+| -------- | --------------------------------- | ------------------------- |
+| High     | First within its type subcategory | Top 3 become Highlights   |
+| Medium   | Standard position in subcategory  | Not in Highlights         |
+| Low      | Last within its type subcategory  | Not in Highlights         |
+| Skip     | Omitted entirely                  | Not in Highlights         |
 
 **GitHub Release Highlights:** Pick the top 3 High-priority items. If fewer than 3 are High, promote the top Medium items.
 
@@ -313,34 +285,48 @@ ELSE:
 
 ### 7. Build the Changelog Entry
 
-**Format:** Version header with simple bullet list.
+**Format:** Version header with type subcategories. Entries sorted by priority within each category.
 
 ```markdown
 ## X.Y.Z
 
-- Added [feature description with inline `code` for commands/settings]
-- Added [another feature] (INT-XXX)
-- Changed [modification description]
-- Fixed [bug description]
-- Improved [enhancement description]
-- Removed [deprecation description]
+### Added
+
+- [feature description with inline `code` for commands/settings]
+- [another feature] (INT-XXX)
+
+### Changed
+
+- [modification description]
+
+### Fixed
+
+- [bug description]
+
+### Improved
+
+- [enhancement description]
+
+### Removed
+
+- [deprecation description]
 ```
 
 **Entry Rules:**
 
-| Rule                    | Example                                                    |
-| ----------------------- | ---------------------------------------------------------- |
-| Start with verb         | Added, Fixed, Improved, Changed, Removed                   |
-| Single line per entry   | No paragraphs, no multi-line descriptions                  |
-| Use backticks for code  | commands, flags, env vars, settings, file paths            |
-| Linear refs optional    | `(INT-XXX)` at end of line if helpful                      |
-| User-facing only        | Skip pure internal refactorings unless they affect users   |
-| No subcategories        | No `### Added`, `### Fixed` headers — just the bullet list |
-| Most recent at top      | New version goes above existing versions                   |
-| No netted-out changes   | If added AND removed in this release, omit entirely        |
-| Combine related commits | Multiple commits on same feature = single changelog entry  |
-| Priority ordering       | High → Medium → Low within each verb group (from Step 5.1) |
-| Skip = omit             | Changes marked "Skip" in Step 5.1 are not included         |
+| Rule                    | Example                                                                |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Type subcategories      | `### Added`, `### Changed`, `### Fixed`, `### Improved`, `### Removed` |
+| Omit empty categories   | If no fixes, skip `### Fixed` entirely                                 |
+| Single line per entry   | No paragraphs, no multi-line descriptions                              |
+| Use backticks for code  | commands, flags, env vars, settings, file paths                        |
+| Linear refs optional    | `(INT-XXX)` at end of line if helpful                                  |
+| User-facing only        | Skip pure internal refactorings unless they affect users               |
+| Most recent at top      | New version goes above existing versions                               |
+| No netted-out changes   | If added AND removed in this release, omit entirely                    |
+| Combine related commits | Multiple commits on same feature = single changelog entry              |
+| Priority ordering       | High → Medium → Low within each subcategory (from Step 5.1)            |
+| Skip = omit             | Changes marked "Skip" in Step 5.1 are not included                     |
 
 **Verb Usage:**
 
@@ -386,7 +372,7 @@ If a parent Linear issue has subissues, decide:
 
 After building the CHANGELOG entry, generate a richer GitHub Release body. This is written to `/tmp/release-notes-$NEW_VERSION.md` for use in Phase 6.
 
-**Format:**
+**Format:** Mirrors the sorted CHANGELOG structure with an added Highlights section.
 
 ```markdown
 ## Highlights
@@ -395,17 +381,25 @@ After building the CHANGELOG entry, generate a richer GitHub Release body. This 
 
 ## What's Changed
 
-### Features
+### Added
 
-- [feature entries from changelog]
+- [entries from CHANGELOG ### Added section]
 
-### Bug Fixes
+### Changed
 
-- [fix entries from changelog]
+- [entries from CHANGELOG ### Changed section]
 
-### Infrastructure & DevEx
+### Fixed
 
-- [changed/improved entries from changelog]
+- [entries from CHANGELOG ### Fixed section]
+
+### Improved
+
+- [entries from CHANGELOG ### Improved section]
+
+### Removed
+
+- [entries from CHANGELOG ### Removed section]
 
 ## CHANGELOG
 
@@ -416,14 +410,14 @@ See [CHANGELOG.md](https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md
 
 **Rules:**
 
-| Rule                    | Details                                                             |
-| ----------------------- | ------------------------------------------------------------------- |
-| Highlights first        | Pick the top 3 High-priority items from Step 5.1                    |
-| Categorize changes      | Group by Features, Bug Fixes, Infrastructure & DevEx                |
-| Skip empty categories   | If no bug fixes, omit the Bug Fixes section                         |
-| Reuse CHANGELOG wording | Use the same verb-first entries from Step 7                         |
-| Include comparison link | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view           |
-| Write to temp file      | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.9 |
+| Rule                       | Details                                                             |
+| -------------------------- | ------------------------------------------------------------------- |
+| Highlights first           | Pick the top 3 High-priority items from Step 5.1                    |
+| Match CHANGELOG categories | Use same `### Added/Changed/Fixed/Improved/Removed` subcategories   |
+| Skip empty categories      | If no fixes, omit the `### Fixed` section                           |
+| Reuse CHANGELOG wording    | Use the same entries from Step 7                                    |
+| Include comparison link    | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view           |
+| Write to temp file         | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.9 |
 
 **Comparison link:** Use the previous version tag (from Step 2) as `vPREVIOUS`.
 
