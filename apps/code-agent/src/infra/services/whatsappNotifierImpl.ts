@@ -12,6 +12,20 @@ import type { WhatsAppNotifier, NotificationError } from '../../domain/services/
 import type { CodeTask, TaskError } from '../../domain/models/codeTask.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 
+const APP_BASE_URL = 'https://intexuraos.cloud';
+
+export function buildTaskUrl(taskId: string): string {
+  return `${APP_BASE_URL}/#/code-tasks/${taskId}`;
+}
+
+function buildCtaUrl(task: CodeTask): { displayText: string; url: string } {
+  const prUrl = task.result?.prUrl;
+  if (prUrl !== undefined && prUrl.length > 0) {
+    return { displayText: 'View Pull Request', url: prUrl };
+  }
+  return { displayText: 'View Progress', url: buildTaskUrl(task.id) };
+}
+
 export interface WhatsAppNotifierConfig {
   whatsappPublisher: WhatsAppSendPublisher;
   linearAgentClient?: LinearAgentClient;
@@ -126,6 +140,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const publishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
         userId,
         message,
+        ctaUrl: buildCtaUrl(task),
         correlationId: task.traceId,
       };
       if (prUrl !== undefined && prUrl.length > 0) {
@@ -152,20 +167,10 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
       const message = formatFailureMessage(title, error);
 
-      const buttons: { type: 'reply'; reply: { id: string; title: string } }[] = [
-        {
-          type: 'reply',
-          reply: {
-            id: `view-task:${task.id}`,
-            title: '🔍 Check Logs',
-          },
-        },
-      ];
-
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        buttons,
+        ctaUrl: { displayText: '🔍 View Task', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
       });
 
@@ -280,6 +285,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const resumedPublishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
         userId,
         message,
+        ctaUrl: buildCtaUrl(task),
         correlationId: task.traceId,
       };
       if (prUrl !== undefined && prUrl.length > 0) {
@@ -368,6 +374,7 @@ Task ID: ${task.id}`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
       });
 
@@ -395,6 +402,7 @@ Task ID: ${task.id}`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
       });
 

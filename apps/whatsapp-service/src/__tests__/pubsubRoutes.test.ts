@@ -422,6 +422,39 @@ describe('Pub/Sub Routes', () => {
       expect(sentMessages[0]?.buttons).toEqual(buttons);
     });
 
+    it('sends CTA URL message when ctaUrl is provided without buttons', async () => {
+      await userMappingRepository.saveMapping('user-cta', ['+48987654321']);
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-cta',
+        message: 'Task completed successfully',
+        ctaUrl: { displayText: 'View Progress', url: 'https://intexuraos.cloud/#/code-tasks/task-123' },
+        correlationId: 'corr-cta',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      const sentMessages = messageSender.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.phoneNumber).toBe('48987654321');
+      expect(sentMessages[0]?.message).toBe('Task completed successfully');
+      expect(sentMessages[0]?.ctaUrl).toEqual({
+        displayText: 'View Progress',
+        url: 'https://intexuraos.cloud/#/code-tasks/task-123',
+      });
+    });
+
     it('returns 500 when sendInteractiveMessage fails', async () => {
       await userMappingRepository.saveMapping('user-fail-buttons', ['+48987654321']);
       messageSender.setFail(true, { code: 'INTERNAL_ERROR', message: 'WhatsApp API error for buttons' });

@@ -272,5 +272,4 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     }
   }
   /* v8 ignore stop @preserve */
-
 }
