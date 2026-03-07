@@ -100,13 +100,16 @@ Multiple Task calls in single message for parallel execution
 ## X.Y.Z
 
 ### Added
+
 - [High-priority entries first]
 - [Medium-priority entries]
 
 ### Fixed
+
 - [entries sorted by priority]
 
 ### Improved
+
 - [entries sorted by priority]
 ```
 

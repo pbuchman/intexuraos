@@ -19,12 +19,12 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 
 ## Invocation Detection
 
-| Argument | Workflow | What Happens |
-|----------|----------|--------------|
-| (none) | [`workflows/full-release.md`](workflows/full-release.md) | Full 6-phase release |
-| `--skip-docs` | [`workflows/full-release.md`](workflows/full-release.md) | Full release, skip Phase 2 |
-| `--phase N` | [`workflows/full-release.md`](workflows/full-release.md) | Resume from Phase N |
-| `--collect` | [`workflows/collect-release-data.md`](workflows/collect-release-data.md) | **Separate pipeline** — run bash script + 4 agent triage steps, produce `.prerelease-data.md`, then STOP. No release. |
+| Argument      | Workflow                                                                 | What Happens                                                                                                          |
+| ------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| (none)        | [`workflows/full-release.md`](workflows/full-release.md)                 | Full 6-phase release                                                                                                  |
+| `--skip-docs` | [`workflows/full-release.md`](workflows/full-release.md)                 | Full release, skip Phase 2                                                                                            |
+| `--phase N`   | [`workflows/full-release.md`](workflows/full-release.md)                 | Resume from Phase N                                                                                                   |
+| `--collect`   | [`workflows/collect-release-data.md`](workflows/collect-release-data.md) | **Separate pipeline** — run bash script + 4 agent triage steps, produce `.prerelease-data.md`, then STOP. No release. |
 
 **`--collect` is NOT a modifier of the release workflow.** It runs a completely different pipeline and exits. The output file is consumed later by `/release` Phase 1 step 2 if it exists and is fresh.
 
@@ -43,14 +43,14 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 
 ## Phase Overview
 
-| Phase | Name            | Interaction    | Key Actions                                                                                          |
-| ----- | --------------- | -------------- | ---------------------------------------------------------------------------------------------------- |
-| 1     | Kickoff         | User Input     | Run semver analysis, single prioritization touchpoint                                                |
-| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel                                                              |
-| 3     | High-Level Docs | Automatic      | Auto-update docs/overview.md via release-docs-updater agent                                          |
-| 4     | README          | Automatic      | Auto-generate "What's New" from High-priority items                                                  |
-| 5     | Website         | Automatic      | Auto-update RecentUpdatesSection from High-priority features                                         |
-| 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, RAG embeddings, commit, merge dev→main, tag on main, GitHub Release |
+| Phase | Name            | Interaction  | Key Actions                                                                                          |
+| ----- | --------------- | ------------ | ---------------------------------------------------------------------------------------------------- |
+| 1     | Kickoff         | User Input   | Run semver analysis, single prioritization touchpoint                                                |
+| 2     | Service Docs    | Silent Batch | Spawn service-scribe agents in parallel                                                              |
+| 3     | High-Level Docs | Automatic    | Auto-update docs/overview.md via release-docs-updater agent                                          |
+| 4     | README          | Automatic    | Auto-generate "What's New" from High-priority items                                                  |
+| 5     | Website         | Automatic    | Auto-update RecentUpdatesSection from High-priority features                                         |
+| 6     | Finalize        | Automatic    | **Bump ALL versions**, CI check, RAG embeddings, commit, merge dev→main, tag on main, GitHub Release |
 
 ## Tool Verification (Fail Fast)
 
@@ -124,10 +124,10 @@ README "What's New" section accumulates features across a MAJOR version:
 ```markdown
 ## What's New in vX.Y.Z
 
-| Improvement            | Impact                              |
-| ---------------------- | ----------------------------------- |
-| **Feature Name**       | One-line impact from user comment   |
-| **Another Feature**    | One-line impact from triage summary |
+| Improvement         | Impact                              |
+| ------------------- | ----------------------------------- |
+| **Feature Name**    | One-line impact from user comment   |
+| **Another Feature** | One-line impact from triage summary |
 ```
 
 ### Phase 5: Website Improvements (Automatic)
@@ -187,35 +187,40 @@ This reads all `docs/**/*.md`, chunks by headers, generates OpenAI embeddings, a
 ## X.Y.Z
 
 ### Added
+
 - [feature description with inline `code`]
 - [another feature] (INT-XXX)
 
 ### Changed
+
 - [modification description]
 
 ### Fixed
+
 - [bug description]
 
 ### Improved
+
 - [enhancement description]
 
 ### Removed
+
 - [deprecation description]
 ```
 
 **Rules:**
 
-| Rule                      | Details                                                  |
-| ------------------------- | -------------------------------------------------------- |
-| Version headers           | `## X.Y.Z` — no dates                                   |
-| Type subcategories        | `### Added`, `### Changed`, `### Fixed`, `### Improved`, `### Removed` |
-| Omit empty categories     | If no fixes, skip `### Fixed` entirely                   |
-| Priority ordering         | High-priority entries first within each category         |
-| Single line per entry     | No paragraphs or multi-line descriptions                 |
-| Backticks for code        | Commands, flags, env vars, settings, file paths          |
-| Linear refs optional      | `(INT-XXX)` at end if helpful                            |
-| User-facing only          | Skip internal refactorings unless they affect users      |
-| Most recent at top        | New version prepended to file                            |
+| Rule                  | Details                                                                |
+| --------------------- | ---------------------------------------------------------------------- |
+| Version headers       | `## X.Y.Z` — no dates                                                  |
+| Type subcategories    | `### Added`, `### Changed`, `### Fixed`, `### Improved`, `### Removed` |
+| Omit empty categories | If no fixes, skip `### Fixed` entirely                                 |
+| Priority ordering     | High-priority entries first within each category                       |
+| Single line per entry | No paragraphs or multi-line descriptions                               |
+| Backticks for code    | Commands, flags, env vars, settings, file paths                        |
+| Linear refs optional  | `(INT-XXX)` at end if helpful                                          |
+| User-facing only      | Skip internal refactorings unless they affect users                    |
+| Most recent at top    | New version prepended to file                                          |
 
 **Skip:** Pure test additions, CI config changes, internal refactorings, dependency updates (unless security)
 
