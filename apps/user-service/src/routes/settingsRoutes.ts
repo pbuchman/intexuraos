@@ -279,8 +279,7 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           properties: {
             provider: {
               type: 'string',
-              enum: ['speechmatics'],
-              description: 'Transcription provider',
+              description: 'Transcription provider (e.g. speechmatics)',
             },
           },
         },
