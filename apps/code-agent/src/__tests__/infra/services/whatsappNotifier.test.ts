@@ -548,7 +548,42 @@ describe('WhatsAppNotifier', () => {
       expect(getPublishSendMessageMock()).toHaveBeenCalledWith({
         userId: 'user-123',
         message: expect.any(String),
+        buttons: [
+          {
+            type: 'reply',
+            reply: {
+              id: 'view-task:task-123',
+              title: '👁️ View Progress',
+            },
+          },
+        ],
         correlationId: 'test-trace-id',
+      });
+    });
+
+    it('includes View Progress button with correct task id', async () => {
+      const task = createMockTask({
+        status: 'failed',
+        traceId: 'test-trace-id',
+      });
+      const error: TaskError = {
+        code: 'test_error',
+        message: 'Test error occurred',
+      };
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskFailed('user-123', task, error);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.buttons).toHaveLength(1);
+      expect(callArgs.buttons[0]).toEqual({
+        type: 'reply',
+        reply: {
+          id: `view-task:${task.id}`,
+          title: '👁️ View Progress',
+        },
       });
     });
 
