@@ -39,11 +39,11 @@ fi
 1. Run steps 1.3-1.5 to get PR list and count
 2. Apply the **Collection Strategy Table:**
 
-| PR Count | Strategy | Rationale |
-|----------|----------|-----------|
-| 1-10     | Inline — execute semver-analysis Steps 3-6 directly | Small enough to collect in main context |
-| 11-25    | Dispatch — run `./scripts/collect-release-data.sh` then Steps 1-4 from `collect-release-data.md` | Too many PRs for reliable inline collection |
-| 26+      | Dispatch — same as 11-25 | Mandatory; inline collection WILL produce incomplete data |
+| PR Count | Strategy                                                                                         | Rationale                                                 |
+| -------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| 1-10     | Inline — execute semver-analysis Steps 3-6 directly                                              | Small enough to collect in main context                   |
+| 11-25    | Dispatch — run `./scripts/collect-release-data.sh` then Steps 1-4 from `collect-release-data.md` | Too many PRs for reliable inline collection               |
+| 26+      | Dispatch — same as 11-25                                                                         | Mandatory; inline collection WILL produce incomplete data |
 
 **This table is NOT advisory — it is a hard gate.** If PR count exceeds 10, you MUST run the collection pipeline. Do not rationalize skipping it ("I can see the PR titles are clear enough", "most are small fixes", etc.).
 
