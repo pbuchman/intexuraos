@@ -53,7 +53,7 @@ export interface WhatsAppMessageSender {
   ): Promise<Result<TextMessageSendResult, WhatsAppError>>;
 
   /**
-   * Send a message with a call-to-action URL button.
+   * Send a CTA URL message that opens a link in the browser.
    * @param phoneNumber - User's phone number in E.164 format (e.g., +48123456789)
    * @param message - Text message body
    * @param ctaUrl - CTA URL button configuration

@@ -22,6 +22,7 @@ import type {
   LlmValidationError,
   LlmValidator,
   SettingsError,
+  TranscriptionProvider,
   UserSettings,
   UserSettingsRepository,
 } from '../domain/settings/index.js';
@@ -236,6 +237,7 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
   private shouldFailDeleteLlmKey = false;
   private shouldFailUpdateLlmPreferences = false;
   private shouldFailClearLlmPreferences = false;
+  private shouldFailUpdateTranscriptionPreferences = false;
 
   /**
    * Configure the fake to fail the next getSettings call.
@@ -284,6 +286,13 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
    */
   setFailNextClearLlmPreferences(fail: boolean): void {
     this.shouldFailClearLlmPreferences = fail;
+  }
+
+  /**
+   * Configure the fake to fail the next updateTranscriptionPreferences call.
+   */
+  setFailNextUpdateTranscriptionPreferences(fail: boolean): void {
+    this.shouldFailUpdateTranscriptionPreferences = fail;
   }
 
   /**
@@ -461,6 +470,38 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
       };
     } else {
       existing.llmPreferences = { defaultModel };
+      existing.updatedAt = new Date().toISOString();
+    }
+
+    this.settings.set(userId, existing);
+    return Promise.resolve(ok(undefined));
+  }
+
+  updateTranscriptionPreferences(
+    userId: string,
+    provider: TranscriptionProvider
+  ): Promise<Result<void, SettingsError>> {
+    if (this.shouldFailUpdateTranscriptionPreferences) {
+      this.shouldFailUpdateTranscriptionPreferences = false;
+      return Promise.resolve(
+        err({
+          code: 'INTERNAL_ERROR',
+          message: 'Simulated update transcription preferences failure',
+        })
+      );
+    }
+
+    let existing = this.settings.get(userId);
+    if (existing === undefined) {
+      const now = new Date().toISOString();
+      existing = {
+        userId,
+        transcriptionPreferences: { provider },
+        createdAt: now,
+        updatedAt: now,
+      };
+    } else {
+      existing.transcriptionPreferences = { provider };
       existing.updatedAt = new Date().toISOString();
     }
 

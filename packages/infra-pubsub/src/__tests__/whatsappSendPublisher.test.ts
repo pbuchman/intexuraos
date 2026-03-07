@@ -150,6 +150,42 @@ describe('createWhatsAppSendPublisher', () => {
       expect(Object.prototype.hasOwnProperty.call(publishedData, 'buttons')).toBe(false);
     });
 
+    it('includes ctaUrl when provided', async () => {
+      const publisher = createWhatsAppSendPublisher(config);
+
+      const ctaUrl = {
+        displayText: 'View Pull Request',
+        url: 'https://github.com/owner/repo/pull/123',
+      };
+
+      const result = await publisher.publishSendMessage({
+        userId: 'user-123',
+        message: 'PR ready for review',
+        ctaUrl,
+      });
+
+      expect(result.ok).toBe(true);
+
+      const call = mockPublishMessage.mock.calls[0] as [{ data: Buffer }];
+      const publishedData = JSON.parse(call[0].data.toString()) as Record<string, unknown>;
+
+      expect(publishedData['ctaUrl']).toEqual(ctaUrl);
+    });
+
+    it('omits ctaUrl when not provided', async () => {
+      const publisher = createWhatsAppSendPublisher(config);
+
+      await publisher.publishSendMessage({
+        userId: 'user-123',
+        message: 'Simple message',
+      });
+
+      const call = mockPublishMessage.mock.calls[0] as [{ data: Buffer }];
+      const publishedData = JSON.parse(call[0].data.toString()) as Record<string, unknown>;
+
+      expect(Object.prototype.hasOwnProperty.call(publishedData, 'ctaUrl')).toBe(false);
+    });
+
     it('returns TOPIC_NOT_FOUND error when topic does not exist', async () => {
       mockPublishMessage.mockRejectedValue(new Error('NOT_FOUND: Topic does not exist'));
 

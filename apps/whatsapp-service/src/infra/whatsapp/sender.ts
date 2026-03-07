@@ -189,9 +189,7 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
       });
     }
   }
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- test-infra: tests use fake message sender @preserve */
   async sendCtaUrlMessage(
     phoneNumber: string,
     message: string,

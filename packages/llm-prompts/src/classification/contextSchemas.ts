@@ -27,7 +27,7 @@ export type CommandType = (typeof COMMAND_TYPES)[number];
 export const CommandClassificationSchema = z.object({
   type: z.enum(COMMAND_TYPES),
   confidence: z.number().min(0).max(1),
-  title: z.string().max(50),
+  title: z.string().max(200),
   reasoning: z.string(),
 });
 

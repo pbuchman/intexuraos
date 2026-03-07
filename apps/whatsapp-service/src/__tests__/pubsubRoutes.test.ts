@@ -455,39 +455,6 @@ describe('Pub/Sub Routes', () => {
       });
     });
 
-    it('prefers buttons over ctaUrl when both are provided', async () => {
-      await userMappingRepository.saveMapping('user-both', ['+48987654321']);
-
-      const buttons = [
-        { type: 'reply', reply: { id: 'cancel-task:task-123:abc', title: 'Cancel Task' } },
-      ];
-
-      const body = createPubSubBody({
-        type: 'whatsapp.message.send',
-        userId: 'user-both',
-        message: 'Task started',
-        buttons,
-        ctaUrl: { displayText: 'View Progress', url: 'https://intexuraos.cloud/#/code-tasks/task-123' },
-        correlationId: 'corr-both',
-        timestamp: new Date().toISOString(),
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/whatsapp/pubsub/send-message',
-        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
-        payload: body,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      const sentMessages = messageSender.getSentMessages();
-      expect(sentMessages).toHaveLength(1);
-      // Should use buttons, not ctaUrl
-      expect(sentMessages[0]?.buttons).toEqual(buttons);
-      expect(sentMessages[0]?.ctaUrl).toBeUndefined();
-    });
-
     it('returns 500 when sendInteractiveMessage fails', async () => {
       await userMappingRepository.saveMapping('user-fail-buttons', ['+48987654321']);
       messageSender.setFail(true, { code: 'INTERNAL_ERROR', message: 'WhatsApp API error for buttons' });
@@ -513,6 +480,98 @@ describe('Pub/Sub Routes', () => {
       expect(response.statusCode).toBe(502);
       const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(responseBody.error.message).toBe('WhatsApp API error for buttons');
+    });
+
+    it('sends CTA URL message when ctaUrl is provided', async () => {
+      await userMappingRepository.saveMapping('user-cta', ['+48111222333']);
+
+      const ctaUrl = { displayText: 'View Pull Request', url: 'https://github.com/owner/repo/pull/42' };
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-cta',
+        message: 'PR ready for review',
+        ctaUrl,
+        correlationId: 'corr-cta',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      const sentMessages = messageSender.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.phoneNumber).toBe('48111222333');
+      expect(sentMessages[0]?.message).toBe('PR ready for review');
+      expect(sentMessages[0]?.ctaUrl).toEqual(ctaUrl);
+      expect(sentMessages[0]?.buttons).toBeUndefined();
+    });
+
+    it('returns 500 when sendCtaUrlMessage fails', async () => {
+      await userMappingRepository.saveMapping('user-cta-fail', ['+48111222333']);
+      messageSender.setFail(true, { code: 'INTERNAL_ERROR', message: 'WhatsApp API error for CTA URL' });
+
+      const ctaUrl = { displayText: 'View PR', url: 'https://github.com/owner/repo/pull/1' };
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-cta-fail',
+        message: 'Test message',
+        ctaUrl,
+        correlationId: 'corr-cta-fail',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(502);
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('WhatsApp API error for CTA URL');
+    });
+
+    it('prefers ctaUrl over buttons when both are provided', async () => {
+      await userMappingRepository.saveMapping('user-both', ['+48111222333']);
+
+      const ctaUrl = { displayText: 'View PR', url: 'https://github.com/owner/repo/pull/99' };
+      const buttons = [{ type: 'reply', reply: { id: 'btn-1', title: 'Test' } }];
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-both',
+        message: 'Message with both',
+        ctaUrl,
+        buttons,
+        correlationId: 'corr-both',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const sentMessages = messageSender.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      // ctaUrl takes priority over buttons
+      expect(sentMessages[0]?.ctaUrl).toEqual(ctaUrl);
+      expect(sentMessages[0]?.buttons).toBeUndefined();
     });
   });
 

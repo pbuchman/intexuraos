@@ -178,7 +178,7 @@ Return ONLY valid JSON:
 {
   "type": "<category>",
   "confidence": <0.0-1.0>,
-  "title": "<concise title, max 50 chars, SAME LANGUAGE as input>",
+  "title": "<concise title, max 200 chars, SAME LANGUAGE as input>",
   "reasoning": "<brief explanation>"
 }
 
