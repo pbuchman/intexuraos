@@ -216,8 +216,15 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const { messageSender, outboundMessageRepository } = getServices();
 
         let result;
-        if (eventData.buttons && eventData.buttons.length > 0) {
-          // Send interactive message with buttons
+        if (eventData.ctaUrl !== undefined) {
+          // Send CTA URL message (opens link in browser)
+          result = await messageSender.sendCtaUrlMessage(
+            phoneNumber,
+            eventData.message,
+            eventData.ctaUrl
+          );
+        } else if (eventData.buttons !== undefined && eventData.buttons.length > 0) {
+          // Send interactive message with reply buttons
           result = await messageSender.sendInteractiveMessage(
             phoneNumber,
             eventData.message,

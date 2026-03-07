@@ -155,8 +155,15 @@ export interface SendMessageEvent {
 
   /**
    * Optional: Interactive buttons to include with the message.
+   * Cannot be combined with ctaUrl (WhatsApp API constraint).
    */
   buttons?: WhatsAppInteractiveButton[];
+
+  /**
+   * Optional: CTA URL button that opens a link in the browser.
+   * Cannot be combined with buttons (WhatsApp API constraint).
+   */
+  ctaUrl?: { displayText: string; url: string };
 
   /**
    * Correlation ID for tracing across services.
