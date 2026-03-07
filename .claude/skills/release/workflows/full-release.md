@@ -34,7 +34,20 @@ fi
 
 **If fresh:** Load commits, PRs, modified services, and Linear refs from the file. If it contains a `## Triage Summary` section (from `/release --collect`), change groups and classifications are ready — use them directly in step 1.6 instead of re-analyzing. Skip steps 1.3-1.5.
 
-**If stale or missing:** Continue with steps 1.3-1.5. Do NOT automatically run the collection script — for small releases, inline collection is faster.
+**If stale or missing:**
+
+1. Run steps 1.3-1.5 to get PR list and count
+2. Apply the **Collection Strategy Table:**
+
+| PR Count | Strategy                                                                                         | Rationale                                                 |
+| -------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| 1-10     | Inline — execute semver-analysis Steps 3-6 directly                                              | Small enough to collect in main context                   |
+| 11-25    | Dispatch — run `./scripts/collect-release-data.sh` then Steps 1-4 from `collect-release-data.md` | Too many PRs for reliable inline collection               |
+| 26+      | Dispatch — same as 11-25                                                                         | Mandatory; inline collection WILL produce incomplete data |
+
+**This table is NOT advisory — it is a hard gate.** If PR count exceeds 10, you MUST run the collection pipeline. Do not rationalize skipping it ("I can see the PR titles are clear enough", "most are small fixes", etc.).
+
+After collection pipeline completes, reload `.prerelease-data.md` and proceed to step 1.6.
 
 ### 1.3 Read Current State
 
