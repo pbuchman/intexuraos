@@ -190,5 +190,88 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     }
   }
   /* v8 ignore stop @preserve */
-  
+
+  /* v8 ignore start -- test-infra: tests use fake message sender @preserve */
+  async sendCtaUrlMessage(
+    phoneNumber: string,
+    message: string,
+    ctaUrl: { displayText: string; url: string }
+  ): Promise<Result<{ wamid: string }, WhatsAppError>> {
+    logger.info({ phoneNumber, messageLength: message.length }, 'Sending WhatsApp CTA URL message');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+
+    try {
+      const normalizedPhone = phoneNumber.startsWith('+') ? phoneNumber.slice(1) : phoneNumber;
+
+      const response = await fetch(`${WHATSAPP_API_BASE}/${this.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: normalizedPhone,
+          type: 'interactive',
+          interactive: {
+            type: 'cta_url',
+            body: {
+              text: message,
+            },
+            action: {
+              name: 'cta_url',
+              parameters: {
+                display_text: ctaUrl.displayText,
+                url: ctaUrl.url,
+              },
+            },
+          },
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        logger.error(
+          { phoneNumber, status: response.status, errorBody },
+          'WhatsApp API returned error for CTA URL message'
+        );
+        return err({
+          code: 'PERSISTENCE_ERROR',
+          message: `WhatsApp API error: ${String(response.status)} - ${errorBody}`,
+        });
+      }
+
+      const responseBody = (await response.json()) as {
+        messages?: { id?: string }[];
+      };
+      const wamid = responseBody.messages?.[0]?.id ?? `unknown-${String(Date.now())}`;
+
+      logger.info({ phoneNumber, normalizedPhone, wamid }, 'CTA URL message sent successfully');
+      return ok({ wamid });
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        logger.error({ phoneNumber, timeoutMs: REQUEST_TIMEOUT_MS }, 'WhatsApp request timed out');
+        return err({
+          code: 'PERSISTENCE_ERROR',
+          message: `WhatsApp request timed out after ${String(REQUEST_TIMEOUT_MS)}ms`,
+        });
+      }
+
+      logger.error({ phoneNumber, error: getErrorMessage(error) }, 'Failed to send WhatsApp CTA URL message');
+      return err({
+        code: 'PERSISTENCE_ERROR',
+        message: `Failed to send WhatsApp CTA URL message: ${getErrorMessage(error)}`,
+      });
+    }
+  }
+  /* v8 ignore stop @preserve */
 }

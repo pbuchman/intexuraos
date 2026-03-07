@@ -12,6 +12,12 @@ import type { WhatsAppNotifier, NotificationError } from '../../domain/services/
 import type { CodeTask, TaskError } from '../../domain/models/codeTask.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 
+const APP_BASE_URL = 'https://intexuraos.cloud';
+
+export function buildTaskUrl(taskId: string): string {
+  return `${APP_BASE_URL}/#/code-tasks/${taskId}`;
+}
+
 export interface WhatsAppNotifierConfig {
   whatsappPublisher: WhatsAppSendPublisher;
   linearAgentClient?: LinearAgentClient;
@@ -128,11 +134,19 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
       const message = formatCompletionMessage(title, task);
 
-      const result = await whatsappPublisher.publishSendMessage({
+      const prUrl = task.result?.prUrl;
+      const publishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
         userId,
         message,
         correlationId: task.traceId,
-      });
+      };
+      if (prUrl !== undefined && prUrl.length > 0) {
+        publishParams.ctaUrl = { displayText: 'View Pull Request', url: prUrl };
+      } else {
+        publishParams.ctaUrl = { displayText: 'View Progress', url: buildTaskUrl(task.id) };
+      }
+
+      const result = await whatsappPublisher.publishSendMessage(publishParams);
 
       if (!result.ok) {
         return err({
@@ -155,6 +169,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
+        ctaUrl: { displayText: '🔍 View Task', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
       });
 
@@ -265,11 +280,19 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
       const message = formatResumedCompletionMessage(title, task);
 
-      const result = await whatsappPublisher.publishSendMessage({
+      const prUrl = task.result?.prUrl;
+      const resumedPublishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
         userId,
         message,
         correlationId: task.traceId,
-      });
+      };
+      if (prUrl !== undefined && prUrl.length > 0) {
+        resumedPublishParams.ctaUrl = { displayText: 'View Pull Request', url: prUrl };
+      } else {
+        resumedPublishParams.ctaUrl = { displayText: 'View Progress', url: buildTaskUrl(task.id) };
+      }
+
+      const result = await whatsappPublisher.publishSendMessage(resumedPublishParams);
 
       if (!result.ok) {
         return err({
@@ -351,6 +374,7 @@ Task ID: ${task.id}`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
       });
 
@@ -378,6 +402,7 @@ Task ID: ${task.id}`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
       });
 

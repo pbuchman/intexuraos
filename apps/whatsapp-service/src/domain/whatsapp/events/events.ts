@@ -159,6 +159,14 @@ export interface SendMessageEvent {
   buttons?: WhatsAppInteractiveButton[];
 
   /**
+   * Optional: Call-to-action URL button. Cannot be combined with reply buttons.
+   */
+  ctaUrl?: {
+    displayText: string;
+    url: string;
+  };
+
+  /**
    * Correlation ID for tracing across services.
    */
   correlationId: string;

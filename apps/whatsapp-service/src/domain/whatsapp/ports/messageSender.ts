@@ -51,4 +51,17 @@ export interface WhatsAppMessageSender {
     message: string,
     buttons: WhatsAppInteractiveButton[]
   ): Promise<Result<TextMessageSendResult, WhatsAppError>>;
+
+  /**
+   * Send a message with a call-to-action URL button.
+   * @param phoneNumber - User's phone number in E.164 format (e.g., +48123456789)
+   * @param message - Text message body
+   * @param ctaUrl - CTA URL button configuration
+   * @returns The wamid of the sent message
+   */
+  sendCtaUrlMessage(
+    phoneNumber: string,
+    message: string,
+    ctaUrl: { displayText: string; url: string }
+  ): Promise<Result<TextMessageSendResult, WhatsAppError>>;
 }
