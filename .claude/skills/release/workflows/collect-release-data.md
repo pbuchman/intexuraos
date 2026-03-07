@@ -110,6 +110,20 @@ Write user-facing summaries and produce the ## Triage Summary output as defined 
 
 **After agent completes:** Append its output to `.prerelease-data.md`.
 
+### Output Validation
+
+Before reporting completion, verify all 4 sections exist in `.prerelease-data.md`:
+
+```bash
+for section in "## Commit Analysis" "## Change Groups" "## Netting Analysis" "## Triage Summary"; do
+  if ! grep -q "$section" .prerelease-data.md; then
+    echo "MISSING: $section"
+  fi
+done
+```
+
+If any section is missing, report which agent step failed and ask the user whether to re-run that step or proceed with partial data.
+
 ---
 
 ## Completion
