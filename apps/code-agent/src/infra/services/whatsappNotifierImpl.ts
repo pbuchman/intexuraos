@@ -152,9 +152,20 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
       const message = formatFailureMessage(title, error);
 
+      const buttons: { type: 'reply'; reply: { id: string; title: string } }[] = [
+        {
+          type: 'reply',
+          reply: {
+            id: `view-task:${task.id}`,
+            title: '🔍 Check Logs',
+          },
+        },
+      ];
+
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
+        buttons,
         correlationId: task.traceId,
       });
 

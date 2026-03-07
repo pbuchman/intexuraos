@@ -1420,4 +1420,108 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value?.status).toBe('queued');
     });
   });
+
+  describe('findPlannedTaskByLinearIssue', () => {
+    it('returns matching planned planning task without implementationTaskId', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a planned planning task
+      const created = await repo.create(createTaskInput({
+        linearIssueId: 'INT-500',
+        agentType: 'planning',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Set status to planned
+      await repo.update(created.value.id, { status: 'planned' });
+
+      const result = await repo.findPlannedTaskByLinearIssue('INT-500');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe(created.value.id);
+    });
+
+    it('returns null when no planned task exists for linearIssueId', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.findPlannedTaskByLinearIssue('INT-999');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+    });
+
+    it('returns null when planned task already has implementationTaskId', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a planned planning task
+      const created = await repo.create(createTaskInput({
+        linearIssueId: 'INT-501',
+        agentType: 'planning',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Set status to planned and implementationTaskId
+      await repo.update(created.value.id, {
+        status: 'planned',
+        implementationTaskId: 'task_existing',
+      });
+
+      const result = await repo.findPlannedTaskByLinearIssue('INT-501');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+    });
+
+    it('returns null when task is not in planned status', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a running planning task (not yet planned)
+      await repo.create(createTaskInput({
+        linearIssueId: 'INT-502',
+        agentType: 'planning',
+      }));
+
+      const result = await repo.findPlannedTaskByLinearIssue('INT-502');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+    });
+
+    it('returns null when task is execution type not planning', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a planned execution task (should not match)
+      const created = await repo.create(createTaskInput({
+        linearIssueId: 'INT-503',
+        agentType: 'execution',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'planned' });
+
+      const result = await repo.findPlannedTaskByLinearIssue('INT-503');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+    });
+  });
 });
