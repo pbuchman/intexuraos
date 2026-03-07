@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
+  Code2,
   ExternalLink,
   FileText,
   HelpCircle,
@@ -47,6 +48,7 @@ const ACTION_TYPES: CommandType[] = [
   'calendar',
   'reminder',
   'linear',
+  'code',
 ];
 
 function getTypeIcon(type: CommandType): React.JSX.Element {
@@ -64,6 +66,8 @@ function getTypeIcon(type: CommandType): React.JSX.Element {
       return <Calendar className={iconClass} />;
     case 'reminder':
       return <Bell className={iconClass} />;
+    case 'code':
+      return <Code2 className={iconClass} />;
     default:
       return <HelpCircle className={iconClass} />;
   }

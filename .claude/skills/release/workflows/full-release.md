@@ -18,7 +18,25 @@ node --version
 
 If any fails, ABORT with clear error message.
 
-### 1.2 Read Current State
+### 1.2 Check for Pre-Collected Data
+
+Before doing CLI work, check if `.prerelease-data.md` exists and is current:
+
+```bash
+if [[ -f ".prerelease-data.md" ]]; then
+  FILE_HEAD=$(head -1 .prerelease-data.md | grep -oP '(?<=HEAD: )\w+')
+  CURRENT_HEAD=$(git rev-parse HEAD)
+  if [[ "$FILE_HEAD" == "$CURRENT_HEAD" ]]; then
+    echo "Pre-release data is current (HEAD: $FILE_HEAD)"
+  fi
+fi
+```
+
+**If fresh:** Load commits, PRs, modified services, and Linear refs from the file. If it contains a `## Triage Summary` section (from `/release --collect`), change groups and classifications are ready — use them directly in step 1.6 instead of re-analyzing. Skip steps 1.3-1.5.
+
+**If stale or missing:** Continue with steps 1.3-1.5. Do NOT automatically run the collection script — for small releases, inline collection is faster.
+
+### 1.3 Read Current State
 
 ```bash
 # Current version
@@ -35,17 +53,17 @@ else
 fi
 ```
 
-### 1.3 Get Merged PRs Since Last Release
+### 1.4 Get Merged PRs Since Last Release
 
 ```bash
-# LAST_TAG_DATE was computed in step 1.2 (with first-release guard)
+# LAST_TAG_DATE was computed in step 1.3 (with first-release guard)
 
 # List merged PRs since that date
 gh pr list --state merged --base development --json number,title,body,mergedAt,author --limit 100 | \
   jq --arg date "$LAST_TAG_DATE" '[.[] | select(.mergedAt > $date)]'
 ```
 
-### 1.4 Detect Modified Services
+### 1.5 Detect Modified Services
 
 ```bash
 # Find apps changed since last tag (excluding web app)
@@ -62,21 +80,21 @@ MODIFIED_SERVICES="$MODIFIED_APPS $MODIFIED_WORKERS"
 echo "All modified services: $MODIFIED_SERVICES"
 ```
 
-### 1.5 Run Semver Analysis with Prioritization
+### 1.6 Run Semver Analysis with Prioritization
 
 Execute the full semver analysis per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Steps 3-7:
 
-1. Collect all data (3.1-3.5)
+1. Collect all data (3.1-3.5) — or use pre-collected data from step 1.2 if available
 2. Validate manifest is non-empty (3.6)
-3. Net out cancelled changes (4)
-4. Categorize remaining changes (5)
-5. Prioritize with user via AskUserQuestion (5.1)
-6. Determine version bump (6)
+3. Net out cancelled changes (4) — or use netting from `## Netting Analysis` if present
+4. Categorize remaining changes (5) — or use `## Change Groups` if present
+5. Prioritize with user via AskUserQuestion (5.1) — always required, even with pre-collected data
+6. Determine version bump (6) — `## Triage Summary` may suggest one, but user confirms
 7. Build changelog entry (7) and GitHub Release body (7.1)
 
 Store results for Phase 6.
 
-### 1.6 Ask for Release Focus
+### 1.7 Ask for Release Focus
 
 Use `AskUserQuestion` tool:
 

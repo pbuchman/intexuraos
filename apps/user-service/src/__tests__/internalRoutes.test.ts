@@ -715,7 +715,7 @@ describe('Internal Routes', () => {
       expect(body.data.llmPreferences).toBeUndefined();
     });
 
-    it('returns undefined llmPreferences when repository errors', async () => {
+    it('returns undefined llmPreferences and transcriptionPreferences when repository errors', async () => {
       const userId = 'user-error';
       fakeSettingsRepo.setFailNextGet(true);
 
@@ -734,9 +734,68 @@ describe('Internal Routes', () => {
         success: boolean;
         data: {
           llmPreferences?: { defaultModel: string };
+          transcriptionPreferences?: { provider: string };
         };
       };
       expect(body.data.llmPreferences).toBeUndefined();
+      expect(body.data.transcriptionPreferences).toBeUndefined();
+    });
+
+    it('returns transcriptionPreferences when present', async () => {
+      const userId = 'user-with-transcription';
+      fakeSettingsRepo.setSettings({
+        userId,
+        transcriptionPreferences: { provider: 'speechmatics' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          transcriptionPreferences?: { provider: string };
+        };
+      };
+      expect(body.data.transcriptionPreferences?.provider).toBe('speechmatics');
+    });
+
+    it('returns undefined transcriptionPreferences when not set', async () => {
+      const userId = 'user-no-transcription';
+      fakeSettingsRepo.setSettings({
+        userId,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          transcriptionPreferences?: { provider: string };
+        };
+      };
+      expect(body.data.transcriptionPreferences).toBeUndefined();
     });
   });
 

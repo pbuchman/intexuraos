@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
+import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js';
 
 const logger = createAppLogger({ name: 'code-routes' });
 
@@ -1307,6 +1308,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       const task = createResult.value;
+
+      // Back-link planning task to this execution task (INT-725, best-effort)
+      await backLinkPlanningTask(codeTaskRepo, request.log, task);
 
       // Fetch user's worker settings
       const settingsResult = await workerSettingsRepo.getSettings(userId);

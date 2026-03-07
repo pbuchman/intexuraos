@@ -56,6 +56,30 @@ export interface LlmPreferences {
 }
 
 /**
+ * Transcription provider identifiers.
+ */
+export type TranscriptionProvider = 'speechmatics';
+
+/**
+ * Valid transcription providers for runtime validation.
+ */
+export const VALID_TRANSCRIPTION_PROVIDERS: readonly TranscriptionProvider[] = ['speechmatics'];
+
+/**
+ * Type guard to check if a value is a valid TranscriptionProvider.
+ */
+export function isTranscriptionProvider(value: string): value is TranscriptionProvider {
+  return (VALID_TRANSCRIPTION_PROVIDERS as readonly string[]).includes(value);
+}
+
+/**
+ * Transcription preferences for user-selected provider.
+ */
+export interface TranscriptionPreferences {
+  provider: TranscriptionProvider;
+}
+
+/**
  * A notification filter rule.
  */
 export interface NotificationFilter {
@@ -81,6 +105,7 @@ export interface UserSettings {
   llmApiKeys?: LlmApiKeys;
   llmTestResults?: LlmTestResults;
   llmPreferences?: LlmPreferences; // User's LLM model preferences
+  transcriptionPreferences?: TranscriptionPreferences; // User's transcription provider preferences
   createdAt: string;
   updatedAt: string;
 }

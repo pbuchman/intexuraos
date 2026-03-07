@@ -19,6 +19,7 @@ import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { sanitizePromptForInjection } from '../../domain/utils/promptInjectionSanitizer.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { loadConfig } from '../../config.js';
+import { backLinkPlanningTask } from './backLinkPlanningTask.js';
 
 /**
  * Request to process a code action.
@@ -267,6 +268,9 @@ export async function processCodeAction(
   }
 
   const task = createResult.value;
+
+  // Step 5b: Back-link planning task to this execution task (INT-725, best-effort)
+  await backLinkPlanningTask(codeTaskRepo, logger, task);
 
   // Step 6: Build webhook URL for callback
   const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
