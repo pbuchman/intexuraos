@@ -253,6 +253,8 @@ export function CodeTaskViewPage(): React.JSX.Element {
         onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowImplementDropdown(false); }}
         onImplement={(): void => { void handleImplement(); }}
+        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
       />
 
       <MemoTaskActions
@@ -455,7 +457,7 @@ function TaskActions({
   if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null && prUrl === undefined && linearIssueUrl === undefined) return null;
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3">
+    <div className="mt-4 flex flex-wrap items-stretch gap-3">
       {isActive ? (
         <>
           <Button
@@ -656,6 +658,8 @@ interface NextStepsProps {
   onToggleDropdown: () => void;
   onSelectWorkerType: (type: WorkerType) => void;
   onImplement: () => void;
+  prUrl?: string;
+  linearIssueUrl?: string;
 }
 
 function NextSteps({
@@ -669,19 +673,25 @@ function NextSteps({
   onToggleDropdown,
   onSelectWorkerType,
   onImplement,
+  prUrl,
+  linearIssueUrl,
 }: NextStepsProps): React.JSX.Element | null {
   if (!isImplementable && implementationTaskId === undefined && implementError === null) return null;
 
   return (
     <div className="mt-4">
       {implementationTaskId !== undefined ? (
-        <a
-          href={`/#/code-tasks/${implementationTaskId}`}
-          className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
-        >
-          <Play className="h-4 w-4" />
-          View Implementation
-        </a>
+        <div className="flex items-center gap-3">
+          <a
+            href={`/#/code-tasks/${implementationTaskId}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+          >
+            <Play className="h-4 w-4" />
+            View Implementation
+          </a>
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+        </div>
       ) : isImplementable ? (
         <div className="relative flex items-center gap-3">
           <div className="relative flex">
@@ -730,6 +740,8 @@ function NextSteps({
               </div>
             ) : null}
           </div>
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
         </div>
       ) : null}
       {implementError !== null ? (

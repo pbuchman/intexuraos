@@ -31,6 +31,8 @@ const VITEST_PATTERNS = [
   /^All files\s/,
   /\|\s+[\d.]+\s+\|/,
   /^@@PHASE_TIMING@@/,
+  /^\(node:\d+\) \[DEP\d+\] DeprecationWarning:/,
+  /^\(Use `node --trace-deprecation \.\.\.` to show where the warning was created\)$/,
 ];
 
 function isVitestLine(line) {
