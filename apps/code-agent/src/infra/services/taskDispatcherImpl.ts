@@ -15,6 +15,15 @@ import type {
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
 
+/**
+ * Check if an HTTP status code is a retryable infrastructure error.
+ * Includes standard gateway errors (502/503/504) and Cloudflare-specific errors (520-530).
+ */
+function isRetryableInfraStatus(status: number): boolean {
+  return status === 502 || status === 503 || status === 504
+    || (status >= 520 && status <= 530);
+}
+
 /* v8 ignore start -- test-infra: requires worker HTTP endpoint to return specific JSON/text error bodies @preserve */
 /** Extract human-readable error message from a response body (may be JSON `{"error":"..."}` or plain text). */
 function extractErrorMessage(text: string): string {
@@ -246,7 +255,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
 
     // INT-619/INT-624: Distinguish capacity-related failures from other failures.
-    // Infrastructure errors (502/504) are neutral — they don't count for or against capacity.
+    // Infrastructure errors (502/504/520-530) are neutral — they don't count for or against capacity.
     if (sawCapacity503 && !sawExplicitRejection) {
       return err({
         code: 'at_capacity',
@@ -304,9 +313,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       );
 
       // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors — retry via worker fallback
-      const isRetryableInfra = response.status === 502 || response.status === 503 || response.status === 504
-        || (response.status >= 520 && response.status <= 530);
-      if (isRetryableInfra) {
+      if (isRetryableInfraStatus(response.status)) {
         const error = new Error(`HTTP ${String(response.status)}`) as Error & { code?: string };
         error.code = String(response.status);
         throw error;
@@ -400,9 +407,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       /* v8 ignore start -- test-infra: requires worker HTTP endpoint to return error response @preserve */
       if (!response.ok) {
         // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors
-        const isRetryableInfra = response.status === 502 || response.status === 503 || response.status === 504
-          || (response.status >= 520 && response.status <= 530);
-        if (isRetryableInfra) {
+        if (isRetryableInfraStatus(response.status)) {
           return err({
             code: 'worker_unavailable',
             message: `Worker is unreachable (HTTP ${String(response.status)})`,
