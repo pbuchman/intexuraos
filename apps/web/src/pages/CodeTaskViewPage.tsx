@@ -18,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
+import { MarkdownContent } from '@/components/MarkdownContent';
 import { PREventsGroup } from '@/components/PREventsGroup';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import type { LogLine, MessageStatus } from '@/hooks';
@@ -783,17 +784,17 @@ function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedProm
           {copied ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
-      <blockquote className="border-l-4 rounded border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
-        <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{prompt}</p>
-      </blockquote>
+      <div className="rounded border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+        <MarkdownContent content={prompt} />
+      </div>
       {sanitizedPrompt !== prompt ? (
         <details className="mt-3">
           <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
             Show sanitized prompt
           </summary>
-          <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
-            <p className="whitespace-pre-wrap">{sanitizedPrompt}</p>
-          </blockquote>
+          <div className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
+            <MarkdownContent content={sanitizedPrompt} />
+          </div>
         </details>
       ) : null}
     </Card>
@@ -825,9 +826,9 @@ function RunSummary({ summary }: { summary: string }): React.JSX.Element {
           {copied ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
-      <blockquote className="border-l-4 rounded border-emerald-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
-        <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{summary}</p>
-      </blockquote>
+      <div className="rounded border-l-4 border-emerald-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+        <MarkdownContent content={summary} />
+      </div>
     </Card>
   );
 }
@@ -842,15 +843,26 @@ function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
     ? parseInt(/\/pull\/(\d+)/.exec(result.prUrl)?.[1] ?? '', 10)
     : undefined;
 
-  if (prNumber === undefined || isNaN(prNumber)) return null;
+  const hasSummary = result.summary !== undefined && result.summary !== '';
+  const hasValidPr = prNumber !== undefined && !isNaN(prNumber);
+
+  if (!hasSummary && !hasValidPr) return null;
 
   return (
-    <div className="mb-6">
-      <PREventsGroup
-        pullRequestNumber={prNumber}
-        title={result.summary ?? null}
-        repository={task.repository}
-      />
+    <div className="mb-6 space-y-4">
+      {hasSummary ? (
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">Summary</h3>
+          <MarkdownContent content={result.summary ?? ''} />
+        </Card>
+      ) : null}
+      {hasValidPr ? (
+        <PREventsGroup
+          pullRequestNumber={prNumber}
+          title={result.summary ?? null}
+          repository={task.repository}
+        />
+      ) : null}
     </div>
   );
 }
