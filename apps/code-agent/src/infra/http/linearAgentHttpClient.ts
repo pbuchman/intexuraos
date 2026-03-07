@@ -532,5 +532,68 @@ export function createLinearAgentHttpClient(
         clearTimeout(timeoutId);
       }
     },
+
+    async fetchIssuesForDisplay(request: {
+      userId: string;
+      identifiers: string[];
+    }): Promise<Result<LinearIssueForDisplay[], LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/display-batch`;
+
+      logger.info({ issueCount: request.identifiers.length }, 'Fetching Linear issues for display');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
+          },
+          body: JSON.stringify({
+            identifiers: request.identifiers,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.warn({ status: response.status, error: errorText }, 'linear-agent fetchIssuesForDisplay failed');
+          return err({ code: 'UNAVAILABLE', message: errorText });
+        }
+
+        const body = await response.json() as {
+          success: boolean;
+          data?: {
+            issues: LinearIssueForDisplay[];
+          };
+        };
+
+        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
+        if (!body.success || body.data === undefined) {
+          logger.error({ body }, 'Invalid response from linear-agent');
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+        /* v8 ignore stop @preserve */
+
+        return ok(body.data.issues);
+      } catch (error) {
+        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.error({ timeoutMs }, 'linear-agent request timed out');
+          return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
+        }
+        /* v8 ignore stop @preserve */
+
+        logger.error({ error }, 'linear-agent fetchIssuesForDisplay request failed');
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
   };
 }

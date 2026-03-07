@@ -52,6 +52,59 @@ interface IssueResponse {
   url: string;
 }
 
+interface IssueDisplayResponse {
+  identifier: string;
+  title: string;
+  state: { name: string; type: string };
+  priority: number;
+  assignee: { id: string; name: string } | null;
+  labels: { id: string; name: string }[];
+  url: string;
+  commentCount: number;
+  lastCommentAt: string | null;
+}
+
+function buildIssueDisplayResponse(
+  issue: {
+    id: string;
+    identifier: string;
+    title: string;
+    state: string;
+    stateType: string;
+    priority: number;
+    assigneeId: string | null;
+    assigneeName: string | null;
+    labels: { id: string; name: string; color: string }[];
+    url: string;
+  },
+  comments: { createdAt: string }[]
+): IssueDisplayResponse {
+  const commentCount = comments.length;
+  let lastCommentAt: string | null = null;
+  if (commentCount > 0) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
+    const lastComment = comments[commentCount - 1];
+    if (lastComment !== undefined) {
+      lastCommentAt = lastComment.createdAt;
+    }
+    /* v8 ignore stop @preserve */
+  }
+
+  return {
+    identifier: issue.identifier,
+    title: issue.title,
+    state: { name: issue.state, type: issue.stateType },
+    priority: issue.priority,
+    /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
+    assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
+    /* v8 ignore stop @preserve */
+    labels: issue.labels.map((label) => ({ id: label.id, name: label.name })),
+    url: issue.url,
+    commentCount,
+    lastCommentAt,
+  };
+}
+
 /* v8 ignore start -- test-infra: error paths require Linear API fault injection testing @preserve */
 async function handleLinearError(
   error: LinearError,
@@ -507,6 +560,145 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
     }
   );
 
+  fastify.post<{ Body: { identifiers: string[] } }>(
+    '/internal/linear/issues/display-batch',
+    {
+      schema: {
+        operationId: 'getLinearIssuesDisplayBatchInternal',
+        summary: 'Get multiple Linear issues for display (internal)',
+        description: 'Fetches multiple Linear issues with display data. Missing identifiers are omitted.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          required: ['identifiers'],
+          properties: {
+            identifiers: {
+              type: 'array',
+              minItems: 1,
+              items: { type: 'string' },
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  issues: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        identifier: { type: 'string' },
+                        title: { type: 'string' },
+                        state: {
+                          type: 'object',
+                          properties: {
+                            name: { type: 'string' },
+                            type: { type: 'string' },
+                          },
+                          required: ['name', 'type'],
+                        },
+                        priority: { type: 'number' },
+                        assignee: {
+                          type: ['object', 'null'],
+                          properties: {
+                            id: { type: 'string' },
+                            name: { type: 'string' },
+                          },
+                        },
+                        labels: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string' },
+                              name: { type: 'string' },
+                            },
+                            required: ['id', 'name'],
+                          },
+                        },
+                        url: { type: 'string' },
+                        commentCount: { type: 'number' },
+                        lastCommentAt: { type: ['string', 'null'] },
+                      },
+                      required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
+                    },
+                  },
+                },
+                required: ['issues'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { identifiers: string[] } }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const services = getServices();
+      const issues: IssueDisplayResponse[] = [];
+
+      for (const identifier of request.body.identifiers) {
+        const issueResult = await services.issueRepository.findByIdentifier(identifier, userId);
+        if (!issueResult.ok) {
+          reply.status(500);
+          return await handleLinearError(issueResult.error, reply);
+        }
+
+        const issue = issueResult.value;
+        if (issue === null) {
+          continue;
+        }
+
+        const commentsResult = await services.commentRepository.listByIssueId(issue.id);
+        if (!commentsResult.ok) {
+          reply.status(500);
+          return await handleLinearError(commentsResult.error, reply);
+        }
+
+        issues.push(buildIssueDisplayResponse(issue, commentsResult.value));
+      }
+
+      return await reply.ok({ issues });
+    }
+  );
+
   // GET /internal/linear/issues/:identifier - Get issue with comment data
   fastify.get<{ Params: { identifier: string } }>(
     '/internal/linear/issues/:identifier',
@@ -646,34 +838,22 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
       /* v8 ignore stop @preserve */
 
-      const commentCount = commentsResult.value.length;
-      let lastCommentAt: string | null = null;
-      if (commentCount > 0) {
-        // Comments are ordered by createdAt ASC, so last is at the end
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
-        const lastComment = commentsResult.value[commentCount - 1];
-        if (lastComment !== undefined) {
-          lastCommentAt = lastComment.createdAt;
-        }
-        /* v8 ignore stop @preserve */
-      }
+      const displayIssue = buildIssueDisplayResponse(issue, commentsResult.value);
 
       return await reply.ok({
         id: issue.id,
         identifier: issue.identifier,
         title: issue.title,
         description: issue.description,
-        state: { name: issue.state, type: issue.stateType },
-        priority: issue.priority,
-        /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
-        assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
-        /* v8 ignore stop @preserve */
-        labels: issue.labels.map((label) => ({ id: label.id, name: label.name, color: label.color })),
-        url: issue.url,
+        state: displayIssue.state,
+        priority: displayIssue.priority,
+        assignee: displayIssue.assignee,
+        labels: displayIssue.labels,
+        url: displayIssue.url,
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt,
-        commentCount,
-        lastCommentAt,
+        commentCount: displayIssue.commentCount,
+        lastCommentAt: displayIssue.lastCommentAt,
       });
     }
   );

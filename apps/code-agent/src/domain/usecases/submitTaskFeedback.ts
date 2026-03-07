@@ -236,8 +236,6 @@ ${feedback.trim()}
     followUpReason: 'user_feedback' as const,
     /* v8 ignore start -- ts-type: optional field spread operators create type narrowing branches @preserve */
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
-    ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
-    ...(originalTask.linearFallback !== undefined && { linearFallback: originalTask.linearFallback }),
     ...(originalTask.actionId !== undefined && { actionId: originalTask.actionId }),
     ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
     ...(originalTask.prNumber !== undefined && { prNumber: originalTask.prNumber }),

@@ -607,6 +607,8 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   private failGeneratePreview = false;
   private failGeneratePreviewError: Error | null = null;
   private generatePreviewResult: CalendarPreview | null = null;
+  private failGetPreview = false;
+  private failGetPreviewError: Error | null = null;
 
   getProcessedActions(): ProcessCalendarRequest[] {
     return this.processedActions;
@@ -634,6 +636,11 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
     this.failGeneratePreviewError = error ?? null;
   }
 
+  setFailGetPreview(fail: boolean, error?: Error): void {
+    this.failGetPreview = fail;
+    this.failGetPreviewError = error ?? null;
+  }
+
   setGeneratePreviewResult(preview: CalendarPreview | null): void {
     this.generatePreviewResult = preview;
   }
@@ -648,9 +655,9 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   }
 
   async getPreview(actionId: string): Promise<Result<CalendarPreview | null>> {
-    if (this.failNext) {
-      this.failNext = false;
-      return err(this.failError ?? new Error('Simulated failure'));
+    if (this.failGetPreview) {
+      this.failGetPreview = false;
+      return err(this.failGetPreviewError ?? new Error('Simulated getPreview failure'));
     }
     return ok(this.previews.get(actionId) ?? null);
   }
