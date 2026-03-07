@@ -26,7 +26,7 @@ interface IssueGroup {
   aggregateStatus: GroupStatus;
 }
 
-type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed';
+type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 
 interface PipelineState {
   planning: StepState | null;
@@ -47,16 +47,18 @@ Pure function, unit-testable.
 2. For each group, derive `PipelineState`:
    - Latest planning task: `agentType === 'planning'`, highest `updatedAt`, excluding `archived`
    - Latest execution task: `agentType === 'execution'`, same rules
-   - Planning step: `'completed'` if `planned`/`implemented`, `'running'` if active, `'failed'` if failed
-   - Execution step: `'completed'` if `implemented`, `'actionable'` if planning done but no `implementationTaskId`, `'failed'` if failed, `'running'` if active
-   - PR step: present if any task has `result?.prUrl`
+   - Tasks with `agentType === 'pull_request'` or `agentType === undefined`: included in the group's `tasks` array and timeline but do NOT affect planning/execution step derivation
+   - Planning step: `null` if no planning task. `'completed'` if `planned`/`implemented`. `'running'` if `running`/`dispatched`/`queued`. `'failed'` if `failed`/`interrupted`.
+   - Execution step: `null` if no execution task AND no actionable state. `'actionable'` if planning is completed and `planningTask.implementationTaskId === undefined`. `'completed'` if `implemented`. `'running'` if `running`/`dispatched`/`queued`. `'failed'` if `failed`/`interrupted`.
+   - PR step: present if any task has `result?.prUrl`. Extract PR number via `/\/pull\/(\d+)/` regex. `null` if no match or no PR URL.
    - `failedAttempts`: count non-archived `failed` tasks
    - `archivedCount`: count `archived` tasks
-3. Derive `aggregateStatus`:
+3. Derive `aggregateStatus` (checked in priority order):
    - `'active'`: any task is `running | dispatched | queued`
    - `'needs-action'`: has planned task without `implementationTaskId`
    - `'failed'`: latest non-archived task is `failed | interrupted`
-   - `'done'`: otherwise
+   - `'archived'`: ALL tasks in the group are `archived`
+   - `'done'`: otherwise (includes `cancelled` tasks — treated as terminal/done)
 4. Sort: `active` first, then `needs-action`, then `failed`, then `done`. Within same status, by `latestTask.updatedAt` desc.
 
 ### Page size
@@ -66,14 +68,19 @@ Pass `limit: 50` from `useCodeTasks` hook. API already accepts `maximum: 100` (l
 ## Component Architecture
 
 ```
-CodeTasksPage
+CodeTasksPage.tsx
   PageHeader              (title, subtitle with counts, New Task button)
   StatusPipeline          (filter bar with group counts)
   ColumnHeader            (Issue | Pipeline | Worker | Time | Output)
   IssueGroupList
-    IssueGroupRow[key]    (React.memo'd)
-      IssueRowCollapsed   (always visible — grid row)
-      IssueTimeline       (conditional — expanded view)
+
+components/code-tasks/IssueGroupRow.tsx   (React.memo'd, own file for SRP)
+  IssueRowCollapsed       (always visible — grid row)
+  PipelineStep            (individual step icon + label)
+  PipelineConnector       (line between steps)
+
+components/code-tasks/IssueTimeline.tsx   (own file for SRP)
+  TimelineItem            (single task entry)
 ```
 
 ### IssueGroupRow (collapsed) — grid layout
@@ -109,11 +116,16 @@ Footer: "2 tasks · 1 archived · click to collapse"
 
 | Planning state | Execution state                        | Render                                   |
 | -------------- | -------------------------------------- | ---------------------------------------- |
+| running        | none                                   | ◌ Planning (blue)                        |
+| failed         | none                                   | ✗ Planning Failed                        |
 | completed      | not started, no `implementationTaskId` | ✓ Planning → **▶ Implement** (green CTA) |
-| completed      | running                                | ✓ Planning → ◌ Running (blue)            |
+| completed      | running/queued/dispatched              | ✓ Planning → ◌ Running (blue)            |
 | completed      | completed + PR                         | ✓ Planning → ✓ Execution → ✓ PR          |
+| completed      | completed, no PR                       | ✓ Planning → ✓ Execution                 |
 | completed      | failed                                 | ✓ Planning → ✗ Failed + attempt count    |
+| none           | running/queued/dispatched              | ◌ Running (blue)                         |
 | none           | completed + PR                         | ✓ Execution → ✓ PR                       |
+| none           | completed, no PR                       | ✓ Execution                              |
 | none           | failed                                 | ✗ Failed + attempt count                 |
 
 ### Tasks without linearIssueId
@@ -140,7 +152,7 @@ Filter persistence: `localStorage` key `code-tasks-group-filter`. Migration: if 
 
 ### Memoization
 
-- `IssueGroupRow`: `React.memo` with custom comparator checking `group` reference + `workerHealthMap` reference
+- `IssueGroupRow`: `React.memo` with shallow structural comparator checking `group.linearIssueId`, `group.aggregateStatus`, `group.latestTask.updatedAt`, `group.tasks.length`, `group.pipeline` fields + `workerHealthMap` reference
 - `groupByLinearIssue`: called inside `useMemo(() => ..., [tasks])`
 - Worker health: `useMemo(() => new Map(workers.map(w => [w.name, w.status])), [workersStatus])`
 - Action handler: single `useCallback` taking `(taskId, action)` tuple
@@ -167,12 +179,14 @@ Reuse `formatElapsedTime` from `utils/dateFormat.ts` (line 172, already exported
 
 ## Files Changed
 
-| File                                               | Change                                |
-| -------------------------------------------------- | ------------------------------------- |
-| `apps/web/src/pages/CodeTasksPage.tsx`             | Complete rewrite — new components     |
-| `apps/web/src/hooks/useCodeTasks.ts`               | Add `limit: 50`, merge-based refresh  |
-| `apps/web/src/utils/issueGroups.ts`                | **NEW** — `groupByLinearIssue`, types |
-| `apps/web/src/utils/__tests__/issueGroups.test.ts` | **NEW** — unit tests for grouping     |
+| File                                                        | Change                                              |
+| ----------------------------------------------------------- | --------------------------------------------------- |
+| `apps/web/src/pages/CodeTasksPage.tsx`                      | Rewrite — page shell, StatusPipeline, PageHeader    |
+| `apps/web/src/components/code-tasks/IssueGroupRow.tsx`      | **NEW** — memo'd collapsed row + pipeline           |
+| `apps/web/src/components/code-tasks/IssueTimeline.tsx`      | **NEW** — expanded timeline view                    |
+| `apps/web/src/hooks/useCodeTasks.ts`                        | Add `limit: 50`, merge-based refresh                |
+| `apps/web/src/utils/issueGroups.ts`                         | **NEW** — `groupByLinearIssue`, types               |
+| `apps/web/src/utils/__tests__/issueGroups.test.ts`          | **NEW** — unit tests for grouping                   |
 
 ## Out of Scope
 
