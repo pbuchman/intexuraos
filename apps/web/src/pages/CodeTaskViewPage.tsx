@@ -441,7 +441,7 @@ function TaskActions({
   if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null) return null;
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3">
+    <div className="mt-4 flex flex-wrap items-stretch gap-3">
       {isActive ? (
         <Button
           variant="danger"
