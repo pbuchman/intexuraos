@@ -25,7 +25,7 @@ Create `apps/web/src/utils/issueGroups.ts` with stub exports:
 ```typescript
 import type { CodeTask } from '@/types';
 
-export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed';
+export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type StepState = 'completed' | 'running' | 'failed' | 'waiting' | 'actionable';
 
 export interface PipelineState {
@@ -71,6 +71,12 @@ Test cases to write (each as a separate `it()` block inside a `describe('groupBy
 13. **sorts groups: active, needs-action, failed, done** — 4 groups, one of each. Expect this order.
 14. **sorts within same status by latestTask.updatedAt desc** — 2 `done` groups with different timestamps. Newest first.
 15. **excludes archived tasks from latest planning/execution lookup** — group with archived planning + non-archived planning. Expect pipeline uses the non-archived one.
+16. **empty input returns empty array** — `groupByLinearIssue([])` returns `[]`.
+17. **tasks with agentType 'pull_request' do not affect planning/execution steps** — group with one `pull_request` task only. Expect `pipeline.planning === null` and `pipeline.execution === null`.
+18. **tasks with agentType undefined do not affect planning/execution steps** — group with one task where `agentType` is undefined. Expect `pipeline.planning === null` and `pipeline.execution === null`.
+19. **fully-archived group gets aggregateStatus 'archived'** — all tasks in group have `status === 'archived'`. Expect `aggregateStatus === 'archived'`.
+20. **cancelled tasks are treated as done** — group with a single `cancelled` task. Expect `aggregateStatus === 'done'`.
+21. **malformed prUrl does not produce PR step** — task with `result.prUrl = 'https://github.com/org/repo/issues/42'` (issues, not pull). Expect `pipeline.pr === null`.
 
 The `createMockTask` factory:
 
@@ -102,7 +108,7 @@ function createMockTask(overrides: Partial<CodeTask> & { id: string }): CodeTask
 **Step 3: Run tests to verify they fail**
 
 Run: `cd apps/web && pnpm test -- src/utils/__tests__/issueGroups.test.ts`
-Expected: All 15 tests FAIL (groupByLinearIssue returns empty array)
+Expected: All 21 tests FAIL (groupByLinearIssue returns empty array)
 
 **Step 4: Commit**
 
@@ -127,13 +133,14 @@ Replace the stub `groupByLinearIssue` with the full implementation following the
    - Sort tasks by `updatedAt` desc
    - Find latest non-archived planning task (`agentType === 'planning'`)
    - Find latest non-archived execution task (`agentType === 'execution'`)
+   - Tasks with `agentType === 'pull_request'` or `agentType === undefined`: include in group's `tasks` array and timeline but do NOT affect planning/execution step derivation
    - Derive `PipelineState`:
      - `planning`: `null` if no planning task. `'completed'` if status is `planned`/`implemented`. `'running'` if `running`/`dispatched`/`queued`. `'failed'` if `failed`/`interrupted`.
      - `execution`: `null` if no execution task AND no actionable state. `'actionable'` if planning is completed and no `implementationTaskId` on the planning task. `'completed'` if `implemented`. `'running'` if `running`/`dispatched`/`queued`. `'failed'` if `failed`/`interrupted`.
      - `pr`: Extract from any task's `result?.prUrl` using regex `/\/pull\/(\d+)/`. `null` if no PR.
      - `failedAttempts`: count of tasks with `status === 'failed'` and `status !== 'archived'`
      - `archivedCount`: count of tasks with `status === 'archived'`
-   - Derive `aggregateStatus`: check in priority order — `'active'` > `'needs-action'` > `'failed'` > `'done'`
+   - Derive `aggregateStatus`: check in priority order — `'active'` > `'needs-action'` > `'failed'` > `'archived'` (all tasks archived) > `'done'`
    - Set `latestTask` to `tasks[0]` (already sorted by `updatedAt` desc)
    - Set `linearIssue` from any task in group that has it
 3. Sort groups by `aggregateStatus` priority, then `latestTask.updatedAt` desc within same status.
@@ -141,7 +148,7 @@ Replace the stub `groupByLinearIssue` with the full implementation following the
 **Step 2: Run tests to verify they pass**
 
 Run: `cd apps/web && pnpm test -- src/utils/__tests__/issueGroups.test.ts`
-Expected: All 15 tests PASS
+Expected: All 21 tests PASS
 
 **Step 3: Commit**
 
@@ -232,7 +239,7 @@ import { useMemo, useState, useCallback, memo } from 'react';
 import { ChevronDown, ChevronRight, Plus, Play, RotateCcw, ExternalLink } from 'lucide-react';
 import { groupByLinearIssue } from '@/utils/issueGroups';
 import type { IssueGroup, GroupStatus } from '@/utils/issueGroups';
-import { formatElapsedTime } from '@/utils/dateFormat';
+import { formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import type { WorkerStatusTag } from '@/types';
 ```
 
@@ -294,11 +301,12 @@ git commit -m "feat: rewrite CodeTasksPage with issue grouping, status pipeline,
 ## Task 5: IssueGroupRow — Collapsed View
 
 **Files:**
-- Modify: `apps/web/src/pages/CodeTasksPage.tsx`
+- Create: `apps/web/src/components/code-tasks/IssueGroupRow.tsx`
+- Modify: `apps/web/src/pages/CodeTasksPage.tsx` (import the new component)
 
-**Step 1: Implement IssueGroupRow as a memo'd component**
+**Step 1: Create IssueGroupRow as a memo'd component in its own file**
 
-Replace the placeholder from Task 4. The component receives:
+Create `apps/web/src/components/code-tasks/IssueGroupRow.tsx`. The component receives:
 
 ```typescript
 interface IssueGroupRowProps {
@@ -315,7 +323,18 @@ const IssueGroupRow = memo(function IssueGroupRow({ group, workerHealthMap, onAc
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   // ...
-}, (prev, next) => prev.group === next.group && prev.workerHealthMap === next.workerHealthMap && prev.onAction === next.onAction);
+}, (prev, next) =>
+  prev.group.linearIssueId === next.group.linearIssueId &&
+  prev.group.aggregateStatus === next.group.aggregateStatus &&
+  prev.group.latestTask.updatedAt === next.group.latestTask.updatedAt &&
+  prev.group.tasks.length === next.group.tasks.length &&
+  prev.group.pipeline.planning === next.group.pipeline.planning &&
+  prev.group.pipeline.execution === next.group.pipeline.execution &&
+  prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
+  prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
+  prev.workerHealthMap === next.workerHealthMap &&
+  prev.onAction === next.onAction
+);
 ```
 
 **Collapsed row layout** — a div with CSS grid `grid-template-columns: 200px 1fr 200px 140px 120px`:
@@ -358,7 +377,7 @@ Expected: Build succeeds
 **Step 4: Commit**
 
 ```
-git add apps/web/src/pages/CodeTasksPage.tsx
+git add apps/web/src/components/code-tasks/IssueGroupRow.tsx apps/web/src/pages/CodeTasksPage.tsx
 git commit -m "feat: implement IssueGroupRow with pipeline visualization and grid layout"
 ```
 
@@ -367,11 +386,12 @@ git commit -m "feat: implement IssueGroupRow with pipeline visualization and gri
 ## Task 6: IssueTimeline — Expanded View
 
 **Files:**
-- Modify: `apps/web/src/pages/CodeTasksPage.tsx`
+- Create: `apps/web/src/components/code-tasks/IssueTimeline.tsx`
+- Modify: `apps/web/src/components/code-tasks/IssueGroupRow.tsx` (import and render)
 
-**Step 1: Implement IssueTimeline component**
+**Step 1: Create IssueTimeline component in its own file**
 
-Rendered inside `IssueGroupRow` when `expanded === true` and `group.tasks.length > 1`.
+Create `apps/web/src/components/code-tasks/IssueTimeline.tsx`. Rendered inside `IssueGroupRow` when `expanded === true` and `group.tasks.length > 1`.
 
 ```typescript
 function IssueTimeline({ tasks }: { tasks: CodeTask[] }): React.JSX.Element
@@ -407,7 +427,7 @@ Expected: Build succeeds
 **Step 3: Commit**
 
 ```
-git add apps/web/src/pages/CodeTasksPage.tsx
+git add apps/web/src/components/code-tasks/IssueTimeline.tsx apps/web/src/components/code-tasks/IssueGroupRow.tsx
 git commit -m "feat: implement IssueTimeline expanded view with task history"
 ```
 
@@ -522,7 +542,7 @@ git commit -m "feat: add responsive layout, loading, empty, and error states"
 ## Task 9: Delete Confirmation
 
 **Files:**
-- Modify: `apps/web/src/pages/CodeTasksPage.tsx`
+- Modify: `apps/web/src/components/code-tasks/IssueGroupRow.tsx`
 
 **Step 1: Port delete confirmation from existing CodeTaskCard**
 
@@ -543,7 +563,7 @@ Expected: Build succeeds
 **Step 3: Commit**
 
 ```
-git add apps/web/src/pages/CodeTasksPage.tsx
+git add apps/web/src/components/code-tasks/IssueGroupRow.tsx
 git commit -m "feat: add delete confirmation for issue groups"
 ```
 
@@ -587,6 +607,8 @@ Start the dev server and verify against dev.intexuraos.cloud:
 **Step 5: Commit any remaining fixes and final commit**
 
 ```
-git add -A
+git add apps/web/src/utils/issueGroups.ts apps/web/src/utils/__tests__/issueGroups.test.ts \
+  apps/web/src/hooks/useCodeTasks.ts apps/web/src/pages/CodeTasksPage.tsx \
+  apps/web/src/components/code-tasks/IssueGroupRow.tsx apps/web/src/components/code-tasks/IssueTimeline.tsx
 git commit -m "feat: complete code tasks list redesign with issue-centric grouped view"
 ```
