@@ -773,6 +773,39 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    findPlannedTaskByLinearIssue: async (
+      linearIssueId: string
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('linearIssueId', '==', linearIssueId)
+          .where('status', '==', 'planned')
+          .where('agentType', '==', 'planning')
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        const task = toCodeTask(doc as { id: string; data(): Record<string, unknown> });
+
+        // Only return if implementationTaskId is not already set
+        if (task.implementationTaskId !== undefined) {
+          return ok(null);
+        }
+
+        return ok(task);
+      } catch (error) {
+        logger.error({ error, linearIssueId }, 'Failed to find planned task by Linear issue');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     findByPR: async (
       repository: string,
       prNumber: number
