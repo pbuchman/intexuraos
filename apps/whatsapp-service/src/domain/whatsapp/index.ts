@@ -60,16 +60,6 @@ export type { WhatsAppMessageSender } from './ports/messageSender.js';
 
 export type { TextMessageSendResult } from './ports/messageSender.js';
 
-export type {
-  SpeechTranscriptionPort,
-  TranscriptionJobInput,
-  TranscriptionJobSubmitResult,
-  TranscriptionJobStatus,
-  TranscriptionJobPollResult,
-  TranscriptionTextResult,
-  TranscriptionPortError,
-} from './ports/transcription.js';
-
 export type { LinkPreviewFetcherPort } from './ports/linkPreviewFetcher.js';
 
 export type {
@@ -85,7 +75,6 @@ export type {
   ExtractLinkPreviewsEvent,
   MediaCleanupEvent,
   SendMessageEvent,
-  TranscribeAudioEvent,
   TranscriptionCompletedEvent,
   WebhookProcessEvent,
   WhatsAppEvent,
@@ -112,13 +101,9 @@ export {
 } from './usecases/processAudioMessage.js';
 
 export {
-  TranscribeAudioUseCase,
-  type TranscribeAudioInput,
-  type TranscribeAudioDeps,
-  type TranscribeAudioLogger,
-  type TranscriptionPollingConfig,
-  DEFAULT_TRANSCRIPTION_POLL_CONFIG,
-} from './usecases/transcribeAudio.js';
+  HandleTranscriptionCompletedUseCase,
+  type HandleTranscriptionCompletedDeps,
+} from './usecases/handleTranscriptionCompleted.js';
 
 export {
   ExtractLinkPreviewsUseCase,

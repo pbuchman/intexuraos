@@ -25,9 +25,15 @@ setup_git_identity() {
 
 setup_github_token() {
     if [ -f "/secrets/github-token" ]; then
-        export GITHUB_TOKEN=$(cat /secrets/github-token)
-        # Configure git to use the token for HTTPS pushes
-        git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
+        # Point-in-time snapshot for convenience scripts; may go stale within
+        # long-running attempts. The git credential helper and gh wrapper
+        # (see Dockerfile) are the authoritative token sources — they re-read
+        # the file on every invocation.
+        export GITHUB_TOKEN="$(cat /secrets/github-token)"
+        # Credential helper reads the bind-mounted file directly on each git
+        # operation so it always uses the latest token from the orchestrator's
+        # TokenRefresher (which updates /secrets/github-token every 30 min).
+        git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=$(cat /secrets/github-token 2>/dev/null)"; }; f'
         echo "[entrypoint] GitHub token loaded and git credential configured"
     else
         echo "[entrypoint] WARNING: GitHub token not found at /secrets/github-token"
@@ -318,19 +324,10 @@ fi
 setup_git_identity
 setup_github_token
 
-# Watch for token refresh in background
-(
-    while true; do
-        sleep 60
-        if [ -f "/secrets/github-token" ]; then
-            NEW_TOKEN=$(cat /secrets/github-token)
-            if [ "$NEW_TOKEN" != "${GITHUB_TOKEN:-}" ]; then
-                export GITHUB_TOKEN="$NEW_TOKEN"
-                echo "[entrypoint] GitHub token refreshed"
-            fi
-        fi
-    done
-) &
+# Token freshness: The orchestrator's TokenRefresher updates /secrets/github-token
+# every 30 minutes via bind mount. The git credential helper reads this file directly
+# on each git operation. The gh wrapper (/usr/local/bin/gh) re-reads it before each
+# invocation. No background watcher needed.
 
 # ------------------------------------------------------------------------------
 # Configure pnpm to use persistent store (shared volume across containers)

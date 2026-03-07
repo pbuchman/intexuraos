@@ -74,7 +74,53 @@ describe('RepoManager', () => {
     vi.restoreAllMocks();
   });
 
+  describe('normalizeUrl', () => {
+    it('should return plain HTTPS URL lowercased with no changes', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('https://github.com/x/y')).toBe('https://github.com/x/y');
+    });
+
+    it('should strip .git suffix from HTTPS URL', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('https://github.com/x/y.git')).toBe('https://github.com/x/y');
+    });
+
+    it('should convert SSH git@ URL to HTTPS', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('git@github.com:x/y.git')).toBe('https://github.com/x/y');
+    });
+
+    it('should lowercase mixed-case HTTPS URL', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('HTTPS://GitHub.com/X/Y')).toBe('https://github.com/x/y');
+    });
+
+    it('should strip embedded credentials from authenticated HTTPS URL', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(
+        normalizeUrl('https://x-access-token:ghs_TOKEN@github.com/pbuchman/intexuraos.git')
+      ).toBe('https://github.com/pbuchman/intexuraos');
+    });
+
+    it('should strip credentials from authenticated URL without .git suffix', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('https://x-access-token:ghs_TOKEN@github.com/pbuchman/intexuraos')).toBe(
+        'https://github.com/pbuchman/intexuraos'
+      );
+    });
+  });
+
   describe('urlsMatch', () => {
+    it('should match authenticated URL against clean URL (regression: orchestrator crash on restart)', async () => {
+      const { urlsMatch } = await loadRepoManager();
+      expect(
+        urlsMatch(
+          'https://x-access-token:ghs_TOKEN@github.com/pbuchman/intexuraos.git',
+          'https://github.com/pbuchman/intexuraos.git'
+        )
+      ).toBe(true);
+    });
+
     it('should normalize HTTPS URL with .git suffix', async () => {
       const { urlsMatch } = await loadRepoManager();
 

@@ -335,7 +335,25 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(200);
       expect(createSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ agentType: 'execution' })
+        expect.objectContaining({
+          agentType: 'execution',
+          linearIssueId: 'INT-999',
+        })
+      );
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueTitle: expect.anything(),
+        })
+      );
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueLabels: expect.anything(),
+        })
+      );
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearFallback: expect.anything(),
+        })
       );
     });
 

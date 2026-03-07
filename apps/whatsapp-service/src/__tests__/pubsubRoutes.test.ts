@@ -13,7 +13,6 @@ import {
   FakeMessageSender,
   FakeOutboundMessageRepository,
   FakePhoneVerificationRepository,
-  FakeSpeechTranscriptionPort,
   FakeThumbnailGeneratorPort,
   FakeWhatsAppCloudApiPort,
   FakeWhatsAppMessageRepository,
@@ -33,7 +32,6 @@ const testConfig: Config = {
   mediaBucket: 'test-media-bucket',
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
-  speechmaticsApiKey: 'test-speechmatics-api-key',
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: INTERNAL_AUTH_TOKEN,
@@ -69,14 +67,12 @@ describe('Pub/Sub Routes', () => {
   let app: FastifyInstance;
   let messageSender: FakeMessageSender;
   let mediaStorage: FakeMediaStorage;
-  let transcriptionService: FakeSpeechTranscriptionPort;
   let messageRepository: FakeWhatsAppMessageRepository;
   let userMappingRepository: FakeWhatsAppUserMappingRepository;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
     mediaStorage = new FakeMediaStorage();
-    transcriptionService = new FakeSpeechTranscriptionPort();
     messageRepository = new FakeWhatsAppMessageRepository();
     userMappingRepository = new FakeWhatsAppUserMappingRepository();
 
@@ -87,7 +83,6 @@ describe('Pub/Sub Routes', () => {
       mediaStorage,
       eventPublisher: new FakeEventPublisher(),
       messageSender,
-      transcriptionService,
       whatsappCloudApi: new FakeWhatsAppCloudApiPort(),
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
@@ -715,22 +710,21 @@ describe('Pub/Sub Routes', () => {
     });
   });
 
-  describe('POST /internal/whatsapp/pubsub/transcribe-audio', () => {
+  describe('POST /internal/whatsapp/pubsub/transcription-completed', () => {
     it('returns 401 when auth is missing', async () => {
       const body = createPubSubBody({
-        type: 'whatsapp.audio.transcribe',
+        type: 'srt.transcription.completed',
         messageId: 'msg-123',
         userId: 'user-456',
-        gcsPath: 'path/to/audio.ogg',
-        mimeType: 'audio/ogg',
-        userPhoneNumber: '+1234567890',
-        originalWaMessageId: 'wamid.abc',
-        phoneNumberId: 'phone-789',
+        jobId: 'job-abc',
+        status: 'completed',
+        transcript: 'Hello world',
+        timestamp: new Date().toISOString(),
       });
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/whatsapp/pubsub/transcribe-audio',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
         payload: body,
       });
 
@@ -739,35 +733,124 @@ describe('Pub/Sub Routes', () => {
       expect(responseBody.error.message).toContain('auth failed');
     });
 
-    it('accepts Pub/Sub push with from: noreply@google.com header', async () => {
-      transcriptionService.setAutoComplete(true, 'Test transcript');
+    it('returns 200 for completed event and updates message + sends WhatsApp message', async () => {
       messageRepository.setMessage({
-        id: 'msg-oidc-test',
+        id: 'msg-completed',
         userId: 'user-456',
-        waMessageId: 'wamid.abc',
+        waMessageId: 'wamid.completed',
         fromNumber: '+1234567890',
         toNumber: '+0987654321',
         text: '',
         mediaType: 'audio',
         timestamp: Date.now().toString(),
         receivedAt: new Date().toISOString(),
-        webhookEventId: 'event-oidc',
+        webhookEventId: 'event-completed',
+        metadata: { phoneNumberId: 'phone-789' },
       });
 
       const body = createPubSubBody({
-        type: 'whatsapp.audio.transcribe',
-        messageId: 'msg-oidc-test',
+        type: 'srt.transcription.completed',
+        messageId: 'msg-completed',
         userId: 'user-456',
-        gcsPath: 'path/to/audio.ogg',
-        mimeType: 'audio/ogg',
-        userPhoneNumber: '+1234567890',
-        originalWaMessageId: 'wamid.abc',
-        phoneNumberId: 'phone-789',
+        jobId: 'job-success',
+        status: 'completed',
+        transcript: 'This is a test transcript',
+        timestamp: new Date().toISOString(),
       });
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/whatsapp/pubsub/transcribe-audio',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      const message = messageRepository.getMessageSync('msg-completed');
+      expect(message?.transcription?.status).toBe('completed');
+      expect(message?.transcription?.text).toBe('This is a test transcript');
+    });
+
+    it('returns 200 for failed event and updates message', async () => {
+      messageRepository.setMessage({
+        id: 'msg-failed',
+        userId: 'user-456',
+        waMessageId: 'wamid.failed',
+        fromNumber: '+1234567890',
+        toNumber: '+0987654321',
+        text: '',
+        mediaType: 'audio',
+        timestamp: Date.now().toString(),
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-failed',
+        metadata: { phoneNumberId: 'phone-789' },
+      });
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageId: 'msg-failed',
+        userId: 'user-456',
+        jobId: 'job-fail',
+        status: 'failed',
+        error: 'Audio quality too low',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      const message = messageRepository.getMessageSync('msg-failed');
+      expect(message?.transcription?.status).toBe('failed');
+    });
+
+    it('returns 200 when message not found (graceful handling)', async () => {
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageId: 'non-existent-msg',
+        userId: 'user-456',
+        jobId: 'job-orphan',
+        status: 'completed',
+        transcript: 'Orphan transcript',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+    });
+
+    it('accepts Pub/Sub push with from: noreply@google.com header', async () => {
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        messageId: 'msg-oidc',
+        userId: 'user-456',
+        jobId: 'job-oidc',
+        status: 'completed',
+        transcript: 'OIDC transcript',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
         headers: {
           'content-type': 'application/json',
           from: 'noreply@google.com',
@@ -780,14 +863,14 @@ describe('Pub/Sub Routes', () => {
       expect(responseBody.success).toBe(true);
     });
 
-    it('returns success when message data is invalid', async () => {
+    it('returns 200 and logs error when message data is not valid base64', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/whatsapp/pubsub/transcribe-audio',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: {
           message: {
-            data: '!!!not-valid!!!',
+            data: '!!!not-base64!!!',
             messageId: 'msg-123',
             publishTime: new Date().toISOString(),
           },
@@ -800,132 +883,46 @@ describe('Pub/Sub Routes', () => {
       expect(responseBody.success).toBe(true);
     });
 
-    it('returns success when event type is unexpected', async () => {
+    it('returns 200 and logs error when message data is not valid JSON', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          message: {
+            data: Buffer.from('not json at all').toString('base64'),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'projects/test/subscriptions/test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+    });
+
+    it('returns 200 when event type is unexpected', async () => {
       const body = createPubSubBody({
         type: 'wrong.event.type',
         messageId: 'msg-123',
         userId: 'user-456',
+        jobId: 'job-abc',
+        status: 'completed',
+        timestamp: new Date().toISOString(),
       });
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/whatsapp/pubsub/transcribe-audio',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: body,
       });
 
       expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean };
-      expect(responseBody.success).toBe(true);
-    });
-
-    it('completes transcription successfully with auto-complete enabled', async () => {
-      transcriptionService.setAutoComplete(true, 'This is a test transcript');
-      messageRepository.setMessage({
-        id: 'msg-transcribe-success',
-        userId: 'user-456',
-        waMessageId: 'wamid.abc',
-        fromNumber: '+1234567890',
-        toNumber: '+0987654321',
-        text: '',
-        mediaType: 'audio',
-        timestamp: Date.now().toString(),
-        receivedAt: new Date().toISOString(),
-        webhookEventId: 'event-123',
-      });
-
-      const body = createPubSubBody({
-        type: 'whatsapp.audio.transcribe',
-        messageId: 'msg-transcribe-success',
-        userId: 'user-456',
-        gcsPath: 'path/to/audio.ogg',
-        mimeType: 'audio/ogg',
-        userPhoneNumber: '+1234567890',
-        originalWaMessageId: 'wamid.abc',
-        phoneNumberId: 'phone-789',
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/whatsapp/pubsub/transcribe-audio',
-        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
-        payload: body,
-      });
-
-      expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean };
-      expect(responseBody.success).toBe(true);
-
-      const message = messageRepository.getMessageSync('msg-transcribe-success');
-      expect(message?.transcription?.status).toBe('completed');
-      expect(message?.transcription?.text).toBe('This is a test transcript');
-    });
-
-    it('returns success even when transcription fails internally', async () => {
-      transcriptionService.setFailMode(true, 'Simulated transcription failure');
-      messageRepository.setMessage({
-        id: 'msg-transcribe-fail',
-        userId: 'user-456',
-        waMessageId: 'wamid.xyz',
-        fromNumber: '+1234567890',
-        toNumber: '+0987654321',
-        text: '',
-        mediaType: 'audio',
-        timestamp: Date.now().toString(),
-        receivedAt: new Date().toISOString(),
-        webhookEventId: 'event-456',
-      });
-
-      const body = createPubSubBody({
-        type: 'whatsapp.audio.transcribe',
-        messageId: 'msg-transcribe-fail',
-        userId: 'user-456',
-        gcsPath: 'path/to/audio.ogg',
-        mimeType: 'audio/ogg',
-        userPhoneNumber: '+1234567890',
-        originalWaMessageId: 'wamid.xyz',
-        phoneNumberId: 'phone-789',
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/whatsapp/pubsub/transcribe-audio',
-        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
-        payload: body,
-      });
-
-      expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean };
-      expect(responseBody.success).toBe(true);
-
-      const message = messageRepository.getMessageSync('msg-transcribe-fail');
-      expect(message?.transcription?.status).toBe('failed');
-    });
-
-    it('returns success and logs error when transcription throws an exception', async () => {
-      messageRepository.setThrowOnUpdateTranscription(true);
-
-      const body = createPubSubBody({
-        type: 'whatsapp.audio.transcribe',
-        messageId: 'msg-throw-test',
-        userId: 'user-456',
-        gcsPath: 'path/to/audio.ogg',
-        mimeType: 'audio/ogg',
-        userPhoneNumber: '+1234567890',
-        originalWaMessageId: 'wamid.throw',
-        phoneNumberId: 'phone-789',
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/whatsapp/pubsub/transcribe-audio',
-        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
-        payload: body,
-      });
-
-      expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean };
-      expect(responseBody.success).toBe(true);
+      const responseBody2 = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody2.success).toBe(true);
     });
   });
 

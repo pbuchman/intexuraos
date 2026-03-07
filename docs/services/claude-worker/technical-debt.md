@@ -6,10 +6,10 @@
 | ------------------- | ----- | -------- |
 | TODO/FIXME Comments | 0     | -        |
 | Security Hardening  | 3     | Medium   |
-| Operational Gaps    | 2     | Low      |
+| Operational Gaps    | 1     | Low      |
 | Architecture Debt   | 2     | Low      |
 
-Last updated: 2026-02-19
+Last updated: 2026-03-06
 
 ## Security Hardening
 
@@ -46,24 +46,16 @@ Last updated: 2026-02-19
 **Impact:** A hung Claude process that keeps the container "running" and produces no output can only be detected by the per-attempt timeout mechanism.
 **Ideal fix:** Have Claude (or the entrypoint) write a periodic heartbeat file to `/tmp/` that the orchestrator can check via `docker exec test -f`.
 
-### 5. Token refresh watcher does not propagate to Claude process
-
-**Severity:** Low
-**Location:** `entrypoint.sh` (background watcher loop)
-**Context:** The background loop polls `/secrets/github-token` every 60 seconds and exports `GITHUB_TOKEN` in the watcher subshell. This export does not propagate to the Claude process or to `run-attempt` invocations. Token delivery to `gh` CLI relies on the git credential helper (`!f() { echo "password=${GITHUB_TOKEN}"; }; f`) being re-evaluated at each `gh` invocation.
-**Impact:** In managed mode, if the token expires between attempts, the new token from the file is not picked up by the credential helper (which reads `GITHUB_TOKEN` from the environment). The `setup_github_token` function is called again at each `run-attempt`, but it reads from the file directly, so the credential helper is reconfigured correctly.
-**Ideal fix:** Verify the credential helper reconfiguration in `run_claude_attempt → setup_github_token` correctly picks up the refreshed token from `/secrets/github-token` on each attempt. If not, rewrite the watcher to update the credential helper config file instead.
-
 ## Architecture Debt
 
-### 6. Dockerfile installs tools based on historical command analysis
+### 5. Dockerfile installs tools based on historical command analysis
 
 **Severity:** Low
 **Location:** `Dockerfile` (comment block lines 4-11)
 **Context:** The toolchain selection is based on a one-time analysis of 1,935 commands across 6 worktrees. As Claude's tool usage evolves, the installed toolchain may drift from actual needs, growing the image size unnecessarily or missing newly needed tools.
 **Ideal fix:** Implement periodic command usage auditing and update the Dockerfile accordingly.
 
-### 7. No image versioning strategy
+### 6. No image versioning strategy
 
 **Severity:** Low
 **Location:** `scripts/build-worker-image.sh`
@@ -100,6 +92,10 @@ Initially migrated from `--print` mode to interactive mode with Docker attach st
 ### MCP Server Permission Errors (2026-02-19)
 
 Pre-installed MCP server packages (`@upstash/context7-mcp`, `@sentry/mcp-server`, `@playwright/mcp`) globally via `npm install -g` in the Dockerfile. On Alpine, `npx -y <package>` downloads to a temp directory with `noexec` permissions, causing "Permission denied" at MCP startup. Global installation puts binaries in `/usr/local/bin` with proper execute permissions; `npx` finds the global install and skips the download.
+
+### INT-684: Token Refresh Propagation Fix (2026-03-06)
+
+Removed the broken background token watcher (subshell `export` never propagated to parent/child processes). Rewrote the git credential helper to read `/secrets/github-token` directly on each git operation instead of expanding `${GITHUB_TOKEN}` from the environment. Added a `gh` CLI wrapper at `/usr/local/bin/gh` that re-reads the token file before each invocation. Token freshness is now fully file-based — no background polling needed.
 
 ### Persistent pnpm Store via Host Mount (2026-02-19)
 

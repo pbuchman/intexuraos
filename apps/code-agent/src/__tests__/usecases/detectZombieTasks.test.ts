@@ -42,7 +42,6 @@ describe('detectZombieTasks', () => {
   let useCase: ReturnType<typeof createDetectZombieTasksUseCase>;
   let findZombieTasksMock: MockedFunction<(staleThreshold: Date) => Promise<ReturnType<typeof ok>>>;
   let updateMock: MockedFunction<(taskId: string, input: unknown) => Promise<unknown>>;
-
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-01T12:00:00Z'));
@@ -155,6 +154,66 @@ describe('detectZombieTasks', () => {
       expect(result.error).toBeInstanceOf(Error);
       expect(result.error.message).toBe('Query failed');
     }
+  });
+
+  describe('PR task lock cleanup', () => {
+    it('returns locksToCleanup for zombie PR task', async () => {
+      const zombieTask = createFakeCodeTask({
+        id: 'zombie-pr-task',
+        status: 'running',
+        repository: 'org/repo',
+        prNumber: 42,
+      });
+      findZombieTasksMock.mockResolvedValue(ok([zombieTask]));
+      updateMock.mockResolvedValue(ok({ ...zombieTask, status: 'interrupted' as const }));
+
+      const result = await useCase();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.interrupted).toBe(1);
+        expect(result.value.locksToCleanup).toEqual([
+          { repository: 'org/repo', prNumber: 42 },
+        ]);
+      }
+    });
+
+    it('returns empty locksToCleanup for zombie non-PR task', async () => {
+      const zombieTask = createFakeCodeTask({
+        id: 'zombie-non-pr-task',
+        status: 'running',
+      });
+      findZombieTasksMock.mockResolvedValue(ok([zombieTask]));
+      updateMock.mockResolvedValue(ok({ ...zombieTask, status: 'interrupted' as const }));
+
+      const result = await useCase();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.interrupted).toBe(1);
+        expect(result.value.locksToCleanup).toEqual([]);
+      }
+    });
+
+    it('returns empty locksToCleanup for zombie follow-up task (has parentTaskId)', async () => {
+      const zombieTask = createFakeCodeTask({
+        id: 'zombie-followup-task',
+        status: 'running',
+        repository: 'org/repo',
+        prNumber: 42,
+        parentTaskId: 'parent-task-123',
+      });
+      findZombieTasksMock.mockResolvedValue(ok([zombieTask]));
+      updateMock.mockResolvedValue(ok({ ...zombieTask, status: 'interrupted' as const }));
+
+      const result = await useCase();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.interrupted).toBe(1);
+        expect(result.value.locksToCleanup).toEqual([]);
+      }
+    });
   });
 
   afterEach(() => {

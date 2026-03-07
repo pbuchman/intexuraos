@@ -18,12 +18,10 @@ export function formatSpeechmaticsError(rawError: string): string {
   try {
     const parsed = JSON.parse(rawError) as SpeechmaticsErrorResponse;
 
-    // Extract message field
     if (parsed.message !== undefined && parsed.message.length > 0) {
       return parsed.message;
     }
 
-    // Fallback to detail field
     if (parsed.detail !== undefined && parsed.detail.length > 0) {
       return parsed.detail;
     }
@@ -31,7 +29,6 @@ export function formatSpeechmaticsError(rawError: string): string {
     // Not JSON, continue to string parsing
   }
 
-  // Handle common error patterns in plain text
   if (rawError.includes('Language identification')) {
     const match = /Language identification[^.]+/.exec(rawError);
     if (match !== null) {
@@ -63,7 +60,6 @@ export function formatSpeechmaticsError(rawError: string): string {
     return 'Could not connect to transcription service';
   }
 
-  // Truncate very long error messages
   if (rawError.length > 100) {
     return rawError.slice(0, 97) + '...';
   }

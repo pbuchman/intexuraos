@@ -13,6 +13,7 @@ import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
@@ -34,6 +35,46 @@ export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Pro
 export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
 }
+
+const linearIssueForDisplaySchema = {
+  type: 'object',
+  properties: {
+    identifier: { type: 'string' },
+    title: { type: 'string' },
+    state: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        type: { type: 'string' },
+      },
+      required: ['name', 'type'],
+    },
+    priority: { type: 'number' },
+    assignee: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+      },
+    },
+    labels: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+        },
+        required: ['id', 'name'],
+      },
+    },
+    url: { type: 'string' },
+    commentCount: { type: 'number' },
+    lastCommentAt: { type: 'string', nullable: true },
+  },
+  required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
+} as const;
 
 // Response schema for created task
 const codeTaskSchema = {
@@ -60,9 +101,10 @@ const codeTaskSchema = {
     actionId: { type: 'string', nullable: true },
     approvalEventId: { type: 'string', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
-    linearIssueTitle: { type: 'string', nullable: true },
-    linearIssueUrl: { type: 'string', nullable: true },
-    linearFallback: { type: 'boolean', nullable: true },
+    linearIssue: {
+      ...linearIssueForDisplaySchema,
+      nullable: true,
+    },
     agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
     implementationTaskId: { type: 'string' },
     parentTaskId: { type: 'string' },
@@ -158,9 +200,6 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearFallback?: boolean;
   agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
@@ -207,9 +246,6 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearFallback?: boolean;
   agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
@@ -260,15 +296,6 @@ function taskToApiResponse(task: {
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearIssueUrl !== undefined && { linearIssueUrl: task.linearIssueUrl }),
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.linearFallback !== undefined && { linearFallback: task.linearFallback }),
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.agentType !== undefined && { agentType: task.agentType }),
@@ -372,6 +399,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               },
             },
             required: ['success', 'error'],
+          },
+          400: {
+            description: 'Invalid request — prompt failed injection sanitization',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
           },
           409: {
             description: 'Duplicate task (deduplication triggered)',
@@ -543,6 +586,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         if (error.code === 'worker_unavailable') {
           return await reply.fail('MISCONFIGURED', 'Worker unavailable');
+        }
+
+        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
+        if (error.code === 'validation_error') {
+        /* v8 ignore stop @preserve */
+          return await reply.fail('INVALID_REQUEST', error.message);
         }
 
         return await reply.fail('INTERNAL_ERROR', error.message);
@@ -1006,7 +1055,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
       workerLocation?: string;
       linearIssueId?: string;
-      linearIssueTitle?: string;
     };
   }>(
     '/code/submit',
@@ -1024,7 +1072,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
             workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
-            linearIssueTitle: { type: 'string' },
           },
           required: ['prompt'],
         },
@@ -1160,7 +1207,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
         workerLocation?: string;
         linearIssueId?: string;
-        linearIssueTitle?: string;
       };
 
       /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
@@ -1214,9 +1260,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         traceId: string;
         webhookSecret: string;
         linearIssueId?: string;
-        linearIssueTitle?: string;
-        linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
-        linearFallback?: boolean;
         agentType: 'planning' | 'execution';
       } = {
         id: taskId,
@@ -1238,20 +1281,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (issueResult.linearIssueId !== undefined) {
       /* v8 ignore stop @preserve */
         createInput.linearIssueId = issueResult.linearIssueId;
-      }
-      // Save linearIssueTitle (always present in result, even in fallback mode)
-      createInput.linearIssueTitle = issueResult.linearIssueTitle;
-      // Save linearIssueType if available (from LLM classification)
-      /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-      if (issueResult.linearIssueType !== undefined) {
-      /* v8 ignore stop @preserve */
-        createInput.linearIssueType = issueResult.linearIssueType;
-      }
-      // Save fallback flag
-      /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-      if (issueResult.linearFallback) {
-      /* v8 ignore stop @preserve */
-        createInput.linearFallback = true;
       }
       const createResult = await codeTaskRepo.create(createInput);
 
@@ -1517,7 +1546,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo } = getServices();
+      const { codeTaskRepo, linearAgentClient } = getServices();
       /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
@@ -1565,8 +1594,51 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', listResult.error.message);
       }
 
+      const apiTasks = listResult.value.tasks.map(taskToApiResponse);
+      const linearIssueIds = Array.from(
+        new Set(
+          listResult.value.tasks
+            .map((task) => task.linearIssueId)
+            .filter((issueId): issueId is string => issueId !== undefined)
+        )
+      );
+
+      let hydratedIssuesByIdentifier = new Map<string, {
+        identifier: string;
+        title: string;
+        state: { name: string; type: string };
+        priority: number;
+        assignee: { id: string; name: string } | null;
+        labels: Array<{ id: string; name: string }>;
+        url: string;
+        commentCount: number;
+        lastCommentAt: string | null;
+      }>();
+      if (linearIssueIds.length > 0) {
+        const linearIssuesResult = await linearAgentClient.fetchIssuesForDisplay({
+          userId,
+          identifiers: linearIssueIds,
+        });
+
+        if (linearIssuesResult.ok) {
+          hydratedIssuesByIdentifier = new Map(
+            linearIssuesResult.value.map((issue) => [issue.identifier, issue])
+          );
+        } else {
+          request.log.warn(
+            { userId, error: linearIssuesResult.error, issueCount: linearIssueIds.length },
+            'Failed to hydrate Linear issues for code task list'
+          );
+        }
+      }
+
       return await reply.ok({
-        tasks: listResult.value.tasks.map(taskToApiResponse),
+        tasks: apiTasks.map((task) => ({
+          ...task,
+          ...(task.linearIssueId !== undefined && hydratedIssuesByIdentifier.has(task.linearIssueId)
+            ? { linearIssue: hydratedIssuesByIdentifier.get(task.linearIssueId) }
+            : {}),
+        })),
         /* v8 ignore start -- ts-type: spread operator with optional property creates type narrowing branch @preserve */
         ...(listResult.value.nextCursor !== undefined && { nextCursor: listResult.value.nextCursor }),
         /* v8 ignore stop @preserve */
@@ -1616,8 +1688,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   dedupKey: { type: 'string' },
                   callbackReceived: { type: 'boolean' },
                   linearIssueId: { type: 'string' },
-                  linearIssueTitle: { type: 'string' },
-                  linearFallback: { type: 'boolean' },
+                  linearIssue: {
+                    ...linearIssueForDisplaySchema,
+                    nullable: true,
+                  },
                   agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
                   implementationTaskId: { type: 'string' },
                   parentTaskId: { type: 'string' },
@@ -1657,43 +1731,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     },
                   },
                   statusSummary: { type: 'object', nullable: true },
-                  linearIssue: {
-                    type: 'object',
-                    nullable: true,
-                    properties: {
-                      identifier: { type: 'string' },
-                      title: { type: 'string' },
-                      state: {
-                        type: 'object',
-                        properties: {
-                          name: { type: 'string' },
-                          type: { type: 'string' },
-                        },
-                      },
-                      priority: { type: 'number' },
-                      assignee: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          id: { type: 'string' },
-                          name: { type: 'string' },
-                        },
-                      },
-                      labels: {
-                        type: 'array',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            id: { type: 'string' },
-                            name: { type: 'string' },
-                          },
-                        },
-                      },
-                      url: { type: 'string' },
-                      commentCount: { type: 'number' },
-                      lastCommentAt: { type: 'string', nullable: true },
-                    },
-                  },
                 },
               },
             },
@@ -2596,6 +2633,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', 'Failed to detect zombie tasks');
       }
 
+      // Best-effort: clean up PR task locks for interrupted zombie tasks
+      for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by !result.ok guard above
+        await deletePRTaskLock(getServices().firestore, lock.repository, lock.prNumber, request.log);
+      }
+
       return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 2594
     }
   );
@@ -2738,6 +2780,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
         { taskId, nonce, userId }
       );
+
+      if (result.ok) {
+        for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by result.ok check
+          await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+        }
+      }
 
       if (!result.ok) {
         const error = result.error;
@@ -3873,6 +3921,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (!result.ok) {
         request.log.error({ error: result.error }, 'Drain queue failed');
         return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      for (const lock of result.value.locksToCleanup ?? []) { // @allow-result-access -- narrowed by !result.ok guard above
+        await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
       }
 
       return await reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above

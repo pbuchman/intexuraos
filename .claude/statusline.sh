@@ -183,6 +183,9 @@ rst() { if [ "$use_color" -eq 1 ]; then printf '\033[0m'; fi; }
 git_branch=""
 if git rev-parse --git-dir >/dev/null 2>&1; then
   git_branch=$(git branch --show-current 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+  if [ ${#git_branch} -gt 20 ]; then
+    git_branch="${git_branch:0:17}..."
+  fi
 fi
 
 # ---- context window calculation (native) ----

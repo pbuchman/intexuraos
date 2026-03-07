@@ -60,21 +60,12 @@ const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
   archived: { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-500 dark:text-slate-500', label: 'Archived', icon: Archive },
 };
 
-// --- Badge style lookup maps ---
-
-const ISSUE_TYPE_STYLES: Record<string, string> = {
-  feature: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
-  bug: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
-  refactor: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
-};
-
 const LINEAR_STATE_STYLES: Record<string, string> = {
   completed: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300',
   started: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
   cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
 };
 
-const DEFAULT_BADGE_STYLE = 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
 const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
 
 const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
@@ -286,6 +277,8 @@ export function CodeTaskViewPage(): React.JSX.Element {
         onShowDeleteConfirm={(): void => { setShowDeleteConfirm(true); }}
         onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); clearDeleteError(); }}
         onConfirmDelete={(): void => { void handleDelete(); }}
+        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
       />
     </Layout>
   );
@@ -301,14 +294,14 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
     <div className="mb-6">
       <div className="min-h-[2.5rem] mt-1 flex flex-wrap items-center gap-2">
         {task.linearIssueId !== undefined ? (
-          (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+          task.linearIssue?.url !== undefined ? (
             <a
-              href={task.linearIssueUrl ?? task.linearIssue?.url}
+              href={task.linearIssue.url}
               target="_blank"
               rel="noopener noreferrer"
               className="text-lg font-medium text-blue-600 hover:underline dark:text-blue-400"
             >
-              {task.linearIssue?.identifier ?? task.linearIssueId}
+              {task.linearIssue.identifier}
             </a>
           ) : (
             <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
@@ -317,7 +310,7 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
           )
         ) : null}
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          {task.linearIssue?.title ?? task.linearIssueTitle ?? 'Code Task'}
+          {task.linearIssue?.title ?? 'Code Task'}
         </h2>
         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}>
           <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
@@ -345,14 +338,6 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
           {task.workerLocation}
         </span>
-
-        {task.linearIssueType !== undefined ? (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            ISSUE_TYPE_STYLES[task.linearIssueType] ?? DEFAULT_BADGE_STYLE
-          }`}>
-            {task.linearIssueType}
-          </span>
-        ) : null}
         {task.linearIssue?.state !== undefined ? (
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
             LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE
@@ -412,6 +397,32 @@ function isActiveStatus(status: CodeTaskStatus): boolean {
   return status === 'queued' || status === 'dispatched' || status === 'running';
 }
 
+function GitHubButton({ href }: { href: string }): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
+    >
+      GitHub
+    </a>
+  );
+}
+
+function LinearButton({ href }: { href: string }): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
+    >
+      Linear
+    </a>
+  );
+}
+
 function TaskActions({
   isActive, cancelling, cancelError, onCancel,
   isRetryable, retrying, retryError,
@@ -419,6 +430,7 @@ function TaskActions({
   onRetry,
   deleting, deleteError, showDeleteConfirm,
   onShowDeleteConfirm, onCancelDeleteConfirm, onConfirmDelete,
+  prUrl, linearIssueUrl,
 }: {
   isActive: boolean;
   cancelling: boolean;
@@ -439,21 +451,27 @@ function TaskActions({
   onShowDeleteConfirm: () => void;
   onCancelDeleteConfirm: () => void;
   onConfirmDelete: () => void;
+  prUrl?: string;
+  linearIssueUrl?: string;
 }): React.JSX.Element | null {
-  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null) return null;
+  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null && prUrl === undefined && linearIssueUrl === undefined) return null;
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3">
+    <div className="mt-4 flex flex-wrap items-stretch gap-3">
       {isActive ? (
-        <Button
-          variant="danger"
-          onClick={(): void => { void onCancel(); }}
-          disabled={cancelling}
-          isLoading={cancelling}
-        >
-          <StopCircle className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Cancel Task</span>
-        </Button>
+        <>
+          <Button
+            variant="danger"
+            onClick={(): void => { void onCancel(); }}
+            disabled={cancelling}
+            isLoading={cancelling}
+          >
+            <StopCircle className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Cancel Task</span>
+          </Button>
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+        </>
       ) : null}
       {isRetryable ? (
         showDeleteConfirm ? (
@@ -526,6 +544,8 @@ function TaskActions({
                 </div>
               ) : null}
             </div>
+            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+            {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
             <button
               type="button"
               onClick={onShowDeleteConfirm}
@@ -537,6 +557,12 @@ function TaskActions({
             </button>
           </>
         )
+      ) : null}
+      {!isActive && !isRetryable ? (
+        <>
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+        </>
       ) : null}
       {cancelError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{cancelError}</p>
