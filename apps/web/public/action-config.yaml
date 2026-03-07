@@ -379,3 +379,19 @@ types:
           value: [completed, failed, rejected]
 
       - action: delete
+
+  code:
+    actions:
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete

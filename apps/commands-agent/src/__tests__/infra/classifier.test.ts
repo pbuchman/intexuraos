@@ -258,14 +258,14 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
-    it('rejects title exceeding 50 characters', async () => {
-      const longTitle = 'A'.repeat(200);
+    it('rejects title exceeding 200 characters', async () => {
+      const longTitle = 'A'.repeat(201);
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 0.9, longTitle))));
 
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
-      // Zod validation fails for title > 50 characters, returns default "note" classification
+      // Zod validation fails for title > 200 characters, returns default "note" classification
       expect(classificationResult.type).toBe('note');
       expect(classificationResult.confidence).toBe(0.3);
       expect(classificationResult.title).toBe('Unknown');
