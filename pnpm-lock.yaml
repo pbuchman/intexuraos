@@ -1945,6 +1945,37 @@ importers:
         specifier: ^4.0.16
         version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
+  workers/transcription:
+    dependencies:
+      '@google-cloud/functions-framework':
+        specifier: ^3.0.0
+        version: 3.5.1
+      '@google-cloud/storage':
+        specifier: ^7.14.0
+        version: 7.18.0(encoding@0.1.13)
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../../packages/common-core
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../../packages/infra-pubsub
+      '@speechmatics/batch-client':
+        specifier: ^5.1.0
+        version: 5.1.0
+      pino:
+        specifier: ^9.6.0
+        version: 9.14.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.5
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
+
   workers/vm-lifecycle:
     dependencies:
       '@google-cloud/compute':
