@@ -30,7 +30,11 @@ export async function backLinkPlanningTask(
 
   try {
     const planningTaskResult = await codeTaskRepo.findPlannedTaskByLinearIssue(task.linearIssueId);
-    if (planningTaskResult.ok && planningTaskResult.value !== null) {
+    if (!planningTaskResult.ok) {
+      logger.warn({ error: planningTaskResult.error, executionTaskId: task.id }, 'Failed to find planning task for back-link');
+      return;
+    }
+    if (planningTaskResult.value !== null) {
       const backLinkResult = await codeTaskRepo.update(planningTaskResult.value.id, {
         implementationTaskId: task.id,
       });
