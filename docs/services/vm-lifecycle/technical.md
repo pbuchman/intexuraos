@@ -1,4 +1,4 @@
-# VM Lifecycle Worker - Technical Reference
+# VM Lifecycle Worker -- Technical Reference
 
 ## Overview
 
@@ -212,8 +212,11 @@ The function polls the health endpoint during the grace period. It stops waiting
 
 | Commit     | Description                                          | Date       |
 | ---------- | ---------------------------------------------------- | ---------- |
+| `6ba7ba00` | Fix test type errors from tsconfig check expansion   | 2026-03-03 |
+| `b3f34d85` | Release v3.1.0                                       | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                       | 2026-02-19 |
 | `b82522d2` | Fix Cloud Functions deployment with esbuild bundling | 2026-02-01 |
-| `f10ebdbf` | Fix empty error objects in log output (INT-464)      | 2026-01-31 |
+| `f10ebdbf` | Fix empty error objects in log output (INT-464)      | 2026-02-01 |
 | `5aa3e1bd` | Enable strict 100% coverage enforcement (INT-427)    | 2026-01-29 |
 | `7a90db67` | Fix vitest v4 migration and improve branch coverage  | 2026-01-28 |
 | `cd70bc3f` | Add Cloud Functions for VM lifecycle (INT-369/370)   | 2026-01-25 |
@@ -240,44 +243,47 @@ The function polls the health endpoint during the grace period. It stops waiting
 
 ## Infrastructure
 
-| Resource               | Type            | Value                         |
-| ---------------------- | --------------- | ----------------------------- |
-| Cloud Function (start) | Gen2 HTTP       | `intexuraos-vm-start-{env}`   |
-| Cloud Function (stop)  | Gen2 HTTP       | `intexuraos-vm-stop-{env}`    |
-| Entry points           | -               | `startVm`, `stopVm`           |
-| Runtime                | -               | Node.js 22                    |
-| Memory (each)          | -               | 256 MB                        |
-| Timeout (each)         | -               | 120 seconds                   |
-| Scheduler (start)      | Cloud Scheduler | `0 7 * * 1-5` (Europe/Warsaw) |
-| Scheduler (stop)       | Cloud Scheduler | `0 23 * * *` (Europe/Warsaw)  |
-| Service account        | -               | `intexuraos-functions-{env}`  |
-| Source bucket object   | -               | `vm-lifecycle/function.zip`   |
+| Resource               | Type            | Value                          |
+| ---------------------- | --------------- | ------------------------------ |
+| Cloud Function (start) | Gen2 HTTP       | `intexuraos-vm-start-{env}`    |
+| Cloud Function (stop)  | Gen2 HTTP       | `intexuraos-vm-stop-{env}`     |
+| Entry points           | -               | `startVm`, `stopVm`            |
+| Runtime                | -               | Node.js 22                     |
+| Memory (each)          | -               | 256 MB                         |
+| Timeout (each)         | -               | 120 seconds                    |
+| Scheduler (start)      | Cloud Scheduler | `0 7 * * 1-5` (Europe/Warsaw)  |
+| Scheduler (stop)       | Cloud Scheduler | `0 23 * * *` (Europe/Warsaw)   |
+| Service account        | -               | `intexuraos-functions-{env}`   |
+| Source bucket object   | -               | `vm-lifecycle/function.zip`    |
+| Scheduler retry        | -               | 3 retries, 5-30s backoff       |
 
 ## Gotchas
 
-**Shared zip, separate functions** - Both `startVm` and `stopVm` are deployed from the same `function.zip` but registered as separate Cloud Functions with different entry points. Updating one redeploys both.
+**Shared zip, separate functions** -- Both `startVm` and `stopVm` deploy from the same `function.zip` but register as separate Cloud Functions with different entry points. Updating one redeploys both.
 
-**Timeout budget** - The 120-second Cloud Function timeout must accommodate health polling (up to 3 minutes) and VM state transitions. In practice, cold starts are faster, but slow boots can cause the function to timeout before the health check passes.
+**Timeout budget mismatch** -- The 120-second Cloud Function timeout is shorter than the 3-minute health poll timeout. Slow boots can cause the function to timeout before the health check passes. The health poll continues internally until the function runtime is killed.
 
-**Orchestrator optional** - If the orchestrator's shutdown endpoint is unreachable, the stop function waits 2 minutes then proceeds with forced shutdown. This is by design to avoid blocking VM shutdown on an unresponsive application.
+**Orchestrator optional** -- If the orchestrator's shutdown endpoint is unreachable, the stop function waits 2 minutes then proceeds with forced shutdown. This prevents blocking VM shutdown on an unresponsive application.
 
-**esbuild bundling required** - Workers use `build-service.mjs` with esbuild instead of plain `tsc`. This bundles `@intexuraos/*` workspace packages into the output zip. Cloud Functions npm runtime cannot resolve `workspace:*` references, so plain TypeScript compilation breaks deployment.
+**esbuild bundling required** -- Workers use `build-service.mjs` with esbuild instead of plain `tsc`. This bundles `@intexuraos/*` workspace packages into the output zip. Cloud Functions npm runtime cannot resolve `workspace:*` references, so plain TypeScript compilation breaks deployment.
 
-**Auth header format** - The function expects `X-Internal-Auth: Bearer <token>`, not the standard `Authorization` header. This matches the IntexuraOS internal auth pattern.
+**Auth header format** -- The function expects `X-Internal-Auth: Bearer <token>`, not the standard `Authorization` header. This matches the IntexuraOS internal auth pattern used across all services.
+
+**State poll vs health poll** -- The `waitForState` function uses a hardcoded 5-second poll interval, separate from the `HEALTH_POLL_INTERVAL_MS` config (10 seconds). These two polling loops serve different purposes: state polling checks the Compute API for VM status transitions; health polling checks the application HTTP endpoint for readiness.
 
 ## File Structure
 
 ```
 workers/vm-lifecycle/src/
   index.ts         - HTTP function handlers, auth validation, registers startVm and stopVm
-  start-vm.ts      - VM startup logic with health polling
-  stop-vm.ts       - Graceful shutdown with task completion wait
-  config.ts        - VM configuration constants and env var defaults
-  logger.ts        - Pino logger with error serialization
+  start-vm.ts      - VM startup logic with health polling (143 lines)
+  stop-vm.ts       - Graceful shutdown with task completion wait (117 lines)
+  config.ts        - VM configuration constants and env var defaults (15 lines)
+  logger.ts        - Pino logger with error serialization (22 lines)
   __tests__/
-    index.test.ts
-    start-vm.test.ts
-    stop-vm.test.ts
-    config.test.ts
-    logger.test.ts
+    index.test.ts      - Auth and HTTP method validation tests
+    start-vm.test.ts   - Start flow tests (running, stopped, unhealthy, errors)
+    stop-vm.test.ts    - Stop flow tests (tasks, orchestrator, errors)
+    config.test.ts     - Config defaults and env var override tests
+    logger.test.ts     - Logger initialization tests
 ```

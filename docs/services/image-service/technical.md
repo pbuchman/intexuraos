@@ -99,20 +99,23 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                  | Date       |
-| ---------- | ------------------------------------------------------------ | ---------- |
-| `b3f34d85` | Release v3.1.0                                               | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                               | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability              | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration across all services      | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention         | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback  | 2026-02-15 |
-| `d5fbb354` | Fix start:local to use tsx instead of node                   | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local       | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform Zai fallback        | 2026-02-09 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)            | 2026-02-01 |
-| `c3198407` | Fix all 132 response contract violations across codebase     | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps       | 2026-01-30 |
+| Commit     | Description                                                           | Date       |
+| ---------- | --------------------------------------------------------------------- | ---------- |
+| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks             | 2026-03-02 |
+| `7fbf7668` | Remove stale fields from test fixtures per code review                | 2026-02-27 |
+| `8fb90669` | Align thumbnail output contract with consumed parser fields (INT-605) | 2026-02-27 |
+| `b3f34d85` | Release v3.1.0                                                        | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                                        | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                       | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration across all services               | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention                  | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback           | 2026-02-15 |
+| `d5fbb354` | Fix start:local to use tsx instead of node                            | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local                | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform Zai fallback                 | 2026-02-09 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                     | 2026-02-01 |
+| `c3198407` | Fix all 132 response contract violations across codebase              | 2026-01-30 |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps                | 2026-01-30 |
 
 ## API Endpoints
 
@@ -155,18 +158,15 @@ sequenceDiagram
 | `visualSummary`  | `string`                    | One sentence describing the visual metaphor     |
 | `prompt`         | `string`                    | Image generation prompt (80-180 words)          |
 | `negativePrompt` | `string`                    | What to avoid (20-80 words)                     |
-| `parameters`     | `ThumbnailPromptParameters` | Generation settings (aspect ratio, style, etc.) |
+| `parameters`     | `ThumbnailPromptParameters` | Generation settings (framing, style, people)    |
 
 ### ThumbnailPromptParameters
 
-| Field             | Type           | Values                                                           |
-| ----------------- | -------------- | ---------------------------------------------------------------- |
-| `aspectRatio`     | `string`       | `"16:9"` (fixed)                                                 |
-| `framing`         | `string`       | LLM-generated framing description                                |
-| `textOnImage`     | `string`       | `"none"` (fixed)                                                 |
-| `realism`         | `RealismStyle` | `"photorealistic"`, `"cinematic illustration"`, `"clean vector"` |
-| `people`          | `string`       | LLM-generated people description                                 |
-| `logosTrademarks` | `string`       | `"none"` (fixed)                                                 |
+| Field     | Type           | Values                                                           |
+| --------- | -------------- | ---------------------------------------------------------------- |
+| `framing` | `string`       | LLM-generated framing description                                |
+| `realism` | `RealismStyle` | `"photorealistic"`, `"cinematic illustration"`, `"clean vector"` |
+| `people`  | `string`       | LLM-generated people description                                 |
 
 ## Supported Models
 
@@ -267,6 +267,8 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 **Delete endpoint resilience**: The DELETE endpoint attempts both GCS deletion and Firestore deletion independently. If either fails, it logs the error but still returns `{ deleted: true }` to the caller.
 
+**Prompt parameters trimmed (INT-605)**: The `ThumbnailPromptParameters` type only contains `framing`, `realism`, and `people`. Previously documented fields `aspectRatio`, `textOnImage`, and `logosTrademarks` were removed from the consumed contract. The LLM prompt may still produce them, but the parser discards any fields not in the validated schema.
+
 ## File Structure
 
 ```
@@ -306,6 +308,13 @@ apps/image-service/src/
 ```
 
 ## Migration Notes
+
+### INT-605: Thumbnail Output Contract Alignment (2026-02-27)
+
+- `ThumbnailPromptParameters` trimmed to 3 fields: `framing`, `realism`, `people`
+- Removed `aspectRatio`, `textOnImage`, `logosTrademarks` from the consumed interface
+- Parser (`parseResponse.ts`) only validates the 3 consumed fields
+- Test fixtures updated to remove stale fields in `7fbf7668`
 
 ### Release v3.1.0 (2026-02-22)
 

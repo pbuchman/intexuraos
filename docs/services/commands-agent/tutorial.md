@@ -165,7 +165,7 @@ More Polish examples:
 curl -X POST https://commands-agent.intexuraos.com/commands \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"text": "stwórz zadanie: kupic mleko", "source": "pwa-shared"}'
+  -d '{"text": "stworz zadanie: kupic mleko", "source": "pwa-shared"}'
 # -> type: todo, confidence: 0.90+
 
 # Research in Polish
@@ -323,6 +323,7 @@ Only works for status: `classified`.
 | Status `failed`                    | LLM error or actions-agent  | Check logs, delete and retry                            |
 | Duplicate command (isNew: false)   | Same externalId reprocessed | Normal idempotency behavior                             |
 | 401 Unauthorized                   | Expired or invalid token    | Refresh Auth0 access token                              |
+| Classification falls back to note  | Title exceeded 200 chars    | Check LLM prompt; long titles are truncated by Zod      |
 
 ---
 
@@ -387,4 +388,4 @@ curl -X POST .../commands -d '{"text": "Test", "source": "pwa-shared", "external
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

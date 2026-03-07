@@ -6,7 +6,7 @@ Machine-readable reference for AI agents interacting with the code-agent service
 
 ```yaml
 name: code-agent
-version: 3.1.0
+version: 3.2.0
 port: 8128
 framework: fastify
 runtime: node22
@@ -32,7 +32,7 @@ interface ProcessCodeActionRequest {
   approvalEventId: string;
   userId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
@@ -43,14 +43,17 @@ interface ProcessCodeActionRequest {
 // Public (from web UI)
 interface SubmitCodeTaskRequest {
   prompt: string; // 1-100000 chars
-  workerType?: 'opus' | 'auto' | 'glm'; // default: 'auto'
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus'; // default: 'auto'
   workerLocation?: string; // 1-32 chars
   linearIssueId?: string;
   linearIssueTitle?: string;
 }
 ```
 
-All prompts pass through `sanitizePrompt()` before reaching the worker. This strips AWS keys, OpenAI/Anthropic API keys, Stripe secrets, GitHub tokens, Slack tokens, Bearer JWTs, PEM private keys, and secret env var assignments. Sensitive URL query parameters are redacted.
+All prompts pass through two sanitization layers before reaching the worker:
+
+1. **Secret redaction** (`sanitizePrompt`): Strips AWS keys, OpenAI/Anthropic API keys, Stripe secrets, GitHub tokens, Slack tokens, Bearer JWTs, PEM private keys, and secret env var assignments. Sensitive URL query parameters are redacted.
+2. **Injection prevention** (`sanitizePromptForInjection`): Rejects system override markers (`[SYSTEM]`, `<|im_start|>`), strips control characters, and blocks base64 blobs over 3000 characters.
 
 ### Task Lifecycle
 
@@ -60,11 +63,13 @@ All prompts pass through `sanitizePrompt()` before reaching the worker. This str
 type TaskStatus =
   | 'dispatched'
   | 'running'
+  | 'queued'       // waiting for worker capacity (INT-619)
   | 'planned'
   | 'implemented'
   | 'failed'
   | 'interrupted'
-  | 'cancelled';
+  | 'cancelled'
+  | 'archived';    // original archived after retry (INT-711)
 
 // Transitions:
 // dispatched -> running (on first log chunk)
@@ -72,7 +77,10 @@ type TaskStatus =
 // dispatched | running -> cancelled (on cancel)
 // running -> planned | implemented | failed | interrupted (on webhook)
 // dispatched | running -> interrupted (zombie detection after 30 min)
+// queued -> dispatched (drain queue picks up task)
+// queued -> failed (TTL expired or queue full)
 // planned | implemented | failed -> running (on sendTaskMessage with 'resumed' action)
+// failed | cancelled | interrupted -> archived (when task is retried, INT-711)
 ```
 
 ### Task Completion Webhook
@@ -89,6 +97,13 @@ interface TaskCompleteWebhook {
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
+    comment_replied?: boolean;
+    planning_outcome_label?: 'planned' | 'unclear';
+    planning_linear_url?: string;
+    planning_subtask_urls?: string;
+    planning_pr_url?: string;
+    execution_outcome_label?: 'implemented';
+    execution_linear_issue_url?: string;
   };
   error?: {
     code: string;
@@ -121,10 +136,11 @@ interface RetryTaskRequest {
 }
 
 // Constraints:
-// - Original must be 'failed' or 'cancelled'
-// - 5-minute cool-off for failed tasks (cancelled bypass)
+// - Original must be 'failed', 'cancelled', or 'interrupted'
+// - 5-minute cool-off for failed tasks (cancelled/interrupted bypass)
 // - No active task on same Linear issue
 // - User must have configured workers
+// - Original task is archived (status -> 'archived')
 ```
 
 ### Task Feedback
@@ -186,6 +202,7 @@ interface SubmitToExecutionAgentResult {
 // - No existing implementationTaskId on planning task (optimistic lock)
 // - No active task on same Linear issue
 // - User must have configured workers
+// - Planning task back-linked via implementationTaskId (INT-725)
 ```
 
 ### Worker Settings
@@ -245,7 +262,7 @@ interface TurnMetrics {
 // sanitizePrompt() is applied to all prompts at every entry point.
 // Returns the sanitized string (pure function, no side effects).
 //
-// Patterns stripped:
+// Patterns stripped (layer 1 - secret redaction):
 // 1. PEM private key blocks (RSA, EC, DSA)
 // 2. AWS access key IDs (AKIA...)
 // 3. OpenAI / Anthropic API keys (sk-...)
@@ -257,6 +274,11 @@ interface TurnMetrics {
 // 9. Sensitive URL query parameters (token, api_key, apikey, access_token)
 // 10. Max length enforcement (100,000 chars)
 // 11. Whitespace normalization
+
+// sanitizePromptForInjection() (layer 2 - injection prevention):
+// Rejects: system override markers, base64 blobs > 3000 chars
+// Strips: control characters (preserves \t, \n, \r)
+// Returns: Result<string, error> -- rejects with 'empty_prompt' or 'base64_blob_detected'
 ```
 
 ### Cancel via Nonce
@@ -273,6 +295,26 @@ interface CancelTaskWithNonceRequest {
 // - Nonce must not be expired (15 min TTL)
 // - User must own the task
 // - Task must be in dispatched or running status
+```
+
+### GitHub Webhook Rules Engine
+
+```typescript
+// Domain-level rules that evaluate GitHub PR events for actionability.
+// Rules are composed in a chain; all must pass for dispatch.
+
+interface WebhookRule {
+  evaluate(event: GitHubPREvent): RuleResult;
+}
+
+// Active rules:
+// 1. ActionableEventRule - filters to supported event+action combos
+// 2. SenderWhitelistRule - only ALLOWED_BOTS + repo owner
+// 3. SkipPrefixRule - ignores @claude, @codex, @ignore prefixes
+
+// When all rules pass, WebhookDispatchService dispatches:
+// - Existing task found for PR: sendTaskMessage (queue or resume)
+// - No task found: createTaskForPR (lock-guarded, user lookup)
 ```
 
 ## Constraints
@@ -315,7 +357,7 @@ PR comment auto-dispatch only processes comments from:
 - `chatgpt-codex-connector[bot]`
 - Repository owner (matches `repository.owner.login`)
 
-All other senders are silently ignored.
+All other senders are silently ignored. Comments starting with `@claude`, `@codex`, or `@ignore` are also skipped.
 
 ## Usage Patterns
 
@@ -366,7 +408,7 @@ Authorization: Bearer <auth0-jwt>
 -> 200: { "success": true, "data": { "tasks": [...], "nextCursor": "cursor-id" } }
 ```
 
-Note: The `status` parameter accepts comma-separated values (e.g., `running,dispatched`) to filter by multiple statuses simultaneously.
+Note: The `status` parameter accepts comma-separated values (e.g., `running,dispatched`) to filter by multiple statuses simultaneously. Tasks include live-hydrated Linear issue data (state, labels, priority).
 
 ### Start execution agent implementation
 
@@ -394,7 +436,7 @@ Authorization: Bearer <auth0-jwt>
       "pullRequestNumber": 42,
       "title": "Add cursor-based pagination",
       "status": "open" | "closed" | "merged",
-      "lastActivityAt": "2026-02-19T10:00:00.000Z"
+      "lastActivityAt": "2026-03-07T10:00:00.000Z"
     }]
   }
 }
@@ -422,9 +464,9 @@ Authorization: Bearer <auth0-jwt>
       "eventType": "pull_request" | "pull_request_review" | "pull_request_review_comment" | "issue_comment" | "push",
       "action": "opened" | "synchronize" | "submitted" | "created" | null,
       "senderLogin": "username",
-      "createdAt": "2026-02-19T10:00:00.000Z",
-      "eventUrl": "https://github.com/org/repo/compare/abc...def",  // clickable link
-      "body": "Comment text or PR description (deduplicated)"        // null for non-body events
+      "createdAt": "2026-03-07T10:00:00.000Z",
+      "eventUrl": "https://github.com/org/repo/compare/abc...def",
+      "body": "Comment text or PR description (deduplicated)"
     }]
   }
 }
@@ -453,8 +495,10 @@ Authorization: Bearer <auth0-jwt>
 ### Cancel task (from web UI)
 
 ```
-POST /code/tasks/:taskId/cancel
+POST /code/cancel
 Authorization: Bearer <auth0-jwt>
+
+{ "taskId": "uuid" }
 
 -> 200: { "success": true, "data": { "cancelled": true } }
 ```
@@ -462,7 +506,7 @@ Authorization: Bearer <auth0-jwt>
 ### Cancel task (from WhatsApp via actions-agent)
 
 ```
-POST /internal/code/cancel
+POST /internal/code/cancel-with-nonce
 X-Internal-Auth: <token>
 
 {
@@ -506,7 +550,7 @@ X-Webhook-Signature: sha256=<hmac>
 {
   "taskId": "uuid",
   "attempt": 1,
-  "timestamp": "2026-02-22T10:30:00.000Z",
+  "timestamp": "2026-03-07T10:30:00.000Z",
   "cpuTimeSeconds": 42.5,
   "cpuCores": 10,
   "peakMemoryMB": 2100,
@@ -527,6 +571,18 @@ X-Webhook-Signature: sha256=<hmac>
 -> 200: { "received": true }
 ```
 
+### Drain task queue (Cloud Scheduler)
+
+```
+POST /internal/drain-queue
+X-Internal-Auth: <token>
+
+-> 200: { "success": true, "data": { "action": "dispatched", "taskId": "uuid" } }
+-> 200: { "success": true, "data": { "action": "expired", "taskId": "uuid" } }
+-> 200: { "success": true, "data": { "action": "still_busy", "taskId": "uuid" } }
+-> 200: { "success": true, "data": { "action": "empty" } }
+```
+
 ## Error Handling
 
 ### Error Response Format
@@ -545,39 +601,42 @@ All errors follow the IntexuraOS contract:
 
 ### Error Code Mapping
 
-| HTTP | Code              | When                                        |
-| ---- | ----------------- | ------------------------------------------- |
-| 401  | `UNAUTHORIZED`    | Missing or invalid auth                     |
-| 400  | `INVALID_REQUEST` | Bad request body or params                  |
-| 400  | `INVALID_WORKER`  | Worker name doesn't match configured worker |
-| 404  | `NOT_FOUND`       | Task or worker not found                    |
-| 409  | `CONFLICT`        | Deduplication triggered                     |
-| 429  | `RATE_LIMITED`    | Rate limit exceeded (see code for type)     |
-| 503  | `MISCONFIGURED`   | Worker unavailable or no workers configured |
-| 500  | `INTERNAL_ERROR`  | Unexpected server error                     |
+| HTTP | Code               | When                                        |
+| ---- | ------------------ | ------------------------------------------- |
+| 401  | `UNAUTHORIZED`     | Missing or invalid auth                     |
+| 400  | `INVALID_REQUEST`  | Bad request body or params                  |
+| 400  | `INVALID_WORKER`   | Worker name doesn't match configured worker |
+| 400  | `validation_error` | Prompt failed injection sanitization        |
+| 404  | `NOT_FOUND`        | Task or worker not found                    |
+| 409  | `CONFLICT`         | Deduplication triggered                     |
+| 429  | `RATE_LIMITED`     | Rate limit exceeded (see code for type)     |
+| 503  | `MISCONFIGURED`    | Worker unavailable or no workers configured |
+| 500  | `INTERNAL_ERROR`   | Unexpected server error                     |
 
 ## Events
 
 ### Outgoing HTTP Calls
 
-| Target        | Endpoint                                      | When                 |
-| ------------- | --------------------------------------------- | -------------------- |
-| Worker        | `POST {workerUrl}/tasks`                      | Task dispatch        |
-| Worker        | `DELETE {workerUrl}/tasks/{taskId}`           | Task cancellation    |
-| Worker        | `POST {workerUrl}/tasks/{taskId}/messages`    | Send message         |
-| Worker        | `GET {workerUrl}/health`                      | Connectivity test    |
-| linear-agent  | `POST /internal/linear/issues`                | Issue creation       |
-| linear-agent  | `PATCH /internal/linear/issues/{id}/state`    | State transition     |
-| linear-agent  | `POST /internal/linear/issues/validate`       | Issue validation     |
-| linear-agent  | `POST /internal/linear/issues/generate-title` | LLM title generation |
-| linear-agent  | `POST /internal/linear/issues/{id}/comments`  | Comment addition     |
-| actions-agent | `PATCH /internal/actions/{id}/status`         | Action status update |
+| Target        | Endpoint                                      | When                       |
+| ------------- | --------------------------------------------- | -------------------------- |
+| Worker        | `POST {workerUrl}/tasks`                      | Task dispatch              |
+| Worker        | `DELETE {workerUrl}/tasks/{taskId}`           | Task cancellation          |
+| Worker        | `POST {workerUrl}/tasks/{taskId}/messages`    | Send message               |
+| Worker        | `GET {workerUrl}/health`                      | Connectivity test          |
+| linear-agent  | `POST /internal/linear/issues`                | Issue creation             |
+| linear-agent  | `PATCH /internal/linear/issues/{id}/state`    | State transition           |
+| linear-agent  | `POST /internal/linear/issues/validate`       | Issue validation           |
+| linear-agent  | `POST /internal/linear/issues/generate-title` | LLM title generation       |
+| linear-agent  | `POST /internal/linear/issues/{id}/comments`  | Comment addition           |
+| actions-agent | `PATCH /internal/actions/{id}/status`         | Action status update       |
+| user-service  | `GET /internal/users/oauth-token`             | GitHub OAuth token         |
+| user-service  | `GET /internal/users/by-github-username`      | GitHub username resolution |
 
 ### Outgoing Pub/Sub
 
-| Topic                        | When                               | Payload                            |
-| ---------------------------- | ---------------------------------- | ---------------------------------- |
-| `intexuraos-whatsapp-send-*` | Task started, completed, or failed | WhatsApp message with task details |
+| Topic                        | When                               | Payload                                       |
+| ---------------------------- | ---------------------------------- | --------------------------------------------- |
+| `intexuraos-whatsapp-send-*` | Task started, completed, or failed | WhatsApp message with CTA URL buttons         |
 
 ### Incoming Webhooks
 

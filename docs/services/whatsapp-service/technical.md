@@ -2,7 +2,7 @@
 
 ## Overview
 
-WhatsApp-service is the integration layer between WhatsApp Business API and IntexuraOS. It receives webhooks from Meta, validates signatures, stores messages in Firestore, downloads media to GCS, tracks outbound messages for reply correlation, and publishes events via Pub/Sub for async processing. Runs on Cloud Run with auto-scaling.
+WhatsApp-service is the integration layer between WhatsApp Business API and IntexuraOS. It receives webhooks from Meta, validates signatures, stores messages in Firestore, downloads media to GCS, tracks outbound messages for reply correlation, and publishes events via Pub/Sub for async processing. Audio transcription is delegated to srt-service via event-driven architecture. Runs on Cloud Run with auto-scaling.
 
 ## Architecture
 
@@ -21,11 +21,13 @@ graph TB
     WS --> MediaStorage[GCS Storage]
 
     WS -->|command.ingest| CA[Commands Agent]
-    WS -->|linkpreview.extract| BA[Bookmarks Agent]
-    WS -->|audio.transcribe| TS[Transcription Service]
+    WS -->|linkpreview.extract| WA2[Web Agent]
+    WS -->|audio.stored| SRT[SRT Service]
     WS -->|action.approval.reply| AA[Actions Agent]
 
-    WS -->|Send text/interactive msg| WhatsApp
+    SRT -->|transcription.completed| WS
+
+    WS -->|Send text/interactive/CTA msg| WhatsApp
 ```
 
 ## Data Flow
@@ -39,7 +41,7 @@ sequenceDiagram
     participant WS as WhatsApp Service
     participant FS as Firestore
     participant PS as Pub/Sub
-    participant AA as Actions Agent
+    participant SRT as SRT Service
 
     WA->>+WS: POST /whatsapp/webhooks
     WS->>WS: Validate HMAC-SHA256 signature
@@ -55,7 +57,15 @@ sequenceDiagram
     WS->>FS: Save whatsapp_message
     WS->>FS: Update webhook_event (status=completed)
 
-    alt Button Response (Interactive) v4.0.0
+    alt Audio Message
+        WS->>PS: Publish whatsapp.audio.stored
+        SRT->>SRT: Transcribe audio asynchronously
+        SRT->>PS: Publish srt.transcription.completed
+        PS->>WS: POST /internal/.../transcription-completed
+        WS->>FS: Update message transcription state
+        WS->>WA: Send transcription result to user
+        WS->>PS: Publish command.ingest (voice)
+    else Button Response (Interactive) v4.0.0
         WS->>WA: markAsReadWithTyping (fire-and-forget)
         WS->>WS: Parse buttonId (intent:actionId)
         WS->>PS: Publish action.approval.reply (with actionId, buttonId, buttonTitle)
@@ -101,23 +111,22 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                            | Date       |
-| ---------- | ---------------------------------------------------------------------- | ---------- |
-| `b3f34d85` | Release v3.1.0                                                         | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                                         | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                        | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                    | 2026-02-16 |
-| `e60eafc1` | Rename SPEECHMATICS_API_KEY to SPEECHMATICS_APP_API_KEY                | 2026-02-15 |
-| `d7c6a061` | Add consistent icons to all WhatsApp messages                          | 2026-02-10 |
-| `fee08074` | INT-524 Add read receipt + typing indicator on button click            | 2026-02-09 |
-| `f4d60cb5` | INT-524 Fix button_reply type extraction bug in extractButtonResponse  | 2026-02-09 |
-| `090e1d9d` | INT-524 Unified interactive approval buttons (remove nonces/reactions) | 2026-02-09 |
-| `021e76bb` | Address PR review comments                                             | 2026-02-06 |
-| `86564bad` | Fix WhatsApp button_reply payload structure                            | 2026-01-28 |
-| `a9847b66` | Add WhatsApp approval buttons with nonces                              | 2026-01-27 |
-| `70ffe910` | Add verification routes and connect integration                        | 2026-01-26 |
-| `c3198407` | Fix all 132 response contract violations across codebase               | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps                 | 2026-01-30 |
+| Commit     | Description                                                       | Date       |
+| ---------- | ----------------------------------------------------------------- | ---------- |
+| `9cd1f458` | Resolve conflicts with development branch                         | 2026-03-07 |
+| `d0d38f53` | Refactor: address code review feedback for INT-738                | 2026-03-07 |
+| `55b959e6` | feat: add deep link ctaUrl to WhatsApp notifications              | 2026-03-07 |
+| `a41ca812` | feat: replace PR URL text with WhatsApp CTA URL buttons           | 2026-03-06 |
+| `9e2184ea` | test: add missing test coverage for INT-684 review                | 2026-03-06 |
+| `1a71a52e` | fix: address code review feedback for INT-684                     | 2026-03-06 |
+| `96ae9463` | INT-684: Migrate from Speechmatics to event-driven transcription  | 2026-03-06 |
+| `78214f01` | Fix critical schema gap: add planningPr fields                    | 2026-03-01 |
+| `e1c2bcc2` | Fix Implement button + planning PR lifecycle                      | 2026-03-01 |
+| `b3f34d85` | Release v3.1.0                                                    | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                                    | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                   | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                               | 2026-02-16 |
+| `e60eafc1` | Rename SPEECHMATICS_API_KEY to SPEECHMATICS_APP_API_KEY           | 2026-02-15 |
 
 ## API Endpoints
 
@@ -145,12 +154,12 @@ sequenceDiagram
 
 ### Internal Endpoints
 
-| Method | Path                                         | Description                                             | Auth         |
-| ------ | -------------------------------------------- | ------------------------------------------------------- | ------------ |
-| POST   | `/internal/whatsapp/pubsub/process-webhook`  | Process webhook or link preview extraction from Pub/Sub | Pub/Sub OIDC |
-| POST   | `/internal/whatsapp/pubsub/transcribe-audio` | Process audio transcription                             | Pub/Sub OIDC |
-| POST   | `/internal/whatsapp/pubsub/send-message`     | Send WhatsApp message                                   | Pub/Sub OIDC |
-| POST   | `/internal/whatsapp/pubsub/media-cleanup`    | Delete GCS media files                                  | Pub/Sub OIDC |
+| Method | Path                                                   | Description                                             | Auth         |
+| ------ | ------------------------------------------------------ | ------------------------------------------------------- | ------------ |
+| POST   | `/internal/whatsapp/pubsub/process-webhook`            | Process webhook or link preview extraction from Pub/Sub | Pub/Sub OIDC |
+| POST   | `/internal/whatsapp/pubsub/transcription-completed`    | Handle transcription result from srt-service            | Pub/Sub OIDC |
+| POST   | `/internal/whatsapp/pubsub/send-message`               | Send WhatsApp message (text, interactive, or CTA)       | Pub/Sub OIDC |
+| POST   | `/internal/whatsapp/pubsub/media-cleanup`              | Delete GCS media files                                  | Pub/Sub OIDC |
 
 ## Domain Models
 
@@ -191,38 +200,41 @@ Tracks sent messages for reply correlation. Uses wamid as document ID for effici
 
 Tracks phone number verification attempts with rate limiting and cooldown.
 
-| Field           | Type                                                   | Description                  |
-| --------------- | ------------------------------------------------------ | ---------------------------- |
-| `id`            | string                                                 | Unique verification ID       |
-| `userId`        | string                                                 | User requesting verification |
-| `phoneNumber`   | string                                                 | Phone number being verified  |
-| `code`          | string                                                 | 6-digit verification code    |
-| `attempts`      | number                                                 | Failed attempt count         |
-| `status`        | `pending` \                                            | `verified` \                 | `expired` \ | `max_attempts` | Verification progress |
-| `createdAt`     | string                                                 | ISO 8601 creation time       |
-| `expiresAt`     | number                                                 | Unix timestamp (10 min TTL)  |
-| `lastAttemptAt` | string \                                               | undefined                    | Last failed attempt time |
-| `verifiedAt`    | string \                                               | undefined                    | When verification succeeded |
+| Field           | Type                                                           | Description                  |
+| --------------- | -------------------------------------------------------------- | ---------------------------- |
+| `id`            | string                                                         | Unique verification ID       |
+| `userId`        | string                                                         | User requesting verification |
+| `phoneNumber`   | string                                                         | Phone number being verified  |
+| `code`          | string                                                         | 6-digit verification code    |
+| `attempts`      | number                                                         | Failed attempt count         |
+| `status`        | `pending` \                                                    | `verified` \                 | `expired` \ | `max_attempts` | Verification progress |
+| `createdAt`     | string                                                         | ISO 8601 creation time       |
+| `expiresAt`     | number                                                         | Unix timestamp (10 min TTL)  |
+| `lastAttemptAt` | string \                                                       | undefined                    | Last failed attempt time |
+| `verifiedAt`    | string \                                                       | undefined                    | When verification succeeded |
 
 ### TranscriptionState
 
-| Field     | Type                                                 | Description             |
-| --------- | ---------------------------------------------------- | ----------------------- |
-| `status`  | `pending` \                                          | `processing` \          | `completed` \ | `failed` | Transcription progress |
-| `text`    | string \                                             | null                    | Full transcribed text |
-| `summary` | string \                                             | null                    | AI-generated key points |
-| `error`   | object \                                             | null                    | Error details if failed |
+| Field         | Type                                                   | Description               |
+| ------------- | ------------------------------------------------------ | ------------------------- |
+| `status`      | `pending` \                                            | `processing` \            | `completed` \ | `failed` | Transcription progress |
+| `jobId`       | string \                                               | undefined                 | Provider job ID |
+| `text`        | string \                                               | undefined                 | Full transcribed text |
+| `summary`     | string \                                               | undefined                 | AI-generated key points |
+| `error`       | object \                                               | undefined                 | Error details if failed |
+| `startedAt`   | string \                                               | undefined                 | When processing started |
+| `completedAt` | string \                                               | undefined                 | When completed or failed |
 
 ### WebhookEvent
 
-| Field            | Type                                                                                 | Description                   |
-| ---------------- | ------------------------------------------------------------------------------------ | ----------------------------- |
-| `id`             | string                                                                               | Unique event ID               |
-| `payload`        | object                                                                               | Raw webhook payload           |
-| `signatureValid` | boolean                                                                              | Signature verification result |
-| `receivedAt`     | string                                                                               | ISO 8601 timestamp            |
-| `phoneNumberId`  | string                                                                               | WhatsApp phone number ID      |
-| `status`         | `pending` \                                                                          | `processing` \                | `completed` \ | `failed` \ | `ignored` \ | `user_unmapped` | Processing status |
+| Field            | Type                                                                                            | Description                   |
+| ---------------- | ----------------------------------------------------------------------------------------------- | ----------------------------- |
+| `id`             | string                                                                                          | Unique event ID               |
+| `payload`        | object                                                                                          | Raw webhook payload           |
+| `signatureValid` | boolean                                                                                         | Signature verification result |
+| `receivedAt`     | string                                                                                          | ISO 8601 timestamp            |
+| `phoneNumberId`  | string                                                                                          | WhatsApp phone number ID      |
+| `status`         | `pending` \                                                                                     | `completed` \                 | `failed` \ | `ignored` \ | `user_unmapped` | Processing status |
 
 ### UserMapping
 
@@ -237,24 +249,24 @@ Tracks phone number verification attempts with rate limiting and cooldown.
 
 ### Published Events
 
-| Event Type                     | Topic                       | Purpose                     |
-| ------------------------------ | --------------------------- | --------------------------- |
-| `whatsapp.webhook.process`     | `whatsapp-webhook-process`  | Async webhook processing    |
-| `whatsapp.media.cleanup`       | `whatsapp-media-cleanup`    | Media deletion              |
-| `whatsapp.audio.transcribe`    | `whatsapp-audio-transcribe` | Audio transcription trigger |
-| `whatsapp.linkpreview.extract` | `whatsapp-linkpreview`      | Link preview extraction     |
-| `command.ingest`               | `command-ingest`            | Command processing          |
-| `action.approval.reply`        | `action-approval-reply`     | Approval response (v2.0.0)  |
+| Event Type                     | Topic                      | Purpose                                    |
+| ------------------------------ | -------------------------- | ------------------------------------------ |
+| `whatsapp.webhook.process`     | `whatsapp-webhook-process` | Async webhook processing                   |
+| `whatsapp.media.cleanup`       | `whatsapp-media-cleanup`   | Media deletion                             |
+| `whatsapp.audio.stored`        | `whatsapp-audio-stored`    | Audio stored in GCS, triggers srt-service  |
+| `whatsapp.linkpreview.extract` | `whatsapp-linkpreview`     | Link preview extraction via web-agent      |
+| `command.ingest`               | `command-ingest`           | Command processing (text and voice)        |
+| `action.approval.reply`        | `action-approval-reply`    | Approval response (v2.0.0)                 |
 
 ### Subscribed Events
 
-| Event Type                     | Handler                                      |
-| ------------------------------ | -------------------------------------------- |
-| `whatsapp.webhook.process`     | `/internal/whatsapp/pubsub/process-webhook`  |
-| `whatsapp.linkpreview.extract` | `/internal/whatsapp/pubsub/process-webhook`  |
-| `whatsapp.audio.transcribe`    | `/internal/whatsapp/pubsub/transcribe-audio` |
-| `whatsapp.message.send`        | `/internal/whatsapp/pubsub/send-message`     |
-| `whatsapp.media.cleanup`       | `/internal/whatsapp/pubsub/media-cleanup`    |
+| Event Type                     | Handler                                                   |
+| ------------------------------ | --------------------------------------------------------- |
+| `whatsapp.webhook.process`     | `/internal/whatsapp/pubsub/process-webhook`               |
+| `whatsapp.linkpreview.extract` | `/internal/whatsapp/pubsub/process-webhook`               |
+| `srt.transcription.completed`  | `/internal/whatsapp/pubsub/transcription-completed`       |
+| `whatsapp.message.send`        | `/internal/whatsapp/pubsub/send-message`                  |
+| `whatsapp.media.cleanup`       | `/internal/whatsapp/pubsub/media-cleanup`                 |
 
 ### ApprovalReplyEvent (v4.0.0)
 
@@ -262,7 +274,7 @@ Tracks phone number verification attempts with rate limiting and cooldown.
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
   replyToWamid: string; // Original approval message wamid
-  replyText: string; // "yes"/"no"/"convert"/"cancel-task"/"view-task"
+  replyText: string; // "yes"/"no"/"convert"/"cancel-task"/"view-task"/"proceed-implementation"
   userId: string;
   timestamp: string;
   actionId?: string; // Extracted from buttonId or correlationId
@@ -288,47 +300,46 @@ interface ApprovalReplyEvent {
 | Service            | Purpose                       |
 | ------------------ | ----------------------------- |
 | WhatsApp Cloud API | Media download, send messages |
-| Speechmatics       | Audio transcription           |
 
 ### Internal Services
 
-| Service         | Endpoint/Topic          | Purpose                    |
-| --------------- | ----------------------- | -------------------------- |
-| actions-agent   | `action-approval-reply` | Process approval responses |
-| commands-agent  | `command-ingest`        | Command classification     |
-| bookmarks-agent | `whatsapp-linkpreview`  | Link preview extraction    |
+| Service        | Endpoint/Topic          | Purpose                                  |
+| -------------- | ----------------------- | ---------------------------------------- |
+| actions-agent  | `action-approval-reply` | Process approval responses               |
+| commands-agent | `command-ingest`        | Command classification                   |
+| web-agent      | Internal HTTP API       | Link preview Open Graph metadata         |
+| srt-service    | `whatsapp-audio-stored` | Audio transcription (event-driven)       |
 
 ## Configuration
 
-| Environment Variable                           | Required | Description                                  |
-| ---------------------------------------------- | -------- | -------------------------------------------- |
-| `INTEXURAOS_WHATSAPP_APP_SECRET`               | Yes      | WhatsApp app secret for signature validation |
-| `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`             | Yes      | Webhook verification token                   |
-| `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`             | Yes      | WhatsApp Graph API access token              |
-| `INTEXURAOS_WHATSAPP_WABA_ID`                  | Yes      | Allowed WABA IDs (comma-separated)           |
-| `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`          | Yes      | Allowed phone number IDs (comma-separated)   |
-| `INTEXURAOS_WHATSAPP_MEDIA_BUCKET`             | Yes      | GCS bucket for media storage                 |
-| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`        | Yes      | Media cleanup Pub/Sub topic                  |
-| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION` | Yes      | Media cleanup subscription                   |
-| `INTEXURAOS_SPEECHMATICS_APP_API_KEY`          | Yes      | Speechmatics API key for transcription       |
-| `INTEXURAOS_GCP_PROJECT_ID`                    | Yes      | Google Cloud project ID                      |
-| `INTEXURAOS_WEB_AGENT_URL`                     | Yes      | Web-agent URL for link preview extraction    |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`               | Yes      | Shared secret for internal endpoints         |
-| `INTEXURAOS_USER_SERVICE_URL`                  | Yes      | User service URL for user lookup             |
-| `INTEXURAOS_AUTH_JWKS_URL`                     | Yes      | JWKS URL for JWT validation                  |
-| `INTEXURAOS_AUTH_ISSUER`                       | Yes      | JWT issuer for token validation              |
-| `INTEXURAOS_AUTH_AUDIENCE`                     | Yes      | JWT audience for token validation            |
-| `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`      | Yes      | Commands ingest topic                        |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`        | Yes      | Send message topic                           |
-| `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`      | Yes      | Webhook processing topic                     |
-| `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`        | Yes      | Audio transcription topic                    |
-| `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`       | Yes      | Approval reply topic                         |
+| Environment Variable                           | Required | Description                                     |
+| ---------------------------------------------- | -------- | ----------------------------------------------- |
+| `INTEXURAOS_WHATSAPP_APP_SECRET`               | Yes      | WhatsApp app secret for signature validation    |
+| `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`             | Yes      | Webhook verification token                      |
+| `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`             | Yes      | WhatsApp Graph API access token                 |
+| `INTEXURAOS_WHATSAPP_WABA_ID`                  | Yes      | Allowed WABA IDs (comma-separated)              |
+| `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`          | Yes      | Allowed phone number IDs (comma-separated)      |
+| `INTEXURAOS_WHATSAPP_MEDIA_BUCKET`             | Yes      | GCS bucket for media storage                    |
+| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`        | Yes      | Media cleanup Pub/Sub topic                     |
+| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION` | Yes      | Media cleanup subscription                      |
+| `INTEXURAOS_GCP_PROJECT_ID`                    | Yes      | Google Cloud project ID                         |
+| `INTEXURAOS_WEB_AGENT_URL`                     | Yes      | Web-agent URL for link preview extraction       |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`               | Yes      | Shared secret for internal endpoints            |
+| `INTEXURAOS_USER_SERVICE_URL`                  | Yes      | User service URL for user lookup                |
+| `INTEXURAOS_AUTH_JWKS_URL`                     | Yes      | JWKS URL for JWT validation                     |
+| `INTEXURAOS_AUTH_ISSUER`                       | Yes      | JWT issuer for token validation                 |
+| `INTEXURAOS_AUTH_AUDIENCE`                     | Yes      | JWT audience for token validation               |
+| `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`      | Yes      | Commands ingest topic                           |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`        | Yes      | Send message topic                              |
+| `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`      | Yes      | Webhook processing topic                        |
+| `INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC`         | Yes      | Audio stored event topic (triggers srt-service) |
+| `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`       | Yes      | Approval reply topic                            |
 
 ## Gotchas
 
 ### Webhook Signature Validation
 
-Uses HMAC-SHA256 with app secret. Must validate before any processing. Signature is in `X-Hub-Signature-256` header.
+Uses HMAC-SHA256 with app secret. Must validate before any processing. Signature is in `X-Hub-Signature-256` header. Uses timing-safe comparison to prevent timing attacks.
 
 ### Reply Correlation Pattern (v2.0.0)
 
@@ -347,16 +358,21 @@ This prevents the same reply from creating duplicate actions through both approv
 
 Approval messages use interactive buttons. Button ID format encodes intent and action ID:
 
-- `approve:{actionId}` - Approve action
-- `cancel:{actionId}` - Cancel/reject action
-- `reject:{actionId}` - Explicitly reject action (added v4.0.0)
-- `convert:{actionId}` - Convert action to different type
-- `cancel-task:{taskId}` - Cancel a running code task
-- `view-task:{taskId}` - View task status
+- `approve:{actionId}` -- Approve action
+- `cancel:{actionId}` -- Cancel/reject action
+- `reject:{actionId}` -- Explicitly reject action (added v4.0.0)
+- `convert:{actionId}` -- Convert action to different type
+- `cancel-task:{taskId}` -- Cancel a running code task
+- `view-task:{taskId}` -- View task status
+- `proceed-implementation:{taskId}` -- Proceed with implementation (INT-678)
 
 **Note:** Nonces were removed in v4.0.0 (INT-524). Button format changed from `approve:{actionId}:{nonce}` to `approve:{actionId}`. Update any code that sends approval buttons.
 
 Button titles are truncated to 20 characters (WhatsApp API limit).
+
+### CTA URL Messages
+
+When `ctaUrl` is provided in a `SendMessageEvent`, the message is sent as a WhatsApp CTA URL message with a clickable button that opens a link in the user's browser. CTA URL messages and interactive reply buttons are mutually exclusive (WhatsApp API constraint).
 
 ### Read Receipts on Button Click (v4.0.0)
 
@@ -364,17 +380,27 @@ When a user taps an interactive button, whatsapp-service fires `markAsReadWithTy
 
 ### Emoji Reactions No Longer Supported (v4.0.0)
 
-As of INT-524, emoji reactions (`👍`/`👎`) no longer trigger approval events. Reactions are marked as `ignored` with status code `REACTION_NOT_SUPPORTED`. Use interactive buttons instead.
+As of INT-524, emoji reactions no longer trigger approval events. Reactions are marked as `ignored` with status code `REACTION_NOT_SUPPORTED`. Use interactive buttons instead.
 
 ### Phone Verification Flow (v3.0.0)
 
 Phone numbers must be verified before connecting via `/whatsapp/connect`. The verification flow:
 
-1. `POST /whatsapp/verify/send` sends a 6-digit code via WhatsApp (🔐 icon added v4.0.0)
+1. `POST /whatsapp/verify/send` sends a 6-digit code via WhatsApp
 2. `POST /whatsapp/verify/confirm` validates the code
 3. Once verified, `POST /whatsapp/connect` accepts the phone number
 
 Rate limits: 3 requests per phone per hour, 60-second cooldown between requests. Codes expire after 10 minutes. Maximum 3 incorrect attempts before lockout.
+
+### Event-Driven Transcription (INT-684)
+
+As of INT-684, audio transcription is fully event-driven. The whatsapp-service no longer calls Speechmatics directly. Instead:
+
+1. Audio is downloaded from WhatsApp and stored in GCS
+2. `whatsapp.audio.stored` event is published to Pub/Sub
+3. srt-service picks up the event and handles transcription
+4. srt-service publishes `srt.transcription.completed` when done
+5. whatsapp-service receives the completed event and updates the message, sends the transcript to the user, and publishes `command.ingest`
 
 ### `extractButtonResponse()` Accepts Both Button Types
 
@@ -397,9 +423,9 @@ Media URLs expire after 15 minutes. Clients should regenerate via GET endpoint w
 
 Messages from unknown phone numbers are marked `user_unmapped` but not failed. This allows tracking without losing data.
 
-### Audio Transcription
+### Language-Aware Transcription Messages
 
-Handled via Speechmatics Batch API with up to 5 minute polling. Original message has `status=pending` until completion.
+When sending transcription results back to users, the service uses language-specific intro phrases for summaries. Polish (`pl`) audio gets a Polish intro phrase; all other languages get English. Markdown headers in summaries are stripped before sending since WhatsApp does not render markdown headers.
 
 ## File Structure
 
@@ -409,21 +435,20 @@ apps/whatsapp-service/src/
     whatsapp/
       ports/
         eventPublisher.ts
-        messageSender.ts              # WhatsAppInteractiveButton (v3.0.0)
+        messageSender.ts              # sendTextMessage, sendInteractiveMessage, sendCtaUrlMessage
         outboundMessageRepository.ts  # v2.0.0
         repositories.ts               # PhoneVerificationRepository (v3.0.0)
         whatsappCloudApi.ts           # markAsReadWithTyping (v4.0.0)
         linkPreviewFetcher.ts
         mediaStorage.ts
         thumbnailGenerator.ts
-        transcription.ts
       usecases/
-        processAudioMessage.ts
-        processImageMessage.ts
-        transcribeAudio.ts
-        extractLinkPreviews.ts
+        processAudioMessage.ts        # Download + store audio in GCS
+        processImageMessage.ts        # Download + thumbnail + store image
+        handleTranscriptionCompleted.ts  # INT-684: handle srt-service result
+        extractLinkPreviews.ts        # Open Graph metadata extraction
       events/
-        events.ts                     # ApprovalReplyEvent (v4.0.0: no nonce)
+        events.ts                     # AudioStoredEvent, ApprovalReplyEvent, etc.
       models/
         WhatsAppMessage.ts
         PhoneVerification.ts          # v3.0.0
@@ -432,6 +457,7 @@ apps/whatsapp-service/src/
       utils/
         phoneNumber.ts
         mimeType.ts
+        logger.ts
   infra/
     firestore/
       webhookEventRepository.ts
@@ -443,7 +469,7 @@ apps/whatsapp-service/src/
       mediaStorageAdapter.ts
     whatsapp/
       cloudApiAdapter.ts              # markAsReadWithTyping (v4.0.0)
-      sender.ts                       # sendInteractiveMessage (v3.0.0)
+      sender.ts                       # sendInteractiveMessage, sendCtaUrlMessage
     media/
       thumbnailGenerator.ts
       thumbnailAdapter.ts
@@ -451,13 +477,11 @@ apps/whatsapp-service/src/
       webAgentLinkPreviewClient.ts
     pubsub/
       publisher.ts
-    speechmatics/
-      adapter.ts
   routes/
-    webhookRoutes.ts                  # Button handling: no nonces, reject intent (v4.0.0)
+    webhookRoutes.ts                  # Button handling: no nonces, reject intent, proceed-implementation
     messageRoutes.ts
     mappingRoutes.ts                  # Verification-gated connect (v3.0.0)
-    pubsubRoutes.ts                   # Interactive message + link preview support
+    pubsubRoutes.ts                   # send-message, media-cleanup, transcription-completed, process-webhook
     verificationRoutes.ts             # v3.0.0
     shared.ts                         # extractButtonResponse (button/button_reply fix v4.0.0)
     schemas.ts
@@ -465,7 +489,7 @@ apps/whatsapp-service/src/
   signature.ts
   adapters.ts                         # PhoneVerificationRepositoryAdapter (v3.0.0)
   config.ts
-  services.ts                         # phoneVerificationRepository in ServiceContainer
+  services.ts                         # phoneVerificationRepository, linkPreviewFetcher in ServiceContainer
   server.ts
   index.ts
 ```

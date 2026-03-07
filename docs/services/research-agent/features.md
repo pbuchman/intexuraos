@@ -46,6 +46,8 @@ Because every model received the same structured research plan and the same atta
 
 Your question does not go to the models unchanged. The system analyzes it and constructs a research plan: the subject domain, key sub-questions, preferred source types, relevant time window, geographic scope, and answer style. It infers whether you need a quick comparison or a deep audit. It flags potential red flags or safety considerations. Each model receives this structured context alongside a sharpened version of your original question.
 
+Before your question even reaches the planning stage, the system checks it for quality. Vague, ambiguous, or under-specified prompts are flagged, and the system offers an improved version that is more likely to produce focused, comparable results. The improvement preserves the original language — a Polish question returns a Polish improvement — and the system rejects its own improvements if they contain multiple options, switch languages, or otherwise fail semantic validation.
+
 This matters because comparable inputs produce comparable outputs. When five models all interpret a vague question differently, the resulting conflict analysis is noise. When they all receive the same precise framing, disagreements reflect genuine differences in evidence or reasoning — not differences in interpretation.
 
 **Example:** You type "Is intermittent fasting good for you?" The system infers a health domain, sets a five-year time scope, generates sub-questions about metabolic effects, cardiovascular outcomes, and contraindications, and notes that safety information and red flags are relevant. Each model gets this structured plan instead of your six-word question. The responses come back focused and directly comparable.
@@ -88,6 +90,7 @@ Start a new research from the IntexuraOS web app. Type your question, optionally
 
 - **Structured conflict detection** — Disagreements identified topic by topic, rated by severity, attributed to specific models — not buried in a blended summary
 - **Review before you spend** — The draft step shows you the refined prompt, selected models, and attached materials before any model is queried, so misclassifications and wrong selections are caught early
+- **Input quality guardrails** — Weak or vague prompts are flagged and improved before they reach the models, with semantic validation that rejects multi-option suggestions and language drift
 - **Full cost visibility** — Per-model cost tracked and displayed for every research, including auxiliary costs for generated images and enhanced research runs
 - **Resilient to partial failure** — If one model fails, the rest complete; you choose whether to proceed with partial results, retry the failed model, or cancel entirely
 - **Start without API keys** — The platform provides fallback access to a subset of models, so you can run research immediately and add more providers over time

@@ -1,6 +1,6 @@
 # Image Service -- Technical Debt
 
-**Last Updated:** 2026-02-22
+**Last Updated:** 2026-03-07
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -70,6 +70,7 @@ Comprehensive test coverage achieved. All adapters, routes, and infrastructure l
 - GCS storage: Upload, delete, and path building tested
 - Routes: Internal endpoints with auth validation, error handling, and success paths tested
 - Models: Validation functions and configuration objects tested
+- Parser: INT-605 contract alignment verified with explicit tests confirming stale fields are excluded
 
 No v8 ignore comments present in the codebase.
 
@@ -104,7 +105,7 @@ All files are within reasonable size limits:
 | `infra/storage/GcsImageStorage.ts`           | 112   | OK     |
 | `infra/image/GoogleImageGenerator.ts`        | 112   | OK     |
 | `infra/image/OpenAIImageGenerator.ts`        | 111   | OK     |
-| `infra/llm/parseResponse.ts`                 | 107   | OK     |
+| `infra/llm/parseResponse.ts`                 | 103   | OK     |
 | `infra/llm/GeminiPromptAdapter.ts`           | 74    | OK     |
 | `infra/llm/GptPromptAdapter.ts`              | 74    | OK     |
 
@@ -130,6 +131,16 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### 2026-02-27: INT-605 Thumbnail Output Contract Alignment
+
+**Issue:** `ThumbnailPromptParameters` included `aspectRatio`, `textOnImage`, and `logosTrademarks` fields that were produced by the LLM but never consumed by the parser or downstream code.
+
+**Resolution:**
+- `ThumbnailPrompt.ts` trimmed to 3 fields: `framing`, `realism`, `people`
+- `parseResponse.ts` only validates consumed fields
+- `promptSchemas.ts` response schema updated to match
+- Test fixtures cleaned of stale fields in `7fbf7668`
 
 ### 2026-02-16: Dev-Mode Log Formatting
 

@@ -225,7 +225,7 @@ interface PreviewInput {
 
 ```typescript
 interface PreviewOutput {
-  chartData: object[];
+  chartData: object[]; // may be empty array when zero rows match
 }
 ```
 
@@ -421,4 +421,4 @@ interface Visualization {
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

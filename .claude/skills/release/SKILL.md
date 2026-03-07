@@ -30,7 +30,7 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 
 ## Core Mandates
 
-1. **Single Prioritization Touchpoint**: Phase 1 presents ALL changes grouped by triage category with default priorities. User adjusts priorities, adds optional comments, then confirms. This is the ONLY user interaction before Phase 6.
+1. **Feature-Only Prioritization**: Phase 1 presents only **features** in the interactive prioritizer. User stars highlights, skips unwanted features, reorders, and adds comments. Notable changes and minor fixes are **automatically included** in the changelog without user intervention. This is the ONLY user interaction before Phase 6.
 2. **Silent Batch Processing**: Phase 2 runs service-scribe agents in parallel without user interaction
 3. **CI Gate**: `pnpm run ci:tracked` MUST pass before Phase 6 commits anything
 4. **Tag Push**: Phase 6 creates AND pushes the version tag to remote
@@ -56,11 +56,12 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 
 Before ANY operation, verify all required tools:
 
-| Tool       | Verification Command | Purpose               |
-| ---------- | -------------------- | --------------------- |
-| Git        | `git --version`      | Version control       |
-| GitHub CLI | `gh auth status`     | PR/release operations |
-| Node.js    | `node --version`     | Package management    |
+| Tool       | Verification Command | Purpose                 |
+| ---------- | -------------------- | ----------------------- |
+| Git        | `git --version`      | Version control         |
+| GitHub CLI | `gh auth status`     | PR/release operations   |
+| Node.js    | `node --version`     | Package management      |
+| gsutil     | `gsutil version`     | Prioritizer page upload |
 
 ### Failure Handling
 
@@ -84,7 +85,7 @@ Aborting.
 3. Find last release tag, list merged PRs since last release
 4. Detect modified services (apps changed since last tag)
 5. Run semver analysis to determine version bump (see `reference/semver-analysis.md`)
-6. **Single Prioritization Touchpoint** — present all changes grouped by triage category (Features/Notable/Minor) with default priorities (High/Medium/Low). User adjusts priorities, adds optional feature comments, confirms with "go". For major releases, also ask for marketing slogan.
+6. **Feature Prioritization Touchpoint** — present only **features** in the interactive prioritizer page. User stars highlights (for README/website), skips unwanted features, reorders priority, adds optional comments. Notable changes and minor fixes are **not shown** in the prioritizer — they are automatically included in the changelog. For major releases, also ask for marketing slogan.
 
 ### Phase 2: Service Documentation (Silent)
 
@@ -226,20 +227,23 @@ This reads all `docs/**/*.md`, chunks by headers, generates OpenAI embeddings, a
 
 ## Single Touchpoint Pattern
 
-All user interaction happens in Phase 1 step 7:
+All user interaction happens in Phase 1 step 7 via an **interactive HTML prioritization page**.
+
+**Only features are shown in the prioritizer.** Notable changes and minor fixes bypass the prioritizer entirely and are automatically included in the changelog under the appropriate type subcategories (Added/Changed/Fixed/Improved/Removed).
 
 ```
-1. Present all changes grouped by triage category (Features/Notable/Minor)
-2. Show default priorities: Features=High, Notable=Medium, Minor=Low
-3. User can:
-   - Change priorities: "3 high", "5 skip"
-   - Add comments: "1 comment: Enables voice..."
-   - Expand batched items: "expand 5-8"
-   - Preview changelog: "preview"
-   - Set marketing slogan (major releases): "slogan: ..."
-   - Confirm: "go"
-4. Store priority map + comments map + slogan for all downstream phases
-5. Phases 2-5 run automatically using this data — no further user interaction until Phase 6 completes
+1. Generate prioritizer page with ONLY features using templates/prioritizer.html
+2. Upload to GCS via /share workflow → user gets a URL
+3. User interacts with the page:
+   - ★ Star features for README/website highlights
+   - ✕ Skip features to omit from CHANGELOG
+   - Drag to reorder priority
+   - Add comments to override descriptions
+4. User clicks "Export & Copy", pastes structured text back
+5. Parse export → priority map + comments map + highlight flags
+6. Notable changes + minor fixes → auto-categorized into changelog
+7. For major releases: also collect marketing slogan
+8. Phases 2-5 run automatically using this data — no further user interaction
 ```
 
 ## References

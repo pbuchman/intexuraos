@@ -91,12 +91,12 @@ When ambiguous, prefer `code`. Engineering tasks default to code execution. Code
 **Polish phrases:**
 
 - link: "zapisz link", "dodaj zakladke"
-- todo: "stwórz zadanie", "dodaj zadanie"
+- todo: "stworz zadanie", "dodaj zadanie"
 - research: "zbadaj", "sprawdz", "przeprowadz research"
-- note: "stwórz notatke", "zapisz notatke"
+- note: "stworz notatke", "zapisz notatke"
 - reminder: "przypomnij mi"
 - calendar: "zaplanuj", "dodaj do kalendarza"
-- linear: "zglos blad", "stwórz issue", "dodaj do lineara"
+- linear: "zglos blad", "stworz issue", "dodaj do lineara"
 
 ### Step 3: Code Detection (Engineering Task Fallback)
 
@@ -322,6 +322,8 @@ sequenceDiagram
 
 **OpenTelemetry** - The Dockerfile uses `--import` flag to preload the `@intexuraos/infra-otel` register module. Tracing data is exported to Dash0 via OTLP/HTTP when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is set. No-op when unset.
 
+**Title length limit** - The Zod schema for classification responses enforces a 200-character maximum on titles. Previously set to 50 characters, this caused valid classifications to be discarded entirely (falling back to `note` with low confidence) when the LLM generated longer titles.
+
 ## File Structure
 
 ```
@@ -369,6 +371,8 @@ packages/llm-prompts/src/
 
 | Commit     | Description                                                     | Date       |
 | ---------- | --------------------------------------------------------------- | ---------- |
+| `cc52e50d` | Increase classification title limit to 200 chars                | 2026-03-07 |
+| `99febe66` | Add resolveGitHubUsername to UserServiceClient mock             | 2026-03-02 |
 | `b3f34d85` | Release v3.1.0                                                  | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                                  | 2026-02-19 |
 | `35abc346` | Persist prompt version with command classification              | 2026-02-19 |
@@ -383,4 +387,4 @@ packages/llm-prompts/src/
 | `02728b75` | Add 'code' type to classification schema                        | 2026-01-25 |
 | `1faa1d3b` | Consolidate user service client architecture                    | 2026-01-25 |
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

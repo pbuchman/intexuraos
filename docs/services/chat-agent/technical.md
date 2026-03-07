@@ -84,19 +84,20 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Hash       | Description                                              | Date       |
-| ---------- | -------------------------------------------------------- | ---------- |
-| `b3f34d85` | Release v3.1.0                                           | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                           | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability          | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                      | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention     | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback | 2026-02-15 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local   | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform Zai fallback    | 2026-02-09 |
-| `63170e4a` | Remove "free" GLM terminology, use createLlmClient       | 2026-02-07 |
-| `996c4179` | Add chat-agent to Cloud Build pipeline                   | 2026-02-06 |
-| `ea6652f7` | Add guest chat sessions with rate limiting               | 2026-02-06 |
+| Hash       | Description                                               | Date       |
+| ---------- | --------------------------------------------------------- | ---------- |
+| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks | 2026-03-02 |
+| `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                            | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability           | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                       | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention      | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback  | 2026-02-15 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local    | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform Zai fallback     | 2026-02-09 |
+| `63170e4a` | Remove "free" GLM terminology, use createLlmClient        | 2026-02-07 |
+| `996c4179` | Add chat-agent to Cloud Build pipeline                    | 2026-02-06 |
+| `ea6652f7` | Add guest chat sessions with rate limiting                | 2026-02-06 |
 
 ## API Endpoints
 

@@ -119,7 +119,62 @@ You should have:
 2. Received a synthesized result combining all responses
 3. Gotten a shareable URL with an AI-generated cover image
 
-## Part 2: Natural Language Model Selection (v2.0.0)
+## Part 2: Validate and Improve Your Prompt
+
+Before creating research, check whether your prompt is clear enough for good results.
+
+### Validate input quality
+
+```bash
+curl -X POST https://research-agent.intexuraos.com/research/validate-input \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Is AI good?",
+    "includeImprovement": true
+  }'
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "quality": 1,
+    "reason": "The prompt is too vague - it does not specify which aspect of AI to evaluate or what criteria to use.",
+    "improvedPrompt": "What are the measurable impacts of generative AI adoption on enterprise productivity, based on peer-reviewed studies from 2023-2026?"
+  }
+}
+```
+
+Quality values: `0` = rejected (too low quality), `1` = weak but valid (improvement suggested), `2` = good (ready to use).
+
+The improvement system preserves your original language. A Polish prompt returns a Polish improvement. If the LLM accidentally switches languages or returns multiple alternatives, the system detects this and retries automatically.
+
+### Force-improve a prompt
+
+```bash
+curl -X POST https://research-agent.intexuraos.com/research/improve-input \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Tell me about climate change"
+  }'
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "improvedPrompt": "What are the current scientific consensus and key areas of debate regarding climate change impacts on global food security, water resources, and biodiversity loss over the next 30 years?"
+  }
+}
+```
+
+## Part 3: Natural Language Model Selection
 
 The model extraction feature lets you specify models in natural language.
 
@@ -180,7 +235,7 @@ If you mention a model but do not have the API key, it is silently excluded:
 # (Claude excluded because no anthropic API key)
 ```
 
-## Part 3: Add Context to Research
+## Part 4: Add Context to Research
 
 Enhance your research by providing additional context.
 
@@ -235,7 +290,7 @@ This creates a new research that:
 - Adds new context to the synthesis
 - Tracks the original as `sourceResearchId`
 
-## Part 4: Understanding Zod Schema Validation (v2.0.0)
+## Part 5: Understanding Zod Schema Validation
 
 The research-agent uses Zod schemas to validate LLM responses.
 
@@ -275,7 +330,7 @@ You can see this in the response's `researchContext` field when present.
 
 **Note (v3.1.0):** The `ContextInferenceAdapter` was simplified during the monorepo-wide prompt audit, replacing unsafe casts with safer fallback defaults.
 
-## Part 5: Handle Errors
+## Part 6: Handle Errors
 
 ### Error: API key missing
 
@@ -366,7 +421,7 @@ curl -X POST https://research-agent.intexuraos.com/research/research_abc123/conf
 
 **Solution:** Verify the ID and that you are authenticated as the owner.
 
-## Part 6: Real-World Scenario - Multi-Model Research with Sharing
+## Part 7: Real-World Scenario - Multi-Model Research with Sharing
 
 Create comprehensive research and share it publicly.
 
@@ -411,7 +466,7 @@ curl -X DELETE https://research-agent.intexuraos.com/research/RESEARCH_ID/share 
 
 This removes the public page and deletes the generated cover image.
 
-## Part 7: Export Research to Notion (v2.2.0)
+## Part 8: Export Research to Notion
 
 Research can be exported to Notion as structured pages. This requires Notion integration to be configured.
 
@@ -521,6 +576,8 @@ The export creates:
 | Notion export fails          | Error on export-notion endpoint   | Verify Notion token is valid; check NOTION_NOT_CONNECTED or RATE_LIMITED error |
 | Already exported             | `ALREADY_EXPORTED` error          | Each research can only be exported once; delete the Notion page manually       |
 | Invalid page ID              | Validation fails                  | Page ID must be 32 hex characters or UUID format                               |
+| Improvement language changed | Improved prompt in wrong language | Semantic checks detect language drift; system retries automatically            |
+| Multiple options returned    | Improvement has numbered list     | Multi-option detection rejects; system retries for single prompt               |
 
 ## Exercises
 
@@ -529,6 +586,7 @@ The export creates:
 1. Create a research using only one model
 2. List all your researches ordered by completion date
 3. Find the total cost of all your researches
+4. Validate input quality for a vague prompt and view the suggested improvement
 
 ### Medium
 

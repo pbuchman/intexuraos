@@ -1,7 +1,7 @@
 # API Docs Hub -- Technical Debt
 
-**Last Updated:** 2026-02-22
-**Analysis Run:** [2026-02-22 entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-07
+**Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
 
 ---
 
@@ -42,7 +42,7 @@ The `/health` endpoint uses `reply.send()` directly rather than `reply.ok()`. Th
 
 ## Test Coverage Gaps
 
-No test files exist for this service. Coverage is not enforced because the service is only 229 lines across 3 files with no domain logic, no business rules, and no complex branching. All behavior is configuration-driven.
+No test files exist for this service. Coverage is not enforced because the service is only 243 lines across 3 files with no domain logic, no business rules, and no complex branching. All behavior is configuration-driven.
 
 ---
 
@@ -81,13 +81,14 @@ None.
 
 ## Resolved Issues
 
-| Date       | Issue                                | Resolution                                                                |
-| ---------- | ------------------------------------ | ------------------------------------------------------------------------- |
-| 2026-02-16 | Dash0 OTel integration               | `@intexuraos/infra-otel` added; log pipeline forwards to Dash0 via OTLP   |
-| 2026-02-16 | Dev-mode log formatting              | `createLogStream()` now emits human-readable output under PM2             |
-| 2026-02-14 | Broken start:local script            | Fixed to use `tsx` instead of `node --experimental-strip-types`           |
-| 2026-02-01 | Chat Agent spec missing              | Added `INTEXURAOS_CHAT_AGENT_OPENAPI_URL` env var (INT-431)               |
-| 2026-01-26 | PromptVault reference after removal  | Removed `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` env var (INT-319)    |
+| Date       | Issue                                             | Resolution                                                                |
+| ---------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| 2026-02-22 | Missing code-agent, linear-agent, web-agent specs | Added 3 new `INTEXURAOS_*_OPENAPI_URL` env vars, bumped spec to 0.0.5     |
+| 2026-02-16 | Dash0 OTel integration                            | `@intexuraos/infra-otel` added; log pipeline forwards to Dash0 via OTLP   |
+| 2026-02-16 | Dev-mode log formatting                           | `createLogStream()` now emits human-readable output under PM2             |
+| 2026-02-14 | Broken start:local script                         | Fixed to use `tsx` instead of `node --experimental-strip-types`           |
+| 2026-02-01 | Chat Agent spec missing                           | Added `INTEXURAOS_CHAT_AGENT_OPENAPI_URL` env var (INT-431)               |
+| 2026-01-26 | PromptVault reference after removal               | Removed `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` env var (INT-319)    |
 
 ---
 

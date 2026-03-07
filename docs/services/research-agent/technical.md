@@ -48,20 +48,21 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                           | Date       |
-| ---------- | ----------------------------------------------------- | ---------- |
-| `b3f34d85` | Release v3.1.0 (version bump only)                    | 2026-02-22 |
-| `c8a42105` | Release v3.0.0 (version bump only)                    | 2026-02-19 |
-| `f451d51a` | Audit and improve 27 LLM prompts across all domains   | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability       | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                   | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention  | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback     | 2026-02-15 |
-| `d7c6a061` | Add consistent icons to all WhatsApp messages         | 2026-02-10 |
-| `0f69a74b` | Add default model selector with platform Zai fallback | 2026-02-08 |
-| `308ba74e` | Add v8 ignore for JWT claims type guards              | 2026-02-08 |
-| `f33b6251` | Fix: Read namespaced Auth0 claims for user profile    | 2026-02-08 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)     | 2026-02-01 |
+| Commit     | Description                                             | Date       |
+| ---------- | ------------------------------------------------------- | ---------- |
+| `99febe66` | Wire GitHub OAuth integration and update mocks          | 2026-03-02 |
+| `e6399f3b` | Apply code review feedback for semantic checks          | 2026-02-27 |
+| `a1a77b95` | Add semantic checks to input improvement validator      | 2026-02-27 |
+| `8fb90669` | Align thumbnail output contract with consumed fields    | 2026-02-27 |
+| `b3f34d85` | Release v3.1.0 (version bump only)                      | 2026-02-22 |
+| `c8a42105` | Release v3.0.0 (version bump only)                      | 2026-02-19 |
+| `f451d51a` | Audit and improve 27 LLM prompts across all domains     | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability         | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                     | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention    | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback       | 2026-02-15 |
+| `d7c6a061` | Add consistent icons to all WhatsApp messages           | 2026-02-10 |
+| `0f69a74b` | Add default model selector with platform Zai fallback   | 2026-02-08 |
 
 ## Data Flow
 
@@ -198,6 +199,15 @@ const SynthesisContextSchema = z.object({
   red_flags: z.array(z.string()),
 });
 ```
+
+### Input Validation (Semantic Checks)
+
+The `InputValidationAdapter` validates and improves user prompts before research begins. Beyond structural checks (empty, too long, JSON-formatted, unwanted prefixes), it performs semantic validation on improved prompts:
+
+- **Multi-option detection** -- Rejects responses containing numbered lists, "Option N:" labels, " OR " separators, or bullet-point lists with 2+ items. The improvement contract requires exactly one improved prompt.
+- **Language drift detection** -- Compares Unicode script ratios between original and improved prompts. If the original is >30% non-Latin characters (Cyrillic, CJK, Arabic, etc.) but the improvement is <10% non-Latin, the improvement is rejected as a language switch.
+
+Both checks trigger the repair pattern: the LLM receives the validation error and attempts a second generation.
 
 ## API Endpoints
 
@@ -409,7 +419,7 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 | Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research`                                |
 | Zai        | `glm-4.7`, `glm-4.7-flash`                                                 |
 
-**Fast model** (`gemini-2.0-flash`): Used for title generation and context inference via the platform Gemini key. Not available as a user-selectable research model.
+**Fast model** (`gemini-2.0-flash`): Used for title generation, context inference, and input validation via the platform Gemini key. Not available as a user-selectable research model.
 
 ### Shared Packages
 
@@ -494,6 +504,8 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 
 **Prompt versioning**: All prompts follow semver versioning. The v3.1.0 prompt audit bumped versions for improved prompts with safer fallbacks and XML delimiters.
 
+**Input improvement semantic checks**: The `validateImprovedPrompt` method rejects structurally valid but semantically invalid LLM improvements. Multi-option responses (numbered lists, bullet points, "Option N:" labels) and language drift (non-Latin original prompt improved to Latin-only output) trigger the repair pattern automatically.
+
 ## File Structure
 
 ```
@@ -540,7 +552,7 @@ apps/research-agent/src/
       PerplexityAdapter.ts          # Perplexity API integration
       GlmAdapter.ts                 # GLM (Zai) API integration
       ContextInferenceAdapter.ts    # Zod-validated context inference
-      InputValidationAdapter.ts     # Zod-validated input validation
+      InputValidationAdapter.ts     # Zod-validated input validation + semantic checks
       LlmAdapterFactory.ts          # Factory pattern
     research/
       FirestoreResearchRepository.ts  # Research persistence
