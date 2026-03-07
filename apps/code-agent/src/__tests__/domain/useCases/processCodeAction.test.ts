@@ -37,6 +37,7 @@ describe('processCodeAction', () => {
       findByIdForUser: vi.fn(),
       update: vi.fn(),
       countQueued: vi.fn(),
+      findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
     } as unknown as CodeTaskRepository;
 
     taskDispatcher = {
@@ -1427,5 +1428,285 @@ describe('processCodeAction', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('internal_error');
     }
+  });
+
+  describe('planning task back-link (INT-725)', () => {
+    function setupExecutionTaskMocks(): void {
+      // Linear issue service returns code-task label (execution agent type)
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-200',
+        linearIssueTitle: 'Test Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        linearFallback: false,
+      });
+
+      // Create returns execution task with linearIssueId
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+        ok({
+          id: 'new-exec-task',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          sanitizedPrompt: 'Fix the bug',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          status: 'dispatched',
+          callbackReceived: false,
+          dedupKey: 'dedup-key-123',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          agentType: 'execution',
+          linearIssueId: 'INT-200',
+        } as CodeTask)
+      );
+
+      vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+        ok({ dispatched: true, workerLocation: 'mac' })
+      );
+
+      // Update for cancel nonce
+      vi.mocked(codeTaskRepo.update).mockResolvedValue(
+        ok({
+          id: 'new-exec-task',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          sanitizedPrompt: 'Fix the bug',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          status: 'dispatched',
+          callbackReceived: false,
+          dedupKey: 'dedup-key-123',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          cancelNonce: 'abcd',
+          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        } as CodeTask)
+      );
+    }
+
+    it('back-links planning task when execution task is created for same Linear issue', async () => {
+      setupExecutionTaskMocks();
+
+      // findPlannedTaskByLinearIssue returns a planning task
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(
+        ok({
+          id: 'planning-task-123',
+          status: 'planned',
+          agentType: 'planning',
+          linearIssueId: 'INT-200',
+        } as CodeTask)
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-200',
+        }
+      );
+
+      expect(result.ok).toBe(true);
+
+      // Should have called findPlannedTaskByLinearIssue
+      expect(codeTaskRepo.findPlannedTaskByLinearIssue).toHaveBeenCalledWith('INT-200');
+
+      // Should have updated planning task with implementationTaskId
+      expect(codeTaskRepo.update).toHaveBeenCalledWith(
+        'planning-task-123',
+        expect.objectContaining({ implementationTaskId: 'new-exec-task' })
+      );
+    });
+
+    it('does not back-link when no planning task exists', async () => {
+      setupExecutionTaskMocks();
+
+      // findPlannedTaskByLinearIssue returns null
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-200',
+        }
+      );
+
+      expect(result.ok).toBe(true);
+
+      // Should NOT have updated any planning task with implementationTaskId
+      const updateCalls = vi.mocked(codeTaskRepo.update).mock.calls;
+      const backLinkCalls = updateCalls.filter(
+        (call: unknown[]) => (call[1] as Record<string, unknown>)['implementationTaskId'] !== undefined
+      );
+      expect(backLinkCalls).toHaveLength(0);
+    });
+
+    it('succeeds even when back-link findPlannedTaskByLinearIssue fails (best-effort)', async () => {
+      setupExecutionTaskMocks();
+
+      // findPlannedTaskByLinearIssue fails
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'DB error' })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-200',
+        }
+      );
+
+      // Should still succeed
+      expect(result.ok).toBe(true);
+    });
+
+    it('succeeds even when back-link update fails (best-effort)', async () => {
+      setupExecutionTaskMocks();
+
+      // findPlannedTaskByLinearIssue returns a planning task
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(
+        ok({
+          id: 'planning-task-123',
+          status: 'planned',
+          agentType: 'planning',
+          linearIssueId: 'INT-200',
+        } as CodeTask)
+      );
+
+      // Override update: first call (back-link) fails, second call (cancel nonce) succeeds
+      vi.mocked(codeTaskRepo.update)
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Update failed' }))
+        .mockResolvedValueOnce(ok({
+          id: 'new-exec-task',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          sanitizedPrompt: 'Fix the bug',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          status: 'dispatched',
+          callbackReceived: false,
+          dedupKey: 'dedup-key-123',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          cancelNonce: 'abcd',
+          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        } as CodeTask));
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-200',
+        }
+      );
+
+      // Should still succeed despite back-link failure
+      expect(result.ok).toBe(true);
+
+      // Should have logged warning
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ planningTaskId: 'planning-task-123', executionTaskId: 'new-exec-task' }),
+        'Failed to back-link planning task to execution task'
+      );
+    });
+
+    it('does not attempt back-link for planning tasks', async () => {
+      // Default linearIssueService returns no code-task label → planning agent type
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+        ok({
+          id: 'new-planning-task',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          sanitizedPrompt: 'Fix the bug',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          status: 'dispatched',
+          callbackReceived: false,
+          dedupKey: 'dedup-key-123',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          agentType: 'planning',
+          linearIssueId: 'INT-200',
+        } as CodeTask)
+      );
+
+      vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+        ok({ dispatched: true, workerLocation: 'mac' })
+      );
+
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({
+          id: 'new-planning-task',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          sanitizedPrompt: 'Fix the bug',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          status: 'dispatched',
+          callbackReceived: false,
+          dedupKey: 'dedup-key-123',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          cancelNonce: 'abcd',
+          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        } as CodeTask)
+      );
+
+      await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-200',
+        }
+      );
+
+      // Should NOT have called findPlannedTaskByLinearIssue for planning tasks
+      expect(codeTaskRepo.findPlannedTaskByLinearIssue).not.toHaveBeenCalled();
+    });
   });
 });
