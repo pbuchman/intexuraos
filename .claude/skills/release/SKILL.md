@@ -17,9 +17,16 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 /release --collect          # Only collect and triage release data (no release)
 ```
 
-### Pre-Release Data Collection
+## Invocation Detection
 
-`/release --collect` runs the data collection and triage pipeline independently — see [`workflows/collect-release-data.md`](workflows/collect-release-data.md). It produces `.prerelease-data.md` at repo root with commits, PRs, change groups, and a triage summary. This is optional — useful when there are many changes since last release and you want to pre-stage the analysis. For small releases, Phase 1 collects data inline.
+| Argument | Workflow | What Happens |
+|----------|----------|--------------|
+| (none) | [`workflows/full-release.md`](workflows/full-release.md) | Full 6-phase release |
+| `--skip-docs` | [`workflows/full-release.md`](workflows/full-release.md) | Full release, skip Phase 2 |
+| `--phase N` | [`workflows/full-release.md`](workflows/full-release.md) | Resume from Phase N |
+| `--collect` | [`workflows/collect-release-data.md`](workflows/collect-release-data.md) | **Separate pipeline** — run bash script + 4 agent triage steps, produce `.prerelease-data.md`, then STOP. No release. |
+
+**`--collect` is NOT a modifier of the release workflow.** It runs a completely different pipeline and exits. The output file is consumed later by `/release` Phase 1 step 2 if it exists and is fresh.
 
 ## Core Mandates
 
