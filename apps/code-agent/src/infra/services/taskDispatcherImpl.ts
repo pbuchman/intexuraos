@@ -241,8 +241,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           continue;
         }
 
-        // 502/504 and Cloudflare 520-530 are infrastructure errors — neutral (don't affect capacity decision)
-        const cfPattern = /\b(502|504|5[2][0-9]|530)\b/;
+        // Same range as isRetryableInfraStatus, minus 503 (handled above for capacity tracking)
+        const cfPattern = /\b(502|504|52[0-9]|530)\b/;
         if (error instanceof Error && cfPattern.test(error.message)) {
           continue;
         }
