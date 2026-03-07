@@ -2195,6 +2195,13 @@ resource "google_secret_manager_secret_iam_member" "transcription_internal_auth"
   member    = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
+# Grant transcription SA permission to sign blobs (required for GCS signed URLs)
+resource "google_service_account_iam_member" "transcription_self_token_creator" {
+  service_account_id = google_service_account.transcription_function.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
 # Grant transcription SA permission to receive Eventarc events
 resource "google_project_iam_member" "transcription_eventarc" {
   project = var.project_id
