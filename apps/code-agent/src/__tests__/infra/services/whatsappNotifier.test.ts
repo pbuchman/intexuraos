@@ -553,7 +553,7 @@ describe('WhatsAppNotifier', () => {
             type: 'reply',
             reply: {
               id: 'view-task:task-123',
-              title: '👁️ View Progress',
+              title: '🔍 Check Logs',
             },
           },
         ],
@@ -561,7 +561,7 @@ describe('WhatsAppNotifier', () => {
       });
     });
 
-    it('includes View Progress button with correct task id', async () => {
+    it('includes Check Logs button with correct task id', async () => {
       const task = createMockTask({
         status: 'failed',
         traceId: 'test-trace-id',
@@ -582,7 +582,7 @@ describe('WhatsAppNotifier', () => {
         type: 'reply',
         reply: {
           id: `view-task:${task.id}`,
-          title: '👁️ View Progress',
+          title: '🔍 Check Logs',
         },
       });
     });
