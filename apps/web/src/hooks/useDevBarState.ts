@@ -25,7 +25,7 @@ interface DevBarState {
 
 const STORAGE_KEY = 'intexuraos-devbar-state';
 const DEFAULT_HEIGHT = 320;
-const DEFAULT_WIDTH = typeof window !== 'undefined' ? window.innerWidth : 1920;
+const DEFAULT_WIDTH = 800;
 const MIN_HEIGHT = 200;
 const MAX_HEIGHT = 600;
 const MIN_WIDTH = 400;
