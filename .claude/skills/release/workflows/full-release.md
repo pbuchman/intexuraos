@@ -14,6 +14,7 @@ Verify all required tools are available:
 git --version
 gh auth status
 node --version
+gsutil version
 ```
 
 If any fails, ABORT with clear error message.
@@ -107,73 +108,110 @@ Execute the semver analysis per [`reference/semver-analysis.md`](../reference/se
 
 ### 1.7 Single Prioritization Touchpoint
 
-**This is the ONLY user interaction point before Phase 6.** Present all categorized changes in a consolidated view and collect priorities + optional comments.
+**This is the ONLY user interaction point before Phase 6.** An interactive HTML page is generated, shared via `/share`, and the user prioritizes **features only**. Notable changes and minor fixes bypass the prioritizer and are automatically included in the changelog.
 
-Use `AskUserQuestion` tool with this format:
+#### 1.7.1 Generate Interactive Prioritization Page
 
-```
-Release Prioritization — vCURRENT → vNEW
+1. Read the `## Triage Summary` from `.prerelease-data.md` (or from the semver analysis output if collected inline)
+2. Build a JSON array of **only features** (NOT notable changes or minor fixes):
 
-Modified services: [list]
-PRs merged: [count]
-Suggested bump: [major/minor/patch]
-
-Priority guide:
-  High   = First in CHANGELOG, top 3 become GitHub Release highlights, used for README/website
-  Medium = Standard position in CHANGELOG
-  Low    = Last in CHANGELOG
-  Skip   = Omitted from CHANGELOG entirely
-
-## Changes (adjust priorities, add comments, then type "go")
-
-### Features (default: High)
-  1. [Feature description] — PR #XXX / INT-XXX
-  2. [Feature description] — PR #XXX / INT-XXX
-
-### Notable Changes (default: Medium)
-  3. [Change description] — PR #XXX
-  4. [Change description] — PR #XXX
-
-### Minor Fixes (default: Low)
-  5-8. 4 bug fixes:
-       - whatsapp: [fix description] (#XXX)
-       - calendar: [fix description] (#XXX)
-       - bookmarks: [fix description] (#XXX)
-       - research: [fix description] (#XXX)
-
-Commands:
-  "3 high" — change #3 to High priority
-  "1 comment: Voice transcription enables..." — add description comment to #1
-  "5 skip" — exclude #5 from changelog (targets entire batch if 5 is a batched range; use "expand 5-8" first to target individual items)
-  "expand 5-8" — show individual items in a batched group (assigns each a unique number for individual commands)
-  "preview" — show final changelog preview before confirming
-  "slogan: End-to-end AI autonomy..." — set marketing slogan (major releases only)
-  "go" or "approve" — confirm and proceed
+```json
+[{ "id": 1, "title": "Feature name", "desc": "User-facing description", "category": "feature" }]
 ```
 
-**Command validation:** If the user types an unrecognized command, respond with the valid command list and ask them to try again.
+**Notable changes and minor fixes are NOT included in the prioritizer.** They are automatically categorized into changelog type subcategories (Added/Changed/Fixed/Improved/Removed) during step 1.7.4.
 
-**Batching rules:**
+3. Read the template from [`templates/prioritizer.html`](../templates/prioritizer.html)
+4. Replace the following placeholders in the template:
+   - `{{NEW_VERSION}}` → e.g., `v3.2.0`
+   - `{{PR_COUNT}}` → number of merged PRs
+   - `{{COMMIT_COUNT}}` → number of commits
+   - `{{BUMP_TYPE}}` → `MAJOR`, `MINOR`, or `PATCH`
+   - `{{ITEMS_JSON}}` → the JSON array from step 2 (features only)
+5. Write the result to `/tmp/release-prioritizer.html`
 
-- Features: shown individually (each gets its own number)
-- Notable changes: shown individually
-- Minor fixes: batched by area if >4 (e.g., "5-8. 4 bug fixes across whatsapp, calendar services")
-- **Batch command semantics:** Commands targeting a batch number (e.g., "5 skip") apply to the **entire batch**. To target individual items within a batch, the user must first "expand 5-8" to assign unique numbers, then use those individual numbers.
+#### 1.7.2 Share the Page
 
-**For major version releases**, also prompt:
+Upload via the `/share` skill's GCS workflow (skip `/frontend-design` — the HTML is already self-contained):
+
+```bash
+SLUG="release-prioritizer-v$(echo $NEW_VERSION | tr '.' '')"
+
+# Check collision
+gsutil ls gs://intexuraos-shared-content-dev/claude/$SLUG.html 2>&1
+
+# Upload (overwrite if same version slug)
+gsutil -h "Cache-Control:public, max-age=60" \
+  -h "Content-Type:text/html; charset=utf-8" \
+  cp /tmp/release-prioritizer.html \
+  gs://intexuraos-shared-content-dev/claude/$SLUG.html
+
+rm /tmp/release-prioritizer.html
+```
+
+**Use a short cache TTL (60s)** — the user may reload after re-uploading with adjustments.
+
+#### 1.7.3 Present URL and Wait
+
+Present the URL to the user and wait for them to paste back the export:
 
 ```
-  This is a MAJOR version release. Please provide a marketing slogan for the
-  previous major version (vX.x) for the Version History section, or type "skip".
+Release Prioritizer ready:
+https://intexuraos.cloud/share/claude/<slug>.html
+
+Instructions:
+1. Open the page
+2. ★ Star items for README/website highlights
+3. ✕ Skip items to omit from CHANGELOG
+4. Drag to reorder priority
+5. Add comments to override descriptions
+6. Click "Export & Copy" and paste the result here
 ```
 
-**After user confirms ("go"):**
+**For major version releases**, also ask:
 
-1. Store the **priority map** (change number → High/Medium/Low/Skip)
-2. Store the **comments map** (change number → user comment text)
+```
+This is a MAJOR version release. Please also provide a marketing slogan for the
+previous major version (vX.x) for the Version History section, or type "skip".
+```
+
+#### 1.7.4 Parse the Export
+
+The user pastes structured text from the page's export. Parse it to extract:
+
+```
+RELEASE PRIORITIZATION — vX.Y.Z
+=============================================
+
+HIGHLIGHTS (N) — README + Website
+  1. Title | comment or — description [category]
+  2. Title — description [category]
+
+HIGH (N) — CHANGELOG
+  1. Title | comment [category]
+  2. Title — description [category]
+
+SKIPPED (N)
+  1. Title [category]
+```
+
+**Parsing rules:**
+
+- `HIGHLIGHTS` section → priority = High, highlight = true (used for README/website)
+- `HIGH` section → priority = High, highlight = false
+- `SKIPPED` section → priority = Skip
+- Items with `|` have user comments (text after `|`, before `[category]`)
+- Items with `—` use default descriptions (text after `—`, before `[category]`)
+- `[feature]` / `[notable]` / `[minor]` → original category for changelog type grouping
+
+**After parsing:**
+
+1. Store the **priority map** (title → High/Skip + highlight flag) — features only
+2. Store the **comments map** (title → user comment text) — features only
 3. Store the **marketing slogan** (if major release)
-4. Build changelog entry per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7
-5. Build GitHub Release body per Step 7.1
+4. **Auto-include notable changes and minor fixes** — categorize all notable changes and minor fixes from the triage summary into changelog type subcategories (Added/Changed/Fixed/Improved/Removed). These are NOT subject to user prioritization and are always included.
+5. Build changelog entry per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7 — combining user-prioritized features with auto-included notable changes and minor fixes
+6. Build GitHub Release body per Step 7.1
 
 Store all results for downstream phases.
 

@@ -1,6 +1,6 @@
 # Todos Agent -- Technical Debt
 
-**Last Updated:** 2026-02-22
+**Last Updated:** 2026-03-07
 **Analysis Run:** Autonomous documentation refresh (service-scribe)
 
 ---
@@ -25,17 +25,17 @@
 
 Features tracked from existing documentation and product roadmap:
 
-- **Todo templates** - Pre-defined todo structures for common tasks (e.g., weekly planning, shopping lists)
-- **Recurring todos** - Automatic todo regeneration on schedule (daily, weekly, monthly)
-- **Todo dependencies** - Link todos with completion dependencies (blocking/blocked by relationships)
+- **Todo templates** -- Pre-defined todo structures for common tasks (e.g., weekly planning, shopping lists)
+- **Recurring todos** -- Automatic todo regeneration on schedule (daily, weekly, monthly)
+- **Todo dependencies** -- Link todos with completion dependencies (blocking/blocked by relationships)
 
 ### Proposed Enhancements
 
-1. **Bulk operations** - Archive multiple todos at once, batch status updates
-2. **Full-text search** - Search todos by content with Firestore indexing
-3. **Collaboration features** - Shared todos, assign to other users
-4. **Reminders** - Time-based notifications for due dates
-5. **Subtask nesting** - Support more than one level of subtasks
+1. **Bulk operations** -- Archive multiple todos at once, batch status updates
+2. **Full-text search** -- Search todos by content with Firestore indexing
+3. **Collaboration features** -- Shared todos, assign to other users
+4. **Reminders** -- Time-based notifications for due dates
+5. **Subtask nesting** -- Support more than one level of subtasks
 
 ---
 
@@ -69,7 +69,7 @@ All endpoints and use cases have test coverage meeting the 100% branch coverage 
 
 ### None Detected
 
-- No `any` types found
+- No `any` types found in production code
 - No `@ts-ignore` or `@ts-expect-error` directives
 - Strict mode enabled with all compiler checks
 
@@ -84,9 +84,9 @@ All files are within reasonable size limits:
 | File                           | Lines | Status                         |
 | ------------------------------ | ----- | ------------------------------ |
 | `todoRoutes.ts`                | ~919  | Acceptable (route definitions) |
+| `firestoreTodoRepository.ts`   | 260   | Acceptable (CRUD operations)   |
 | `processTodoCreated.ts`        | 208   | Acceptable (single use case)   |
 | `todoItemExtractionService.ts` | 183   | Acceptable (single service)    |
-| `firestoreTodoRepository.ts`   | 260   | Acceptable (CRUD operations)   |
 
 ---
 
@@ -94,9 +94,9 @@ All files are within reasonable size limits:
 
 ### Low Priority
 
-| Pattern                  | Locations                             | Suggestion                                |
-| ------------------------ | ------------------------------------- | ----------------------------------------- |
-| `parseDate` function     | `todoRoutes.ts`, `internalRoutes.ts`  | Extract to shared utility in domain layer |
+| Pattern              | Locations                            | Suggestion                                |
+| -------------------- | ------------------------------------ | ----------------------------------------- |
+| `parseDate` function | `todoRoutes.ts`, `internalRoutes.ts` | Extract to shared utility in domain layer |
 
 ---
 
@@ -104,16 +104,15 @@ All files are within reasonable size limits:
 
 ### None Detected
 
-No deprecated APIs or dependencies in use. All dependencies are current:
-
-- `fastify` v5.1.0
-- `zod` v3.24.1
-- `vitest` v4.0.16
-- `@intexuraos/internal-clients` (latest)
+No deprecated APIs or dependencies in use.
 
 ---
 
 ## Recent Improvements
+
+### GitHub OAuth Mock Update (2026-03-02)
+
+Updated cross-service mocks in test utilities to include `resolveGitHubUsername` method on the `UserServiceClient` interface (commit `99febe66`). Test-only change, no production logic affected.
 
 ### Release v3.1.0 (2026-02-22)
 
@@ -162,6 +161,7 @@ Achieved 100% branch coverage with proper v8 ignore annotations (INT-427).
 
 | Date       | Issue                              | Resolution                                   |
 | ---------- | ---------------------------------- | -------------------------------------------- |
+| 2026-03-02 | UserServiceClient mock incomplete  | Added resolveGitHubUsername mock (99febe66)  |
 | 2026-02-22 | Version at 3.0.0                   | Bumped to v3.1.0                             |
 | 2026-02-16 | No distributed tracing             | Added Dash0 OpenTelemetry integration (#803) |
 | 2026-02-15 | Inconsistent API key naming        | Standardized to APP convention (#793)        |

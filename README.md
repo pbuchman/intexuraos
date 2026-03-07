@@ -7,15 +7,15 @@
     <a href="https://github.com/pbuchman/intexuraos/actions"><img src="https://img.shields.io/github/actions/workflow/status/pbuchman/intexuraos/ci.yml?branch=main&label=Build&style=flat-square&logo=github" alt="Build Status"></a>
     <img src="https://img.shields.io/badge/Coverage-100%25-success?style=flat-square&logo=codecov" alt="Coverage">
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-    <img src="https://img.shields.io/badge/AI_Models-16-purple?style=flat-square" alt="AI Models">
-    <img src="https://img.shields.io/badge/Components-46-orange?style=flat-square" alt="Components">
+    <img src="https://img.shields.io/badge/AI_Models-19-purple?style=flat-square" alt="AI Models">
+    <img src="https://img.shields.io/badge/Components-47-orange?style=flat-square" alt="Components">
     <img src="https://img.shields.io/badge/Infrastructure-Terraform-623CE4?style=flat-square&logo=terraform&logoColor=white" alt="Terraform">
   </p>
 </div>
 
 > Most productivity tools ask you to have the idea _and_ organize it at the same time. IntexuraOS removes the organizing step. Say what you need — while walking, while commuting, while thinking of something else — and a system of specialized agents handles the rest.
 
-This is not one AI that tries to do everything. It is 24 services — 20 apps, 4 workers, and 22 shared packages — each built for a single domain, communicating through a shared platform. One agent classifies your intent. Another dispatches it. A third executes it. Your dentist appointment lands on Google Calendar. Your research question goes to five AI models simultaneously. Your bug report becomes finished, tested code — written by an autonomous coding agent on your own machine, inside isolated containers, under your own AI subscription. Code never leaves your network.
+This is not one AI that tries to do everything. It is 25 services — 20 apps, 5 workers, and 22 shared packages — each built for a single domain, communicating through a shared platform. One agent classifies your intent. Another dispatches it. A third executes it. Your dentist appointment lands on Google Calendar. Your research question goes to five AI models simultaneously. Your bug report becomes finished, tested code — written by an autonomous coding agent on your own machine, inside isolated containers, under your own AI subscription. Code never leaves your network.
 
 IntexuraOS does not use AI as a feature. It deploys AI agents that use software as a tool. The platform researches, schedules, manages tasks, and **writes and ships its own code**.
 
@@ -100,7 +100,7 @@ Every task runs in its own world:
 
 When IntexuraOS needs to research a topic, it does not ask one model and hope for the best. It asks five.
 
-**16 models across 5 providers** — Google, OpenAI, Anthropic, Perplexity, and Zai — each queried in parallel, each reasoning independently, then synthesized into a single report with source attribution and confidence scoring.
+**19 models across 7 providers** — Google, OpenAI, Anthropic, Perplexity, Zai, MiniMax, and Alibaba Cloud — each queried in parallel, each reasoning independently, then synthesized into a single report with source attribution and confidence scoring.
 
 ```mermaid
 graph TB
@@ -239,16 +239,22 @@ Everything in Terraform. No manual cloud console changes. Reproducible, auditabl
 
 ---
 
-## What's New in v3.1.0
+## What's New in v3.2.0
 
-| Change                        | What It Means for You                                                                   |
-| ----------------------------- | --------------------------------------------------------------------------------------- |
-| **Auto-Trigger Code Tasks**   | Assign a project issue and the coding agent starts designing immediately                |
-| **Faster Code from Comments** | Leave a comment on a code change and the agent picks it up directly — no delay          |
-| **Smarter Code Execution**    | The agent now plans before writing, reviews its own code twice, and summarizes progress |
-| **Secret Stripping**          | API keys and tokens are automatically removed before reaching the coding agent          |
-| **Faster Verification**       | Full test and check pipeline runs in 3m43s, down from 5 minutes                         |
-| **Collapsible Log Output**    | Expand and collapse individual tool outputs when watching code tasks live               |
+| Improvement                 | Impact                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| **Agent-Based Routing**     | Requests automatically routed to the right specialist based on issue labels             |
+| **One-Click Implement**     | Planned tasks go from design to pull request with a single button press                 |
+| **Task Queueing**           | New requests wait in line when workers are busy instead of being dropped                |
+| **PR Comment Tasks**        | Leave a comment on a pull request and a code task is created automatically              |
+| **More AI Models**          | Qwen, Sonnet, and MiniMax worker types join the coding agent lineup                     |
+| **Voice Transcription**     | Voice messages automatically transcribed and processed by AI                            |
+| **WhatsApp Deep Links**     | Tap CTA buttons to navigate directly to tasks and dashboards                            |
+| **Auto-Trigger Code Tasks** | Assign a project issue and the coding agent starts designing immediately                |
+| **Smarter Code Execution**  | The agent now plans before writing, reviews its own code twice, and summarizes progress |
+| **Secret Stripping**        | API keys and tokens are automatically removed before reaching the coding agent          |
+| **Faster Verification**     | Full test and check pipeline runs in 3m43s, down from 5 minutes                         |
+| **Collapsible Log Output**  | Expand and collapse individual tool outputs when watching code tasks live               |
 
 ---
 

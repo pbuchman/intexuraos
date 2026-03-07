@@ -2,9 +2,9 @@
 
 ## Overview
 
-API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 15 IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration -- it exists solely to serve a configured Swagger UI.
+API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 18 IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration -- it exists solely to serve a configured Swagger UI.
 
-**Versions:** Package `3.1.0` / OpenAPI spec `0.0.4`
+**Versions:** Package `3.1.0` / OpenAPI spec `0.0.5`
 
 ## Architecture
 
@@ -15,7 +15,7 @@ graph LR
 
     Browser -->|fetch /openapi.json| S1[User Service]
     Browser -->|fetch /openapi.json| S2[Research Agent]
-    Browser -->|fetch /openapi.json| SN[... 13 more services]
+    Browser -->|fetch /openapi.json| SN[... 16 more services]
 
     Hub -->|GET /health| Health[Config Validation]
 ```
@@ -42,6 +42,7 @@ sequenceDiagram
 
 | Commit     | Description                                               | Date       |
 | ---------- | --------------------------------------------------------- | ---------- |
+| `ed9cdc25` | Add code-agent, linear-agent, web-agent to docs hub       | 2026-02-22 |
 | `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                            | 2026-02-19 |
 | `6063175b` | Dev-mode log formatting for PM2 readability               | 2026-02-16 |
@@ -77,11 +78,11 @@ interface OpenApiSource {
 interface Config {
   port: number;
   host: string;
-  openApiSources: OpenApiSource[];  // Exactly 15 sources required at startup
+  openApiSources: OpenApiSource[];  // Exactly 18 sources required at startup
 }
 ```
 
-## Aggregated Services (15)
+## Aggregated Services (18)
 
 | Display Name                     | Environment Variable                                      |
 | -------------------------------- | --------------------------------------------------------- |
@@ -100,6 +101,9 @@ interface Config {
 | Bookmarks Agent API              | `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`                  |
 | Calendar Agent API               | `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`                   |
 | Chat Agent API                   | `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                       |
+| Code Agent API                   | `INTEXURAOS_CODE_AGENT_OPENAPI_URL`                       |
+| Linear Agent API                 | `INTEXURAOS_LINEAR_AGENT_OPENAPI_URL`                     |
+| Web Agent API                    | `INTEXURAOS_WEB_AGENT_OPENAPI_URL`                        |
 
 ## Pub/Sub
 
@@ -141,25 +145,28 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 
 ## Configuration
 
-### Required Environment Variables (15)
+### Required Environment Variables (18)
 
-| Variable                                              | Description                   |
-| ----------------------------------------------------- | ----------------------------- |
-| `INTEXURAOS_USER_SERVICE_OPENAPI_URL`                 | User Service OpenAPI JSON URL |
-| `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`               | Notion Service OpenAPI URL    |
-| `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`             | WhatsApp Service OpenAPI URL  |
-| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL` | Mobile Notifications URL      |
-| `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`               | Research Agent OpenAPI URL    |
-| `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`               | Commands Agent OpenAPI URL    |
-| `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                | Actions Agent OpenAPI URL     |
-| `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL`          | Data Insights Agent URL       |
-| `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                | Image Service OpenAPI URL     |
-| `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                  | Notes Agent OpenAPI URL       |
-| `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                  | Todos Agent OpenAPI URL       |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`         | Application Settings URL      |
-| `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`              | Bookmarks Agent OpenAPI URL   |
-| `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`               | Calendar Agent OpenAPI URL    |
-| `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                   | Chat Agent OpenAPI URL        |
+| Variable                                              | Description                        |
+| ----------------------------------------------------- | ---------------------------------- |
+| `INTEXURAOS_USER_SERVICE_OPENAPI_URL`                 | User Service OpenAPI JSON URL      |
+| `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`               | Notion Service OpenAPI URL         |
+| `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`             | WhatsApp Service OpenAPI URL       |
+| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL` | Mobile Notifications URL           |
+| `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`               | Research Agent OpenAPI URL         |
+| `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`               | Commands Agent OpenAPI URL         |
+| `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                | Actions Agent OpenAPI URL          |
+| `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL`          | Data Insights Agent URL            |
+| `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                | Image Service OpenAPI URL          |
+| `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                  | Notes Agent OpenAPI URL            |
+| `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                  | Todos Agent OpenAPI URL            |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`         | Application Settings URL           |
+| `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`              | Bookmarks Agent OpenAPI URL        |
+| `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`               | Calendar Agent OpenAPI URL         |
+| `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                   | Chat Agent OpenAPI URL             |
+| `INTEXURAOS_CODE_AGENT_OPENAPI_URL`                   | Code Agent OpenAPI URL             |
+| `INTEXURAOS_LINEAR_AGENT_OPENAPI_URL`                 | Linear Agent OpenAPI URL           |
+| `INTEXURAOS_WEB_AGENT_OPENAPI_URL`                    | Web Agent OpenAPI URL              |
 
 ### Optional Environment Variables
 
@@ -195,22 +202,22 @@ module "api_docs_hub" {
   # OpenAPI URLs reference other module outputs
   env_vars = {
     INTEXURAOS_USER_SERVICE_OPENAPI_URL = "${module.user_service.service_url}/openapi.json"
-    # ... 14 more service URLs
+    # ... 17 more service URLs
   }
 
   depends_on = [module.user_service, module.notion_service, ...]
 }
 ```
 
-The Terraform module uses `depends_on` for all 15 upstream services to ensure their Cloud Run URLs are available before the hub deploys.
+The Terraform module uses `depends_on` for all 18 upstream services to ensure their Cloud Run URLs are available before the hub deploys.
 
 ## File Structure
 
 ```
 apps/api-docs-hub/src/
-  config.ts         # OpenApiSource[] config + env var validation (108 lines)
-  server.ts         # Fastify server, Swagger UI registration, health endpoint (92 lines)
+  config.ts         # OpenApiSource[] config + env var validation (121 lines)
+  server.ts         # Fastify server, Swagger UI registration, health endpoint (93 lines)
   index.ts          # Entry point: Sentry init, loadConfig(), listen (29 lines)
 ```
 
-Total: 229 lines of source code across 3 files. This is one of the simplest services in the monorepo.
+Total: 243 lines of source code across 3 files. This is one of the simplest services in the monorepo.

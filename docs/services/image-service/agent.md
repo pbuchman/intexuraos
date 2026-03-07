@@ -41,12 +41,9 @@ interface ThumbnailPrompt {
   prompt: string;          // Image generation prompt (80-180 words)
   negativePrompt: string;  // What to avoid (20-80 words)
   parameters: {
-    aspectRatio: '16:9';
     framing: string;
-    textOnImage: 'none';
     realism: 'photorealistic' | 'cinematic illustration' | 'clean vector';
     people: string;
-    logosTrademarks: 'none';
   };
 }
 ```
@@ -70,12 +67,9 @@ interface ThumbnailPrompt {
     "prompt": "A professional visualization of artificial intelligence research, featuring neural network patterns and data flow in a modern digital art style with deep blue and purple colors",
     "negativePrompt": "blurry, low quality, distorted, ugly, poorly drawn, text, watermark",
     "parameters": {
-      "aspectRatio": "16:9",
       "framing": "centered composition with leading space",
-      "textOnImage": "none",
       "realism": "cinematic illustration",
-      "people": "no people",
-      "logosTrademarks": "none"
+      "people": "no people"
     }
   }
 }
@@ -263,4 +257,4 @@ None. Image-service does not publish Pub/Sub events.
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

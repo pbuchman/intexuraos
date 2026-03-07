@@ -56,12 +56,9 @@ curl -X POST http://localhost:8120/internal/images/prompts/generate \
     "prompt": "A professional visualization of artificial intelligence research, featuring glowing neural network nodes with luminous blue connections against a dark gradient background, abstract data streams and geometric layers suggesting complexity and intelligence, minimalist scientific illustration with deep blue and purple tones, 16:9 wide format",
     "negativePrompt": "blurry, low quality, text on image, watermark, photorealistic people, corporate clipart, busy background, logos",
     "parameters": {
-      "aspectRatio": "16:9",
       "framing": "centered composition with radial depth",
-      "textOnImage": "none",
       "realism": "cinematic illustration",
-      "people": "no people",
-      "logosTrademarks": "none"
+      "people": "no people"
     }
   }
 }
@@ -69,7 +66,7 @@ curl -X POST http://localhost:8120/internal/images/prompts/generate \
 
 ### What Just Happened?
 
-The service sent your text to the Gemini 2.5 Pro LLM, which analyzed the content and generated a structured prompt optimized for image generation. The response includes not just the prompt, but also a title, visual summary, negative prompt (what to avoid), and rendering parameters. Use the `data.prompt` field when calling the image generation endpoint.
+The service sent your text to the Gemini 2.5 Pro LLM, which analyzed the content and generated a structured prompt optimized for image generation. The response includes a title, visual summary, the generation prompt itself, a negative prompt (what to avoid), and rendering parameters covering framing, realism style, and people directives. Use the `data.prompt` field when calling the image generation endpoint.
 
 **Checkpoint:** You should see a `success: true` response with all five fields populated in `data`.
 
@@ -313,7 +310,7 @@ curl -X POST http://localhost:8120/internal/images/prompts/generate \
   }'
 ```
 
-Examine the response: `title` (max 10 words), `visualSummary` (1 sentence), `prompt` (80-180 words), `negativePrompt` (20-80 words), and `parameters` with fixed values for `aspectRatio` ("16:9"), `textOnImage` ("none"), and `logosTrademarks` ("none").
+Examine the response: `title` (max 10 words), `visualSummary` (1 sentence), `prompt` (80-180 words), `negativePrompt` (20-80 words), and `parameters` with `framing` (LLM-generated), `realism` (one of three styles), and `people` (LLM-generated directive).
 
 ### Exercise 2: Compare Providers
 

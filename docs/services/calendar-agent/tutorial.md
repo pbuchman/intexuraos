@@ -109,11 +109,51 @@ Note: All-day events use `date` (YYYY-MM-DD), not `dateTime`. End date is exclus
 
 ## Part 3: Using Preview Generation
 
-The preview flow allows users to see what will be created before committing.
+The preview flow allows users to see what will be created before committing. There are two generation modes: synchronous (direct HTTP) and asynchronous (Pub/Sub).
 
-### Step 3.1: Check Preview Status
+### Step 3.1: Generate Preview Synchronously (Recommended)
 
-After an action is submitted, check the preview status:
+For approval flows where the preview must be available immediately:
+
+```bash
+curl -X POST "https://calendar-agent.intexuraos.com/internal/calendar/preview" \
+  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "actionId": "action-123",
+    "userId": "user-456",
+    "text": "Dentist appointment next Tuesday at 2pm",
+    "currentDate": "2026-03-07"
+  }'
+```
+
+**Response (ready):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "preview": {
+      "actionId": "action-123",
+      "userId": "user-456",
+      "status": "ready",
+      "summary": "Dentist appointment",
+      "start": "2026-03-11T14:00:00",
+      "end": "2026-03-11T15:00:00",
+      "duration": "1 hour",
+      "isAllDay": false,
+      "reasoning": "Interpreted 'next Tuesday at 2pm' as March 11th based on current date.",
+      "generatedAt": "2026-03-07T10:00:05Z"
+    }
+  }
+}
+```
+
+The synchronous endpoint returns the preview data directly in the response, avoiding the need to poll.
+
+### Step 3.2: Check Preview Status
+
+After an async preview is submitted, check the preview status:
 
 ```bash
 curl -X GET "https://calendar-agent.intexuraos.com/internal/calendar/preview/action-123" \
@@ -158,7 +198,7 @@ curl -X GET "https://calendar-agent.intexuraos.com/internal/calendar/preview/act
 }
 ```
 
-### Step 3.2: Understanding Preview Fields
+### Step 3.3: Understanding Preview Fields
 
 | Field       | Description                                       |
 | ----------- | ------------------------------------------------- |
@@ -167,9 +207,9 @@ curl -X GET "https://calendar-agent.intexuraos.com/internal/calendar/preview/act
 | `isAllDay`  | True if event spans full days                     |
 | `reasoning` | LLM's explanation of how it interpreted the input |
 
-### Step 3.3: Process Action After Approval
+### Step 3.4: Process Action After Approval
 
-When user approves, the preview data is used:
+When user approves, the preview data is used. Pass the full user prompt via the `text` field:
 
 ```bash
 curl -X POST "https://calendar-agent.intexuraos.com/internal/calendar/process-action" \
@@ -179,8 +219,9 @@ curl -X POST "https://calendar-agent.intexuraos.com/internal/calendar/process-ac
     "action": {
       "id": "action-123",
       "userId": "user-456",
-      "title": "Dentist appointment next Tuesday at 2pm"
-    }
+      "title": "Dentist appointment"
+    },
+    "text": "Dentist appointment next Tuesday at 2pm"
   }'
 ```
 
@@ -198,6 +239,8 @@ curl -X POST "https://calendar-agent.intexuraos.com/internal/calendar/process-ac
 ```
 
 If preview is ready, it skips LLM extraction and uses cached data. The `resourceUrl` links directly to the created Google Calendar event. If the event has no `htmlLink`, it falls back to `/#/calendar`.
+
+The `text` field contains the full user prompt for LLM extraction. When omitted, falls back to `action.title`. Always prefer sending `text` with the complete natural language input.
 
 ## Part 4: Handle Errors
 
@@ -422,17 +465,19 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 | Attendee ignored  | Attendee not added   | Ensure email is valid email address                  |
 | Retry returns 422 | Missing start/end    | Failed event has no extracted times, create manually |
 | Retry returns 404 | Wrong user           | Failed event belongs to a different user             |
+| Auto-execute fail | Missing date/time    | Ensure `text` field has full user prompt, not title  |
 
 ## Best Practices
 
-1. **Poll preview status** - Check every 1-2 seconds until ready or failed
-2. **Always specify timeMin/timeMax** - Reduces data transfer and improves performance
-3. **Use pagination** - Set maxResults to avoid fetching all events at once
-4. **Handle partial success** - Free/busy may return some calendars with errors
-5. **Implement caching** - Cache event data for short periods
-6. **Respect rate limits** - Google Calendar has daily quota limits
-7. **Display reasoning** - Show users why dates were interpreted a certain way
-8. **Use resourceUrl** - The process-action response links directly to Google Calendar
+1. **Use synchronous preview** - For approval flows, use `POST /internal/calendar/preview` for immediate preview data
+2. **Pass full prompt text** - Always send the complete user message via the `text` field in process-action, not just the short classifier title
+3. **Always specify timeMin/timeMax** - Reduces data transfer and improves performance
+4. **Use pagination** - Set maxResults to avoid fetching all events at once
+5. **Handle partial success** - Free/busy may return some calendars with errors
+6. **Implement caching** - Cache event data for short periods
+7. **Respect rate limits** - Google Calendar has daily quota limits
+8. **Display reasoning** - Show users why dates were interpreted a certain way
+9. **Use resourceUrl** - The process-action response links directly to Google Calendar
 
 ## Exercises
 
@@ -446,15 +491,15 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 
 1. Create an all-day event
 2. Search for events containing "meeting"
-3. Poll a preview until it becomes ready
+3. Generate a preview synchronously and display it
 
 ### Hard
 
 1. Find next available 1-hour slot for multiple attendees
-2. Implement preview polling with exponential backoff
+2. Implement preview polling with exponential backoff for async flow
 3. Handle all preview states (pending, ready, failed) in UI
 4. Build a failed events review flow with retry and delete support
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

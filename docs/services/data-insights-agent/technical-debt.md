@@ -1,6 +1,6 @@
 # Data Insights Agent -- Technical Debt
 
-**Last Updated:** 2026-02-22
+**Last Updated:** 2026-03-07
 **Analysis Run:** Autonomous service-scribe (development branch)
 
 ---
@@ -87,23 +87,25 @@ None.
 
 ## Resolved Issues
 
-| Date       | Issue                                     | Resolution                                             |
-| ---------- | ----------------------------------------- | ------------------------------------------------------ |
-| 2026-02-20 | Scheduled snapshot refresh (6.5M tok/day) | Removed Cloud Scheduler job; on-demand refresh only    |
-| 2026-02-17 | Visualization service as placeholder      | Full CRUD + async compute + on-demand refresh          |
-| 2026-02-15 | Default LLM model not specified           | Switched to Gemini 2.5 Flash with Gemini fallback      |
-| 2026-02-08 | Response contract violations              | Migrated all routes to reply.ok() / reply.fail()       |
-| 2026-02-08 | Raw pino() logger usage                   | Migrated to createAppLogger() for Sentry integration   |
-| 2026-02-08 | INT-408 Missing env var registration      | Added 4 required env vars to REQUIRED_ENV              |
-| 2026-02-08 | INT-427 Coverage enforcement              | Strict 100% branch coverage with v8 ignore             |
-| 2026-02-08 | INT-301 User service client consolidation | Removed local infra/user/ re-export wrapper            |
-| 2025-01-25 | INT-218 LLM response validation           | Migrated 3 services to Zod schemas                     |
-| 2025-01-25 | INT-269 Internal client consolidation     | Migrated to @intexuraos/internal-clients               |
-| 2025-01-19 | INT-160 Empty chart definitions           | Fixed empty chart bug                                  |
-| 2025-01-17 | INT-137 Strict sentence count validation  | Relaxed validation                                     |
-| 2025-01-15 | INT-79 Parse failures                     | Added LLM repair pattern                               |
-| 2025-01-15 | INT-77 Empty insights as errors           | Return success with reason                             |
-| 2025-01-15 | Clean Architecture violations             | Enforced domain->infra boundary                        |
+| Date       | Issue                                                      | Resolution                                             |
+| ---------- | ---------------------------------------------------------- | ------------------------------------------------------ |
+| 2026-03-02 | GitHub OAuth mock updates across 18 services               | Added resolveGitHubUsername to UserServiceClient mocks |
+| 2026-02-23 | INT-595 TransformedDataSchema rejected valid empty arrays  | Removed `.min(1)` from schema to match prompt contract |
+| 2026-02-20 | Scheduled snapshot refresh (6.5M tok/day)                  | Removed Cloud Scheduler job; on-demand refresh only    |
+| 2026-02-17 | Visualization service as placeholder                       | Full CRUD + async compute + on-demand refresh          |
+| 2026-02-15 | Default LLM model not specified                            | Switched to Gemini 2.5 Flash with Gemini fallback      |
+| 2026-02-08 | Response contract violations                               | Migrated all routes to reply.ok() / reply.fail()       |
+| 2026-02-08 | Raw pino() logger usage                                    | Migrated to createAppLogger() for Sentry integration   |
+| 2026-02-08 | INT-408 Missing env var registration                       | Added 4 required env vars to REQUIRED_ENV              |
+| 2026-02-08 | INT-427 Coverage enforcement                               | Strict 100% branch coverage with v8 ignore             |
+| 2026-02-08 | INT-301 User service client consolidation                  | Removed local infra/user/ re-export wrapper            |
+| 2025-01-25 | INT-218 LLM response validation                            | Migrated 3 services to Zod schemas                     |
+| 2025-01-25 | INT-269 Internal client consolidation                      | Migrated to @intexuraos/internal-clients               |
+| 2025-01-19 | INT-160 Empty chart definitions                            | Fixed empty chart bug                                  |
+| 2025-01-17 | INT-137 Strict sentence count validation                   | Relaxed validation                                     |
+| 2025-01-15 | INT-79 Parse failures                                      | Added LLM repair pattern                               |
+| 2025-01-15 | INT-77 Empty insights as errors                            | Return success with reason                             |
+| 2025-01-15 | Clean Architecture violations                              | Enforced domain->infra boundary                        |
 
 ---
 

@@ -1,7 +1,7 @@
 # Commands Agent - Technical Debt
 
-**Last Updated:** 2026-02-22
-**Analysis Run:** Service documentation generation (v3.1.0 context)
+**Last Updated:** 2026-03-07
+**Analysis Run:** Service documentation generation (v3.1.0+ context)
 
 ---
 
@@ -24,17 +24,15 @@ Based on code analysis and git history:
 
 1. **Reminder handler implementation** - CommandType includes `reminder` but actions-agent handler not yet implemented
 
-2. **Code handler implementation** - CommandType includes `code` but actions-agent handler not yet implemented
+2. **Additional language support** - Currently English and Polish; German and Spanish phrases could be added to Step 1 and Step 2 of classification prompt
 
-3. **Additional language support** - Currently English and Polish; German and Spanish phrases could be added to Step 1 and Step 2 of classification prompt
+3. **Confidence threshold tuning** - Low confidence commands default to `note`; could offer user confirmation flow for ambiguous inputs
 
-4. **Confidence threshold tuning** - Low confidence commands default to `note`; could offer user confirmation flow for ambiguous inputs
+4. **Structured output mode** - Consider using Gemini function calling or OpenAI JSON mode instead of regex JSON extraction
 
-5. **Structured output mode** - Consider using Gemini function calling or OpenAI JSON mode instead of regex JSON extraction
+5. **Circuit breaker for actions-agent** - Commands fail with `failed` status when actions-agent is unavailable; circuit breaker pattern would improve resilience
 
-6. **Circuit breaker for actions-agent** - Commands fail with `failed` status when actions-agent is unavailable; circuit breaker pattern would improve resilience
-
-7. **Graceful degradation for startup pricing** - `initServices()` hard-fails when app-settings-service is unreachable; cached or default pricing would improve boot resilience
+6. **Graceful degradation for startup pricing** - `initServices()` hard-fails when app-settings-service is unreachable; cached or default pricing would improve boot resilience
 
 ---
 
@@ -54,7 +52,7 @@ Based on code analysis and git history:
 
 **File:** `apps/commands-agent/src/infra/llm/classifier.ts`
 
-**Issue:** The `.slice(0, 500)` in `rawResponsePreview` log fields uses a bare number for the log preview length. `PWA_SHARED_LINK_CONFIDENCE_BOOST` and Zod-enforced title max (50 chars) are already named constants.
+**Issue:** The `.slice(0, 500)` in `rawResponsePreview` log fields uses a bare number for the log preview length. `PWA_SHARED_LINK_CONFIDENCE_BOOST` and Zod-enforced title max (200 chars) are already named constants.
 
 **Recommendation:** Extract to a named constant:
 
@@ -125,6 +123,14 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 ---
 
 ## Resolved Issues
+
+### Classification title limit too restrictive
+
+**Resolved in:** cc52e50d (2026-03-07)
+
+**Previous issue:** The Zod schema for classification responses enforced a 50-character maximum on titles. When the LLM generated a longer title, the entire classification was rejected (including the correct type and confidence), falling back to `note` with 0.3 confidence.
+
+**Solution:** Increased the title limit from 50 to 200 characters. This preserves valid classifications that happen to have descriptive titles.
 
 ### URL keyword misclassification
 
@@ -200,4 +206,4 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

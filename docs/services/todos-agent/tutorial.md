@@ -73,7 +73,7 @@ curl -X POST http://localhost:8123/todos \
 
 ### What Just Happened?
 
-You created a todo. The service assigned a unique ID, set the status to `pending`, and initialized an empty items array. The `source` and `sourceId` fields track where the todo originated.
+You created a todo. The service assigned a unique ID, set the status to `pending`, and initialized an empty items array. The `source` and `sourceId` fields track where the todo originated. Priority defaults to `medium` if not specified.
 
 ---
 
@@ -114,7 +114,7 @@ curl "http://localhost:8123/todos?archived=false" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-**Checkpoint:** You should see only todos matching your filters. Tags use OR logic (todos matching ANY tag).
+**Checkpoint:** You should see only todos matching your filters. Tags use OR logic (todos matching ANY provided tag are returned).
 
 ---
 
@@ -143,7 +143,7 @@ curl -X POST http://localhost:8123/todos \
   }'
 ```
 
-**Expected response:** The todo includes an `items` array with three items, each with a position (0, 1, 2).
+**Expected response:** The todo includes an `items` array with three items, each with a position (0, 1, 2) and status `pending`.
 
 ### Step 3.2: Add an Item to Existing Todo
 
@@ -174,7 +174,7 @@ curl -X PATCH http://localhost:8123/todos/TODO_ID/items/ITEM_ID \
   }'
 ```
 
-**Note:** When all items in a todo are marked completed, the todo automatically transitions to `completed` status. When some items are completed but not all, the todo transitions to `in_progress`.
+**Note:** When all items in a todo are marked completed, the todo automatically transitions to `completed` status and `completedAt` is set. When some items are completed but not all, the todo transitions to `in_progress`.
 
 ### Step 4.2: Reorder Items
 
@@ -187,7 +187,7 @@ curl -X POST http://localhost:8123/todos/TODO_ID/items/reorder \
   }'
 ```
 
-**Note:** Reordering requires ALL item IDs. Provide them in the new order you want.
+**Note:** Reordering requires ALL item IDs. Provide them in the new order you want. Partial reorders are rejected.
 
 ### Step 4.3: Delete an Item
 
@@ -209,7 +209,8 @@ curl -X PATCH http://localhost:8123/todos/TODO_ID \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "priority": "urgent"
+    "priority": "urgent",
+    "tags": ["work", "urgent"]
   }'
 ```
 
@@ -220,7 +221,7 @@ curl -X POST http://localhost:8123/todos/TODO_ID/cancel \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-**Note:** Cannot cancel already completed todos.
+**Note:** Cannot cancel already completed todos. Already-cancelled todos return success without changes.
 
 ### Step 5.3: Archive a Completed or Cancelled Todo
 
@@ -268,7 +269,7 @@ curl -X POST http://localhost:8123/internal/todos \
 1. Todo created with `status: processing`
 2. Pub/Sub event triggers the AI extraction
 3. Your LLM (Gemini 2.5 Flash or GLM-4.7) parses the description
-4. Items added: "Finish sales presentation", "Call dentist", "Review team updates"
+4. Items extracted: "Finish sales presentation", "Call dentist", "Review team updates"
 5. Due dates and priorities inferred from context
 6. Status changes to `pending`
 
@@ -284,15 +285,16 @@ curl "http://localhost:8123/todos/TODO_ID" \
 
 ## Troubleshooting
 
-| Issue             | Symptom            | Solution                               |
-| ----------------- | ------------------ | -------------------------------------- |
-| Auth failed       | 401 Unauthorized   | Check your access token is valid       |
-| Todo not found    | 404 error          | Verify the todo ID                     |
-| Invalid request   | 400 error          | Check required fields (title, tags)    |
-| Invalid operation | 400 error          | Check status restrictions              |
-| Archive failed    | 400 error          | Only completed/cancelled todos archive |
-| Cancel failed     | 400 error          | Cannot cancel already completed todos  |
-| No extraction     | Items not added    | Check if user has LLM API key set      |
+| Issue             | Symptom          | Solution                                                     |
+| ----------------- | ---------------- | ------------------------------------------------------------ |
+| Auth failed       | 401 Unauthorized | Check your access token is valid and not expired             |
+| Todo not found    | 404 error        | Verify the todo ID and that it belongs to your user          |
+| Access denied     | 403 error        | You can only access your own todos                           |
+| Invalid request   | 400 error        | Check required fields: `title`, `tags`, `source`, `sourceId` |
+| Invalid operation | 400 error        | Check status restrictions (archive, cancel)                  |
+| Archive failed    | 400 error        | Only completed/cancelled todos can be archived               |
+| Cancel failed     | 400 error        | Cannot cancel already completed todos                        |
+| No extraction     | Items not added  | Check if user has LLM API key configured                     |
 
 ---
 
@@ -300,9 +302,10 @@ curl "http://localhost:8123/todos/TODO_ID" \
 
 Now that you understand the basics:
 
-1. Explore the [Technical Reference](technical.md) for full API details
-2. Learn about the [AI item extraction](technical.md#ai-item-extraction) feature
+1. Explore the [Technical Reference](technical.md) for full API details and Mermaid diagrams
+2. Learn about the [AI item extraction](technical.md#ai-item-extraction) pipeline
 3. Check out [commands-agent](../commands-agent/features.md) for creating todos from natural language via WhatsApp
+4. Review the [Agent Interface](agent.md) for machine-readable integration patterns
 
 ---
 
@@ -310,9 +313,9 @@ Now that you understand the basics:
 
 Test your understanding:
 
-1. **Easy:** Create a todo with 3 items and mark one as completed
-2. **Medium:** Create a todo, filter it by tag, update its priority, then cancel and archive it
-3. **Hard:** Create a todo via the internal endpoint with a complex description, wait for AI extraction, verify items were created with priorities and due dates
+1. **Easy:** Create a todo with 3 items and mark one as completed. Verify the todo transitions to `in_progress`.
+2. **Medium:** Create a todo, filter it by tag, update its priority, then cancel and archive it.
+3. **Hard:** Create a todo via the internal endpoint with a complex description, wait for AI extraction, verify items were created with priorities and due dates.
 
 <details>
 <summary>Solutions</summary>
@@ -342,6 +345,10 @@ curl -X PATCH http://localhost:8123/todos/TODO_ID/items/ITEM_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "completed"}'
+
+# Verify: todo.status should now be "in_progress"
+curl "http://localhost:8123/todos/TODO_ID" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Exercise 2: Filter, Update, Cancel, Archive

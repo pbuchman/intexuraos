@@ -1,7 +1,7 @@
 # Calendar Agent - Technical Debt
 
-**Last Updated:** 2026-02-22
-**Analysis Run:** v3.1.0 (INT-585 htmlLink as resourceUrl, Release v3.0.0/v3.1.0)
+**Last Updated:** 2026-03-07
+**Analysis Run:** v3.1.0+ (INT-535 synchronous preview, INT-621 full prompt text)
 
 ---
 
@@ -14,6 +14,29 @@
 | Type Issues | 0     | -        |
 | TODOs       | 0     | -        |
 | **Total**   | **1** | Low      |
+
+---
+
+## Recent Improvements (post v3.1.0)
+
+### INT-535: Synchronous Calendar Preview
+
+**Status:** Complete
+
+Added `POST /internal/calendar/preview` endpoint for synchronous preview generation via direct HTTP. This allows actions-agent to generate previews inline during approval message construction, eliminating the need for Pub/Sub async flow in latency-sensitive paths. The Pub/Sub endpoint (`POST /internal/calendar/generate-preview`) remains available for async use cases.
+
+**Changes:**
+- Added `DirectPreviewBody` interface and new route handler in `internalRoutes.ts`
+- Changed error response schemas from `500` to `502 Bad Gateway` on internal endpoints
+- Removed explicit `reply.status(500)` before `reply.fail('DOWNSTREAM_ERROR')` calls (the framework handles status codes)
+
+### INT-621: Full User Prompt for Event Extraction
+
+**Status:** Complete
+
+`POST /internal/calendar/process-action` now accepts an optional `text` field containing the full user prompt. Previously, only `action.title` (a short classifier-generated title) was sent, causing 100% of auto-executed calendar actions to fail with "Missing date/time" because the title lacked temporal information. The `text` field is now preferred for LLM extraction, with `action.title` as fallback.
+
+**Change:** Added `text?: string` to `ProcessActionBody`, extraction logic uses `text` when present with non-zero length, falls back to `action.title`.
 
 ---
 
@@ -183,6 +206,8 @@ No test coverage gaps identified. Strict 100% branch coverage enforced with v8 i
 - Failed event retry - ownership check, missing start/end, create+delete flow, non-blocking delete failure
 - mapUserServiceError - all error code mappings tested
 - GoogleCalendarClient.listEvents - auto singleEvents, orderBy, maxResults, q parameter passing
+- Direct HTTP preview generation - success, auth rejection, validation, extraction failure
+- Full prompt text passthrough - text field used when provided, title fallback when absent
 
 ---
 
@@ -208,21 +233,25 @@ No deprecated API usage detected.
 
 ## Resolved Issues
 
-| Date       | Issue                                             | Resolution                                       |
-| ---------- | ------------------------------------------------- | ------------------------------------------------ |
-| 2026-02-20 | processAction returned internal /#/calendar URL   | Now uses Google Calendar htmlLink as resourceUrl |
-| 2026-02-16 | No distributed tracing across service boundaries  | Added Dash0 OpenTelemetry integration            |
-| 2026-02-15 | API key env vars inconsistently named             | Standardized to APP naming convention            |
-| 2026-02-15 | Single LLM with no fallback on unavailability     | Added multi-model with Zai fallback              |
-| 2026-01-31 | Failed extractions could not be dismissed/retried | Added DELETE and POST retry endpoints            |
-| 2026-01-30 | LLM returning invalid JSON caused immediate fail  | Added repair prompt mechanism (1 retry attempt)  |
-| 2026-01-30 | Date-only format rejected for all-day events      | Updated schema to accept YYYY-MM-DD format       |
-| 2026-01-29 | Polish relative dates parsed incorrectly          | Added day of week to currentDate context         |
-| 2026-01-28 | Missing INTEXURAOS_GCP_PROJECT_ID env var         | Added to REQUIRED_ENV array                      |
-| 2026-01-26 | Dual user service clients (local + shared)        | Consolidated to single shared UserServiceClient  |
-| 2026-01-26 | singleEvents not set for time-filtered queries    | Auto-set singleEvents=true with time filters     |
-| 2026-01-24 | Preview cleanup blocking event response           | Changed to non-blocking deletion                 |
-| 2026-01-24 | Missing duration/isAllDay in preview              | Added computed fields                            |
+| Date       | Issue                                             | Resolution                                          |
+| ---------- | ------------------------------------------------- | --------------------------------------------------- |
+| 2026-03-02 | Cross-service mock missing resolveGitHubUsername  | Added method to FakeUserServiceClient               |
+| 2026-02-24 | Auto-execute sent title instead of full prompt    | Added `text` field to process-action endpoint       |
+| 2026-02-23 | Error responses used 500 instead of 502           | Fixed internal endpoint schemas to use 502          |
+| 2026-02-23 | No synchronous preview generation available       | Added POST /internal/calendar/preview endpoint      |
+| 2026-02-20 | processAction returned internal /#/calendar URL   | Now uses Google Calendar htmlLink as resourceUrl    |
+| 2026-02-16 | No distributed tracing across service boundaries  | Added Dash0 OpenTelemetry integration               |
+| 2026-02-15 | API key env vars inconsistently named             | Standardized to APP naming convention               |
+| 2026-02-15 | Single LLM with no fallback on unavailability     | Added multi-model with Zai fallback                 |
+| 2026-01-31 | Failed extractions could not be dismissed/retried | Added DELETE and POST retry endpoints               |
+| 2026-01-30 | LLM returning invalid JSON caused immediate fail  | Added repair prompt mechanism (1 retry attempt)     |
+| 2026-01-30 | Date-only format rejected for all-day events      | Updated schema to accept YYYY-MM-DD format          |
+| 2026-01-29 | Polish relative dates parsed incorrectly          | Added day of week to currentDate context            |
+| 2026-01-28 | Missing INTEXURAOS_GCP_PROJECT_ID env var         | Added to REQUIRED_ENV array                         |
+| 2026-01-26 | Dual user service clients (local + shared)        | Consolidated to single shared UserServiceClient     |
+| 2026-01-26 | singleEvents not set for time-filtered queries    | Auto-set singleEvents=true with time filters        |
+| 2026-01-24 | Preview cleanup blocking event response           | Changed to non-blocking deletion                    |
+| 2026-01-24 | Missing duration/isAllDay in preview              | Added computed fields                               |
 
 ---
 

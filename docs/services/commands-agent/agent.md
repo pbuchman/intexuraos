@@ -178,6 +178,7 @@ interface Command {
 | **Source Types**        | Create endpoint only supports 'pwa-shared' source; WhatsApp uses Pub/Sub          |
 | **Classification**      | Automatic via Gemini 2.5 Flash (default), GLM-4.7, or GLM-4.7-Flash               |
 | **Idempotency**         | Commands keyed by {sourceType}:{externalId}; duplicates return existing command   |
+| **Title Limit**         | Classification titles are capped at 200 characters by Zod schema validation       |
 
 ---
 
@@ -312,8 +313,8 @@ whatsapp-service -> Pub/Sub (command.ingest) -> /internal/commands -> commands-a
 | Language | Explicit Prefix       | Explicit Intent Phrases              |
 | -------- | --------------------- | ------------------------------------ |
 | English  | linear:, todo:, note: | save bookmark, create todo, research |
-| Polish   | do lineara, zadanie   | zapisz link, stwórz zadanie, zbadaj  |
+| Polish   | do lineara, zadanie   | zapisz link, stworz zadanie, zbadaj  |
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

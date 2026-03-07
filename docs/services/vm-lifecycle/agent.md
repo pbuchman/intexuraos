@@ -1,16 +1,16 @@
 # vm-lifecycle -- Agent Interface
 
-> Machine-readable interface definition for AI agents interacting with vm-lifecycle.
+> Machine-readable specification for AI agent integration with vm-lifecycle.
 
 ---
 
 ## Identity
 
-| Field    | Value                                                  |
-| -------- | ------------------------------------------------------ |
-| **Name** | vm-lifecycle                                           |
-| **Role** | VM Start/Stop Controller                               |
-| **Goal** | Start and stop a GCE VM on schedule with health checks |
+| Attribute | Value                                                                                                                              |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Name**  | vm-lifecycle                                                                                                                       |
+| **Role**  | GCE VM start/stop controller with health verification                                                                              |
+| **Goal**  | Start and stop a coding VM on schedule, ensuring application readiness before declaring success and draining tasks before shutdown |
 
 ---
 
@@ -20,13 +20,13 @@
 
 **Endpoint:** `POST /` (Cloud Function: `startVm`)
 
-**When to use:** When you need to bring up the GCE VM and confirm the application is ready to accept work. Use before sending tasks to the orchestrator. Safe to call if the VM is already running — it returns immediately if healthy.
+**When to use:** When you need to bring up the GCE VM and confirm the application is ready to accept work. Use before sending tasks to the orchestrator. Safe to call if the VM is already running -- returns immediately if healthy.
 
 **Input Schema:**
 
 ```typescript
 interface StartVmInput {
-  // No body required — configuration is fully environment-driven
+  // No body required -- configuration is fully environment-driven
 }
 ```
 
@@ -36,7 +36,7 @@ interface StartVmInput {
 interface StartVmResult {
   success: boolean;
   message: string;
-  startupDurationMs?: number; // Present on all success cases; absent only when Compute API throws
+  startupDurationMs?: number; // Present on success; absent only when Compute API throws
 }
 ```
 
@@ -44,22 +44,23 @@ interface StartVmResult {
 
 ```json
 // Request: POST / (no body)
+// Header: X-Internal-Auth: Bearer <token>
 
-// Response 200 — started fresh
+// Response 200 -- started fresh
 {
   "success": true,
   "message": "VM started and healthy",
   "startupDurationMs": 45000
 }
 
-// Response 200 — already running
+// Response 200 -- already running
 {
   "success": true,
   "message": "VM already running and healthy",
   "startupDurationMs": 2000
 }
 
-// Response 503 — health check timed out
+// Response 503 -- health check timed out
 {
   "success": false,
   "message": "VM started but health check timed out after 3 minutes",
@@ -77,7 +78,7 @@ interface StartVmResult {
 
 ```typescript
 interface StopVmInput {
-  // No body required — configuration is fully environment-driven
+  // No body required -- configuration is fully environment-driven
 }
 ```
 
@@ -95,21 +96,22 @@ interface StopVmResult {
 
 ```json
 // Request: POST / (no body)
+// Header: X-Internal-Auth: Bearer <token>
 
-// Response 200 — shutdown initiated
+// Response 200 -- shutdown initiated
 {
   "success": true,
   "message": "VM shutdown initiated",
   "runningTasksAtShutdown": 2
 }
 
-// Response 200 — already stopped
+// Response 200 -- already stopped
 {
   "success": true,
   "message": "VM already in TERMINATED state"
 }
 
-// Response 503 — Compute API failure
+// Response 503 -- Compute API failure
 {
   "success": false,
   "message": "Failed to stop VM: <error details>"
@@ -122,10 +124,10 @@ interface StopVmResult {
 
 **Do NOT:**
 
-- Call without `X-Internal-Auth: Bearer <token>` header — both functions return 401
-- Use GET or any non-POST method — returns 405
-- Expect synchronous completion of the VM stop — the function issues the stop command but does not wait for `TERMINATED`
-- Rely on sub-120-second execution — health polling alone can take up to 3 minutes
+- Call without `X-Internal-Auth: Bearer <token>` header -- returns 401
+- Use GET or any non-POST method -- returns 405
+- Expect synchronous completion of the VM stop -- the function issues the stop command but does not wait for `TERMINATED` state
+- Rely on sub-120-second execution -- health polling can take up to 3 minutes (exceeds function timeout)
 
 **Requires:**
 
@@ -137,25 +139,23 @@ interface StopVmResult {
 
 ## Usage Patterns
 
-### Start the VM
+### Pattern 1: Start VM Before Sending Tasks
 
-```bash
-curl -X POST https://VM_START_FUNCTION_URL \
-  -H "X-Internal-Auth: Bearer YOUR_TOKEN"
+```
+1. POST to startVm function with X-Internal-Auth header
+2. If response.success === true, proceed to send tasks to the orchestrator
+3. If response.success === false, check message for diagnostics
 ```
 
-**Response:** `{ "success": true, "message": "VM started and healthy", "startupDurationMs": 45000 }`
+### Pattern 2: Graceful Shutdown
 
-### Stop the VM
-
-```bash
-curl -X POST https://VM_STOP_FUNCTION_URL \
-  -H "X-Internal-Auth: Bearer YOUR_TOKEN"
+```
+1. POST to stopVm function with X-Internal-Auth header
+2. Function handles orchestrator notification and task draining automatically
+3. Check runningTasksAtShutdown to know if tasks were in progress
 ```
 
-**Response:** `{ "success": true, "message": "VM shutdown initiated", "runningTasksAtShutdown": 0 }`
-
-### Check VM state directly (via gcloud)
+### Pattern 3: Check VM State Directly (via gcloud)
 
 ```bash
 gcloud compute instances describe cc-vm \
@@ -209,4 +209,4 @@ gcloud compute instances describe cc-vm \
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-03-07

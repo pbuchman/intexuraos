@@ -1,7 +1,7 @@
 # Orchestrator - Technical Debt
 
-**Last Updated:** 2026-02-19
-**Analysis Run:** v2.2.0 documentation update (multi-attempt completion verification)
+**Last Updated:** 2026-03-07
+**Analysis Run:** v3.1.0 documentation update (multi-model support, container adoption, forensics mode)
 
 ---
 
@@ -21,7 +21,7 @@
 
 ### 1. Default repository hardcoded
 
-**File:** `workers/orchestrator/src/services/task-dispatcher.ts:282`
+**File:** `workers/orchestrator/src/services/task-dispatcher.ts:593`
 
 ```typescript
 private getDefaultRepository(_request: CreateTaskRequest): string {
@@ -38,7 +38,7 @@ private getDefaultRepository(_request: CreateTaskRequest): string {
 
 ### 2. Graceful shutdown not implemented
 
-**File:** `workers/orchestrator/src/routes.ts:279`
+**File:** `workers/orchestrator/src/routes.ts:305`
 
 ```typescript
 app.post('/admin/shutdown', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {

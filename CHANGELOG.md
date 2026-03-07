@@ -1,5 +1,119 @@
 # Changelog
 
+## 3.2.0
+
+### Added
+
+- Agent-based routing architecture with label-based dispatch — requests automatically routed to the right specialist based on issue labels (INT-718)
+- Implement button and planning-to-PR lifecycle — planned tasks kicked off with one click
+- Task queueing — new requests wait in line when all workers are busy instead of being dropped (INT-619, INT-624)
+- PR comment to code task creation with improved webhook handling (INT-618, INT-704, INT-668)
+- New AI models: Qwen, Sonnet, and MiniMax worker types for more flexibility (INT-703, INT-710, INT-706)
+- Event-driven audio transcription — voice messages automatically converted to text and processed by AI (INT-684, INT-682, INT-685, INT-616)
+- WhatsApp CTA buttons and deep links — tap to navigate directly to tasks and actions (INT-730, INT-738, INT-727, INT-732)
+- WhatsApp task progress notifications so users stay informed on their phone (INT-628)
+- User-level transcription preferences for per-user voice message settings (INT-683)
+- CI-enforced prompt versioning — all prompt changes tracked and versioned (INT-709)
+- Calendar event previews and rich message formatting for more informative responses (INT-535, INT-621)
+- Live Linear data hydration — task views always show latest issue information
+- Code task view UI enhancements — status badges, live data, delete controls, richer detail display (INT-723, INT-729, INT-724, INT-719)
+- Auto-archival of previous task attempts when retrying (INT-711)
+- Automatic Docker container cleanup on a daily schedule (INT-523)
+- Interactive release prioritization page for streamlined release workflows
+- Formatted markdown rendering in the task detail view (INT-739)
+- Debug skill for faster code task troubleshooting
+- Mandatory reading of Linear issue comments so AI has full context before starting work (INT-715)
+- GitHub username to Code Settings for easier identification (INT-627)
+- Worker type selection when retrying or implementing tasks (INT-630)
+- AI-generated rich task summaries for a quicker overview of each task
+- Sample data for easier testing and onboarding (INT-536)
+- Environment identification so services clearly report which environment they run in (INT-677)
+- Tool recommendation hooks for smarter tool suggestions during task execution (INT-675)
+- Container lifecycle documentation for operational clarity (INT-620)
+- Daily scheduled worker rebuild to keep containers up to date
+- Evidence-check stop hook to ensure tasks provide proof of completion
+- PR title format guidance to orchestrator prompts for consistent naming (INT-666, INT-661, INT-662)
+- Code-agent, linear-agent, and web-agent to the documentation hub
+- Worker type requirement in PR descriptions for better task dispatch
+- Base branch test coverage to the task dispatcher (INT-625)
+- PWA 1024x1024 icon for home screen installs
+- `og-image.png` for social media previews
+- Google Analytics tracking
+- Negative complexity examples to the planning prompt
+- GCP project ID to internal documentation
+- OpenRouter integration design document
+- Compact log viewer layout for iPad
+
+### Changed
+
+- Cancelled tasks now accept messages so users can continue the conversation (INT-714)
+- Reordered sidebar navigation and removed daily cost limit display
+- Default AI model only uses models the user has API keys for (INT-571)
+- Gemini responses log summaries instead of raw data
+- Increased orchestrator message length limit to 20k characters
+
+### Improved
+
+- PR review quality with better instructions and formatting for code review feedback (INT-631, INT-673, INT-655)
+- Prompt injection hardening across all agent prompts (INT-413)
+- Website redesign with refreshed look and feel
+- Message classification with higher title character limit and new code task type
+- Log readability by summarizing long JSON array results (INT-687)
+- Session resume log messages simplified to reduce noise (INT-712)
+- Token usage by optimizing internal instruction size
+- Retry analysis with adaptive logic that learns from failure patterns
+- Webhook security by extracting shared secret utilities (INT-614)
+- Container startup reliability by moving secret sync to the entrypoint
+- Orchestrator log noise reduced by cleaning up verification messages (INT-693)
+- Orchestrator observability with better monitoring and diagnostics
+- Auto-retry prompts for the verifier to reduce false failures (INT-625)
+- Conditions for when a code task should be triggered
+- Handling of trivial planning tasks to avoid unnecessary overhead
+- Prompt reliability with schema and contract fixes across multiple agents (INT-595, INT-596, INT-605, INT-606, INT-604, INT-608, INT-607, INT-609)
+- PR comment routing to reuse existing tasks instead of creating duplicates (INT-668)
+- `/share` skill reliability
+- Rate limit and diff log formatting
+- Single-comment enforcement in PR review prompts
+
+### Fixed
+
+- Session isolation preventing data from one task leaking into another (INT-713)
+- PR task lock cleanup so stale locks no longer block new tasks (INT-705)
+- Linear sync correctly handling issues across multiple users (INT-623)
+- Retry logic for Cloudflare 520-530 errors to reduce failed requests (INT-736)
+- Confirmation inbox link navigating to the correct page (INT-735)
+- Container setup issues with repo syncing and environment file mounting (INT-690)
+- Race condition in subtask normalization causing duplicate entries (INT-681)
+- Create-new flow not reappearing after canceling a link-existing action (INT-707)
+- Logs view losing auto-scroll after sending a message (INT-719)
+- Incorrect AI model reference causing unexpected behavior (INT-716)
+- Agent type preservation on task retry so PR tasks keep their correct type (INT-657, INT-654)
+- Classifier incorrectly treating date mentions as calendar events (INT-622)
+- Verifier confidence scoring range for more accurate results (INT-602, INT-603)
+- Bot-authored PR comments being incorrectly processed as user requests (INT-702)
+- Session data bleeding across resumed tasks
+- Markdown link wrappers breaking webhook URLs (INT-659)
+- Raw JSON appearing in user-facing log messages (INT-628)
+- Delete Task button not showing when it should (INT-676)
+- Security issue where hook scripts could be run directly outside their intended context
+- Raw tool result data removed from log display for a cleaner experience (INT-689)
+- Header logo aspect ratio on mobile
+- OG meta tags domain and inspect polling behavior
+- Website metatags for better search visibility
+- Invalid GitHub CLI field names
+- Nitpick-nuker status verdict and table formatting
+- PR comments being dropped for already-dispatched tasks
+- Raw rate limit JSON appearing in orchestrator logs
+- Code-agent logger incorrectly discarding request logs
+- Implementation phase using the wrong prompt template
+- Verification transcript growing too large (added truncation)
+- Orchestrator URL normalization for credentials
+- Orchestrator API key validation logging
+- Long branch names overflowing the status line
+- Incorrect agent-type mismatch warning removed
+- Repo owner resolution for bot senders
+- `tool_use_error` XML tags removed from log output
+
 ## 3.1.0
 
 - Added auto-triggering of code tasks on Linear issue assignment — newly assigned Todo issues without "Code Task" label automatically dispatch to Phase 1 design
