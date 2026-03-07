@@ -4834,11 +4834,15 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledTimes(1);
     const publishCall = mockWhatsAppPublisher.publishSendMessage.mock.calls[0];
     expect(publishCall).toBeDefined();
-    const params = publishCall?.[0] as { userId: string; message: string } | undefined;
+    const params = publishCall?.[0] as { userId: string; message: string; ctaUrl?: { displayText: string; url: string } } | undefined;
     expect(params?.userId).toBe('user-123');
     expect(params?.message).toContain('completed');
     expect(params?.message).toContain('fix/login-bug');
-    expect(params?.message).toContain('https://github.com/pbuchman/intexuraos/pull/123');
+    expect(params?.message).not.toContain('PR:');
+    expect(params?.ctaUrl).toEqual({
+      displayText: 'View Pull Request',
+      url: 'https://github.com/pbuchman/intexuraos/pull/123',
+    });
     expect(params?.message).toContain('Fixed login redirect handling');
   });
 
