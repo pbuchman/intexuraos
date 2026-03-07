@@ -1581,6 +1581,12 @@ describe('processCodeAction', () => {
 
       // Should still succeed
       expect(result.ok).toBe(true);
+
+      // Should have logged warning about find failure
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ executionTaskId: 'new-exec-task' }),
+        'Failed to find planning task for back-link'
+      );
     });
 
     it('succeeds even when back-link update fails (best-effort)', async () => {
