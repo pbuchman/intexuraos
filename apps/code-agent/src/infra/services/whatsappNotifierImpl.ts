@@ -157,7 +157,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
           type: 'reply',
           reply: {
             id: `view-task:${task.id}`,
-            title: '👁️ View Progress',
+            title: '🔍 Check Logs',
           },
         },
       ];
