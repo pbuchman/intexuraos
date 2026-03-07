@@ -6,10 +6,10 @@ import type { Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from './repositories.js';
 import type {
   ApprovalReplyEvent,
+  AudioStoredEvent,
   CommandIngestEvent,
   ExtractLinkPreviewsEvent,
   MediaCleanupEvent,
-  TranscribeAudioEvent,
   WebhookProcessEvent,
 } from '../events/index.js';
 
@@ -36,10 +36,10 @@ export interface EventPublisherPort {
   publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>>;
 
   /**
-   * Publish a transcribe audio event.
-   * Triggers async audio transcription (up to 5 min polling).
+   * Publish an audio stored event.
+   * Triggers srt-service to start transcription.
    */
-  publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, WhatsAppError>>;
+  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Publish a link preview extraction event.

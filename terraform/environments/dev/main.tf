@@ -469,8 +469,8 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
-    # Speechmatics API secrets
-    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for whatsapp-service"
+    # Speechmatics API secrets (used by transcription Cloud Function)
+    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for transcription Cloud Function"
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Firebase configuration for web app
@@ -617,6 +617,29 @@ module "pubsub_whatsapp_webhook_process" {
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
   }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
+# Subscription for srt-service transcription completed events (srt-service -> whatsapp-service)
+# Topic is owned by srt-service; whatsapp-service defines the push subscription here.
+module "pubsub_srt_transcription_completed" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-srt-transcription-completed-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
+  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
+  push_audience              = module.whatsapp_service.service_url
+  ack_deadline_seconds       = 120
+
+  publisher_service_accounts = {}
 
   depends_on = [
     google_project_service.apis,
@@ -2144,7 +2167,7 @@ resource "google_cloud_scheduler_job" "log_cleanup" {
 # -----------------------------------------------------------------------------
 
 resource "google_service_account" "transcription_function" {
-  account_id   = "intexuraos-transcription-fn-${var.environment}"
+  account_id   = "ixos-transcription-fn-${var.environment}"
   display_name = "Transcription Cloud Function Service Account"
   description  = "Service account for transcription Cloud Function (audio-stored -> transcription-completed)"
 
@@ -2170,6 +2193,13 @@ resource "google_secret_manager_secret_iam_member" "transcription_internal_auth"
   secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to sign blobs (required for GCS signed URLs)
+resource "google_service_account_iam_member" "transcription_self_token_creator" {
+  service_account_id = google_service_account.transcription_function.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
 # Grant transcription SA permission to receive Eventarc events

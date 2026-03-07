@@ -31,9 +31,8 @@ const VITEST_PATTERNS = [
   /^All files\s/,
   /\|\s+[\d.]+\s+\|/,
   /^@@PHASE_TIMING@@/,
-  // Node.js runtime deprecation warnings (e.g. punycode DEP0040) from dependencies
-  /^\(node:\d+\)\s+\[DEP\d+\]/,
-  /^\(Use `node --trace-deprecation/,
+  /^\(node:\d+\) \[DEP\d+\] DeprecationWarning:/,
+  /^\(Use `node --trace-deprecation \.\.\.` to show where the warning was created\)$/,
 ];
 
 function isVitestLine(line) {
