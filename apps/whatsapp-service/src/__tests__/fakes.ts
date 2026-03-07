@@ -765,7 +765,7 @@ export class FakeEventPublisher implements EventPublisherPort {
  * Fake message sender for testing.
  */
 export class FakeMessageSender implements WhatsAppMessageSender {
-  private sentMessages: { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[] }[] = [];
+  private sentMessages: { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[]; ctaUrl?: { displayText: string; url: string } }[] = [];
   private shouldFail = false;
   private shouldThrow = false;
   private failError: WhatsAppError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
@@ -815,7 +815,7 @@ export class FakeMessageSender implements WhatsAppMessageSender {
   async sendCtaUrlMessage(
     phoneNumber: string,
     message: string,
-    _ctaUrl: { displayText: string; url: string }
+    ctaUrl: { displayText: string; url: string }
   ): Promise<Result<TextMessageSendResult, WhatsAppError>> {
     if (this.shouldThrow) {
       throw new Error('Unexpected send error');
@@ -823,12 +823,12 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     if (this.shouldFail) {
       return Promise.resolve(err(this.failError));
     }
-    this.sentMessages.push({ phoneNumber, message });
+    this.sentMessages.push({ phoneNumber, message, ctaUrl });
     const wamid = `fake-wamid-${String(Date.now())}-${randomUUID().slice(0, 8)}`;
     return Promise.resolve(ok({ wamid }));
   }
 
-  getSentMessages(): { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[] }[] {
+  getSentMessages(): { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[]; ctaUrl?: { displayText: string; url: string } }[] {
     return [...this.sentMessages];
   }
 
