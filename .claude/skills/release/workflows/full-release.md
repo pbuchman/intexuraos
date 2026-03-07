@@ -131,8 +131,8 @@ Priority guide:
 Commands:
   "3 high" — change #3 to High priority
   "1 comment: Voice transcription enables..." — add description comment to #1
-  "5 skip" — exclude #5 from changelog
-  "expand 5-8" — show individual items in a batched group
+  "5 skip" — exclude #5 from changelog (targets entire batch if 5 is a batched range; use "expand 5-8" first to target individual items)
+  "expand 5-8" — show individual items in a batched group (assigns each a unique number for individual commands)
   "preview" — show final changelog preview before confirming
   "slogan: End-to-end AI autonomy..." — set marketing slogan (major releases only)
   "go" or "approve" — confirm and proceed
@@ -141,11 +141,14 @@ Commands:
 **Command validation:** If the user types an unrecognized command, respond with the valid command list and ask them to try again.
 
 **Batching rules:**
+
 - Features: shown individually (each gets its own number)
 - Notable changes: shown individually
 - Minor fixes: batched by area if >4 (e.g., "5-8. 4 bug fixes across whatsapp, calendar services")
+- **Batch command semantics:** Commands targeting a batch number (e.g., "5 skip") apply to the **entire batch**. To target individual items within a batch, the user must first "expand 5-8" to assign unique numbers, then use those individual numbers.
 
 **For major version releases**, also prompt:
+
 ```
   This is a MAJOR version release. Please provide a marketing slogan for the
   previous major version (vX.x) for the Version History section, or type "skip".
@@ -214,6 +217,7 @@ Use Agent tool with:
 ```
 
 The agent will automatically:
+
 1. Update `docs/overview.md` following `docs/STANDARDS.md` rules
 2. Verify README badges (AI Models count, Components count)
 3. Check `docs/services/index.md` has all services listed
@@ -326,6 +330,8 @@ End-to-end AI autonomy: From your mobile to the cloud and back. IntexuraOS went 
 
 ### 5.4 Implement Changes
 
+**Guard:** If no features were marked High priority in the Phase 1 priority map, skip the RecentUpdatesSection update. Only invoke frontend-design when there are concrete features to display.
+
 Invoke the frontend-design skill for the website updates:
 
 ```
@@ -334,7 +340,7 @@ Use Skill tool with:
 - args: "Update RecentUpdatesSection with [N] new feature tiles from release vX.Y.Z: [list of High-priority features with descriptions]"
 ```
 
-For major releases, also invoke for VersionHistorySection:
+For major releases, invoke VersionHistorySection **after** RecentUpdatesSection completes (sequential, not parallel — both touch the same web files):
 
 ```
 Use Skill tool with:
@@ -417,14 +423,17 @@ Prepend the changelog entry built during Phase 1 (see [`reference/semver-analysi
 ## X.Y.Z
 
 ### Added
+
 - [High-priority entries first]
 - [Medium-priority entries]
 - [Low-priority entries]
 
 ### Fixed
+
 - [entries sorted by priority]
 
 ### Improved
+
 - [entries sorted by priority]
 ```
 
