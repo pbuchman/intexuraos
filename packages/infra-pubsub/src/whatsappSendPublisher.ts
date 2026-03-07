@@ -62,7 +62,7 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
       event.buttons = params.buttons;
     }
 
-    /* v8 ignore start -- upstream: ctaUrl passthrough covered by whatsapp-service pubsub route tests @preserve */
+    /* v8 ignore start -- upstream: ctaUrl passthrough to Pub/Sub event, tested via consuming services @preserve */
     if (params.ctaUrl !== undefined) {
       event.ctaUrl = params.ctaUrl;
     }

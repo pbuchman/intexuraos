@@ -559,7 +559,7 @@ describe('WhatsAppNotifier', () => {
   });
 
   describe('notifyTaskFailed', () => {
-    it('sends failure notification with ctaUrl deep link instead of reply buttons', async () => {
+    it('sends failure notification with ctaUrl deep link', async () => {
       const task = createMockTask({
         status: 'failed',
         traceId: 'test-trace-id',
