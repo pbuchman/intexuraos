@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
+import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js';
 
 const logger = createAppLogger({ name: 'code-routes' });
 
@@ -1309,21 +1310,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const task = createResult.value;
 
       // Back-link planning task to this execution task (INT-725, best-effort)
-      if (task.agentType === 'execution' && task.linearIssueId !== undefined) {
-        try {
-          const planningTaskResult = await codeTaskRepo.findPlannedTaskByLinearIssue(task.linearIssueId);
-          if (planningTaskResult.ok && planningTaskResult.value !== null) {
-            const backLinkResult = await codeTaskRepo.update(planningTaskResult.value.id, {
-              implementationTaskId: task.id,
-            });
-            if (!backLinkResult.ok) {
-              request.log.warn({ planningTaskId: planningTaskResult.value.id, executionTaskId: task.id }, 'Failed to back-link planning task to execution task');
-            }
-          }
-        } catch (backLinkError: unknown) {
-          request.log.warn({ error: backLinkError, executionTaskId: task.id }, 'Best-effort back-link to planning task failed');
-        }
-      }
+      await backLinkPlanningTask(codeTaskRepo, request.log, task);
 
       // Fetch user's worker settings
       const settingsResult = await workerSettingsRepo.getSettings(userId);

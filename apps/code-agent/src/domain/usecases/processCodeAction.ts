@@ -19,6 +19,7 @@ import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { sanitizePromptForInjection } from '../../domain/utils/promptInjectionSanitizer.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { loadConfig } from '../../config.js';
+import { backLinkPlanningTask } from './backLinkPlanningTask.js';
 
 /**
  * Request to process a code action.
@@ -269,21 +270,7 @@ export async function processCodeAction(
   const task = createResult.value;
 
   // Step 5b: Back-link planning task to this execution task (INT-725, best-effort)
-  if (task.agentType === 'execution' && task.linearIssueId !== undefined) {
-    try {
-      const planningTaskResult = await codeTaskRepo.findPlannedTaskByLinearIssue(task.linearIssueId);
-      if (planningTaskResult.ok && planningTaskResult.value !== null) {
-        const backLinkResult = await codeTaskRepo.update(planningTaskResult.value.id, {
-          implementationTaskId: task.id,
-        });
-        if (!backLinkResult.ok) {
-          logger.warn({ planningTaskId: planningTaskResult.value.id, executionTaskId: task.id }, 'Failed to back-link planning task to execution task');
-        }
-      }
-    } catch (backLinkError: unknown) {
-      logger.warn({ error: backLinkError, executionTaskId: task.id }, 'Best-effort back-link to planning task failed');
-    }
-  }
+  await backLinkPlanningTask(codeTaskRepo, logger, task);
 
   // Step 6: Build webhook URL for callback
   const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
