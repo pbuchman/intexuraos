@@ -242,9 +242,7 @@ export function DevBar(): React.JSX.Element | null {
       style={{ height: `${String(height)}px`, width: isFullWidth ? '100%' : `${String(width)}px` }}
     >
       <ResizeHandle position="top" onResize={handleHeightResize} onResizeEnd={handleResizeEnd} />
-      {!isFullWidth && (
-        <ResizeHandle position="left" onResize={handleWidthResize} onResizeEnd={handleResizeEnd} />
-      )}
+      <ResizeHandle position="left" onResize={handleWidthResize} onResizeEnd={handleResizeEnd} />
 
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-700 px-4 py-2">
@@ -322,6 +320,21 @@ export function DevBar(): React.JSX.Element | null {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setWidth(isFullWidth ? 800 : window.innerWidth);
+            }}
+            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            title={isFullWidth ? 'Half width' : 'Full width'}
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {isFullWidth ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l-7 7 7 7M15 5l7 7-7 7" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5l7 7-7 7M9 19l-7-7 7-7" />
+              )}
+            </svg>
+          </button>
           <span className="text-xs text-slate-500">
             {isAuthenticated ? (user?.email ?? 'Auth') : 'No auth'}
           </span>

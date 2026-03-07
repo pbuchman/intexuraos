@@ -657,6 +657,138 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
+    it('falls back to next worker when first returns 530 (Cloudflare)', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // First call returns 530 (Cloudflare origin error)
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 530,
+        json: async () => ({ error: 'Origin DNS Error' }),
+      } as Response);
+
+      // Second call succeeds
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('cloud-vm');
+      }
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('falls back to next worker when first returns 520 (Cloudflare edge)', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // First call returns 520 (Cloudflare Web Server Returned an Unknown Error)
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 520,
+        json: async () => ({ error: 'Unknown Error' }),
+      } as Response);
+
+      // Second call succeeds
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('cloud-vm');
+      }
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns worker_unavailable when all workers return Cloudflare 530', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 530, json: async () => ({}) } as Response);
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 530, json: async () => ({}) } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_unavailable');
+      }
+    });
+
+    it('returns at_capacity when one worker returns 503 and other returns 530', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      // home-mac returns 503 (at capacity)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+      // cloud-vm returns 530 (Cloudflare error — neutral like 502/504)
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 530, json: async () => ({}) } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('at_capacity');
+      }
+    });
+
     it('returns worker_unavailable when 503 mixed with explicit rejection', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);

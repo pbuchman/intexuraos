@@ -280,7 +280,8 @@ export type CommandType =
   | 'link'
   | 'calendar'
   | 'reminder'
-  | 'linear';
+  | 'linear'
+  | 'code';
 
 /**
  * Command status

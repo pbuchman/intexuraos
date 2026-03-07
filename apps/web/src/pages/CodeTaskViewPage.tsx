@@ -18,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
+import { MarkdownContent } from '@/components/MarkdownContent';
 import { PREventsGroup } from '@/components/PREventsGroup';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import type { LogLine, MessageStatus } from '@/hooks';
@@ -226,6 +227,8 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
       <MemoTaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
 
+      {task.result?.summary !== undefined && task.result.summary !== '' ? <MemoRunSummary summary={task.result.summary} /> : null}
+
       {task.result !== undefined ? <MemoTaskResult task={task} /> : null}
       {task.error !== undefined ? <MemoTaskError task={task} /> : null}
 
@@ -279,6 +282,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
         onConfirmDelete={(): void => { void handleDelete(); }}
         {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
+        linksInNextSteps={isImplementable || task.implementationTaskId !== undefined}
       />
     </Layout>
   );
@@ -430,7 +434,7 @@ function TaskActions({
   onRetry,
   deleting, deleteError, showDeleteConfirm,
   onShowDeleteConfirm, onCancelDeleteConfirm, onConfirmDelete,
-  prUrl, linearIssueUrl,
+  prUrl, linearIssueUrl, linksInNextSteps,
 }: {
   isActive: boolean;
   cancelling: boolean;
@@ -453,8 +457,9 @@ function TaskActions({
   onConfirmDelete: () => void;
   prUrl?: string;
   linearIssueUrl?: string;
+  linksInNextSteps: boolean;
 }): React.JSX.Element | null {
-  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null && prUrl === undefined && linearIssueUrl === undefined) return null;
+  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null && (linksInNextSteps || (prUrl === undefined && linearIssueUrl === undefined))) return null;
 
   return (
     <div className="mt-4 flex flex-wrap items-stretch gap-3">
@@ -469,8 +474,8 @@ function TaskActions({
             <StopCircle className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Cancel Task</span>
           </Button>
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
         </>
       ) : null}
       {isRetryable ? (
@@ -544,8 +549,8 @@ function TaskActions({
                 </div>
               ) : null}
             </div>
-            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
             {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
             <button
               type="button"
               onClick={onShowDeleteConfirm}
@@ -558,10 +563,10 @@ function TaskActions({
           </>
         )
       ) : null}
-      {!isActive && !isRetryable ? (
+      {!isActive && !isRetryable && !linksInNextSteps ? (
         <>
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
         </>
       ) : null}
       {cancelError !== null ? (
@@ -689,8 +694,8 @@ function NextSteps({
             <Play className="h-4 w-4" />
             View Implementation
           </a>
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
         </div>
       ) : isImplementable ? (
         <div className="relative flex items-center gap-3">
@@ -740,8 +745,8 @@ function NextSteps({
               </div>
             ) : null}
           </div>
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
         </div>
       ) : null}
       {implementError !== null ? (
@@ -779,17 +784,17 @@ function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedProm
           {copied ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
-      <blockquote className="border-l-4 rounded border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
-        <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{prompt}</p>
-      </blockquote>
+      <div className="rounded border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+        <MarkdownContent content={prompt} />
+      </div>
       {sanitizedPrompt !== prompt ? (
         <details className="mt-3">
           <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
             Show sanitized prompt
           </summary>
-          <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
-            <p className="whitespace-pre-wrap">{sanitizedPrompt}</p>
-          </blockquote>
+          <div className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
+            <MarkdownContent content={sanitizedPrompt} />
+          </div>
         </details>
       ) : null}
     </Card>
@@ -797,6 +802,38 @@ function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedProm
 }
 
 const MemoTaskPrompt = memo(TaskPrompt);
+
+function RunSummary({ summary }: { summary: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback((): void => {
+    void navigator.clipboard.writeText(summary).then(() => {
+      setCopied(true);
+      setTimeout(() => { setCopied(false); }, 2000);
+    }).catch(() => { /* clipboard unavailable */ });
+  }, [summary]);
+
+  return (
+    <Card className="mb-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Run Summary</h3>
+        <button
+          type="button"
+          onClick={copy}
+          className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+          title={copied ? 'Copied!' : 'Copy'}
+        >
+          {copied ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        </button>
+      </div>
+      <div className="rounded border-l-4 border-emerald-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+        <MarkdownContent content={summary} />
+      </div>
+    </Card>
+  );
+}
+
+const MemoRunSummary = memo(RunSummary);
 
 function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
   const result = task.result;
@@ -806,15 +843,26 @@ function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
     ? parseInt(/\/pull\/(\d+)/.exec(result.prUrl)?.[1] ?? '', 10)
     : undefined;
 
-  if (prNumber === undefined || isNaN(prNumber)) return null;
+  const hasSummary = result.summary !== undefined && result.summary !== '';
+  const hasValidPr = prNumber !== undefined && !isNaN(prNumber);
+
+  if (!hasSummary && !hasValidPr) return null;
 
   return (
-    <div className="mb-6">
-      <PREventsGroup
-        pullRequestNumber={prNumber}
-        title={result.summary ?? null}
-        repository={task.repository}
-      />
+    <div className="mb-6 space-y-4">
+      {hasSummary ? (
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">Summary</h3>
+          <MarkdownContent content={result.summary ?? ''} />
+        </Card>
+      ) : null}
+      {hasValidPr ? (
+        <PREventsGroup
+          pullRequestNumber={prNumber}
+          title={result.summary ?? null}
+          repository={task.repository}
+        />
+      ) : null}
     </div>
   );
 }
