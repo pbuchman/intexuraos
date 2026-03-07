@@ -22,14 +22,17 @@ Output EXACTLY this format — no other text:
 ## Netting Analysis
 
 ### Revert Pairs (remove both from changelog)
+
 - PR #N reverts PR #M — <description>
-(or "None detected")
+  (or "None detected")
 
 ### Follow-up Fixes (merge into parent)
+
 - PR #N is a follow-up fix for PR #M — merge into "<parent group name>"
-(or "None detected")
+  (or "None detected")
 
 ### Net Result
+
 - Changes before netting: <N>
 - Reverted pairs removed: <N>
 - Follow-ups merged: <N>

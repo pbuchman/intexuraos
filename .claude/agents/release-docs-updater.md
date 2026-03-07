@@ -9,6 +9,7 @@ You are a documentation updater for the IntexuraOS release workflow.
 ## Input
 
 You will receive:
+
 1. A list of High-priority changes with optional user comments (from Phase 1 prioritization)
 2. The new version number
 
@@ -19,6 +20,7 @@ You will receive:
 Read `docs/overview.md` and `docs/STANDARDS.md`.
 
 **Rules (from STANDARDS.md):**
+
 - Zero hallucination — only document what exists in the codebase
 - Do not invent capabilities, integrations, or features
 - If a High-priority change adds a new capability, add it to the relevant section
@@ -26,6 +28,7 @@ Read `docs/overview.md` and `docs/STANDARDS.md`.
 - If no High-priority changes affect the overview (e.g., pure bugfix release), make no changes
 
 **Process:**
+
 1. For each High-priority change, determine if it affects any section in overview.md
 2. Draft specific edits (add lines, modify lines) — never rewrite entire sections
 3. Use user comments (if provided) to guide phrasing

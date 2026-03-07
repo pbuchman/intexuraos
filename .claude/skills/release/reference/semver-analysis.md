@@ -241,12 +241,12 @@ Prefer user-facing language from Linear issues over technical language from comm
 
 **Priority assignments from the touchpoint:**
 
-| Priority | CHANGELOG position                 | GitHub Release Highlights |
-| -------- | ---------------------------------- | ------------------------- |
-| High     | First within its type subcategory  | Top 3 become Highlights   |
-| Medium   | Standard position in subcategory   | Not in Highlights         |
-| Low      | Last within its type subcategory   | Not in Highlights         |
-| Skip     | Omitted entirely                   | Not in Highlights         |
+| Priority | CHANGELOG position                | GitHub Release Highlights |
+| -------- | --------------------------------- | ------------------------- |
+| High     | First within its type subcategory | Top 3 become Highlights   |
+| Medium   | Standard position in subcategory  | Not in Highlights         |
+| Low      | Last within its type subcategory  | Not in Highlights         |
+| Skip     | Omitted entirely                  | Not in Highlights         |
 
 **GitHub Release Highlights:** Pick the top 3 High-priority items. If fewer than 3 are High, promote the top Medium items.
 
@@ -291,37 +291,42 @@ ELSE:
 ## X.Y.Z
 
 ### Added
+
 - [feature description with inline `code` for commands/settings]
 - [another feature] (INT-XXX)
 
 ### Changed
+
 - [modification description]
 
 ### Fixed
+
 - [bug description]
 
 ### Improved
+
 - [enhancement description]
 
 ### Removed
+
 - [deprecation description]
 ```
 
 **Entry Rules:**
 
-| Rule                      | Example                                                    |
-| ------------------------- | ---------------------------------------------------------- |
-| Type subcategories        | `### Added`, `### Changed`, `### Fixed`, `### Improved`, `### Removed` |
-| Omit empty categories     | If no fixes, skip `### Fixed` entirely                     |
-| Single line per entry     | No paragraphs, no multi-line descriptions                  |
-| Use backticks for code    | commands, flags, env vars, settings, file paths            |
-| Linear refs optional      | `(INT-XXX)` at end of line if helpful                      |
-| User-facing only          | Skip pure internal refactorings unless they affect users   |
-| Most recent at top        | New version goes above existing versions                   |
-| No netted-out changes     | If added AND removed in this release, omit entirely        |
-| Combine related commits   | Multiple commits on same feature = single changelog entry  |
-| Priority ordering         | High → Medium → Low within each subcategory (from Step 5.1) |
-| Skip = omit               | Changes marked "Skip" in Step 5.1 are not included         |
+| Rule                    | Example                                                                |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Type subcategories      | `### Added`, `### Changed`, `### Fixed`, `### Improved`, `### Removed` |
+| Omit empty categories   | If no fixes, skip `### Fixed` entirely                                 |
+| Single line per entry   | No paragraphs, no multi-line descriptions                              |
+| Use backticks for code  | commands, flags, env vars, settings, file paths                        |
+| Linear refs optional    | `(INT-XXX)` at end of line if helpful                                  |
+| User-facing only        | Skip pure internal refactorings unless they affect users               |
+| Most recent at top      | New version goes above existing versions                               |
+| No netted-out changes   | If added AND removed in this release, omit entirely                    |
+| Combine related commits | Multiple commits on same feature = single changelog entry              |
+| Priority ordering       | High → Medium → Low within each subcategory (from Step 5.1)            |
+| Skip = omit             | Changes marked "Skip" in Step 5.1 are not included                     |
 
 **Verb Usage:**
 
@@ -377,18 +382,23 @@ After building the CHANGELOG entry, generate a richer GitHub Release body. This 
 ## What's Changed
 
 ### Added
+
 - [entries from CHANGELOG ### Added section]
 
 ### Changed
+
 - [entries from CHANGELOG ### Changed section]
 
 ### Fixed
+
 - [entries from CHANGELOG ### Fixed section]
 
 ### Improved
+
 - [entries from CHANGELOG ### Improved section]
 
 ### Removed
+
 - [entries from CHANGELOG ### Removed section]
 
 ## CHANGELOG
@@ -400,14 +410,14 @@ See [CHANGELOG.md](https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md
 
 **Rules:**
 
-| Rule                        | Details                                                             |
-| --------------------------- | ------------------------------------------------------------------- |
-| Highlights first            | Pick the top 3 High-priority items from Step 5.1                    |
-| Match CHANGELOG categories  | Use same `### Added/Changed/Fixed/Improved/Removed` subcategories   |
-| Skip empty categories       | If no fixes, omit the `### Fixed` section                           |
-| Reuse CHANGELOG wording     | Use the same entries from Step 7                                    |
-| Include comparison link     | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view           |
-| Write to temp file          | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.9 |
+| Rule                       | Details                                                             |
+| -------------------------- | ------------------------------------------------------------------- |
+| Highlights first           | Pick the top 3 High-priority items from Step 5.1                    |
+| Match CHANGELOG categories | Use same `### Added/Changed/Fixed/Improved/Removed` subcategories   |
+| Skip empty categories      | If no fixes, omit the `### Fixed` section                           |
+| Reuse CHANGELOG wording    | Use the same entries from Step 7                                    |
+| Include comparison link    | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view           |
+| Write to temp file         | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.9 |
 
 **Comparison link:** Use the previous version tag (from Step 2) as `vPREVIOUS`.
 
