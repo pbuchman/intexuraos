@@ -8,7 +8,7 @@ import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastif
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { isFastModel, getProviderForModel } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
-import { getUserSettings, type GetUserSettingsErrorCode, type TranscriptionProvider } from '../domain/settings/index.js';
+import { getUserSettings, isTranscriptionProvider, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
 
 /**
  * Map domain error codes to HTTP error codes for GET.
@@ -360,10 +360,14 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('FORBIDDEN', 'Cannot update other user settings');
       }
 
+      if (!isTranscriptionProvider(body.provider)) {
+        return await reply.fail('INVALID_REQUEST', `Invalid provider: ${body.provider}`);
+      }
+
       const { userSettingsRepository } = getServices();
       const result = await userSettingsRepository.updateTranscriptionPreferences(
         params.uid,
-        body.provider as TranscriptionProvider
+        body.provider
       );
 
       if (!result.ok) {

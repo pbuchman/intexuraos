@@ -715,7 +715,7 @@ describe('Internal Routes', () => {
       expect(body.data.llmPreferences).toBeUndefined();
     });
 
-    it('returns undefined llmPreferences when repository errors', async () => {
+    it('returns undefined llmPreferences and transcriptionPreferences when repository errors', async () => {
       const userId = 'user-error';
       fakeSettingsRepo.setFailNextGet(true);
 
@@ -734,9 +734,11 @@ describe('Internal Routes', () => {
         success: boolean;
         data: {
           llmPreferences?: { defaultModel: string };
+          transcriptionPreferences?: { provider: string };
         };
       };
       expect(body.data.llmPreferences).toBeUndefined();
+      expect(body.data.transcriptionPreferences).toBeUndefined();
     });
 
     it('returns transcriptionPreferences when present', async () => {
