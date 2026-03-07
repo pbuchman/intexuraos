@@ -450,4 +450,120 @@ describe('Settings Routes', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
+
+  describe('PATCH /users/:uid/settings/transcription', () => {
+    it('returns 200 and saves transcription provider', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-transcription';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/transcription`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { provider: 'speechmatics' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { provider: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.provider).toBe('speechmatics');
+
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.transcriptionPreferences?.provider).toBe('speechmatics');
+    });
+
+    it('returns 400 for invalid provider', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-bad-provider';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/transcription`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { provider: 'invalid-provider' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 for missing provider', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-missing-provider';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/transcription`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 401 without auth token', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/users/some-user/settings/transcription',
+        payload: { provider: 'speechmatics' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 403 when updating a different user', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-a';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent('auth0|user-b')}/settings/transcription`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { provider: 'speechmatics' },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 500 when repository fails', { timeout: 20000 }, async () => {
+      fakeSettingsRepo.setFailNextUpdateTranscriptionPreferences(true);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-repo-fail-transcription';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/transcription`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { provider: 'speechmatics' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
 });
