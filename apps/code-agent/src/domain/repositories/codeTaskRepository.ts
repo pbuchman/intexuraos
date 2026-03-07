@@ -175,4 +175,16 @@ export interface CodeTaskRepository {
    * Used to check queue capacity before adding new tasks.
    */
   countQueued(): Promise<Result<number, RepositoryError>>;
+
+  /**
+   * Find a planned planning task for a Linear issue that has no implementation task yet (INT-725).
+   * Used to back-link execution tasks to their planning predecessor.
+   * Returns null if no matching task exists.
+   *
+   * Assumption: at most one planned planning task exists per Linear issue
+   * without an implementationTaskId set. Uses limit(1) for efficiency.
+   */
+  findPlannedTaskByLinearIssue(
+    linearIssueId: string
+  ): Promise<Result<CodeTask | null, RepositoryError>>;
 }
