@@ -12,7 +12,6 @@ import {
 import { GcsMediaStorageAdapter } from './infra/gcs/index.js';
 import { GcpPubSubPublisher, type GcpPubSubPublisherConfig } from './infra/pubsub/index.js';
 import { WhatsAppCloudApiAdapter, WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
-import { SpeechmaticsTranscriptionAdapter } from './infra/speechmatics/index.js';
 import { ThumbnailGeneratorAdapter } from './infra/media/index.js';
 import { createWebAgentLinkPreviewClient } from './infra/linkpreview/webAgentLinkPreviewClient.js';
 import type {
@@ -21,7 +20,6 @@ import type {
   MediaStoragePort,
   OutboundMessageRepository,
   PhoneVerificationRepository,
-  SpeechTranscriptionPort,
   ThumbnailGeneratorPort,
   WhatsAppCloudApiPort,
   WhatsAppMessageRepository,
@@ -40,11 +38,10 @@ export interface ServiceConfig {
   mediaCleanupTopic: string;
   commandsIngestTopic?: string;
   webhookProcessTopic?: string;
-  transcriptionTopic?: string;
+  audioStoredTopic?: string;
   approvalReplyTopic?: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
-  speechmaticsApiKey: string;
   webAgentUrl: string;
   internalAuthToken: string;
 }
@@ -61,8 +58,8 @@ function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
   if (config.webhookProcessTopic !== undefined) {
     pubsubConfig.webhookProcessTopic = config.webhookProcessTopic;
   }
-  if (config.transcriptionTopic !== undefined) {
-    pubsubConfig.transcriptionTopic = config.transcriptionTopic;
+  if (config.audioStoredTopic !== undefined) {
+    pubsubConfig.audioStoredTopic = config.audioStoredTopic;
   }
   if (config.approvalReplyTopic !== undefined) {
     pubsubConfig.approvalReplyTopic = config.approvalReplyTopic;
@@ -83,7 +80,6 @@ export interface ServiceContainer {
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
-  transcriptionService: SpeechTranscriptionPort;
   whatsappCloudApi: WhatsAppCloudApiPort;
   thumbnailGenerator: ThumbnailGeneratorPort;
   linkPreviewFetcher: LinkPreviewFetcherPort;
@@ -125,7 +121,6 @@ export function getServices(): ServiceContainer {
       serviceConfig.whatsappAccessToken,
       serviceConfig.whatsappPhoneNumberId
     ),
-    transcriptionService: new SpeechmaticsTranscriptionAdapter(serviceConfig.speechmaticsApiKey),
     whatsappCloudApi: new WhatsAppCloudApiAdapter(serviceConfig.whatsappAccessToken),
     thumbnailGenerator: new ThumbnailGeneratorAdapter(),
     linkPreviewFetcher: createWebAgentLinkPreviewClient({

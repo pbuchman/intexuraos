@@ -225,20 +225,19 @@ describe('GcpPubSubPublisher', () => {
     });
   });
 
-  describe('publishTranscribeAudio', () => {
+  describe('publishAudioStored', () => {
     it('skips publish when topic is not configured', async () => {
       const event = {
-        type: 'whatsapp.audio.transcribe' as const,
+        type: 'whatsapp.audio.stored' as const,
         messageId: 'msg-123',
         userId: 'user-456',
+        mediaId: 'media-789',
         gcsPath: 'path/to/audio.ogg',
         mimeType: 'audio/ogg',
-        userPhoneNumber: '+1234567890',
-        originalWaMessageId: 'wamid.abc',
-        phoneNumberId: 'phone-789',
+        timestamp: new Date().toISOString(),
       };
 
-      const result = await publisher.publishTranscribeAudio(event);
+      const result = await publisher.publishAudioStored(event);
 
       expect(result.ok).toBe(true);
       expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, { messageId: 'msg-123' });
@@ -248,25 +247,24 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
-        transcriptionTopic: 'transcription-topic',
+        audioStoredTopic: 'audio-stored-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
 
       const event = {
-        type: 'whatsapp.audio.transcribe' as const,
+        type: 'whatsapp.audio.stored' as const,
         messageId: 'msg-123',
         userId: 'user-456',
+        mediaId: 'media-789',
         gcsPath: 'path/to/audio.ogg',
         mimeType: 'audio/ogg',
-        userPhoneNumber: '+1234567890',
-        originalWaMessageId: 'wamid.abc',
-        phoneNumberId: 'phone-789',
+        timestamp: new Date().toISOString(),
       };
 
-      const result = await publisherWithTopic.publishTranscribeAudio(event);
+      const result = await publisherWithTopic.publishAudioStored(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('transcription-topic', event, {
+      expect(mockPublishToTopic).toHaveBeenCalledWith('audio-stored-topic', event, {
         messageId: 'msg-123',
       });
     });
@@ -275,7 +273,7 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
-        transcriptionTopic: 'transcription-topic',
+        audioStoredTopic: 'audio-stored-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
       mockPublishToTopic.mockResolvedValue({
@@ -283,15 +281,14 @@ describe('GcpPubSubPublisher', () => {
         error: { code: 'PUBLISH_FAILED', message: 'Publish timeout' },
       });
 
-      const result = await publisherWithTopic.publishTranscribeAudio({
-        type: 'whatsapp.audio.transcribe',
+      const result = await publisherWithTopic.publishAudioStored({
+        type: 'whatsapp.audio.stored',
         messageId: 'msg-fail',
         userId: 'user-456',
+        mediaId: 'media-xyz',
         gcsPath: 'path/to/audio.ogg',
         mimeType: 'audio/ogg',
-        userPhoneNumber: '+1234567890',
-        originalWaMessageId: 'wamid.xyz',
-        phoneNumberId: 'phone-789',
+        timestamp: new Date().toISOString(),
       });
 
       expect(result.ok).toBe(false);

@@ -310,8 +310,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
  */
 export async function processWebhookEvent(
   request: FastifyRequest<{ Body: WebhookPayload }>,
-  savedEvent: { id: string },
-  config: Config
+  savedEvent: { id: string }
 ): Promise<void> {
   const services = getServices();
   const { webhookEventRepository, userMappingRepository } = services;
@@ -534,7 +533,6 @@ export async function processWebhookEvent(
       await handleAudioMessage(
         request,
         savedEvent,
-        config,
         services,
         userId,
         waMessageId,
@@ -650,7 +648,6 @@ async function handleImageMessage(
 async function handleAudioMessage(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
-  config: Config,
   services: ReturnType<typeof getServices>,
   userId: string,
   waMessageId: string,
@@ -684,29 +681,22 @@ async function handleAudioMessage(
   );
 
   if (result.ok) {
-    // Publish transcription event to Pub/Sub for async processing
-    const transcriptionPhoneNumberId = config.allowedPhoneNumberIds[0];
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard on array element @preserve */
-    if (transcriptionPhoneNumberId !== undefined) {
-      const publishResult = await services.eventPublisher.publishTranscribeAudio({
-        type: 'whatsapp.audio.transcribe',
-        messageId: result.value.messageId,
-        userId,
-        gcsPath: result.value.gcsPath,
-        mimeType: result.value.mimeType,
-        userPhoneNumber: fromNumber,
-        originalWaMessageId: waMessageId,
-        phoneNumberId: transcriptionPhoneNumberId,
-      });
-      /* v8 ignore stop @preserve */
-/* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
-      if (!publishResult.ok) {
-        request.log.error(
-          { error: publishResult.error, messageId: result.value.messageId },
-          'Failed to publish audio transcription event'
-        );
-      }
-      /* v8 ignore stop @preserve */
+    // Publish audio stored event to Pub/Sub for async transcription by srt-service
+    const publishResult = await services.eventPublisher.publishAudioStored({
+      type: 'whatsapp.audio.stored',
+      userId,
+      messageId: result.value.messageId,
+      mediaId: result.value.mediaId,
+      gcsPath: result.value.gcsPath,
+      mimeType: result.value.mimeType,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!publishResult.ok) {
+      request.log.error(
+        { error: publishResult.error, messageId: result.value.messageId },
+        'Failed to publish audio stored event'
+      );
     }
 
     // Mark as read with typing indicator (shows user something is happening)
