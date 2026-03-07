@@ -226,7 +226,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
       <MemoTaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
 
-      {task.result?.summary !== undefined ? <MemoRunSummary summary={task.result.summary} /> : null}
+      {task.result?.summary !== undefined && task.result.summary !== '' ? <MemoRunSummary summary={task.result.summary} /> : null}
 
       {task.result !== undefined ? <MemoTaskResult task={task} /> : null}
       {task.error !== undefined ? <MemoTaskError task={task} /> : null}
