@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { EncryptedValue } from './Encryptor.js';
-import type { LlmProvider, LlmTestResult, LLMModel, UserSettings } from '../models/UserSettings.js';
+import type { LlmProvider, LlmTestResult, LLMModel, TranscriptionProvider, UserSettings } from '../models/UserSettings.js';
 import type { SettingsError } from '../models/SettingsError.js';
 
 /**
@@ -65,4 +65,13 @@ export interface UserSettingsRepository {
    * Used when a provider's API key is deleted and the default model belongs to that provider.
    */
   clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>>;
+
+  /**
+   * Update the user's transcription provider preference.
+   * Creates the settings document if it doesn't exist.
+   */
+  updateTranscriptionPreferences(
+    userId: string,
+    provider: TranscriptionProvider
+  ): Promise<Result<void, SettingsError>>;
 }

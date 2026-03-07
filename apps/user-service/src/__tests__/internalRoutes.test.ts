@@ -738,6 +738,63 @@ describe('Internal Routes', () => {
       };
       expect(body.data.llmPreferences).toBeUndefined();
     });
+
+    it('returns transcriptionPreferences when present', async () => {
+      const userId = 'user-with-transcription';
+      fakeSettingsRepo.setSettings({
+        userId,
+        transcriptionPreferences: { provider: 'speechmatics' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          transcriptionPreferences?: { provider: string };
+        };
+      };
+      expect(body.data.transcriptionPreferences?.provider).toBe('speechmatics');
+    });
+
+    it('returns undefined transcriptionPreferences when not set', async () => {
+      const userId = 'user-no-transcription';
+      fakeSettingsRepo.setSettings({
+        userId,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          transcriptionPreferences?: { provider: string };
+        };
+      };
+      expect(body.data.transcriptionPreferences).toBeUndefined();
+    });
   });
 
   describe('GET /internal/users/:uid/oauth/github/token', () => {

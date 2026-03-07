@@ -330,6 +330,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       defaultModel: { type: 'string' },
                     },
                   },
+                  transcriptionPreferences: {
+                    type: 'object',
+                    properties: {
+                      provider: { type: 'string' },
+                    },
+                  },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },
@@ -376,12 +382,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Failed to fetch user settings'
         );
         // Return empty preferences on error instead of failing
-        return await reply.ok({ llmPreferences: undefined });
+        return await reply.ok({ llmPreferences: undefined, transcriptionPreferences: undefined });
       }
 
       const settings = result.value;
       return await reply.ok({
         llmPreferences: settings?.llmPreferences,
+        transcriptionPreferences: settings?.transcriptionPreferences,
       });
     }
   );
