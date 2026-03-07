@@ -22,7 +22,7 @@ export function createWhatsappRoutes(config: Config): FastifyPluginCallback {
     fastify.register(mappingRoutes);
     fastify.register(messageRoutes);
     fastify.register(verificationRoutes);
-    fastify.register(createPubsubRoutes(config));
+    fastify.register(createPubsubRoutes());
     done();
   };
 }

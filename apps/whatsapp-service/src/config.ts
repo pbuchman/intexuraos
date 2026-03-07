@@ -88,21 +88,15 @@ const configSchema = z.object({
   webhookProcessTopic: z.string().optional(),
 
   /**
-   * Pub/Sub topic for audio transcription.
-   * Triggers async transcription polling.
+   * Pub/Sub topic for audio stored events. Triggers srt-service to start transcription.
    */
-  transcriptionTopic: z.string().optional(),
+  audioStoredTopic: z.string().optional(),
 
   /**
    * Pub/Sub topic for approval reply events.
    * Triggers actions-agent to process approval/rejection.
    */
   approvalReplyTopic: z.string().optional(),
-
-  /**
-   * Speechmatics API key for audio transcription.
-   */
-  speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_APP_API_KEY is required'),
 
   /**
    * GCP project ID.
@@ -146,14 +140,13 @@ export function loadConfig(): Config {
     mediaBucket: process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'],
     mediaCleanupTopic: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'],
     mediaCleanupSubscription: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'],
-    speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_APP_API_KEY'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
     commandsIngestTopic: process.env['INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC'],
     sendMessageTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'],
     webhookProcessTopic: process.env['INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC'],
-    transcriptionTopic: process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC'],
+    audioStoredTopic: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'],
     approvalReplyTopic: process.env['INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC'],
     port: process.env['PORT'],
     host: process.env['HOST'],
@@ -174,7 +167,6 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_WHATSAPP_MEDIA_BUCKET',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
-    'INTEXURAOS_SPEECHMATICS_APP_API_KEY',
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_AGENT_URL',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
