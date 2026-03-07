@@ -242,9 +242,9 @@ Run /release to start the release workflow — Phase 1 will use this data.
 
 ## Error Handling
 
-| Error | Action |
-|-------|--------|
-| Script fails | Report error, STOP |
-| Agent step fails | Report which step failed, keep partial output in file, user can re-run |
-| < 5 commits | Ask user if triage is worth it — raw data may be enough |
-| File already exists and is fresh | Ask user: "Pre-release data exists for current HEAD. Re-run triage?" |
+| Error                            | Action                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| Script fails                     | Report error, STOP                                                     |
+| Agent step fails                 | Report which step failed, keep partial output in file, user can re-run |
+| < 5 commits                      | Ask user if triage is worth it — raw data may be enough                |
+| File already exists and is fresh | Ask user: "Pre-release data exists for current HEAD. Re-run triage?"   |
