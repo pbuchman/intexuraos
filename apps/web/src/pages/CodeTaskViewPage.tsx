@@ -262,6 +262,8 @@ export function CodeTaskViewPage(): React.JSX.Element {
         onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowImplementDropdown(false); }}
         onImplement={(): void => { void handleImplement(); }}
+        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
       />
 
       <MemoTaskActions
@@ -619,6 +621,32 @@ function ImplementationLinkBanner({ implementationTaskId }: { implementationTask
   );
 }
 
+function GitHubButton({ href }: { href: string }): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
+    >
+      GitHub
+    </a>
+  );
+}
+
+function LinearButton({ href }: { href: string }): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
+    >
+      Linear
+    </a>
+  );
+}
+
 interface NextStepsProps {
   isImplementable: boolean;
   implementing: boolean;
@@ -630,6 +658,8 @@ interface NextStepsProps {
   onToggleDropdown: () => void;
   onSelectWorkerType: (type: WorkerType) => void;
   onImplement: () => void;
+  prUrl?: string;
+  linearIssueUrl?: string;
 }
 
 function NextSteps({
@@ -643,19 +673,25 @@ function NextSteps({
   onToggleDropdown,
   onSelectWorkerType,
   onImplement,
+  prUrl,
+  linearIssueUrl,
 }: NextStepsProps): React.JSX.Element | null {
   if (!isImplementable && implementationTaskId === undefined && implementError === null) return null;
 
   return (
     <div className="mt-4">
       {implementationTaskId !== undefined ? (
-        <a
-          href={`/#/code-tasks/${implementationTaskId}`}
-          className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
-        >
-          <Play className="h-4 w-4" />
-          View Implementation
-        </a>
+        <div className="flex items-center gap-3">
+          <a
+            href={`/#/code-tasks/${implementationTaskId}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+          >
+            <Play className="h-4 w-4" />
+            View Implementation
+          </a>
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+        </div>
       ) : isImplementable ? (
         <div className="relative flex items-center gap-3">
           <div className="relative flex">
@@ -704,6 +740,8 @@ function NextSteps({
               </div>
             ) : null}
           </div>
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
         </div>
       ) : null}
       {implementError !== null ? (
