@@ -1708,5 +1708,35 @@ describe('processCodeAction', () => {
       // Should NOT have called findPlannedTaskByLinearIssue for planning tasks
       expect(codeTaskRepo.findPlannedTaskByLinearIssue).not.toHaveBeenCalled();
     });
+
+    it('succeeds even when findPlannedTaskByLinearIssue throws an exception (best-effort)', async () => {
+      setupExecutionTaskMocks();
+
+      // findPlannedTaskByLinearIssue throws an unexpected exception
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockRejectedValueOnce(
+        new Error('Unexpected Firestore connection error')
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-200',
+        }
+      );
+
+      // Should still succeed despite thrown exception
+      expect(result.ok).toBe(true);
+
+      // Should have logged warning about the exception
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ executionTaskId: 'new-exec-task' }),
+        'Best-effort back-link to planning task failed'
+      );
+    });
   });
 });
