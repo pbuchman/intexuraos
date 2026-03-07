@@ -279,6 +279,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
         onConfirmDelete={(): void => { void handleDelete(); }}
         {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
+        linksInNextSteps={isImplementable || task.implementationTaskId !== undefined}
       />
     </Layout>
   );
@@ -430,7 +431,7 @@ function TaskActions({
   onRetry,
   deleting, deleteError, showDeleteConfirm,
   onShowDeleteConfirm, onCancelDeleteConfirm, onConfirmDelete,
-  prUrl, linearIssueUrl,
+  prUrl, linearIssueUrl, linksInNextSteps,
 }: {
   isActive: boolean;
   cancelling: boolean;
@@ -453,8 +454,9 @@ function TaskActions({
   onConfirmDelete: () => void;
   prUrl?: string;
   linearIssueUrl?: string;
+  linksInNextSteps: boolean;
 }): React.JSX.Element | null {
-  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null && prUrl === undefined && linearIssueUrl === undefined) return null;
+  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null && (linksInNextSteps || (prUrl === undefined && linearIssueUrl === undefined))) return null;
 
   return (
     <div className="mt-4 flex flex-wrap items-stretch gap-3">
@@ -469,8 +471,8 @@ function TaskActions({
             <StopCircle className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Cancel Task</span>
           </Button>
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
         </>
       ) : null}
       {isRetryable ? (
@@ -544,8 +546,8 @@ function TaskActions({
                 </div>
               ) : null}
             </div>
-            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
             {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
             <button
               type="button"
               onClick={onShowDeleteConfirm}
@@ -558,10 +560,10 @@ function TaskActions({
           </>
         )
       ) : null}
-      {!isActive && !isRetryable ? (
+      {!isActive && !isRetryable && !linksInNextSteps ? (
         <>
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
         </>
       ) : null}
       {cancelError !== null ? (
@@ -689,8 +691,8 @@ function NextSteps({
             <Play className="h-4 w-4" />
             View Implementation
           </a>
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
         </div>
       ) : isImplementable ? (
         <div className="relative flex items-center gap-3">
@@ -740,8 +742,8 @@ function NextSteps({
               </div>
             ) : null}
           </div>
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
         </div>
       ) : null}
       {implementError !== null ? (
