@@ -226,6 +226,8 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
       <MemoTaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
 
+      {task.result?.summary !== undefined && task.result.summary !== '' ? <MemoRunSummary summary={task.result.summary} /> : null}
+
       {task.result !== undefined ? <MemoTaskResult task={task} /> : null}
       {task.error !== undefined ? <MemoTaskError task={task} /> : null}
 
@@ -799,6 +801,38 @@ function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedProm
 }
 
 const MemoTaskPrompt = memo(TaskPrompt);
+
+function RunSummary({ summary }: { summary: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback((): void => {
+    void navigator.clipboard.writeText(summary).then(() => {
+      setCopied(true);
+      setTimeout(() => { setCopied(false); }, 2000);
+    }).catch(() => { /* clipboard unavailable */ });
+  }, [summary]);
+
+  return (
+    <Card className="mb-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Run Summary</h3>
+        <button
+          type="button"
+          onClick={copy}
+          className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+          title={copied ? 'Copied!' : 'Copy'}
+        >
+          {copied ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        </button>
+      </div>
+      <blockquote className="border-l-4 rounded border-emerald-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+        <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{summary}</p>
+      </blockquote>
+    </Card>
+  );
+}
+
+const MemoRunSummary = memo(RunSummary);
 
 function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
   const result = task.result;
