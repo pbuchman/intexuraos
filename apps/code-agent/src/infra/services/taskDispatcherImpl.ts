@@ -162,7 +162,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   }
 
   /**
-   * Attempt to dispatch to a worker, with fallback on 502/503/504.
+   * Attempt to dispatch to a worker, with fallback on 502/503/504 and Cloudflare 520-530.
    * Uses per-request worker credentials for user isolation.
    */
   private async dispatchToWorker(
@@ -232,8 +232,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           continue;
         }
 
-        // 502/504 are infrastructure errors — neutral (don't affect capacity decision)
-        if (error instanceof Error && (error.message.includes('502') || error.message.includes('504'))) {
+        // 502/504 and Cloudflare 520-530 are infrastructure errors — neutral (don't affect capacity decision)
+        const cfPattern = /\b(502|504|5[2][0-9]|530)\b/;
+        if (error instanceof Error && cfPattern.test(error.message)) {
           continue;
         }
 
@@ -302,7 +303,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         'Worker dispatch request failed'
       );
 
-      if (response.status === 502 || response.status === 503 || response.status === 504) {
+      // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors — retry via worker fallback
+      const isRetryableInfra = response.status === 502 || response.status === 503 || response.status === 504
+        || (response.status >= 520 && response.status <= 530);
+      if (isRetryableInfra) {
         const error = new Error(`HTTP ${String(response.status)}`) as Error & { code?: string };
         error.code = String(response.status);
         throw error;
@@ -395,7 +399,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
       /* v8 ignore start -- test-infra: requires worker HTTP endpoint to return error response @preserve */
       if (!response.ok) {
-        if (response.status === 502 || response.status === 503 || response.status === 504) {
+        // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors
+        const isRetryableInfra = response.status === 502 || response.status === 503 || response.status === 504
+          || (response.status >= 520 && response.status <= 530);
+        if (isRetryableInfra) {
           return err({
             code: 'worker_unavailable',
             message: `Worker is unreachable (HTTP ${String(response.status)})`,
