@@ -792,7 +792,7 @@ function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedProm
           <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
             Show sanitized prompt
           </summary>
-          <div className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm dark:border-slate-600 dark:bg-slate-700">
+          <div className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
             <MarkdownContent content={sanitizedPrompt} />
           </div>
         </details>
