@@ -47,6 +47,10 @@ fi
 
 **CRITICAL:** Complete ALL sub-steps before moving to Step 4. Do not categorize, filter, or skip anything during collection.
 
+**Scale enforcement:** If you are executing these steps inline (not via the `--collect` pipeline), you are responsible for completing every sub-step for every PR. For releases with 11+ PRs, this is prohibitively expensive in the main context — use the `--collect` pipeline instead (see `full-release.md` step 1.2 Collection Strategy Table).
+
+**Common failure mode:** Skipping Steps 3.2-3.4 and categorizing from PR titles alone. This produces shallow, inaccurate triage. PR titles are summaries — commits, Linear issues, and subissues contain the actual change details needed for correct categorization and netting.
+
 #### 3.1 Collect All Merged PRs
 
 ```bash
@@ -157,6 +161,19 @@ Use `AskUserQuestion`:
 1. "Abort release" (Recommended)
 2. "Create version-only release" — bump version with empty changelog
 3. "Let me check" — pause for manual investigation
+
+#### Completeness Gate (MANDATORY before Step 4)
+
+Before proceeding to Step 4 (netting), verify ALL of the following. If ANY check fails, STOP and complete the missing collection.
+
+| Check | How to Verify | Failure Action |
+|-------|--------------|----------------|
+| Every PR has commits collected | Each manifest entry has non-empty `Commits` array | Re-run Step 3.2 for missing PRs |
+| All INT-XXX refs fetched from Linear | Count unique INT-XXX in manifest vs. fetched issues | Re-run Step 3.4 for missing IDs |
+| Unified manifest assembled | Manifest exists with PR → commits → Linear structure | Re-run Step 3.5 |
+| No PR was skipped during collection | Manifest PR count matches `gh pr list` count | Investigate missing PRs |
+
+**If using pre-collected data:** The `## Triage Summary` section in `.prerelease-data.md` satisfies this gate — the collection pipeline already enforces completeness through its 4 sequential agent steps.
 
 ### 4. Net Out Cancelled Changes
 
