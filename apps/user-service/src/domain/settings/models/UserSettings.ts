@@ -56,6 +56,18 @@ export interface LlmPreferences {
 }
 
 /**
+ * Transcription provider identifiers.
+ */
+export type TranscriptionProvider = 'speechmatics';
+
+/**
+ * Transcription preferences for user-selected provider.
+ */
+export interface TranscriptionPreferences {
+  provider: TranscriptionProvider;
+}
+
+/**
  * A notification filter rule.
  */
 export interface NotificationFilter {
@@ -81,6 +93,7 @@ export interface UserSettings {
   llmApiKeys?: LlmApiKeys;
   llmTestResults?: LlmTestResults;
   llmPreferences?: LlmPreferences; // User's LLM model preferences
+  transcriptionPreferences?: TranscriptionPreferences; // User's transcription provider preferences
   createdAt: string;
   updatedAt: string;
 }
