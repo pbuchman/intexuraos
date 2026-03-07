@@ -7,6 +7,7 @@ import {
   CheckCircle,
   ChevronRight,
   Clock,
+  Code2,
   Cog,
   ExternalLink,
   FileText,
@@ -55,6 +56,8 @@ function getTypeIcon(type: CommandType): React.JSX.Element {
       return <Calendar className={iconClass} />;
     case 'reminder':
       return <Bell className={iconClass} />;
+    case 'code':
+      return <Code2 className={iconClass} />;
     default:
       return <HelpCircle className={iconClass} />;
   }
