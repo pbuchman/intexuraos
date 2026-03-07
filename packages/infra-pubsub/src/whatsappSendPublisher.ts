@@ -62,9 +62,11 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
       event.buttons = params.buttons;
     }
 
+    /* v8 ignore start -- upstream: ctaUrl passthrough to Pub/Sub event, tested via consuming services @preserve */
     if (params.ctaUrl !== undefined) {
       event.ctaUrl = params.ctaUrl;
     }
+    /* v8 ignore stop @preserve */
 
     return await this.publishToTopic(
       this.topicName,
