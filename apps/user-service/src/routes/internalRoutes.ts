@@ -6,7 +6,7 @@
  * POST /internal/users/:uid/llm-keys/:provider/last-used - Update last used timestamp
  * GET /internal/users/:uid/research-settings - Get research settings for a user
  * GET /internal/users/:uid/oauth/google/token - Get valid Google OAuth token for a user
- * GET /internal/users/:uid/settings - Get user LLM preferences (default model)
+ * GET /internal/users/:uid/settings - Get user settings preferences (LLM and transcription)
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -304,9 +304,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     {
       schema: {
         operationId: 'getInternalUserSettings',
-        summary: 'Get user LLM preferences (internal)',
+        summary: 'Get user settings preferences (internal)',
         description:
-          'Internal endpoint for service-to-service communication. Returns user LLM preferences including default model.',
+          'Internal endpoint for service-to-service communication. Returns user settings preferences including LLM and transcription preferences.',
         tags: ['internal'],
         params: {
           type: 'object',

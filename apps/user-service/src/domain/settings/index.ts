@@ -20,7 +20,11 @@ export type {
   TranscriptionProvider,
   TranscriptionPreferences,
 } from './models/UserSettings.js';
-export { createDefaultSettings } from './models/UserSettings.js';
+export {
+  createDefaultSettings,
+  isTranscriptionProvider,
+  VALID_TRANSCRIPTION_PROVIDERS,
+} from './models/UserSettings.js';
 export type { SettingsError, SettingsErrorCode } from './models/SettingsError.js';
 
 // Ports
