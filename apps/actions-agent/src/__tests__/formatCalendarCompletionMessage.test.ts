@@ -5,7 +5,6 @@ import type { CalendarPreview } from '../domain/ports/calendarServiceClient.js';
 describe('formatCalendarCompletionMessage', () => {
   const baseParams = {
     fallbackMessage: 'Calendar event created successfully',
-    eventUrl: 'https://calendar.google.com/calendar/event?eid=abc123',
   };
 
   describe('rich message (preview available)', () => {
@@ -30,7 +29,8 @@ describe('formatCalendarCompletionMessage', () => {
       expect(result).toContain('\u{1F4C6}');
       expect(result).toContain('\u23F1 1 hour 30 minutes');
       expect(result).toContain('\u{1F4CD} Conference Room A');
-      expect(result).toContain('View: https://calendar.google.com/calendar/event?eid=abc123');
+      // URL is now passed as a CTA button, not embedded in message text
+      expect(result).not.toContain('View:');
     });
 
     it('formats message without location when null', () => {
@@ -97,7 +97,8 @@ describe('formatCalendarCompletionMessage', () => {
       const result = formatCalendarCompletionMessage({ ...baseParams, preview: null });
 
       expect(result).toContain('\u{1F4C5} Calendar event created successfully');
-      expect(result).toContain('View: https://calendar.google.com/calendar/event?eid=abc123');
+      // URL is now passed as a CTA button, not embedded in message text
+      expect(result).not.toContain('View:');
     });
 
     it('returns basic message when preview status is failed', () => {
