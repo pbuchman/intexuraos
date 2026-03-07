@@ -80,40 +80,89 @@ MODIFIED_SERVICES="$MODIFIED_APPS $MODIFIED_WORKERS"
 echo "All modified services: $MODIFIED_SERVICES"
 ```
 
-### 1.6 Run Semver Analysis with Prioritization
+### 1.6 Run Semver Analysis
 
-Execute the full semver analysis per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Steps 3-7:
+Execute the semver analysis per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Steps 3-6:
 
 1. Collect all data (3.1-3.5) — or use pre-collected data from step 1.2 if available
 2. Validate manifest is non-empty (3.6)
 3. Net out cancelled changes (4) — or use netting from `## Netting Analysis` if present
 4. Categorize remaining changes (5) — or use `## Change Groups` if present
-5. Prioritize with user via AskUserQuestion (5.1) — always required, even with pre-collected data
-6. Determine version bump (6) — `## Triage Summary` may suggest one, but user confirms
-7. Build changelog entry (7) and GitHub Release body (7.1)
+5. Determine version bump (6) — `## Triage Summary` may suggest one, but user confirms
 
-Store results for Phase 6.
+**Do NOT build changelog yet** — that happens after prioritization in step 1.7.
 
-### 1.7 Ask for Release Focus
+### 1.7 Single Prioritization Touchpoint
 
-Use `AskUserQuestion` tool:
+**This is the ONLY user interaction point before Phase 6.** Present all categorized changes in a consolidated view and collect priorities + optional comments.
+
+Use `AskUserQuestion` tool with this format:
 
 ```
-Release Focus
+Release Prioritization — vCURRENT → vNEW
 
-Detected:
-- Version: X.Y.Z → X.Y.Z+1
-- Modified services: [list]
-- PRs merged: [count]
+Modified services: [list]
+PRs merged: [count]
+Suggested bump: [major/minor/patch]
 
-What should be highlighted in this release? (optional)
+Priority guide:
+  High   = First in CHANGELOG, top 3 become GitHub Release highlights, used for README/website
+  Medium = Standard position in CHANGELOG
+  Low    = Last in CHANGELOG
+  Skip   = Omitted from CHANGELOG entirely
+
+## Changes (adjust priorities, add comments, then type "go")
+
+### Features (default: High)
+  1. [Feature description] — PR #XXX / INT-XXX
+  2. [Feature description] — PR #XXX / INT-XXX
+
+### Notable Changes (default: Medium)
+  3. [Change description] — PR #XXX
+  4. [Change description] — PR #XXX
+
+### Minor Fixes (default: Low)
+  5-8. 4 bug fixes:
+       - whatsapp: [fix description] (#XXX)
+       - calendar: [fix description] (#XXX)
+       - bookmarks: [fix description] (#XXX)
+       - research: [fix description] (#XXX)
+
+Commands:
+  "3 high" — change #3 to High priority
+  "1 comment: Voice transcription enables..." — add description comment to #1
+  "5 skip" — exclude #5 from changelog (targets entire batch if 5 is a batched range; use "expand 5-8" first to target individual items)
+  "expand 5-8" — show individual items in a batched group (assigns each a unique number for individual commands)
+  "preview" — show final changelog preview before confirming
+  "slogan: End-to-end AI autonomy..." — set marketing slogan (major releases only)
+  "go" or "approve" — confirm and proceed
 ```
 
-**Options:**
+**Command validation:** If the user types an unrecognized command, respond with the valid command list and ask them to try again.
 
-1. "Auto-detect from PRs" (Recommended)
-2. "Let me specify highlights"
-3. "Skip highlights"
+**Batching rules:**
+
+- Features: shown individually (each gets its own number)
+- Notable changes: shown individually
+- Minor fixes: batched by area if >4 (e.g., "5-8. 4 bug fixes across whatsapp, calendar services")
+- **Batch command semantics:** Commands targeting a batch number (e.g., "5 skip") apply to the **entire batch**. To target individual items within a batch, the user must first "expand 5-8" to assign unique numbers, then use those individual numbers.
+
+**For major version releases**, also prompt:
+
+```
+  This is a MAJOR version release. Please provide a marketing slogan for the
+  previous major version (vX.x) for the Version History section, or type "skip".
+```
+
+**After user confirms ("go"):**
+
+1. Store the **priority map** (change number → High/Medium/Low/Skip)
+2. Store the **comments map** (change number → user comment text)
+3. Store the **marketing slogan** (if major release)
+4. Build changelog entry per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7
+5. Build GitHub Release body per Step 7.1
+
+Store all results for downstream phases.
 
 ---
 
@@ -143,74 +192,43 @@ Task 3: service-scribe for research-agent
 
 ### 2.3 Wait for Completion
 
-All agents must complete before proceeding. Do NOT checkpoint here — this is silent batch processing.
+All agents must complete before proceeding. Do NOT ask for user confirmation here — this is silent batch processing.
 
 ---
 
-## Phase 3: High-Level Docs (Checkpoint)
+## Phase 3: High-Level Docs (Automatic)
 
-### 3.1 Read Current Overview
+### 3.1 Spawn Docs Updater Agent
 
-```bash
-cat docs/overview.md
-```
-
-### 3.2 Analyze Changes
-
-From merged PRs and modified services, identify:
-
-- New capabilities added
-- Significant architectural changes
-- New integrations or patterns
-
-### 3.3 Propose Updates
-
-Draft specific additions/modifications to `docs/overview.md`:
-
-```markdown
-## Proposed Changes to docs/overview.md
-
-### Section: [section name]
-
-**Change type:** [Add | Modify | Remove]
-**Current content:**
-
-> [existing text if modifying]
-
-**Proposed content:**
-
-> [new text]
-
-**Rationale:** [why this change]
-```
-
-### 3.4 CHECKPOINT
-
-Use `AskUserQuestion` tool:
+Launch the `release-docs-updater` agent with High-priority changes and optional user comments from Phase 1:
 
 ```
-High-Level Documentation Update
+Use Agent tool with:
+- subagent_type: "release-docs-updater"
+- prompt: |
+    Version: vX.Y.Z
 
-[Show proposed changes]
+    High-priority changes:
+    [list of High-priority items with descriptions]
 
-Approve these changes to docs/overview.md?
+    User comments:
+    [map of change → comment from Phase 1 touchpoint]
+- run_in_background: false
 ```
 
-**Options:**
+The agent will automatically:
 
-1. "Approve" — Apply changes
-2. "Revise" — Provide feedback
-3. "Skip" — Proceed without changes
+1. Update `docs/overview.md` following `docs/STANDARDS.md` rules
+2. Verify README badges (AI Models count, Components count)
+3. Check `docs/services/index.md` has all services listed
 
-If "Revise": Ask for feedback, incorporate, re-present.
+### 3.2 Skip Condition
 
-### 3.5 Apply Changes
-
-If approved, use Edit tool to update `docs/overview.md`.
+If the release has no High-priority features that affect the overview (e.g., pure bugfix release), the agent will report "No changes needed" and this phase completes instantly.
 
 ---
 
-## Phase 4: README Update (Checkpoint)
+## Phase 4: README Update (Automatic)
 
 ### 4.1 Read Current README
 
@@ -222,70 +240,28 @@ head -150 README.md
 
 Use template from [`templates/readme-whats-new.md`](../templates/readme-whats-new.md).
 
-Extract from merged PRs:
+Auto-generate from High-priority items collected in Phase 1:
 
-- Feature titles (user-facing language)
-- Brief descriptions (1 sentence each)
-- Sort by impact/importance
+- Use user comments (from Phase 1 touchpoint) as descriptions where provided
+- Fall back to triage summary descriptions for items without comments
+- Sort by: Features first, then Notable changes, then fixes
+- Use concise table format (see template)
 
-### 4.3 Content Approval Process (ONE BY ONE)
+### 4.3 Apply Changes
 
-**CRITICAL**: Ask user ONE BY ONE for each potential feature:
-
-```
-Feature: [Feature Name]
-Type: [User-facing feature | Bug fix | Technical refactoring | Infrastructure]
-
-Include this feature in the "What's New" section?
-```
-
-**Default rules:**
-
-- User-facing features (new capabilities, UX improvements) → YES
-- Bug fixes that users notice → YES
-- Technical refactorings → NO (unless major impact like cost savings)
-
-Track approved features for website Phase 5.
-
-### 4.4 CHECKPOINT
-
-Use `AskUserQuestion` tool:
-
-```
-README "What's New" Section
-
-## What's New in vX.Y.Z
-
-| Feature | Description |
-|---------|-------------|
-| **Feature A** | One-sentence description |
-| **Feature B** | One-sentence description |
-| ... |
-
-Approve this "What's New" section?
-```
-
-**Options:**
-
-1. "Approve" — Apply changes
-2. "Revise" — Provide feedback
-3. "Skip" — Proceed without changes
-
-### 4.5 Apply Changes
-
-If approved, use Edit tool to apply the "What's New" section following the accumulation pattern (see step 4.6):
+Use Edit tool to apply the "What's New" section following the accumulation pattern (see step 4.4):
 
 - **Patch/minor release:** APPEND new tiles to the existing section, update version in header
 - **Major release:** Replace entire section with only the new release tiles (move old tiles to VersionHistorySection)
 
-### 4.6 Accumulation Pattern (MANDATORY)
+### 4.4 Accumulation Pattern (MANDATORY)
 
-**Website "What's New" section accumulates across a MAJOR version:**
+**README "What's New" section accumulates across a MAJOR version:**
 
-- **Showcase ALL approved features** from ALL sub-releases in current major version
+- **Showcase ALL High-priority features** from ALL sub-releases in current major version
 - Example: v2.0.0 (6 features) + v2.1.0 (2 features) → 8 tiles total in v2.x section
 - **Only when new major version releases** (e.g., v3.0.0) do old features move to VersionHistorySection
-- **Header**: "What's New" (no version number)
+- **Header**: "What's New in vX.Y.Z"
 - **Right side**: Changelog link
 - **Maximum**: 3-12 feature tiles
 
@@ -295,7 +271,7 @@ If approved, use Edit tool to apply the "What's New" section following the accum
 
 ---
 
-## Phase 5: Website Improvements (Checkpoint)
+## Phase 5: Website Improvements (Automatic)
 
 ### 5.1 Detect Major Version Release
 
@@ -312,11 +288,12 @@ if [[ $(echo "$NEW_VERSION" | cut -d'.' -f1) -gt $(echo "$CURRENT_VERSION" | cut
 fi
 ```
 
-### 5.2 Generate RecentUpdatesSection Content
+### 5.2 Auto-Update RecentUpdatesSection
 
-Map approved features from Phase 4 to website-ready content:
+Map High-priority features from Phase 1 to website-ready content:
 
 - Transform feature descriptions into user-facing language
+- Use user comments from Phase 1 touchpoint for richer descriptions
 - Use brutalist design: `BrutalistCard` with icon, title, description
 - Color coding (optional):
   - Green → user-facing improvements
@@ -341,7 +318,7 @@ Map approved features from Phase 4 to website-ready content:
 - Expandable button below "What's New" section
 - Combined subreleases (e.g., v2.0.0, v2.1.0 → v2.x paragraph)
 - List format: paragraphs, not tiles
-- Marketing slogan for each major version
+- Marketing slogan from Phase 1 touchpoint (collected during step 1.7)
 
 **Example v1.x content:**
 
@@ -351,95 +328,25 @@ v1.x — Launch
 End-to-end AI autonomy: From your mobile to the cloud and back. IntexuraOS went from architecture document to handling live traffic — voice to research, links to bookmarks, dates to calendar events. The full AI agent pipeline is now processing real user requests in production.
 ```
 
-**Ask user for marketing slogan:**
+### 5.4 Implement Changes
 
-```
-Previous major version (v2.x) needs a marketing slogan for the version history section.
+**Guard:** If no features were marked High priority in the Phase 1 priority map, skip the RecentUpdatesSection update. Only invoke frontend-design when there are concrete features to display.
 
-Example pattern: "[One-line tagline]. [2-3 sentence summary of capabilities]."
-
-Provide a marketing slogan for v2.x:
-```
-
-### 5.4 Run Website Audit
-
-Follow [`workflows/website-audit.md`](website-audit.md) to:
-
-1. Analyze release impact on website sections
-2. Review `HomePage.tsx` for staleness/improvements
-3. Identify quick wins and high-impact changes
-
-### 5.5 Compile Exactly 3 Suggestions
-
-Combine audit results into EXACTLY 3 suggestions:
-
-**Always include (if applicable):**
-
-| Type      | What                        | Why                    | Effort |
-| --------- | --------------------------- | ---------------------- | ------ |
-| [FEATURE] | Update RecentUpdatesSection | Add new approved tiles | Low    |
-
-**For major releases, add:**
-
-| Type      | What                         | Why                       | Effort |
-| --------- | ---------------------------- | ------------------------- | ------ |
-| [FEATURE] | Create VersionHistorySection | Archive old major version | Medium |
-
-**Plus 1-2 additional suggestions from audit:**
-
-| Type      | What                       | Why                      | Effort |
-| --------- | -------------------------- | ------------------------ | ------ |
-| [IMPROVE] | Enhance hero section       | Reflect new capabilities | Medium |
-| [CONTENT] | Add testimonial/case study | Social proof             | Medium |
-
-**Selection rules:**
-
-- At least 1 release-driven suggestion
-- At least 1 Low effort suggestion
-- Maximum 1 High effort suggestion
-
-### 5.6 CHECKPOINT
-
-Use `AskUserQuestion` tool:
-
-```
-Website Improvement Suggestions
-
-Based on this release, here are 3 website improvements:
-
-1. [TYPE] **What**: ...
-   **Why**: ...
-   **Effort**: Low/Medium/High
-
-2. [TYPE] **What**: ...
-   **Why**: ...
-   **Effort**: Low/Medium/High
-
-3. [TYPE] **What**: ...
-   **Why**: ...
-   **Effort**: Low/Medium/High
-
-Which suggestions should I implement?
-```
-
-**Options (multiSelect: true):**
-
-1. "Suggestion 1"
-2. "Suggestion 2"
-3. "Suggestion 3"
-4. "None — skip website updates"
-
-### 5.7 Implement Selected Suggestions
-
-For EACH selected suggestion, invoke the frontend-design skill:
+Invoke the frontend-design skill for the website updates:
 
 ```
 Use Skill tool with:
 - skill: "frontend-design"
-- args: "<description of the website change>"
+- args: "Update RecentUpdatesSection with [N] new feature tiles from release vX.Y.Z: [list of High-priority features with descriptions]"
 ```
 
-Wait for each to complete before starting the next.
+For major releases, invoke VersionHistorySection **after** RecentUpdatesSection completes (sequential, not parallel — both touch the same web files):
+
+```
+Use Skill tool with:
+- skill: "frontend-design"
+- args: "Create VersionHistorySection for vX.x with marketing slogan: [slogan from Phase 1]"
+```
 
 ---
 
@@ -506,15 +413,35 @@ pnpm install
 
 ### 6.2 Update CHANGELOG.md and Release Notes
 
-Prepend the changelog entry built during Phase 1 semver analysis (see [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7):
+Prepend the changelog entry built during Phase 1 (see [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7):
 
 1. Read current CHANGELOG.md
 2. Insert new `## X.Y.Z` section at the top (below any file header)
-3. Use the priority-ordered, verb-first entries from Step 7
+3. Use the type-subcategorized, priority-ordered entries from Step 7:
+
+```markdown
+## X.Y.Z
+
+### Added
+
+- [High-priority entries first]
+- [Medium-priority entries]
+- [Low-priority entries]
+
+### Fixed
+
+- [entries sorted by priority]
+
+### Improved
+
+- [entries sorted by priority]
+```
+
+4. Omit empty subcategories (e.g., if no `### Removed` entries, skip it entirely)
 
 Also verify the GitHub Release notes file:
 
-- This was generated in Phase 1 step 1.5 per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7.1
+- This was generated in Phase 1 step 1.7 per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7.1
 - Confirm `/tmp/release-notes-$NEW_VERSION.md` exists; if missing, rebuild per Step 7.1
 
 ### 6.3 CI Gate (MANDATORY)
@@ -723,12 +650,12 @@ If `pnpm run ci:tracked` fails:
 4. Re-run CI
 5. Only after CI passes, proceed with commit/tag
 
-### User Declines All Changes
+### User Skips All Changes
 
-If user skips all checkpoint phases (1.5 prioritization, 3, 4, 5):
+If user marks all changes as "Skip" during Phase 1 prioritization:
 
-1. Phase 6 still runs
-2. Commit message reflects only version bump
+1. Phases 3-5 have no High-priority items to work with — they complete instantly
+2. Phase 6 still runs with a minimal changelog (version bump only)
 3. Tag is still created and pushed
 
 ### Resume State

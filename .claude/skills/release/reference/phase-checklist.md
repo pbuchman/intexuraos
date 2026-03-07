@@ -11,8 +11,8 @@ Quick reference for all release phases and their requirements.
 - [ ] Find last release tag
 - [ ] List merged PRs since last release
 - [ ] Detect modified services
-- [ ] Calculate version bump (major/minor/patch)
-- [ ] Ask user for release focus (AskUserQuestion)
+- [ ] Run semver analysis (collect, net, categorize, determine bump)
+- [ ] **Single Prioritization Touchpoint** — present changes, collect priorities + comments + slogan
 
 **Commands:**
 
@@ -30,7 +30,7 @@ git diff --name-only $LAST_TAG..HEAD -- apps/ | cut -d'/' -f2 | sort -u | grep -
 - [ ] For each modified service: spawn service-scribe agent
 - [ ] Run all agents in parallel
 - [ ] Wait for all completions
-- [ ] No checkpoint — silent batch processing
+- [ ] No user interaction — silent batch processing
 
 **Tool Usage:**
 
@@ -41,70 +41,43 @@ Multiple Task calls in single message for parallel execution
 
 ---
 
-## Phase 3: High-Level Docs (Checkpoint)
+## Phase 3: High-Level Docs (Automatic)
 
-- [ ] Read `docs/overview.md`
-- [ ] Analyze changes from release
-- [ ] Draft proposed updates
-- [ ] **CHECKPOINT**: Present, wait for approval
-- [ ] If approved: apply changes with Edit tool
+- [ ] Spawn `release-docs-updater` agent with High-priority changes + user comments
+- [ ] Agent auto-updates `docs/overview.md`, verifies README badges, checks `docs/services/index.md`
+- [ ] If pure bugfix release: agent skips updates
 
-**Checkpoint Options:**
-
-1. Approve — Apply changes
-2. Revise — Incorporate feedback, re-present
-3. Skip — Proceed without changes
+**No user interaction required.**
 
 ---
 
-## Phase 4: README (Checkpoint)
+## Phase 4: README (Automatic)
 
 - [ ] Read current README.md
-- [ ] Generate "What's New" section using template
-- [ ] For each feature: ask user ONE BY ONE (tile-worthy or skip)
-- [ ] Track approved features for Phase 5 website tiles
-- [ ] **CHECKPOINT**: Present, wait for approval
-- [ ] If approved: replace section with Edit tool
+- [ ] Auto-generate "What's New" table from High-priority items
+- [ ] Use user comments as descriptions (fallback to triage summaries)
+- [ ] Apply following accumulation pattern
 
 **Template:** `templates/readme-whats-new.md`
 
-**Checkpoint Options:**
-
-1. Approve — Apply changes
-2. Revise — Incorporate feedback, re-present
-3. Skip — Proceed without changes
+**No user interaction required.**
 
 ---
 
-## Phase 5: Website (Checkpoint)
+## Phase 5: Website (Automatic)
 
-- [ ] Generate RecentUpdatesSection content
-- [ ] Run website audit (see `workflows/website-audit.md`)
-- [ ] Compile EXACTLY 3 suggestions
-- [ ] **CHECKPOINT**: Present, wait for selection
-- [ ] For each selected: invoke `/frontend-design` skill
+- [ ] Auto-update RecentUpdatesSection from High-priority features
+- [ ] If major version: create VersionHistorySection with marketing slogan from Phase 1
+- [ ] Invoke `/frontend-design` skill for implementation
 
-**Template:** `templates/website-suggestions.md`
-
-**Selection Rules:**
-
-- At least 1 release-driven
-- At least 1 Low effort
-- Maximum 1 High effort
-
-**Checkpoint Options (multiSelect):**
-
-1. Suggestion 1
-2. Suggestion 2
-3. Suggestion 3
-4. None — skip website updates
+**No user interaction required.**
 
 ---
 
 ## Phase 6: Finalize
 
 - [ ] Update ALL package.json versions (root, apps/\*, packages/\*, workers/\*)
-- [ ] Update CHANGELOG.md with new version entry (Claude Code style)
+- [ ] Update CHANGELOG.md with new version entry (sorted type subcategories)
 - [ ] Run `pnpm run ci:tracked` — **MUST PASS**
 - [ ] Refresh RAG embeddings: `pnpm run embed-docs` (with prod env overrides)
 - [ ] Stage & commit on `development`
@@ -121,17 +94,26 @@ Multiple Task calls in single message for parallel execution
   - [ ] Current branch is `development`
 - [ ] Display summary using template (includes release URL and validation results)
 
-**Changelog Format (Claude Code Style):**
+**Changelog Format (Sorted by Type):**
 
 ```markdown
 ## X.Y.Z
 
-- Added [feature with `code` inline]
-- Fixed [bug description]
-- Changed [modification]
+### Added
+
+- [High-priority entries first]
+- [Medium-priority entries]
+
+### Fixed
+
+- [entries sorted by priority]
+
+### Improved
+
+- [entries sorted by priority]
 ```
 
-No subcategories, verb-first entries, single line each.
+Type subcategories, omit empty categories, High → Medium → Low within each.
 
 **Commands:**
 
@@ -191,30 +173,29 @@ git branch --show-current                                           # Check 5: o
 
 ---
 
-## Checkpoint Pattern Explained
+## Single Touchpoint Pattern Explained
 
-At each checkpoint (Phases 3, 4, 5):
+All user interaction happens once in Phase 1 step 1.7:
 
 ```
 ┌─────────────────────────────────────────┐
-│ 1. Present proposed changes             │
-│    - Clear formatting                   │
-│    - Explain what will change           │
-│    - Show before/after if applicable    │
+│ 1. Present all changes by category      │
+│    - Features (default: High)           │
+│    - Notable Changes (default: Medium)  │
+│    - Minor Fixes (default: Low)         │
 ├─────────────────────────────────────────┤
-│ 2. STOP execution                       │
-│    - Do NOT proceed automatically       │
-│    - Wait for user input                │
+│ 2. User adjusts priorities/comments     │
+│    - "3 high" — change priority         │
+│    - "1 comment: ..." — add comment     │
+│    - "5 skip" — exclude from changelog  │
 ├─────────────────────────────────────────┤
-│ 3. Use AskUserQuestion                  │
-│    - Approve: Apply and continue        │
-│    - Revise: Get feedback, redo         │
-│    - Skip: Continue without changes     │
+│ 3. User confirms with "go"              │
+│    - Store priority map + comments map  │
+│    - Build changelog + release notes    │
 ├─────────────────────────────────────────┤
-│ 4. Handle response                      │
-│    - If approved: Edit tool to apply    │
-│    - If revise: Loop back to step 1     │
-│    - If skip: Move to next phase        │
+│ 4. Phases 2-5 run automatically         │
+│    - No further user interaction        │
+│    - All phases use Phase 1 data        │
 └─────────────────────────────────────────┘
 ```
 
@@ -227,7 +208,7 @@ At each checkpoint (Phases 3, 4, 5):
 | CI fails in Phase 6           | Fix issues, re-run CI, then commit                    |
 | service-scribe agent fails    | Log error, continue with other services               |
 | RAG embeddings fail           | Log error, continue release (re-run manually)         |
-| User declines all checkpoints | Proceed with version-only release                     |
+| User skips all changes        | Proceed with version-only release                     |
 | Tool unavailable              | ABORT immediately with clear error                    |
 | Merge to main fails           | Check for conflicts, resolve manually, retry          |
 | GitHub Release creation fails | Log error, provide manual `gh release create` command |

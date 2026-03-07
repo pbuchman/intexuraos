@@ -120,18 +120,18 @@ For each documentation section:
 
 | Status    | Meaning                          |
 | --------- | -------------------------------- |
-| Approved  | User approved at checkpoint      |
-| Skipped   | User chose to skip               |
-| Revised   | User provided feedback, re-done  |
+| Updated   | Auto-generated from priority map |
+| Skipped   | No High-priority items           |
+| Failed    | Auto-generation encountered error|
 
 ### Website Suggestions
 
-For each of the 3 suggestions:
+Website updates auto-implemented from High-priority features:
 
 | Status      | Meaning                              |
 | ----------- | ------------------------------------ |
 | Implemented | frontend-design skill completed      |
-| Skipped     | User did not select this suggestion  |
+| Skipped     | No High-priority features to showcase|
 | Failed      | Implementation encountered error     |
 
 ### Post-Release Validation
