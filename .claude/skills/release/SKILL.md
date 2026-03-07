@@ -1,7 +1,7 @@
 ---
 name: release
 description: Orchestrate a 6-phase release workflow with automated service documentation, high-level docs updates, README "What's New" section, website improvements, RAG embeddings refresh, and semantic versioning. Use when preparing a new release.
-argument-hint: '[--skip-docs | --phase N]'
+argument-hint: '[--skip-docs | --phase N | --collect]'
 ---
 
 # Release Skill
@@ -14,7 +14,12 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 /release                    # Full release workflow
 /release --skip-docs        # Skip Phase 2 (service documentation)
 /release --phase 3          # Resume from specific phase
+/release --collect          # Only collect and triage release data (no release)
 ```
+
+### Pre-Release Data Collection
+
+`/release --collect` runs the data collection and triage pipeline independently — see [`workflows/collect-release-data.md`](workflows/collect-release-data.md). It produces `.prerelease-data.md` at repo root with commits, PRs, change groups, and a triage summary. This is optional — useful when there are many changes since last release and you want to pre-stage the analysis. For small releases, Phase 1 collects data inline.
 
 ## Core Mandates
 
@@ -69,8 +74,8 @@ Aborting.
 ### Phase 1: Kickoff
 
 1. Get current version from `package.json`
-2. Find last release tag: `git tag -l "v*" --sort=-v:refname | head -1`
-3. List merged PRs since last release
+2. **Check for pre-collected data:** If `.prerelease-data.md` exists and its HEAD sha (line 1) matches current `git rev-parse HEAD`, load it and skip to step 5 — the file already contains commits, PRs, modified services, and optionally a triage summary. If the file is stale or missing, continue with steps 3-4.
+3. Find last release tag, list merged PRs since last release
 4. Detect modified services (apps changed since last tag)
 5. Run semver analysis to determine version bump (see `reference/semver-analysis.md`)
 6. Ask user for release focus/highlights guidance
@@ -281,6 +286,7 @@ At each checkpoint phase:
 ## References
 
 - Workflow: [`workflows/full-release.md`](workflows/full-release.md)
+- Data Collection: [`workflows/collect-release-data.md`](workflows/collect-release-data.md)
 - Website Audit: [`workflows/website-audit.md`](workflows/website-audit.md)
 - Templates: [`templates/`](templates/)
 - Checklist: [`reference/phase-checklist.md`](reference/phase-checklist.md)
