@@ -166,12 +166,12 @@ Use `AskUserQuestion`:
 
 Before proceeding to Step 4 (netting), verify ALL of the following. If ANY check fails, STOP and complete the missing collection.
 
-| Check | How to Verify | Failure Action |
-|-------|--------------|----------------|
-| Every PR has commits collected | Each manifest entry has non-empty `Commits` array | Re-run Step 3.2 for missing PRs |
-| All INT-XXX refs fetched from Linear | Count unique INT-XXX in manifest vs. fetched issues | Re-run Step 3.4 for missing IDs |
-| Unified manifest assembled | Manifest exists with PR → commits → Linear structure | Re-run Step 3.5 |
-| No PR was skipped during collection | Manifest PR count matches `gh pr list` count | Investigate missing PRs |
+| Check                                | How to Verify                                        | Failure Action                  |
+| ------------------------------------ | ---------------------------------------------------- | ------------------------------- |
+| Every PR has commits collected       | Each manifest entry has non-empty `Commits` array    | Re-run Step 3.2 for missing PRs |
+| All INT-XXX refs fetched from Linear | Count unique INT-XXX in manifest vs. fetched issues  | Re-run Step 3.4 for missing IDs |
+| Unified manifest assembled           | Manifest exists with PR → commits → Linear structure | Re-run Step 3.5                 |
+| No PR was skipped during collection  | Manifest PR count matches `gh pr list` count         | Investigate missing PRs         |
 
 **If using pre-collected data:** The `## Triage Summary` section in `.prerelease-data.md` satisfies this gate — the collection pipeline already enforces completeness through its 4 sequential agent steps.
 
