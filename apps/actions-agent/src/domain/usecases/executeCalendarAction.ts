@@ -81,6 +81,19 @@ export function createExecuteCalendarActionUseCase(
       'Processing calendar action via calendar-agent'
     );
 
+    // Fetch preview BEFORE processAction — the real calendar-agent deletes the preview
+    // from Firestore after creating the event, so fetching after would always return null.
+    let previewForMessage: CalendarPreview | null = null;
+    const previewResult = await calendarServiceClient.getPreview(actionId);
+    if (previewResult.ok) {
+      previewForMessage = previewResult.value; // @allow-result-access -- guarded by previewResult.ok check above
+    } else {
+      logger.warn(
+        { actionId, error: previewResult.error.message },
+        'Failed to fetch preview for completion message (non-fatal, using basic message)'
+      );
+    }
+
     const result = await calendarServiceClient.processAction({ action, text });
 
     if (!result.ok) {
@@ -105,7 +118,7 @@ export function createExecuteCalendarActionUseCase(
       });
     }
 
-    const response = result.value; // @allow-result-access -- guarded by !result.ok at line 85
+    const response = result.value; // @allow-result-access -- guarded by !result.ok check above
 
     if (response.status === 'failed') {
       const errorMessage = response.message;
@@ -149,22 +162,9 @@ export function createExecuteCalendarActionUseCase(
       const isAbsoluteUrl = resourceUrl.startsWith('http');
       const fullUrl = isAbsoluteUrl ? resourceUrl : `${webAppUrl}${resourceUrl}`;
 
-      // Fetch cached preview for rich message (best-effort)
-      let previewForMessage: CalendarPreview | null = null;
-      const previewResult = await calendarServiceClient.getPreview(actionId);
-      if (previewResult.ok) {
-        previewForMessage = previewResult.value; // @allow-result-access -- guarded by previewResult.ok check above
-      } else {
-        logger.warn(
-          { actionId, error: previewResult.error.message },
-          'Failed to fetch preview for completion message (non-fatal, using basic message)'
-        );
-      }
-
       const whatsappMessage = formatCalendarCompletionMessage({
         preview: previewForMessage,
         fallbackMessage: message,
-        eventUrl: fullUrl,
       });
 
       logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
@@ -172,6 +172,7 @@ export function createExecuteCalendarActionUseCase(
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: action.userId,
         message: whatsappMessage,
+        ctaUrl: { displayText: '\u{1F4C5} View in Calendar', url: fullUrl },
         correlationId: `calendar-complete-${actionId}`,
       });
 

@@ -370,6 +370,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     correlationId: string;
     replyToMessageId?: string;
     buttons?: import('@intexuraos/infra-pubsub').WhatsAppInteractiveButton[];
+    ctaUrl?: { displayText: string; url: string };
   }[] = [];
   private failNext = false;
   private failError: PublishError | null = null;
@@ -392,6 +393,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     message: string;
     replyToMessageId?: string;
     buttons?: import('@intexuraos/infra-pubsub').WhatsAppInteractiveButton[];
+    ctaUrl?: { displayText: string; url: string };
     correlationId?: string;
   }): Promise<Result<void, PublishError>> {
     if (this.failNext) {
@@ -404,6 +406,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
       correlationId: string;
       replyToMessageId?: string;
       buttons?: WhatsAppInteractiveButton[];
+      ctaUrl?: { displayText: string; url: string };
     } = {
       userId: params.userId,
       message: params.message,
@@ -414,6 +417,9 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     }
     if (params.buttons !== undefined) {
       messageEntry.buttons = params.buttons;
+    }
+    if (params.ctaUrl !== undefined) {
+      messageEntry.ctaUrl = params.ctaUrl;
     }
     this.sentMessages.push(messageEntry);
     return ok(undefined);
@@ -609,6 +615,7 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   private generatePreviewResult: CalendarPreview | null = null;
   private failGetPreview = false;
   private failGetPreviewError: Error | null = null;
+  private clearPreviewOnProcess = false;
 
   getProcessedActions(): ProcessCalendarRequest[] {
     return this.processedActions;
@@ -645,10 +652,21 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
     this.generatePreviewResult = preview;
   }
 
+  /**
+   * When set to true, processAction will clear all previews to simulate the real
+   * calendar-agent behaviour where the preview is deleted from Firestore after event creation.
+   */
+  setClearPreviewOnProcess(clear: boolean): void {
+    this.clearPreviewOnProcess = clear;
+  }
+
   async processAction(request: ProcessCalendarRequest): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
+    }
+    if (this.clearPreviewOnProcess) {
+      this.previews.clear();
     }
     this.processedActions.push(request);
     return ok(this.nextResponse);
