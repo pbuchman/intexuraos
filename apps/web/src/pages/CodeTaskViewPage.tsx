@@ -647,32 +647,6 @@ function ImplementationLinkBanner({ implementationTaskId }: { implementationTask
   );
 }
 
-function GitHubButton({ href }: { href: string }): React.JSX.Element {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
-    >
-      GitHub
-    </a>
-  );
-}
-
-function LinearButton({ href }: { href: string }): React.JSX.Element {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
-    >
-      Linear
-    </a>
-  );
-}
-
 interface NextStepsProps {
   isImplementable: boolean;
   implementing: boolean;
