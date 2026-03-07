@@ -812,6 +812,22 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     return Promise.resolve(ok({ wamid }));
   }
 
+  async sendCtaUrlMessage(
+    phoneNumber: string,
+    message: string,
+    _ctaUrl: { displayText: string; url: string }
+  ): Promise<Result<TextMessageSendResult, WhatsAppError>> {
+    if (this.shouldThrow) {
+      throw new Error('Unexpected send error');
+    }
+    if (this.shouldFail) {
+      return Promise.resolve(err(this.failError));
+    }
+    this.sentMessages.push({ phoneNumber, message });
+    const wamid = `fake-wamid-${String(Date.now())}-${randomUUID().slice(0, 8)}`;
+    return Promise.resolve(ok({ wamid }));
+  }
+
   getSentMessages(): { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[] }[] {
     return [...this.sentMessages];
   }
