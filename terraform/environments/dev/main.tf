@@ -469,6 +469,8 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
+    # Speechmatics API secrets (used by transcription Cloud Function)
+    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for transcription Cloud Function"
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Firebase configuration for web app
@@ -2165,7 +2167,7 @@ resource "google_cloud_scheduler_job" "log_cleanup" {
 # -----------------------------------------------------------------------------
 
 resource "google_service_account" "transcription_function" {
-  account_id   = "intexuraos-transcription-fn-${var.environment}"
+  account_id   = "ixos-transcription-fn-${var.environment}"
   display_name = "Transcription Cloud Function Service Account"
   description  = "Service account for transcription Cloud Function (audio-stored -> transcription-completed)"
 
