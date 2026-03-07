@@ -96,6 +96,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
       return ok(0);
     },
+    async findPlannedTaskByLinearIssue(): ReturnType<CodeTaskRepository['findPlannedTaskByLinearIssue']> {
+      return ok(null);
+    },
   };
 }
 
