@@ -120,7 +120,6 @@ const LIMITS = {
   maxConcurrentTasks: 3,
   maxTasksPerHour: 10,
   maxPromptLength: 10000,
-  dailyCostCap: 20, // dollars
   monthlyCostCap: 200, // dollars
   estimatedCostPerTask: 1.17,
 };
@@ -172,10 +171,10 @@ interface SendTaskMessageResult {
 }
 
 // 'queued'  -- task is running; message held in pendingUserMessages, delivered at turn end
-// 'resumed' -- task is in terminal state (planned/implemented/failed); task re-dispatched via --continue
+// 'resumed' -- task is in terminal state (planned/implemented/failed/cancelled); task re-dispatched via --continue
 // Constraints:
 // - Task must be owned by userId
-// - Status must NOT be 'cancelled' or 'dispatched'
+// - Status must NOT be 'queued' (only queued tasks reject messages)
 // - User must have configured workers
 ```
 
@@ -343,7 +342,6 @@ Layer 3: linearIssueId active check (one active task per issue)
 type RateLimitErrorCode =
   | 'concurrent_limit' // 429 - max 3 concurrent
   | 'hourly_limit' // 429 - max 10/hour
-  | 'daily_cost_limit' // 429 - $20/day cap
   | 'monthly_cost_limit' // 429 - $200/month cap
   | 'prompt_too_long' // 429 - >10000 chars
   | 'service_unavailable'; // 503 - usage DB unreachable
@@ -476,7 +474,7 @@ Notes:
 
 - `pullRequestNumber` requires `repository` to also be set
 - Per-PR queries return oldest-first; repository/all queries return newest-first
-- Comment `edited` events are merged with their original -- same position, latest body
+- Comment `edited` events are merged with their original — same position, latest body
 - PR body appears only on the most recent `pull_request` event
 
 ### Send message to task

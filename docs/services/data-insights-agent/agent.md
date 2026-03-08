@@ -1,4 +1,4 @@
-# data-insights-agent -- Agent Interface
+# data-insights-agent — Agent Interface
 
 > **Machine-readable specification for AI agent integration**
 
@@ -321,7 +321,7 @@ interface Visualization {
 
 **When to use:** Manually trigger chart data recomputation against current snapshot
 
-**Note:** Idempotent when already `refreshing` -- returns current state without queuing duplicate computation.
+**Note:** Idempotent when already `refreshing` — returns current state without queuing duplicate computation.
 
 ---
 

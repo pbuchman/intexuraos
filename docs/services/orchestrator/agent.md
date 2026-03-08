@@ -1,4 +1,4 @@
-# orchestrator -- Agent Interface
+# orchestrator — Agent Interface
 
 > Machine-readable interface definition for AI agents interacting with the orchestrator.
 

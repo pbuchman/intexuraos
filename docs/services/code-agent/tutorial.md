@@ -1,4 +1,4 @@
-# Code Agent -- Getting Started Tutorial
+# Code Agent — Getting Started Tutorial
 
 **Time estimate:** 30-45 minutes
 
@@ -46,7 +46,7 @@ Open [http://localhost:8128/docs](http://localhost:8128/docs) in your browser to
 
 ## Part 2: Configure a Worker (10 min)
 
-Before you can submit tasks, you need to configure at least one worker. Workers are user-specific -- each user manages their own worker machines.
+Before you can submit tasks, you need to configure at least one worker. Workers are user-specific — each user manages their own worker machines.
 
 ### Step 1: Add a worker via API
 
@@ -129,7 +129,7 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-The task progresses through statuses: `dispatched` -> `running` -> `planned` or `implemented` (or `failed`). Tasks never reach a generic `completed` status -- they finish as `planned` (planning agent) or `implemented` (execution agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
+The task progresses through statuses: `dispatched` -> `running` -> `planned` or `implemented` (or `failed`). Tasks never reach a generic `completed` status — they finish as `planned` (planning agent) or `implemented` (execution agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
 
 ### Step 3: List your tasks
 

@@ -93,7 +93,10 @@ For each modified service detected in Phase 1:
 
 - Spawn Task tool with `subagent_type: service-scribe`
 - Run all agents in parallel
-- Wait for all to complete before proceeding
+- Wait for all to complete
+- **Post-scribe validation:** For each completed service, spawn `subagent_type: doc-validator` to check for hallucinations, missing coverage, and typographic issues
+- Collect all verdicts — log summary but do NOT block the release (fixes can be applied in a follow-up)
+- **Aggregate commit-docs reports:** Consolidate all per-service coverage tables into a single summary table showing service name, coverage %, and count of active contradictions. Flag any service below 80% coverage for manual review. Log the consolidated report but do not block the release.
 
 ### Phase 3: High-Level Docs (Automatic)
 

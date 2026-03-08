@@ -1,4 +1,4 @@
-# Code Agent -- Technical Debt
+# Code Agent — Technical Debt
 
 **Last Updated:** 2026-03-07
 **Analysis Run:** [2026-03-07 autonomous run]
@@ -14,7 +14,7 @@
 | Future plans   | 2      | Medium   |
 | TS strictness  | 1      | Low      |
 | SRP violations | 1      | High     |
-| **Total**      | **10** | --       |
+| **Total**      | **10** | —        |
 
 > Note: codeRoutes.ts has grown to ~3900 lines. Routing split is an ongoing priority.
 
@@ -50,9 +50,9 @@ systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system p
 systemPromptHash: 'default', // TODO: Use actual system prompt hash
 ```
 
-The `systemPromptHash` field is designed for audit tracking -- recording which version of the system prompt was active when the task ran. Currently it stores a hardcoded string, making it impossible to audit prompt version changes.
+The `systemPromptHash` field is designed for audit tracking — recording which version of the system prompt was active when the task ran. Currently it stores a hardcoded string, making it impossible to audit prompt version changes.
 
-**Impact:** Audit trail gap -- no way to correlate task results with the system prompt version that generated them.
+**Impact:** Audit trail gap — no way to correlate task results with the system prompt version that generated them.
 
 **Remediation:** Compute SHA-256 of the actual system prompt template at startup and inject it via config.
 
@@ -64,7 +64,7 @@ The `systemPromptHash` field is designed for audit tracking -- recording which v
 
 **File:** `apps/code-agent/src/routes/codeRoutes.ts`
 
-This single file contains all internal code task routes AND all public code task routes -- over 3900 lines. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, queue draining, and worker status. Each route includes inline Fastify schema definitions that consume significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`) but the original routes remain consolidated.
+This single file contains all internal code task routes AND all public code task routes — over 3900 lines. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, queue draining, and worker status. Each route includes inline Fastify schema definitions that consume significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`) but the original routes remain consolidated.
 
 **Impact:** Difficult to navigate, review, and test. Changes to one route risk unintended effects on others.
 
@@ -139,7 +139,7 @@ This pattern appears in `codeRoutes.ts` and could benefit from a typed wrapper t
 
 ## Test Coverage Notes
 
-The service has 45+ test files covering domain models, use cases, infra adapters, and routes. Coverage exemptions use the `/* v8 ignore <CATEGORY> -- reason @preserve */` pattern with valid categories.
+The service has 45+ test files covering domain models, use cases, infra adapters, and routes. Coverage exemptions use the `/* v8 ignore <CATEGORY> — reason @preserve */` pattern with valid categories.
 
 Common exemption categories in this service:
 
@@ -166,25 +166,25 @@ Common exemption categories in this service:
 | INT-711 | Retried tasks clutter task list                   | Original task archived to `archived` status on retry                           |
 | INT-725 | Planning tasks not linked to execution            | backLinkPlanningTask sets implementationTaskId on planning task                |
 | INT-738 | WhatsApp notifications lack direct links          | CTA URL buttons with deep links to PR and task dashboard                       |
-| --      | Duplicate PR body in synchronize events           | deduplicatePRBody() pass in GET /code/github-pr-events                         |
-| --      | Edited comment creates duplicate timeline entry   | deduplicateCommentEvents() keeps first position, latest body                   |
-| --      | Turn-end metrics not collected                    | TurnMetrics subcollection + FirestoreTurnMetricsRepository                     |
-| --      | No way to send mid-task messages or resume        | sendTaskMessage use case + POST /code/tasks/:id/messages                       |
-| --      | PR list view requires O(events) query             | github-pr-summaries collection + GET /code/github-pr-summaries                 |
-| --      | Webhook dedup used shared actionId                | Unique per-submission actionId + propagated dedup errors                       |
-| --      | Sender whitelist for webhook dispatch             | Replaced scattered filters with ALLOWED_BOTS Set + owner check                 |
-| --      | Bot review edit triage                            | Dispatch message includes in-progress detection instructions                   |
-| --      | Linear not transitioned on completion             | markInReview called on task-complete webhook when PR exists                    |
-| --      | CPU cores hardcoded in metrics                    | Dynamic cgroup-based core count from orchestrator                              |
-| --      | Cloudflare errors not retryable                   | 520-530 status codes treated as retryable infrastructure errors                |
-| --      | Linear data stale in task list                    | Live hydration of Linear issue data via linearAgentClient                      |
-| --      | No PR comment task creation without existing task | createTaskForPR use case with lock guard and user lookup                       |
-| --      | Linear labels not persisted on tasks              | linearIssueLabels field added to CodeTask model                                |
+| —       | Duplicate PR body in synchronize events           | deduplicatePRBody() pass in GET /code/github-pr-events                         |
+| —       | Edited comment creates duplicate timeline entry   | deduplicateCommentEvents() keeps first position, latest body                   |
+| —       | Turn-end metrics not collected                    | TurnMetrics subcollection + FirestoreTurnMetricsRepository                     |
+| —       | No way to send mid-task messages or resume        | sendTaskMessage use case + POST /code/tasks/:id/messages                       |
+| —       | PR list view requires O(events) query             | github-pr-summaries collection + GET /code/github-pr-summaries                 |
+| —       | Webhook dedup used shared actionId                | Unique per-submission actionId + propagated dedup errors                       |
+| —       | Sender whitelist for webhook dispatch             | Replaced scattered filters with ALLOWED_BOTS Set + owner check                 |
+| —       | Bot review edit triage                            | Dispatch message includes in-progress detection instructions                   |
+| —       | Linear not transitioned on completion             | markInReview called on task-complete webhook when PR exists                    |
+| —       | CPU cores hardcoded in metrics                    | Dynamic cgroup-based core count from orchestrator                              |
+| —       | Cloudflare errors not retryable                   | 520-530 status codes treated as retryable infrastructure errors                |
+| —       | Linear data stale in task list                    | Live hydration of Linear issue data via linearAgentClient                      |
+| —       | No PR comment task creation without existing task | createTaskForPR use case with lock guard and user lookup                       |
+| —       | Linear labels not persisted on tasks              | linearIssueLabels field added to CodeTask model                                |
 
 ---
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

@@ -1,8 +1,8 @@
-# Todos Agent -- Technical Reference
+# Todos Agent — Technical Reference
 
 ## Overview
 
-Todos-agent manages user-scoped tasks with support for todo items, priorities, due dates, tags, and AI-powered item extraction from natural language descriptions. Runs on Cloud Run with auto-scaling, uses Firestore for persistence, and integrates with user-service for LLM access. Package version: 3.1.0.
+Todos-agent manages user-scoped tasks with support for todo items, priorities, due dates, tags, and AI-powered item extraction from natural language descriptions. Runs on Cloud Run with auto-scaling, uses Firestore for persistence, and integrates with user-service for LLM access.
 
 ## Architecture
 
@@ -93,6 +93,7 @@ sequenceDiagram
 
 | Commit     | Description                                               | Date       |
 | ---------- | --------------------------------------------------------- | ---------- |
+| `44ea683a` | Release v3.2.0                                            | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration, update cross-service mocks | 2026-03-02 |
 | `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                            | 2026-02-19 |
@@ -276,7 +277,7 @@ When a new item is added to a completed todo, the status reverts to `in_progress
 - **Item extraction requires user API key**: If user has no configured LLM API key, extraction fails and a warning item is added to the todo. The todo still transitions to `pending`.
 - **Archive restriction**: Only completed or cancelled todos can be archived. Already-archived todos return success without changes.
 - **Cancel restriction**: Cannot cancel already completed todos (returns `INVALID_OPERATION`). Already-cancelled todos return success without changes.
-- **Item ordering**: Reorder requires all item IDs to match existing items exactly -- partial reorders are rejected with `INVALID_OPERATION`.
+- **Item ordering**: Reorder requires all item IDs to match existing items exactly — partial reorders are rejected with `INVALID_OPERATION`.
 - **Max items cap**: LLM extraction results are capped at 50 items per todo.
 - **Markdown stripping**: LLM responses wrapped in markdown code blocks (` ```json ... ``` `) are automatically stripped before parsing.
 - **Pub/Sub auth**: The Pub/Sub handler accepts both Cloud Run OIDC (from header `noreply@google.com`) and internal auth token.

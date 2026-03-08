@@ -1,6 +1,6 @@
 # API Docs Hub
 
-The single front door to every API in IntexuraOS -- eighteen services, one search bar, one URL.
+The single front door to every API in IntexuraOS — eighteen services, one search bar, one URL.
 
 ## The Problem
 
@@ -10,15 +10,15 @@ The issue is not that the documentation does not exist. Every service already pu
 
 ## Use Case: Finding What You Need
 
-Built for any developer integrating with IntexuraOS -- whether building a new feature, debugging a request, or onboarding to the platform for the first time.
+Built for any developer integrating with IntexuraOS — whether building a new feature, debugging a request, or onboarding to the platform for the first time.
 
-You need to check the shape of a calendar event payload. Instead of hunting for the calendar agent's documentation URL, you open one bookmark: the docs hub. A dropdown at the top lists every service in the system. You select Calendar Agent API, and the full spec loads -- endpoints, schemas, example payloads, all of it. You find what you need, then switch to the Research Agent API from the same dropdown to check a second endpoint. Two services, one tab, no context switch.
+You need to check the shape of a calendar event payload. Instead of hunting for the calendar agent's documentation URL, you open one bookmark: the docs hub. A dropdown at the top lists every service in the system. You select Calendar Agent API, and the full spec loads — endpoints, schemas, example payloads, all of it. You find what you need, then switch to the Research Agent API from the same dropdown to check a second endpoint. Two services, one tab, no context switch.
 
 ## How It Helps
 
 ### One URL, Every Service
 
-Eighteen services publish their API specifications independently. The docs hub collects all eighteen into a single interactive documentation interface -- Swagger UI -- with a dropdown selector at the top. Pick a service, and its complete OpenAPI spec loads in the same interface. No bookmarks to maintain, no URLs to remember, no tabs to juggle.
+Eighteen services publish their API specifications independently. The docs hub collects all eighteen into a single interactive documentation interface — Swagger UI — with a dropdown selector at the top. Pick a service, and its complete OpenAPI spec loads in the same interface. No bookmarks to maintain, no URLs to remember, no tabs to juggle.
 
 ### Always Current
 
@@ -26,22 +26,22 @@ The hub does not store copies of each specification. When you select a service, 
 
 ### Instant Discoverability
 
-A developer's first visit to the docs hub reveals the full surface area of IntexuraOS in one glance. The dropdown lists every service by name -- User Service, Research Agent, Code Agent, Linear Agent, Web Agent, and thirteen more. For someone new to the platform, this is the fastest way to understand what exists and where to start.
+A developer's first visit to the docs hub reveals the full surface area of IntexuraOS in one glance. The dropdown lists every service by name — User Service, Research Agent, Code Agent, Linear Agent, Web Agent, and thirteen more. For someone new to the platform, this is the fastest way to understand what exists and where to start.
 
 ## Key Benefits
 
-- **Single bookmark** -- One URL replaces eighteen, and the dropdown puts every service within two clicks
-- **Live specifications** -- Fetched directly from running services, so docs are never stale
-- **Full platform map** -- The dropdown doubles as a directory of every API in the system
-- **Zero learning curve** -- built on Swagger UI, so any developer who has used API documentation before already knows how to navigate, test requests, and inspect schemas
+- **Single bookmark** — One URL replaces eighteen, and the dropdown puts every service within two clicks
+- **Live specifications** — Fetched directly from running services, so docs are never stale
+- **Full platform map** — The dropdown doubles as a directory of every API in the system
+- **Zero learning curve** — built on Swagger UI, so any developer who has used API documentation before already knows how to navigate, test requests, and inspect schemas
 
 ## Limitations
 
-- **Service must be running** -- If a service is down, its specification will not load in the dropdown
-- **No version history** -- The hub always shows the current spec; there is no way to view a previous version
-- **No built-in authentication** -- To test authenticated endpoints through Swagger UI, you must manually provide a token
-- **Static configuration** -- Adding or removing a service from the hub requires a redeployment
+- **Service must be running** — If a service is down, its specification will not load in the dropdown
+- **No version history** — The hub always shows the current spec; there is no way to view a previous version
+- **No built-in authentication** — To test authenticated endpoints through Swagger UI, you must manually provide a token
+- **Static configuration** — Adding or removing a service from the hub requires a redeployment
 
 ---
 
-_Part of [IntexuraOS](../overview.md) -- One interface for every API in the system._
+_Part of [IntexuraOS](../overview.md) — One interface for every API in the system._

@@ -1,4 +1,4 @@
-# Todos Agent -- Technical Debt
+# Todos Agent — Technical Debt
 
 **Last Updated:** 2026-03-07
 **Analysis Run:** Autonomous documentation refresh (service-scribe)
@@ -9,13 +9,13 @@
 
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
-| TODO/FIXME Comments | 0     | -        |
-| Test Coverage Gaps  | 0     | -        |
-| TypeScript Issues   | 0     | -        |
-| SRP Violations      | 0     | -        |
+| TODO/FIXME Comments | 0     | —        |
+| Test Coverage Gaps  | 0     | —        |
+| TypeScript Issues   | 0     | —        |
+| SRP Violations      | 0     | —        |
 | Code Duplicates     | 1     | Low      |
-| Deprecations        | 0     | -        |
-| **Total**           | **1** | --       |
+| Deprecations        | 0     | —        |
+| **Total**           | **1** | —        |
 
 ---
 
@@ -25,17 +25,17 @@
 
 Features tracked from existing documentation and product roadmap:
 
-- **Todo templates** -- Pre-defined todo structures for common tasks (e.g., weekly planning, shopping lists)
-- **Recurring todos** -- Automatic todo regeneration on schedule (daily, weekly, monthly)
-- **Todo dependencies** -- Link todos with completion dependencies (blocking/blocked by relationships)
+- **Todo templates** — Pre-defined todo structures for common tasks (e.g., weekly planning, shopping lists)
+- **Recurring todos** — Automatic todo regeneration on schedule (daily, weekly, monthly)
+- **Todo dependencies** — Link todos with completion dependencies (blocking/blocked by relationships)
 
 ### Proposed Enhancements
 
-1. **Bulk operations** -- Archive multiple todos at once, batch status updates
-2. **Full-text search** -- Search todos by content with Firestore indexing
-3. **Collaboration features** -- Shared todos, assign to other users
-4. **Reminders** -- Time-based notifications for due dates
-5. **Subtask nesting** -- Support more than one level of subtasks
+1. **Bulk operations** — Archive multiple todos at once, batch status updates
+2. **Full-text search** — Search todos by content with Firestore indexing
+3. **Collaboration features** — Shared todos, assign to other users
+4. **Reminders** — Time-based notifications for due dates
+5. **Subtask nesting** — Support more than one level of subtasks
 
 ---
 
@@ -79,14 +79,7 @@ All endpoints and use cases have test coverage meeting the 100% branch coverage 
 
 ### None Detected
 
-All files are within reasonable size limits:
-
-| File                           | Lines | Status                         |
-| ------------------------------ | ----- | ------------------------------ |
-| `todoRoutes.ts`                | ~919  | Acceptable (route definitions) |
-| `firestoreTodoRepository.ts`   | 260   | Acceptable (CRUD operations)   |
-| `processTodoCreated.ts`        | 208   | Acceptable (single use case)   |
-| `todoItemExtractionService.ts` | 183   | Acceptable (single service)    |
+All files are within reasonable size limits. The largest file (`todoRoutes.ts`) contains route definitions with schema declarations, which is an expected pattern for Fastify services.
 
 ---
 
@@ -110,17 +103,21 @@ No deprecated APIs or dependencies in use.
 
 ## Recent Improvements
 
+### Release v3.2.0 (2026-03-07)
+
+Version bump as part of the monorepo release cycle (commit `44ea683a`).
+
 ### GitHub OAuth Mock Update (2026-03-02)
 
 Updated cross-service mocks in test utilities to include `resolveGitHubUsername` method on the `UserServiceClient` interface (commit `99febe66`). Test-only change, no production logic affected.
 
 ### Release v3.1.0 (2026-02-22)
 
-Version bump to 3.1.0 as part of the monorepo release cycle.
+Version bump to v3.1.0 as part of the monorepo release cycle.
 
 ### Release v3.0.0 (2026-02-19)
 
-Major version bump to 3.0.0 as part of the monorepo release cycle. Full documentation refresh completed.
+Major version bump to v3.0.0 as part of the monorepo release cycle. Full documentation refresh completed.
 
 ### Dash0 OpenTelemetry Integration (2026-02-16)
 
@@ -130,8 +127,8 @@ Added Dash0 as an OpenTelemetry observability backend (PR #803). Provides distri
 
 Standardized all LLM API key env vars to `APP` naming convention (PR #793):
 
-- `INTEXURAOS_ZAI_APP_API_KEY` -- platform Zai key
-- `INTEXURAOS_GEMINI_APP_API_KEY` -- platform Gemini key (new)
+- `INTEXURAOS_ZAI_APP_API_KEY` — platform Zai key
+- `INTEXURAOS_GEMINI_APP_API_KEY` — platform Gemini key (new)
 
 ### Default LLM Switch to Gemini 2.5 Flash (2026-02-15)
 
@@ -161,6 +158,7 @@ Achieved 100% branch coverage with proper v8 ignore annotations (INT-427).
 
 | Date       | Issue                              | Resolution                                   |
 | ---------- | ---------------------------------- | -------------------------------------------- |
+| 2026-03-07 | Version at 3.1.0                   | Released v3.2.0 (44ea683a)                   |
 | 2026-03-02 | UserServiceClient mock incomplete  | Added resolveGitHubUsername mock (99febe66)  |
 | 2026-02-22 | Version at 3.0.0                   | Bumped to v3.1.0                             |
 | 2026-02-16 | No distributed tracing             | Added Dash0 OpenTelemetry integration (#803) |
@@ -178,7 +176,7 @@ Achieved 100% branch coverage with proper v8 ignore annotations (INT-427).
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
-- [Agent](agent.md) -- Machine-readable interface
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
+- [Agent](agent.md) — Machine-readable interface
 - [Documentation Run Log](../../documentation-runs.md)

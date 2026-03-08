@@ -13,7 +13,7 @@
 | Security Hardening  | 3     | Medium   |
 | Operational Gaps    | 1     | Low      |
 | Architecture Debt   | 2     | Low      |
-| **Total**           | **6** | --       |
+| **Total**           | **6** | —        |
 
 ---
 
@@ -21,11 +21,11 @@
 
 ### Planned Features
 
-- **Read-only root filesystem** -- Investigate all write paths and create targeted mounts to enable `ReadonlyRootfs: true`
-- **Image size optimization** -- Multi-stage build to reduce final image size by excluding build-time-only dependencies
-- **Seccomp profile** -- Add a custom seccomp profile to restrict system calls beyond capability dropping
-- **Image versioning** -- Tag images with git SHA or semantic version in CI; currently tagged as `:latest`
-- **Plugin auto-update** -- Mechanism to refresh pre-installed Claude Code plugins when new versions are released
+- **Read-only root filesystem** — Investigate all write paths and create targeted mounts to enable `ReadonlyRootfs: true`
+- **Image size optimization** — Multi-stage build to reduce final image size by excluding build-time-only dependencies
+- **Seccomp profile** — Add a custom seccomp profile to restrict system calls beyond capability dropping
+- **Image versioning** — Tag images with git SHA or semantic version in CI; currently tagged as `:latest`
+- **Plugin auto-update** — Mechanism to refresh pre-installed Claude Code plugins when new versions are released
 
 ### Proposed Enhancements
 
@@ -102,7 +102,7 @@ No test coverage gaps. The worker is tested via E2E tests in the orchestrator wo
 
 ## TypeScript Issues
 
-Not applicable. The claude-worker is entirely shell scripts and Dockerfiles -- no TypeScript code.
+Not applicable. The claude-worker is entirely shell scripts and Dockerfiles — no TypeScript code.
 
 ---
 
@@ -160,12 +160,12 @@ Moved GCP Secret Manager sync from the orchestrator to the container entrypoint.
 
 ### INT-684: Token Refresh Propagation Fix (2026-03-06)
 
-Removed the broken background token watcher (subshell `export` never propagated to parent/child processes). Rewrote the git credential helper to read `/secrets/github-token` directly on each git operation instead of expanding `${GITHUB_TOKEN}` from the environment. Added a `gh` CLI wrapper at `/usr/local/bin/gh` that re-reads the token file before each invocation. Token freshness is now fully file-based -- no background polling needed.
+Removed the broken background token watcher (subshell `export` never propagated to parent/child processes). Rewrote the git credential helper to read `/secrets/github-token` directly on each git operation instead of expanding `${GITHUB_TOKEN}` from the environment. Added a `gh` CLI wrapper at `/usr/local/bin/gh` that re-reads the token file before each invocation. Token freshness is now fully file-based — no background polling needed.
 
 ---
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

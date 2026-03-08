@@ -17,7 +17,7 @@
 | Code Smells         | 1     | Low      |
 | Deprecations        | 0     | -        |
 | Console Logging     | 0     | -        |
-| **Total**           | **8** | --       |
+| **Total**           | **8** | —        |
 
 ---
 
@@ -161,7 +161,7 @@ No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
 
-### v4.1.0 Rich Calendar Completion Messages (INT-535)
+### Rich Calendar Completion Messages (INT-535)
 
 **Issue:** Calendar action completion notifications sent a plain text message ("Calendar event created. View it here: [link]") without event details.
 
@@ -169,7 +169,7 @@ No deprecated APIs or dependencies in use.
 
 **Date Resolved:** 2026-03-04
 
-### v4.1.0 Synchronous Calendar Preview in Approval Messages (INT-535)
+### Synchronous Calendar Preview in Approval Messages (INT-535)
 
 **Issue:** Calendar approval messages showed only the action title without event details, requiring users to open the web app to see the parsed event information.
 
@@ -177,7 +177,7 @@ No deprecated APIs or dependencies in use.
 
 **Date Resolved:** 2026-03-04
 
-### v4.1.0 Proceed to Implementation Button (INT-628)
+### Proceed to Implementation Button (INT-628)
 
 **Issue:** Two-phase code tasks required users to open the web app to proceed from design to implementation phase.
 
@@ -185,7 +185,7 @@ No deprecated APIs or dependencies in use.
 
 **Date Resolved:** 2026-02-25
 
-### v4.1.0 Additional Worker Types for Code Actions
+### Additional Worker Types for Code Actions
 
 **Issue:** Code action `workerType` only supported `opus`, `auto`, and `glm`.
 
@@ -193,7 +193,7 @@ No deprecated APIs or dependencies in use.
 
 **Date Resolved:** 2026-02-24
 
-### v4.1.0 Calendar Preview Fetch Ordering Fix
+### Calendar Preview Fetch Ordering Fix
 
 **Issue:** Calendar completion messages could not include rich event details because calendar-agent deletes the preview from Firestore after creating the Google Calendar event.
 
@@ -219,7 +219,7 @@ returned by calendar-agent and pass them through without prepending `webAppUrl`.
 
 **Date Resolved:** 2026-02-20
 
-### v4.1.0 Auto-Execute Generalized to All Action Types
+### Auto-Execute Generalized to All Action Types
 
 **Issue:** `shouldAutoExecute()` only auto-executed link actions, requiring manual approval for high-confidence todo/research/note/code actions even when classification was near-certain.
 
@@ -227,7 +227,7 @@ returned by calendar-agent and pass them through without prepending `webAppUrl`.
 
 **Date Resolved:** 2026-02-19
 
-### v4.0.0 Unified Interactive Approval Buttons (INT-524)
+### Unified Interactive Approval Buttons (INT-524)
 
 **Issue:** LLM approval classification added latency and cost on every approval reply. Nonce-based approval
 for code actions created UX friction (4-char code in button title). Per-type approval logic was duplicated
@@ -241,7 +241,7 @@ calling LLM. Deleted `llmApprovalIntentClassifier.ts`, `approvalIntentClassifier
 
 **Date Resolved:** 2026-02-09
 
-### v4.0.0 Deleted Action Graceful Handling
+### Deleted Action Graceful Handling
 
 **Issue:** When an action was deleted between the approval message being sent and the user tapping the
 button, the approval-reply handler returned 500, causing Pub/Sub to retry indefinitely.
@@ -251,7 +251,7 @@ longer available"). Clean up orphaned approval_messages. Pub/Sub stops retrying.
 
 **Date Resolved:** 2026-02-16
 
-### v4.0.0 Cancel-task Error Code Normalization (#779)
+### Cancel-task Error Code Normalization (#779)
 
 **Issue:** Cancel-task domain error codes used lowercase snake_case (`invalid_nonce`, `nonce_expired`,
 `not_owner`, `task_not_cancellable`), inconsistent with project ErrorCode convention.
@@ -266,7 +266,7 @@ all callers and tests. Silent fallback operators replaced with explicit checks t
 **Issue:** `handleApprovalReply.ts` grew to 1450 lines with multiple large helper functions for LLM
 classification, nonce validation, button handling, and text fallback patterns.
 
-**Resolution:** Resolved organically via INT-524 -- removing the LLM layer and nonces brought the file
+**Resolution:** Resolved organically via INT-524 — removing the LLM layer and nonces brought the file
 back to 757 lines. Further splitting is not currently warranted.
 
 **Date Resolved:** 2026-02-09
@@ -328,7 +328,7 @@ back to 757 lines. Further splitting is not currently warranted.
 
 **Date Resolved:** 2026-01-25
 
-### v2.0.0 Race Condition Fix (INT-211)
+### Race Condition Fix (INT-211)
 
 **Issue:** Concurrent Pub/Sub messages could trigger multiple WhatsApp notifications for the same action.
 
@@ -338,9 +338,9 @@ back to 757 lines. Further splitting is not currently warranted.
 
 ---
 
-## v4.0.0 Technical Decisions
+## Recent Technical Decisions
 
-The following design decisions were made in v4.0.0 and should be revisited if issues arise:
+The following design decisions were made recently and should be revisited if issues arise:
 
 1. **Button-only approval, no text fallback** - Text replies re-send buttons. This is simpler and cheaper
    than LLM classification but requires WhatsApp clients that support interactive buttons.
@@ -351,7 +351,7 @@ The following design decisions were made in v4.0.0 and should be revisited if is
 3. **Cancel-task nonce retained** - The `cancel-task:{taskId}:{nonce}` button format still uses nonces
    because task cancellation is irreversible and warrants one-time-use security tokens.
 
-## v2.0.0 Technical Decisions
+## Early Technical Decisions
 
 1. **Atomic status transitions via Firestore transactions** - Prevents race conditions but adds latency.
    Monitor for performance issues at scale.
@@ -363,6 +363,6 @@ The following design decisions were made in v4.0.0 and should be revisited if is
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

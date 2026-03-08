@@ -1,4 +1,4 @@
-# Image Service -- Technical Reference
+# Image Service — Technical Reference
 
 ## Overview
 
@@ -101,6 +101,7 @@ sequenceDiagram
 
 | Commit     | Description                                                           | Date       |
 | ---------- | --------------------------------------------------------------------- | ---------- |
+| `44ea683a` | Release v3.2.0 (package.json version bump only)                       | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration, update cross-service mocks             | 2026-03-02 |
 | `7fbf7668` | Remove stale fields from test fixtures per code review                | 2026-02-27 |
 | `8fb90669` | Align thumbnail output contract with consumed parser fields (INT-605) | 2026-02-27 |
@@ -115,7 +116,6 @@ sequenceDiagram
 | `0f69a74b` | Add default model selector with platform Zai fallback                 | 2026-02-09 |
 | `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                     | 2026-02-01 |
 | `c3198407` | Fix all 132 response contract violations across codebase              | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps                | 2026-01-30 |
 
 ## API Endpoints
 
@@ -152,13 +152,13 @@ sequenceDiagram
 
 ### ThumbnailPrompt
 
-| Field            | Type                        | Description                                     |
-| ---------------- | --------------------------- | ----------------------------------------------- |
-| `title`          | `string`                    | Short title for the image (max 10 words)        |
-| `visualSummary`  | `string`                    | One sentence describing the visual metaphor     |
-| `prompt`         | `string`                    | Image generation prompt (80-180 words)          |
-| `negativePrompt` | `string`                    | What to avoid (20-80 words)                     |
-| `parameters`     | `ThumbnailPromptParameters` | Generation settings (framing, style, people)    |
+| Field            | Type                        | Description                                  |
+| ---------------- | --------------------------- | -------------------------------------------- |
+| `title`          | `string`                    | Short title for the image (max 10 words)     |
+| `visualSummary`  | `string`                    | One sentence describing the visual metaphor  |
+| `prompt`         | `string`                    | Image generation prompt (80–180 words)       |
+| `negativePrompt` | `string`                    | What to avoid (20–80 words)                  |
+| `parameters`     | `ThumbnailPromptParameters` | Generation settings (framing, style, people) |
 
 ### ThumbnailPromptParameters
 
@@ -186,12 +186,12 @@ sequenceDiagram
 
 ### Pricing Models (from index.ts REQUIRED_MODELS)
 
-| Model                    | Purpose                       |
-| ------------------------ | ----------------------------- |
-| `gemini-2.5-flash`       | Pricing context for Gemini    |
-| `gpt-4o-mini`            | Pricing context for OpenAI    |
-| `gpt-image-1`            | Image generation pricing      |
-| `gemini-2.5-flash-image` | Image generation pricing      |
+| Model                    | Purpose                    |
+| ------------------------ | -------------------------- |
+| `gemini-2.5-flash`       | Pricing context for Gemini |
+| `gpt-4o-mini`            | Pricing context for OpenAI |
+| `gpt-image-1`            | Image generation pricing   |
+| `gemini-2.5-flash-image` | Image generation pricing   |
 
 **Note:** The pricing models (`gemini-2.5-flash`, `gpt-4o-mini`) differ from the actual prompt generation models (`gemini-2.5-pro`, `gpt-4.1`). See Gotchas section.
 
@@ -209,10 +209,10 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 ### External Services
 
-| Service           | Purpose                            | Failure Mode     |
-| ----------------- | ---------------------------------- | ---------------- |
-| OpenAI API        | GPT Image 1, GPT-4.1               | DOWNSTREAM_ERROR |
-| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro | DOWNSTREAM_ERROR |
+| Service           | Purpose                             | Failure Mode     |
+| ----------------- | ----------------------------------- | ---------------- |
+| OpenAI API        | GPT Image 1, GPT-4.1                | DOWNSTREAM_ERROR |
+| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro  | DOWNSTREAM_ERROR |
 
 ### Infrastructure
 
@@ -223,27 +223,27 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 ## Configuration
 
-| Variable                              | Required | Description                                    |
-| ------------------------------------- | -------- | ---------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                        |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS endpoint for JWT verification             |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer                                     |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience                                   |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User-service base URL                          |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                |
-| `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket name for image storage              |
-| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects                |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service URL (pricing data)        |
-| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking DSN                      |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key for user fallback         |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback      |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for OpenTelemetry tracing  |
+| Variable                              | Required | Description                                   |
+| ------------------------------------- | -------- | --------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                       |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS endpoint for JWT verification            |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer                                    |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience                                  |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User-service base URL                         |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth               |
+| `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket name for image storage             |
+| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects               |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service URL (pricing data)       |
+| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking DSN                     |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key for user fallback        |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback     |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for OpenTelemetry tracing |
 
 ## Gotchas
 
 **Pricing model mismatch**: The `REQUIRED_MODELS` in `index.ts` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but the prompt adapters actually use `gemini-2.5-pro` and `gpt-4.1` respectively. This means cost tracking may use incorrect per-token rates for prompt generation.
 
-**Slug generation**: The `slug` field is derived from the title using `slugify()` -- max 50 characters, lowercase, normalized unicode, hyphens for spaces. Only used when a title is provided (research cover images).
+**Slug generation**: The `slug` field is derived from the title using `slugify()` — max 50 characters, lowercase, normalized unicode, hyphens for spaces. Only used when a title is provided (research cover images).
 
 **Thumbnail size**: Thumbnails are exactly 256px on the longest edge, maintaining aspect ratio, saved as JPEG at 80% quality. Created using Sharp image processing library.
 

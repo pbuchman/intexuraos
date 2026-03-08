@@ -1,4 +1,4 @@
-# Calendar Agent - Tutorial
+# Calendar Agent — Tutorial
 
 Learn to manage Google Calendar events through IntexuraOS with preview support.
 
@@ -8,7 +8,7 @@ Learn to manage Google Calendar events through IntexuraOS with preview support.
 - Google account connected via user-service
 - Familiarity with ISO 8601 datetime formats
 
-## Part 1: Hello World - List Events
+## Part 1: Hello World — List Events
 
 List your upcoming calendar events:
 
@@ -430,7 +430,7 @@ curl -X POST "https://calendar-agent.intexuraos.com/calendar/failed-events/faile
 
 The failed event record is automatically deleted after successful retry.
 
-**Response (422 - Missing times):**
+**Response (422 — Missing times):**
 
 ```json
 {
@@ -460,7 +460,7 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 | NOT_CONNECTED     | 403 on all requests  | Connect Google account via user-service              |
 | Invalid time      | 400 error            | Use ISO 8601 format with timezone                    |
 | Event not found   | 404                  | Verify eventId and calendarId                        |
-| Preview pending   | Status stays pending | Wait and poll, may take 2-5 seconds                  |
+| Preview pending   | Status stays pending | Wait and poll, may take 2–5 seconds                  |
 | Preview failed    | Status is failed     | Check error field, event saved for manual review     |
 | Attendee ignored  | Attendee not added   | Ensure email is valid email address                  |
 | Retry returns 422 | Missing start/end    | Failed event has no extracted times, create manually |
@@ -469,15 +469,15 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 
 ## Best Practices
 
-1. **Use synchronous preview** - For approval flows, use `POST /internal/calendar/preview` for immediate preview data
-2. **Pass full prompt text** - Always send the complete user message via the `text` field in process-action, not just the short classifier title
-3. **Always specify timeMin/timeMax** - Reduces data transfer and improves performance
-4. **Use pagination** - Set maxResults to avoid fetching all events at once
-5. **Handle partial success** - Free/busy may return some calendars with errors
-6. **Implement caching** - Cache event data for short periods
-7. **Respect rate limits** - Google Calendar has daily quota limits
-8. **Display reasoning** - Show users why dates were interpreted a certain way
-9. **Use resourceUrl** - The process-action response links directly to Google Calendar
+1. **Use synchronous preview** — For approval flows, use `POST /internal/calendar/preview` for immediate preview data
+2. **Pass full prompt text** — Always send the complete user message via the `text` field in process-action, not just the short classifier title
+3. **Always specify timeMin/timeMax** — Reduces data transfer and improves performance
+4. **Use pagination** — Set maxResults to avoid fetching all events at once
+5. **Handle partial success** — Free/busy may return some calendars with errors
+6. **Implement caching** — Cache event data for short periods
+7. **Respect rate limits** — Google Calendar has daily quota limits
+8. **Display reasoning** — Show users why dates were interpreted a certain way
+9. **Use resourceUrl** — The process-action response links directly to Google Calendar
 
 ## Exercises
 

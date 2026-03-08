@@ -1,4 +1,4 @@
-# User Service - Technical Reference
+# User Service — Technical Reference
 
 ## Overview
 
@@ -96,7 +96,7 @@ sequenceDiagram
 | `ab863ba5` | Refactor: add isTranscriptionProvider type guard                  | 2026-03-06 |
 | `0fff5af7` | Feat: add transcription preferences to user settings              | 2026-03-06 |
 | `99febe66` | Fix: wire GitHub OAuth integration and update cross-service mocks | 2026-03-02 |
-| `e07de959` | Feat: add GitHub OAuth integration (Stream A, tasks A1-A5)        | 2026-03-01 |
+| `e07de959` | Feat: add GitHub OAuth integration (Stream A, tasks A1–A5)        | 2026-03-01 |
 | `1478b385` | INT-571: log cascade failure + document over-clearing assumption  | 2026-02-22 |
 | `cbd5d845` | INT-571: restrict default model selection to configured API keys  | 2026-02-22 |
 | `b3f34d85` | Release v3.1.0                                                    | 2026-02-22 |
@@ -105,7 +105,6 @@ sequenceDiagram
 | `a52a6bbc` | Dash0 OpenTelemetry integration                                   | 2026-02-16 |
 | `d5fbb354` | Fix start:local to use tsx instead of node                        | 2026-02-14 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter                             | 2026-02-14 |
-| `65b90801` | Simplify local dev to Pub/Sub emulator only                       | 2026-02-14 |
 
 ## API Endpoints
 
@@ -194,7 +193,7 @@ sequenceDiagram
 
 | Field      | Type                       | Description           |
 | ---------- | -------------------------- | --------------------- |
-| `status`   | 'success' \                | 'failure'             | Test outcome |
+| `status`   | `'success' \               | 'failure'`            | Test outcome |
 | `message`  | string                     | LLM response or error |
 | `testedAt` | string                     | ISO 8601 timestamp    |
 
@@ -208,18 +207,18 @@ sequenceDiagram
 
 | Field      | Type                  | Description                    |
 | ---------- | --------------------- | ------------------------------ |
-| `provider` | TranscriptionProvider | 'speechmatics' (only option)   |
+| `provider` | TranscriptionProvider | `'speechmatics'` (only option) |
 
 ### OAuthConnection
 
-| Field       | Type                    | Description                |
-| ----------- | ----------------------- | -------------------------- |
-| `userId`    | string                  | User identifier            |
-| `provider`  | 'google' \              | 'github'                   | OAuth provider |
-| `email`     | string                  | User's email or username   |
-| `tokens`    | OAuthTokens             | Encrypted tokens           |
-| `createdAt` | string                  | Connection timestamp       |
-| `updatedAt` | string                  | Last refresh timestamp     |
+| Field       | Type                       | Description              |
+| ----------- | -------------------------- | ------------------------ |
+| `userId`    | string                     | User identifier          |
+| `provider`  | `'google' \                | 'github'`                | OAuth provider |
+| `email`     | string                     | User's email or username |
+| `tokens`    | OAuthTokens                | Encrypted tokens         |
+| `createdAt` | string                     | Connection timestamp     |
+| `updatedAt` | string                     | Last refresh timestamp   |
 
 ### OAuthTokens
 
@@ -241,7 +240,7 @@ sequenceDiagram
 | `scope`        | string | Granted scopes (optional)      |
 | `idToken`      | string | OIDC ID token (optional)       |
 
-## LLM Error Formatting (v2.0.0)
+## LLM Error Formatting
 
 The `formatLlmError()` function parses provider-specific error responses and returns user-friendly messages. Error detection follows a specific precedence order.
 
@@ -254,7 +253,7 @@ The `formatLlmError()` function parses provider-specific error responses and ret
 4. Generic fallback (with rate limit precedence)
 ```
 
-### Rate Limit Precedence (INT-199 Fix)
+### Rate Limit Precedence
 
 The generic error parser checks for rate limits BEFORE API key errors. This prevents 429 responses from being misdiagnosed as invalid keys:
 
@@ -305,7 +304,7 @@ Validation prompt: `Say "API key validated" in exactly 3 words.`
 
 ## Pub/Sub Events
 
-None - user-service does not publish or subscribe to Pub/Sub events.
+None — user-service does not publish or subscribe to Pub/Sub events.
 
 ## Dependencies
 
@@ -375,7 +374,7 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 
 **LLM key testing costs money**: The `/test` endpoint validates keys by making actual API calls to the provider.
 
-**Rate limit vs API key errors**: Error parser checks rate limits before API key patterns to avoid misdiagnosis (v2.0.0 fix).
+**Rate limit vs API key errors**: Error parser checks rate limits before API key patterns to avoid misdiagnosis.
 
 **Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`, `zai`) differ from display names.
 

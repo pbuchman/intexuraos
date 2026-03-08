@@ -292,7 +292,7 @@ pnpm --filter orchestrator test:e2e
 pnpm --filter orchestrator build
 ```
 
-This produces `workers/orchestrator/dist/index.js` -- a bundled ESM file.
+This produces `workers/orchestrator/dist/index.js` — a bundled ESM file.
 
 ### Run in production
 

@@ -1,4 +1,4 @@
-# todos-agent -- Agent Interface
+# todos-agent — Agent Interface
 
 > Machine-readable interface definition for AI agents interacting with todos-agent.
 
@@ -157,7 +157,7 @@ interface Todo {
 | **Description Limit**   | Descriptions over 10,000 chars truncated for AI extraction            |
 | **Max Items**           | AI extraction capped at 50 items per todo                             |
 | **Default Priority**    | New todos default to `medium` priority if not specified               |
-| **Tag Filtering**       | Tag filter uses OR logic -- matches todos containing ANY provided tag |
+| **Tag Filtering**       | Tag filter uses OR logic — matches todos containing ANY provided tag  |
 
 ---
 
@@ -198,10 +198,10 @@ const archived = await listTodos({ archived: true });
 ### Complete Items Progressively
 
 ```typescript
-// Mark first item complete -- todo auto-transitions to in_progress
+// Mark first item complete — todo auto-transitions to in_progress
 await updateTodoItem(todoId, item1Id, { status: 'completed' });
 
-// Mark remaining items complete -- todo auto-transitions to completed
+// Mark remaining items complete — todo auto-transitions to completed
 await updateTodoItem(todoId, item2Id, { status: 'completed' });
 await updateTodoItem(todoId, item3Id, { status: 'completed' });
 // todo.status is now 'completed', todo.completedAt is set
@@ -237,10 +237,10 @@ const feedback = await createTodoInternal({
 
 ## Internal Endpoints
 
-| Method | Path                                      | Purpose                                  |
-| ------ | ----------------------------------------- | ---------------------------------------- |
-| POST   | `/internal/todos`                         | Create todo from other services          |
-| POST   | `/internal/todos/pubsub/todos-processing` | Pub/Sub push handler for AI extraction   |
+| Method | Path                                      | Purpose                                |
+| ------ | ----------------------------------------- | -------------------------------------- |
+| POST   | `/internal/todos`                         | Create todo from other services        |
+| POST   | `/internal/todos/pubsub/todos-processing` | Pub/Sub push handler for AI extraction |
 
 ---
 

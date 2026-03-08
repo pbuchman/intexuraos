@@ -1,4 +1,4 @@
-# Linear Agent -- Technical Reference
+# Linear Agent — Technical Reference
 
 ## Overview
 
@@ -210,9 +210,12 @@ For comment webhooks, the handler finds all users who have the issue synced via 
 
 The `linearIssueRepository` now uses composite document keys (`userId_issueId`) to prevent one user's sync from overwriting another user's data. Delete operations are also scoped to the specific user.
 
-### Code-Task Label Prompt Selection (c5892669)
+### Code-Task Label Prompt Selection (c5892669) + Mandatory Comments Reading (d81fc1a3, INT-715)
 
-`triggerCodeTaskFromAssignment` now checks whether the issue has a `code-task` label. If present, the agent sends an EXECUTION_PROMPT ("Implement the requirements..."). If absent, it sends an ASSIGNMENT_PROMPT ("Analyze the linked Linear issue...enrich the description..."). Label detection is case-insensitive.
+`triggerCodeTaskFromAssignment` checks whether the issue has a `code-task` label. If present, it sends an EXECUTION_PROMPT; if absent, it sends an ASSIGNMENT_PROMPT. Label detection is case-insensitive. Both prompts instruct the code agent to read all Linear issue comments newest-first before starting work:
+
+- **ASSIGNMENT_PROMPT:** "Analyze the linked Linear issue and all its comments (newest first). Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear."
+- **EXECUTION_PROMPT:** "Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR."
 
 ### Modified Auto-Trigger Conditions (5635b52c)
 
@@ -451,7 +454,7 @@ Reads all synced issues from Firestore, builds parent-child relationships in mem
 
 ### generateIssueTitle
 
-Generates a concise issue title (max 80 chars) from a task description using LLM. Returns `err()` if all attempts (2) fail -- no regex fallback.
+Generates a concise issue title (max 80 chars) from a task description using LLM. Returns `err()` if all attempts (2) fail — no regex fallback.
 
 ### validateIssue
 
@@ -467,7 +470,7 @@ Processes a comment webhook event. Saves new or updated comments to `linear_issu
 
 ### triggerCodeTaskFromAssignment
 
-Triggered by webhook events when an issue is assigned for the first time. Uses `shouldTriggerCodeTask` to validate conditions: action is `update`, assignee changed from null to non-null, state is `backlog` or `unstarted`. Selects prompt based on `code-task` label: EXECUTION_PROMPT (with label) or ASSIGNMENT_PROMPT (without label). Fire-and-forget execution.
+Triggered by webhook events when an issue is assigned for the first time. Uses `shouldTriggerCodeTask` to validate conditions: action is `update`, assignee changed from null to non-null, state is `backlog` or `unstarted`. Selects prompt based on `code-task` label: EXECUTION_PROMPT (with label) or ASSIGNMENT_PROMPT (without label). Always dispatches with `workerType: 'auto'`. Supported worker types: `opus`, `auto`, `sonnet`, `minimax`, `glm`. Fire-and-forget execution.
 
 ### fullSync / fullSyncAllUsers
 
@@ -528,8 +531,8 @@ Linear webhooks are verified using HMAC-SHA256 signatures. The raw request body 
 
 ### Issue Mapper
 
-- `mapWebhookToSyncedIssue` -- Maps webhook payload with assignee, labels, team data, and parent ID
-- `mapApiIssueToSyncedIssue` -- Maps API response with full label and assignee data
+- `mapWebhookToSyncedIssue` — Maps webhook payload with assignee, labels, team data, and parent ID
+- `mapApiIssueToSyncedIssue` — Maps API response with full label and assignee data
 
 Both include safe parsing of state types (defaults to 'unstarted') and priority values (defaults to 0).
 
@@ -607,21 +610,23 @@ Both include safe parsing of state types (defaults to 'unstarted') and priority 
 ## Gotchas
 
 - Linear state names are case-insensitive for column mapping ("In Review", "IN REVIEW", "in review" all work)
-- The `completedAt` field is not stored in `SyncedLinearIssue` -- `updatedAt` is used as a proxy for archive cutoff
+- The `completedAt` field is not stored in `SyncedLinearIssue` — `updatedAt` is used as a proxy for archive cutoff
 - Idempotency check uses `actionId`, not message content hash
 - Webhook signature validation requires raw body capture via custom Fastify content type parser
-- `linear_issues` documents use composite key `userId_issueId` -- queries by issueId alone require a field query
+- `linear_issues` documents use composite key `userId_issueId` — queries by issueId alone require a field query
 - Unknown webhook state types default to `unstarted`; out-of-range priority values default to 0
-- `generateIssueTitle` returns `err()` on LLM failure -- no silent degradation
+- `generateIssueTitle` returns `err()` on LLM failure — no silent degradation
 - Dashboard (`GET /linear/issues`) reads from Firestore; run a full sync if data seems stale
 - `/internal/linear/sync-all` accepts both OIDC Bearer tokens (Cloud Scheduler) and X-Internal-Auth
 - Labels are full objects `{ id, name, color }` internally; `validateIssue` HTTP response maps them to `string[]` (names only)
 - Auto-trigger code task fires on first assignment (null -> non-null assignee) while state is `backlog` or `unstarted`
 - Auto-trigger selects prompt based on `code-task` label: execution prompt (with label) or enrichment prompt (without)
-- Webhook fan-out syncs ALL connected users per team -- `Promise.allSettled` ensures one user's failure does not block others
+- Webhook fan-out syncs ALL connected users per team — `Promise.allSettled` ensures one user's failure does not block others
 - Comment webhooks determine teamId from the synced issue; issues without a teamId (synced before teamId was added) skip signature validation
+- `findLinearIssueById` uses a field query without userId scoping — in multi-user scenarios where two users have the same issue synced, it returns whichever document Firestore returns first (known limitation, tracked separately from INT-623)
 - Internal issue endpoints (`/internal/issues/*` and `/internal/linear/issues/*`) require both `X-Internal-Auth` and `X-User-Id` headers
-- The `/internal/linear/issues/:issueId/metadata` endpoint resolves label names to IDs using `listIssueLabels` -- unknown label names are silently dropped
+- The `/internal/linear/issues/:issueId/metadata` endpoint resolves label names to IDs using `listIssueLabels` — unknown label names are silently dropped
+- Both `ASSIGNMENT_PROMPT` and `EXECUTION_PROMPT` in `triggerCodeTaskFromAssignment` instruct the code agent to read all Linear issue comments newest-first before starting work (INT-715)
 
 ## File Structure
 
@@ -659,7 +664,7 @@ apps/linear-agent/
 |   |   +-- llm/
 |   |       +-- linearActionExtractionService.ts
 |   +-- routes/
-|   |   +-- linearRoutes.ts          # Public API (14 endpoints, 993 lines)
+|   |   +-- linearRoutes.ts          # Public API (14 endpoints)
 |   |   +-- internalRoutes.ts        # Internal: process-action, validate, title, sync
 |   |   +-- internalIssuesRoutes.ts  # Internal: issue CRUD, comments, metadata, tree, batch
 |   |   +-- linearWebhookRoutes.ts   # Webhook receiver with fan-out

@@ -1,4 +1,4 @@
-# Transcription Worker -- Tutorial
+# Transcription Worker — Tutorial
 
 > **Time:** 15-20 minutes
 > **Prerequisites:** Node.js 22+, GCP project access, Speechmatics API key
@@ -58,7 +58,7 @@ interface TranscriptionDeps {
 }
 ```
 
-**Checkpoint:** You should understand that every code path -- signed URL failure, job submission error, poll timeout, job rejection, transcript fetch error, or unexpected exception -- ends with a published event.
+**Checkpoint:** You should understand that every code path — signed URL failure, job submission error, poll timeout, job rejection, transcript fetch error, or unexpected exception — ends with a published event.
 
 ---
 
@@ -78,7 +78,7 @@ pnpm test
 The tests demonstrate the dependency injection pattern:
 
 ```typescript
-// From main.test.ts -- creating fake dependencies
+// From main.test.ts — creating fake dependencies
 const deps: TranscriptionDeps = {
   fetchUserProvider: vi.fn().mockResolvedValue('speechmatics'),
   generateSignedUrl: vi.fn().mockResolvedValue(ok('https://signed-url.example.com')),
@@ -172,7 +172,7 @@ case 'my-provider':
 
 Users select their provider through user-service settings at `transcriptionPreferences.provider`. The worker fetches this on each invocation, so provider changes take effect on the next audio message.
 
-**Checkpoint:** You should understand that adding a provider requires only a new adapter class and a factory registration -- no changes to the orchestration logic.
+**Checkpoint:** You should understand that adding a provider requires only a new adapter class and a factory registration — no changes to the orchestration logic.
 
 ---
 

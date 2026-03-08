@@ -1,4 +1,4 @@
-# Transcription Worker -- Technical Reference
+# Transcription Worker — Technical Reference
 
 ## Overview
 
@@ -88,6 +88,7 @@ sequenceDiagram
 
 | Commit     | Description                                                    | Date       |
 | ---------- | -------------------------------------------------------------- | ---------- |
+| `44ea683a` | Release v3.2.0                                                 | 2026-03-07 |
 | `60610a9d` | Clarify two-step event validation with inline comments         | 2026-03-06 |
 | `cead3f44` | Add type literal to event guard, clarify publisher/mediaId     | 2026-03-06 |
 | `ca4f530a` | Inject logger into adapter and factory, add event schema guard | 2026-03-06 |
@@ -167,7 +168,7 @@ The factory maps provider names to adapter implementations. Currently only `spee
 | `backoffMultiplier` | 1.5     | Exponential backoff factor            |
 | `maxAttempts`       | 60      | Maximum polls before timeout          |
 
-Transient poll errors do not abort -- the worker continues polling with increased backoff. The total polling window is approximately 5 minutes.
+Transient poll errors do not abort — the worker continues polling with increased backoff. The total polling window is approximately 5 minutes.
 
 ## Pub/Sub
 

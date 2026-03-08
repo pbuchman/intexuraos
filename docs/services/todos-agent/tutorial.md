@@ -1,6 +1,6 @@
-# Todos Agent -- Tutorial
+# Todos Agent — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** Node.js 22+, GCP project access, Auth0 access token
 > **You'll learn:** How to create todos, manage items, and integrate with the AI item extraction feature
 

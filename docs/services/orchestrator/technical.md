@@ -1,4 +1,4 @@
-# Orchestrator - Technical Reference
+# Orchestrator — Technical Reference
 
 ## Overview
 
@@ -130,6 +130,14 @@ graph TB
 
 ## Recent Changes
 
+### Git Remote URL Credential Stripping (2026-03-07)
+
+`normalizeUrl()` in `repo-manager.ts` now strips embedded HTTP credentials (username/password) from git remote URLs before comparison. This prevents authentication tokens from leaking into logs or error messages when validating repository identity.
+
+### API Key Validation Error Chain Logging (2026-03-07)
+
+Improved error logging in `ApiKeyValidator` to show the full error chain (including nested `cause` properties) when validation requests fail, aiding diagnosis of network connectivity issues.
+
 ### Versioned PromptBuilder Pattern (2026-03-04)
 
 Converted all system prompts to use the `PromptBuilder<TInput>` interface with semver `version` fields. CI enforcement validates version bumps on change via `scripts/verify-prompt-versions.mjs`.
@@ -221,7 +229,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 
 ### SendMessage Schema
 
-`POST /tasks/:id/message` -- sends a follow-up message to a task.
+`POST /tasks/:id/message` — sends a follow-up message to a task.
 
 ```typescript
 {
@@ -508,7 +516,7 @@ Evaluates whether a task attempt met its agent-specific contract:
 Prevents accidental secret leaks in commits:
 
 - Matches files against 20+ glob patterns (`.env`, `.pem`, `*.key`, `terraform.tfstate`, `*.tf`, `state.json`, etc.)
-- Reverts matched files via `git checkout HEAD~N -- "{file}"`
+- Reverts matched files via `git checkout HEAD~N — "{file}"`
 - Returns guard result indicating which files were reverted
 
 ### SystemPrompt (PromptBuilder)
@@ -527,7 +535,7 @@ Ensures the orchestrator has a valid local repository clone:
 
 - `ensureRepository()`: clone if missing, validate + fetch + clean if present
 - `validateRepository()`: checks `.git` is directory (not worktree file), remote URL matches, `package.json` name matches
-- `normalizeUrl()`: handles SSH vs HTTPS, trailing `.git` suffix, and embedded HTTP credentials
+- `normalizeUrl()`: handles SSH vs HTTPS, trailing `.git` suffix, and embedded HTTP credentials (stripped for security)
 
 ### OrchestratorFileAuditSink
 
@@ -640,15 +648,16 @@ Appends LLM audit records to a local JSONL file:
 8. **Container name conflicts.** If a previous orchestrator run left orphaned containers, `createWorker` fails with "name already in use". Startup recovery cleans orphans automatically.
 9. **Worktree `.git` file.** Git worktrees have a `.git` file (not directory) pointing to the main repo's `.git/worktrees/`. The DockerProvider reads this file to determine the main git directory and mounts it into the container.
 10. **State file corruption.** If `state.json` is corrupted (e.g., partial write on crash), `StatePersistence.load()` backs up the file and starts fresh rather than crashing.
-11. **Turn metrics are cgroup-dependent.** `TurnMetricsCollector` reads from `/sys/fs/cgroup/system.slice/docker-{id}.scope` -- this path is Linux-specific and will return zero values on macOS. Turn metrics collection is non-fatal.
+11. **Turn metrics are cgroup-dependent.** `TurnMetricsCollector` reads from `/sys/fs/cgroup/system.slice/docker-{id}.scope` — this path is Linux-specific and will return zero values on macOS. Turn metrics collection is non-fatal.
 12. **Docker header stripping handles mid-frame splits.** Long messages (e.g., `hook_response` JSON) can span multiple Docker frames, resulting in headers appearing mid-string. `log-formatter.ts` scans the entire string for the 8-byte binary pattern, not just at line boundaries.
 13. **Completion verifier is required.** `INTEXURAOS_GEMINI_APP_API_KEY` is a hard-required env var. Missing this key causes startup failure.
 14. **Verifier failure = task failure.** If Gemini is unreachable or returns unparseable JSON, the task is marked `failed` with `TASK_COMPLETION_VERIFIER_FAILED`.
-15. **Git identity flows from host to container.** The bootstrapper reads `git config user.name/email` from the host and injects them as env vars into worker containers. Local repo config overrides global config -- the bootstrapper warns about this.
+15. **Git identity flows from host to container.** The bootstrapper reads `git config user.name/email` from the host and injects them as env vars into worker containers. Local repo config overrides global config — the bootstrapper warns about this.
 16. **`/tasks/:id/message` requires HMAC auth.** Unlike GET and DELETE task endpoints, sending a message requires the same HMAC dispatch headers as submitting a new task.
 17. **Image pull is fail-fast.** The orchestrator pulls the worker image before each new task container. If the pull fails, the task fails immediately with no cached-image fallback.
 18. **OAuth credentials are per-session.** Each task gets a copy of OAuth credentials in its session directory. Token refreshes update both the global file and all active task session directories.
 19. **Worker type determines API routing.** The `WORKER_TYPES` registry maps each worker type to a specific API base URL and key env var. Invalid worker types fail at Zod validation.
+20. **Git remote URLs with credentials.** `normalizeUrl()` strips embedded HTTP credentials from remote URLs before comparison or logging to prevent credential leakage.
 
 ## File Structure
 

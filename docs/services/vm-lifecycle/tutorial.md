@@ -1,6 +1,6 @@
-# VM Lifecycle Worker -- Tutorial
+# VM Lifecycle Worker — Tutorial
 
-> **Time:** 15-20 minutes
+> **Time:** 15–20 minutes
 > **Prerequisites:** GCP project access, `gcloud` CLI authenticated, `INTEXURAOS_INTERNAL_AUTH_TOKEN` value
 > **You will learn:** How to start and stop the coding VM manually, monitor function execution, and troubleshoot common issues
 
@@ -40,7 +40,7 @@ On weekends, the VM remains stopped because only the stop scheduler runs daily. 
 
 ### What Just Happened?
 
-Cloud Scheduler sends a POST request to the respective Cloud Function at the scheduled time. The function handles all the complexity -- health checks, task draining, error recovery -- so the scheduler only needs to fire and forget.
+Cloud Scheduler sends a POST request to the respective Cloud Function at the scheduled time. The function handles all the complexity — health checks, task draining, error recovery — so the scheduler only needs to fire and forget.
 
 ---
 
@@ -89,7 +89,7 @@ Replace `FUNCTION_URL` with the Cloud Function URL from Terraform output `functi
 }
 ```
 
-**Checkpoint:** A `startupDurationMs` value under 60000 (60 seconds) is typical for a warm start. Cold starts can take 30-90 seconds depending on the application initialization time.
+**Checkpoint:** A `startupDurationMs` value under 60000 (60 seconds) is typical for a warm start. Cold starts can take 30–90 seconds depending on the application initialization time.
 
 ---
 

@@ -1,4 +1,4 @@
-# Data Insights Agent -- Technical Debt
+# Data Insights Agent — Technical Debt
 
 **Last Updated:** 2026-03-07
 **Analysis Run:** Autonomous service-scribe (development branch)
@@ -10,20 +10,20 @@
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
 | Code Smells | 1     | Low      |
-| Test Gaps   | 0     | -        |
-| Type Issues | 0     | -        |
-| TODOs       | 0     | -        |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
 | **Total**   | **1** | Low      |
 
 ---
 
 ## Future Plans
 
-1. **Stale code comments referencing scheduler** -- Three code comments still reference "scheduler" after the scheduled snapshot refresh was removed in `f1e27f57`. The `CompositeFeedRepository.listAll()` JSDoc says "Used by scheduler for batch refresh operations", `SNAPSHOT_TTL_MINUTES` comment says "matches scheduler interval", and `computeVisualization.ts` says "Called fire-and-forget after creation, or for manual/scheduled refresh". These should be updated to reflect the current on-demand-only refresh model.
+1. **Stale code comments referencing scheduler** — Three code comments still reference "scheduler" after the scheduled snapshot refresh was removed in `f1e27f57`. The `CompositeFeedRepository.listAll()` JSDoc says "Used by scheduler for batch refresh operations", `SNAPSHOT_TTL_MINUTES` comment says "matches scheduler interval", and `computeVisualization.ts` says "Called fire-and-forget after creation, or for manual/scheduled refresh". These should be updated to reflect the current on-demand-only refresh model.
 
-2. **refreshFeedVisualizations use case** -- The `refreshFeedVisualizations` use case exists in domain code but is not wired into any route or service after the scheduled refresh removal. It could be useful for a future bulk refresh endpoint or could be removed as dead code.
+2. **refreshFeedVisualizations use case** — The `refreshFeedVisualizations` use case exists in domain code and is exported and tested, but is not wired into any route or service after the scheduled refresh removal. It could be useful for a future bulk refresh endpoint or could be removed as dead code.
 
-3. **CompositeFeedRepository.listAll()** -- This method exists in the repository port but is no longer called by any active code path after the scheduled refresh was removed. It was used by the now-deleted `refreshAllSnapshots` use case.
+3. **CompositeFeedRepository.listAll()** — This method exists in the repository port but is no longer called by any active code path after the scheduled refresh was removed. It was used by the now-deleted `refreshAllSnapshots` use case.
 
 ---
 
@@ -49,13 +49,13 @@ None detected.
 
 ## Test Coverage Gaps
 
-None detected -- all code paths covered at 100% threshold with v8 ignore exemptions for false positives.
+None detected — all code paths covered at 100% threshold with v8 ignore exemptions for false positives.
 
 ---
 
 ## TypeScript Issues
 
-None detected -- no `any` types, `@ts-ignore`, or unsafe casts.
+None detected — no `any` types, `@ts-ignore`, or unsafe casts.
 
 ---
 
@@ -67,15 +67,15 @@ None detected in codebase scan.
 
 ## SRP Violations
 
-| File                                         | Lines | Issue                                              | Suggestion                          |
-| -------------------------------------------- | ----- | -------------------------------------------------- | ----------------------------------- |
-| `routes/compositeFeedRoutes.ts`              | 583   | Handles CRUD + schema + data + snapshot + refresh  | Consider splitting snapshot routes  |
+| File                            | Issue                                              | Suggestion                         |
+| ------------------------------- | -------------------------------------------------- | ---------------------------------- |
+| `routes/compositeFeedRoutes.ts` | Handles CRUD + schema + data + snapshot + refresh  | Consider splitting snapshot routes |
 
 ---
 
 ## Code Duplicates
 
-None detected -- unique implementations per service.
+None detected — unique implementations per service.
 
 ---
 
@@ -111,7 +111,7 @@ None.
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
-- [Agent](agent.md) -- Machine-readable interface
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
+- [Agent](agent.md) — Machine-readable interface
 - [Documentation Run Log](../../documentation-runs.md)

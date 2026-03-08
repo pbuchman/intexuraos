@@ -1,4 +1,4 @@
-# api-docs-hub -- Agent Interface
+# api-docs-hub — Agent Interface
 
 > Machine-readable specification for AI agent integration
 
@@ -9,7 +9,7 @@
 | **Name**    | api-docs-hub                                                            |
 | **Role**    | Aggregates OpenAPI specs from 18 services into a single Swagger UI      |
 | **Goal**    | Provide a unified documentation portal for all IntexuraOS service APIs  |
-| **Version** | 3.1.0 (package) / 0.0.5 (OpenAPI spec)                                  |
+| **Version** | 3.2.0 (package) / 0.0.5 (OpenAPI spec)                                  |
 
 ---
 
@@ -79,9 +79,9 @@ interface HealthCheck {
 
 **Do NOT:**
 
-- Use `/docs` for programmatic API discovery -- it serves HTML, not machine-readable data
-- Expect the hub to proxy or cache OpenAPI specs -- specs are fetched client-side by the browser
-- Call this service for any data mutation -- it is entirely read-only
+- Use `/docs` for programmatic API discovery — it serves HTML, not machine-readable data
+- Expect the hub to proxy or cache OpenAPI specs — specs are fetched client-side by the browser
+- Call this service for any data mutation — it is entirely read-only
 
 **Requires:**
 

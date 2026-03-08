@@ -65,7 +65,7 @@ None identified. Current coverage meets the 100% branch threshold with valid v8 
 
 ## TypeScript Issues
 
-None identified. One `@ts-expect-error` exists in test code (`linearActionExtractionService.test.ts`) for intentional negative testing of schema validation -- this is valid usage. No `any` types in production source code. Service uses strict TypeScript with proper type definitions for:
+None identified. One `@ts-expect-error` exists in test code (`linearActionExtractionService.test.ts`) for intentional negative testing of schema validation — this is valid usage. No `any` types in production source code. Service uses strict TypeScript with proper type definitions for:
 
 - Linear API types (`LinearIssue`, `LinearIssueWithTeam`, `LinearTeam`, `IssueStateCategory`)
 - Sync types (`SyncedLinearIssue`, `LinearComment`, `WorkflowState`)
@@ -177,7 +177,7 @@ None. The service uses current versions of:
 4. **Error Mapping**: Consistent error code translation to HTTP status across all route files
 5. **Performance**: Client caching and request deduplication (INT-95)
 6. **Clean Separation**: Domain logic isolated from infrastructure with well-defined ports
-7. **Firestore-First Dashboard**: No Linear API call on dashboard load -- fast and rate-limit-proof
+7. **Firestore-First Dashboard**: No Linear API call on dashboard load — fast and rate-limit-proof
 8. **Parent-Child Hierarchy**: In-memory tree built from Firestore data; subissues display correctly
 9. **Multi-Tenant Webhooks**: Per-connection webhook secrets with team-based routing
 10. **Safe Parsing**: Issue mapper handles unknown state types and out-of-range priorities with defaults
@@ -185,13 +185,13 @@ None. The service uses current versions of:
 12. **OIDC + Internal Auth**: sync-all accepts both Cloud Scheduler OIDC and internal auth tokens
 13. **Signature Security**: HMAC-SHA256 with timing-safe comparison prevents timing attacks
 14. **Comment Sync**: Comments stored in Firestore and exposed via paginated API
-15. **HTTP Boundary Type Mapping**: `validateIssue` maps `LinearLabel[]` to `string[]` at the route layer -- domain types stay clean
+15. **HTTP Boundary Type Mapping**: `validateIssue` maps `LinearLabel[]` to `string[]` at the route layer — domain types stay clean
 16. **OpenTelemetry**: Distributed tracing and metrics via Dash0 loaded transparently at process start (no-op when unconfigured)
 17. **Auto-Trigger on Assignment**: Webhook-driven code task creation with strict guard conditions
 18. **Assignee Preservation**: Full sync preserves assignee data from the Linear API for dashboard display
 19. **Multi-User Webhook Fan-Out**: Webhooks fan out to all connected users per team via `Promise.allSettled` (INT-623)
 20. **Composite Document Keys**: `userId_issueId` keys prevent cross-user data overwrite in shared Firestore collections
-21. **Dual-Prompt Code Task**: Prompt selection based on `code-task` label -- enrichment vs execution
+21. **Dual-Prompt Code Task**: Prompt selection based on `code-task` label — enrichment vs execution
 22. **Display Batch Endpoint**: `POST /internal/linear/issues/display-batch` returns multiple issues in a single call for efficiency
 23. **Issue Tree Traversal**: `GET /internal/issues/:issueId/tree` returns recursive descendants from local sync data without Linear API calls
 
@@ -203,7 +203,7 @@ None. The service uses current versions of:
 4. **Route File Size**: `linearRoutes.ts` at ~993 lines and `internalIssuesRoutes.ts` at ~933 lines could benefit from splitting
 5. **Comment Full Sync**: No bulk comment reconciliation for initial setup
 6. **Fire-and-Forget Auto-Trigger**: `triggerCodeTaskFromAssignment` errors only logged, not surfaced
-7. **v8 Ignore Density**: 92 coverage exemption directives across 12 files -- highest concentration in `internalIssuesRoutes.ts` (28) and `linearRoutes.ts` (18)
+7. **v8 Ignore Density**: 92 coverage exemption directives across 12 files — highest concentration in `internalIssuesRoutes.ts` (28) and `linearRoutes.ts` (18)
 
 ---
 

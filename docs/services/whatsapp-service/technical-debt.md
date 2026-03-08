@@ -1,7 +1,7 @@
-# WhatsApp Service - Technical Debt
+# WhatsApp Service — Technical Debt
 
 **Last Updated:** 2026-03-07
-**Version:** 5.0.0
+**Analysis Run:** v3.1.0
 
 ---
 
@@ -10,12 +10,12 @@
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
 | TODO/FIXME Comments | 1     | Low      |
-| Test Coverage Gaps  | 0     | -        |
-| TypeScript Issues   | 0     | -        |
+| Test Coverage Gaps  | 0     | —        |
+| TypeScript Issues   | 0     | —        |
 | SRP Violations      | 1     | Medium   |
-| Code Duplicates     | 0     | -        |
-| Deprecations        | 0     | -        |
-| **Total**           | **2** | -        |
+| Code Duplicates     | 0     | —        |
+| Deprecations        | 0     | —        |
+| **Total**           | **2** | —        |
 
 ---
 
@@ -25,18 +25,17 @@
 
 Features that are planned but not yet implemented:
 
-- **Telegram support** -- Add Telegram as an additional messaging channel
-- **SMS support** -- Add SMS as fallback messaging channel
-- **Message threading** -- Group related messages into conversation threads
-- **Video support** -- Handle video messages (currently ignored)
-- **Multi-phone per user** -- Allow users to connect multiple WhatsApp numbers
+- **Telegram support** — Add Telegram as an additional messaging channel
+- **SMS support** — Add SMS as fallback messaging channel
+- **Message threading** — Group related messages into conversation threads
+- **Video support** — Handle video messages (currently ignored)
+- **Multi-phone per user** — Allow users to connect multiple WhatsApp numbers
 
 ### Proposed Enhancements
 
 1. Retry mechanism for failed message deliveries
 2. Message read receipts tracking
 3. Approval message expiration notifications
-4. Button nonce validation on the receiving side (removed in v4.0.0 for simplicity; may re-add for security)
 
 ---
 
@@ -65,30 +64,30 @@ All endpoints and use cases have test coverage. The service maintains >95% cover
 - Routes: Fully tested (webhook, message, mapping, pubsub, verification)
 - Use cases: All covered (processAudioMessage, processImageMessage, handleTranscriptionCompleted, extractLinkPreviews)
 - Infrastructure: Tested via routes and dedicated infra tests
-- v2.0.0 features: Approval reply handling, OutboundMessage tracking
-- v3.0.0 features: Phone verification, interactive buttons
-- v4.0.0 features: No-nonce buttons, reject intent, read receipts on button click
-- INT-684 features: Event-driven transcription via srt-service, CTA URL messages
+- Approval reply handling, OutboundMessage tracking
+- Phone verification, interactive buttons
+- No-nonce buttons, reject intent, read receipts on button click
+- Event-driven transcription via srt-service, CTA URL messages
 
 ### Test Files
 
 Located in `apps/whatsapp-service/src/__tests__/`:
 
-- `webhookAsyncProcessing.test.ts` -- Async webhook processing including button responses (v4.0.0)
-- `webhookReceiver.test.ts` -- Webhook HMAC signature validation and receipt
-- `webhookVerification.test.ts` -- Webhook hub challenge verification
-- `messageRoutes.test.ts` -- Message CRUD operations
-- `mappingRoutes.test.ts` -- User phone number mapping (with verification gate)
-- `pubsubRoutes.test.ts` -- Pub/Sub event handlers (including interactive messages, CTA URL, transcription-completed)
-- `verificationRoutes.test.ts` -- Phone verification send/confirm/status
-- `shared.test.ts` -- Shared utility functions (extractButtonResponse with button_reply fix)
-- `usecases/processAudioMessage.test.ts` -- Audio download and GCS storage
-- `usecases/processImageMessage.test.ts` -- Image download, thumbnail, GCS storage
-- `usecases/handleTranscriptionCompleted.test.ts` -- srt-service event handling (INT-684)
-- `usecases/extractLinkPreviews.test.ts` -- Link preview extraction
-- `infra/phoneVerificationRepository.test.ts` -- Verification repository
-- `infra/sender.test.ts` -- WhatsApp sender (sendTextMessage, sendInteractiveMessage, sendCtaUrlMessage)
-- `infra/**/*.test.ts` -- Other infra implementations
+- `webhookAsyncProcessing.test.ts` — Async webhook processing including button responses
+- `webhookReceiver.test.ts` — Webhook HMAC signature validation and receipt
+- `webhookVerification.test.ts` — Webhook hub challenge verification
+- `messageRoutes.test.ts` — Message CRUD operations
+- `mappingRoutes.test.ts` — User phone number mapping (with verification gate)
+- `pubsubRoutes.test.ts` — Pub/Sub event handlers (including interactive messages, CTA URL, transcription-completed)
+- `verificationRoutes.test.ts` — Phone verification send/confirm/status
+- `shared.test.ts` — Shared utility functions (extractButtonResponse with button_reply fix)
+- `usecases/processAudioMessage.test.ts` — Audio download and GCS storage
+- `usecases/processImageMessage.test.ts` — Image download, thumbnail, GCS storage
+- `usecases/handleTranscriptionCompleted.test.ts` — srt-service event handling (INT-684)
+- `usecases/extractLinkPreviews.test.ts` — Link preview extraction
+- `infra/phoneVerificationRepository.test.ts` — Verification repository
+- `infra/sender.test.ts` — WhatsApp sender (sendTextMessage, sendInteractiveMessage, sendCtaUrlMessage)
+- `infra/**/*.test.ts` — Other infra implementations
 
 ---
 
@@ -96,7 +95,7 @@ Located in `apps/whatsapp-service/src/__tests__/`:
 
 ### None Detected
 
-No `@ts-ignore` or `@ts-expect-error` directives found.
+No `@ts-ignore`, `@ts-expect-error`, or `any` types found.
 
 ---
 
@@ -104,9 +103,9 @@ No `@ts-ignore` or `@ts-expect-error` directives found.
 
 ### Medium Priority
 
-| File                      | Lines  | Issue                                               | Suggestion                                                 |
-| ------------------------- | ------ | --------------------------------------------------- | ---------------------------------------------------------- |
-| `routes/webhookRoutes.ts` | ~1152  | Handles webhook validation, routing, and 5 handlers | Extract handleTextMessage, handleButtonMessage to usecases |
+| File                      | Issue                                               | Suggestion                                                 |
+| ------------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
+| `routes/webhookRoutes.ts` | Handles webhook validation, routing, and 5 handlers | Extract handleTextMessage, handleButtonMessage to usecases |
 
 **Details:** `webhookRoutes.ts` contains:
 
@@ -136,7 +135,7 @@ No deprecated APIs or dependencies in use. Speechmatics direct dependency was re
 
 ---
 
-## Race Condition Fixes (v2.0.0)
+## Race Condition Fixes
 
 ### INT-201: Duplicate Actions from Approval Replies
 
@@ -182,13 +181,13 @@ No deprecated APIs or dependencies in use. Speechmatics direct dependency was re
 | 2026-01-28 | Env vars not registered in REQUIRED_ENV                           | Add mandatory env var registration enforcement                              |
 | 2026-01-16 | Approval events published without actionId                        | Only publish when actionId extracted                                        |
 | 2026-01-14 | Duplicate actions from approval replies                           | Skip command.ingest for known approvals                                     |
-| 2026-01-13 | Reactions not triggering approval flow                            | Add reaction handling (later removed in v4.0.0)                             |
+| 2026-01-13 | Reactions not triggering approval flow                            | Add reaction handling (later removed)                                       |
 | 2026-01-11 | No reply correlation for approval messages                        | Add OutboundMessage tracking                                                |
 
 ---
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
-- [Tutorial](tutorial.md) -- Integration guide
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
+- [Tutorial](tutorial.md) — Integration guide

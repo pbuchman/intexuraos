@@ -1,4 +1,4 @@
-# chat-agent -- Agent Interface
+# chat-agent — Agent Interface
 
 > Machine-readable interface definition for AI agents interacting with chat-agent.
 
@@ -79,7 +79,7 @@ interface DocSource {
 }
 ```
 
-**Example -- documentation question:**
+**Example — documentation question:**
 
 ```json
 // Request
@@ -100,7 +100,7 @@ interface DocSource {
 }
 ```
 
-**Example -- command creation:**
+**Example — command creation:**
 
 ```json
 // Request
@@ -123,7 +123,7 @@ interface DocSource {
 }
 ```
 
-**Example -- confirm action:**
+**Example — confirm action:**
 
 ```json
 // Request

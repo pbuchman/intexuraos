@@ -218,7 +218,7 @@ Cloud Functions and local services that run outside Cloud Run.
 
 **vm-lifecycle** -- Two HTTP-triggered Cloud Functions (`startVm` and `stopVm`) that manage GCE Spot VM instances. `startVm` polls for health after boot; `stopVm` gracefully drains running tasks before shutdown.
 
-**transcription** -- Pub/Sub-triggered Cloud Function that converts WhatsApp voice notes stored in GCS into text using Speechmatics Batch API. Supports auto language detection, AI-generated summaries, and 100+ custom vocabulary terms. Publishes results (success or failure) to the transcription-completed topic for whatsapp-service consumption.
+**transcription** — Pub/Sub-triggered Cloud Function that converts WhatsApp voice notes stored in GCS into text using Speechmatics Batch API. Supports auto language detection, AI-generated summaries, and 100+ custom vocabulary terms. Publishes results (success or failure) to the transcription-completed topic for whatsapp-service consumption.
 
 ---
 
