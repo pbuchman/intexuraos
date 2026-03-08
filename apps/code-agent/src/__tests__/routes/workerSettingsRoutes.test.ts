@@ -73,7 +73,7 @@ describe('Worker Settings Routes', () => {
       logger,
     });
 
-    const taskDispatcher = createTaskDispatcherService({ logger });
+    const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe });
 
     const whatsappNotifier = createWhatsAppNotifier({
       whatsappPublisher: {

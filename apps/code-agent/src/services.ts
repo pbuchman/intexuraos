@@ -283,7 +283,8 @@ export function initServices(config: ServiceConfig): void {
   const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
   const logLineRepo = createFirestoreLogLineRepository({ firestore, logger });
   const workerSettingsRepo = createWorkerSettingsRepository({ firestore, logger });
-  const taskDispatcher = createTaskDispatcherService({ logger });
+  const workerHealthProbe = createWorkerHealthProbe();
+  const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe });
   const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher, linearAgentClient });
   const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000 });
 
@@ -328,7 +329,7 @@ export function initServices(config: ServiceConfig): void {
     }),
     metricsClient,
     workerSettingsRepo,
-    workerHealthProbe: createWorkerHealthProbe(),
+    workerHealthProbe,
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),

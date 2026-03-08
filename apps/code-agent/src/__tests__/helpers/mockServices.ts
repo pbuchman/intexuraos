@@ -135,6 +135,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     taskDispatcher: createTaskDispatcherService({
       logger,
+      workerHealthProbe: mockWorkerHealthProbe,
     }),
     whatsappNotifier: createWhatsAppNotifier({
       whatsappPublisher: {
@@ -212,7 +213,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
         logger,
       }),
       linearIssueService,
-      taskDispatcher: createTaskDispatcherService({ logger }),
+      taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
       whatsappNotifier: createWhatsAppNotifier({
         whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
       }),
