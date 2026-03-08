@@ -1,4 +1,4 @@
-# Chat Agent -- Getting Started
+# Chat Agent — Getting Started
 
 **Time estimate:** 20 minutes
 **Prerequisites:** Running IntexuraOS locally (`pnpm dev`), valid JWT token or guest session ID
@@ -6,7 +6,7 @@
 
 ---
 
-## Part 1: Hello World -- Send Your First Message
+## Part 1: Hello World — Send Your First Message
 
 The simplest interaction: send a message as a guest user and get a response.
 
@@ -200,7 +200,7 @@ curl -s http://localhost:8129/chat \
   }' | jq
 ```
 
-The response uses the user's configured LLM model -- defaulting to Gemini 2.5 Flash for new users, with GLM-4.7 and GLM-4.7-Flash available as alternatives.
+The response uses the user's configured LLM model — defaulting to Gemini 2.5 Flash for new users, with GLM-4.7 and GLM-4.7-Flash available as alternatives.
 
 ### Step 3: Follow-up question with history
 

@@ -1,8 +1,8 @@
-# User Service - Tutorial
+# User Service — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** Node.js 20+, IntexuraOS dev environment, Auth0 tenant
-> **You'll learn:** How to authenticate, manage LLM API keys, set default models, and connect Google OAuth
+> **You'll learn:** How to authenticate, manage LLM API keys, set default models, connect Google and GitHub OAuth, and configure transcription preferences
 
 ---
 
@@ -14,7 +14,8 @@ A working integration that:
 - Stores and validates LLM API keys
 - Tests keys with real provider calls
 - Sets a default LLM model for all agents
-- Connects a Google account for calendar access
+- Configures transcription preferences
+- Connects Google and GitHub accounts
 - Accesses internal endpoints for service-to-service communication
 
 ---
@@ -30,7 +31,7 @@ Before starting, ensure you have:
 
 ---
 
-## Part 1: Hello World - Get Auth Config (2 minutes)
+## Part 1: Hello World — Get Auth Config (2 minutes)
 
 The simplest endpoint returns non-secret Auth0 configuration for troubleshooting.
 
@@ -185,7 +186,7 @@ The service validates the key by making a test call to OpenAI before storing it.
 }
 ```
 
-**Validation failure (rate limit - v2.0.0 fix):**
+**Validation failure (rate limit):**
 
 ```json
 {
@@ -270,45 +271,6 @@ curl -X POST https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm
 }
 ```
 
-**Failure response (Anthropic billing):**
-
-```json
-{
-  "success": true,
-  "data": {
-    "status": "failure",
-    "message": "Insufficient Anthropic API credits. Please add funds at console.anthropic.com",
-    "testedAt": "2026-01-24T10:00:00.000Z"
-  }
-}
-```
-
-### Step 4.2: Check test results
-
-```bash
-curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-Test results are now visible in the response:
-
-```json
-{
-  "success": true,
-  "data": {
-    "defaultModel": null,
-    "openai": "sk-p...XXXX",
-    "testResults": {
-      "openai": {
-        "status": "success",
-        "message": "Hi! I'm GPT...",
-        "testedAt": "2026-01-24T10:00:00.000Z"
-      }
-    }
-  }
-}
-```
-
 ### Checkpoint
 
 The test result is stored and displayed alongside the key status.
@@ -334,14 +296,7 @@ curl -X DELETE https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/l
 }
 ```
 
-### Step 5.2: Verify deletion
-
-```bash
-curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-The provider now shows `null`.
+If the deleted provider was the default model's provider, the default model is automatically cleared.
 
 ---
 
@@ -350,6 +305,8 @@ The provider now shows `null`.
 Configure which fast model all agents use by default.
 
 ### Step 6.1: Set a default model
+
+The service validates that the model is a supported fast model AND that you have an API key configured for the model's provider.
 
 ```bash
 curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
@@ -371,29 +328,61 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 }
 ```
 
-**Invalid model:**
+**No API key for provider:**
 
 ```json
 {
   "success": false,
   "error": {
     "code": "INVALID_REQUEST",
-    "message": "Invalid model: unsupported-model. Must be a supported fast model."
+    "message": "Cannot set default model to claude-haiku-3-5: no API key configured for provider 'anthropic'"
   }
 }
 ```
 
 ### Checkpoint
 
-All agents now use "claude-haiku-3-5" by default. If the user has no Anthropic API key, the platform falls back to GLM-4.7-Flash automatically.
+All agents now use "claude-haiku-3-5" by default, and the service ensures the API key exists for Anthropic.
 
 ---
 
-## Part 7: Connect Google OAuth (5 minutes)
+## Part 7: Set Transcription Preferences (2 minutes)
+
+Choose which transcription provider processes your voice notes.
+
+### Step 7.1: Set transcription provider
+
+```bash
+curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/transcription \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "speechmatics"
+  }'
+```
+
+**Success response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "provider": "speechmatics"
+  }
+}
+```
+
+### Checkpoint
+
+Voice notes from WhatsApp are now processed through Speechmatics.
+
+---
+
+## Part 8: Connect Google OAuth (5 minutes)
 
 Connect a Google account for calendar integration.
 
-### Step 7.1: Initiate OAuth flow
+### Step 8.1: Initiate OAuth flow
 
 ```bash
 curl -X POST https://user-service.intexuraos.com/oauth/connections/google/initiate \
@@ -411,14 +400,14 @@ curl -X POST https://user-service.intexuraos.com/oauth/connections/google/initia
 }
 ```
 
-### Step 7.2: Complete OAuth flow
+### Step 8.2: Complete OAuth flow
 
 1. Redirect user to `authorizationUrl`
 2. User grants calendar permissions
 3. Google redirects back to callback URL
 4. Service stores encrypted tokens
 
-### Step 7.3: Check connection status
+### Step 8.3: Check connection status
 
 ```bash
 curl https://user-service.intexuraos.com/oauth/connections/google/status \
@@ -446,11 +435,68 @@ Google account is connected. Calendar-agent can now access the user's calendar t
 
 ---
 
-## Part 8: Internal Service Access (Service-to-Service) (5 minutes)
+## Part 9: Connect GitHub OAuth (5 minutes)
+
+Connect a GitHub account for code automation.
+
+### Step 9.1: Initiate GitHub OAuth flow
+
+```bash
+curl -X POST https://user-service.intexuraos.com/oauth/connections/github/initiate \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "authorizationUrl": "https://github.com/login/oauth/authorize?..."
+  }
+}
+```
+
+### Step 9.2: Complete OAuth flow
+
+1. Redirect user to `authorizationUrl`
+2. User authorizes the GitHub app
+3. GitHub redirects back to callback URL
+4. Service stores the access token (no refresh token for GitHub)
+
+### Step 9.3: Check connection status
+
+```bash
+curl https://user-service.intexuraos.com/oauth/connections/github/status \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Connected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "connected": true,
+    "username": "octocat",
+    "scopes": ["repo", "read:user"],
+    "createdAt": "2026-03-01T10:00:00.000Z",
+    "updatedAt": "2026-03-01T10:00:00.000Z"
+  }
+}
+```
+
+### Checkpoint
+
+GitHub account is connected. Code-agent can now create branches and pull requests on your behalf.
+
+---
+
+## Part 10: Internal Service Access (Service-to-Service) (5 minutes)
 
 Simulate how another service (like research-agent) accesses API keys.
 
-### Step 8.1: Internal request with shared secret
+### Step 10.1: Internal request with shared secret
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
@@ -472,16 +518,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
 }
 ```
 
-### Step 8.2: Update last used timestamp
-
-```bash
-curl -X POST https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys/openai/last-used \
-  -H "X-Internal-Auth: YOUR_SHARED_SECRET"
-```
-
-Returns 204 No Content on success.
-
-### Step 8.3: Get Google OAuth token (for calendar-agent)
+### Step 10.2: Get Google OAuth token (for calendar-agent)
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/google/token \
@@ -502,7 +539,45 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/googl
 
 This automatically refreshes the token if expired.
 
-### Step 8.4: Get user LLM preferences
+### Step 10.3: Get GitHub OAuth token (for code-agent)
+
+```bash
+curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/github/token \
+  -H "X-Internal-Auth: YOUR_SHARED_SECRET"
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "accessToken": "gho_XXXXXXXXXXXXXXXXXX",
+    "username": "octocat"
+  }
+}
+```
+
+### Step 10.4: Find user by GitHub username
+
+```bash
+curl https://user-service.intexuraos.com/internal/users/by-github-username/octocat \
+  -H "X-Internal-Auth: YOUR_SHARED_SECRET"
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "auth0|abc123",
+    "username": "octocat"
+  }
+}
+```
+
+### Step 10.5: Get user preferences
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
@@ -517,6 +592,9 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
   "data": {
     "llmPreferences": {
       "defaultModel": "claude-haiku-3-5"
+    },
+    "transcriptionPreferences": {
+      "provider": "speechmatics"
     }
   }
 }
@@ -524,7 +602,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 
 ---
 
-## Part 9: Handle Errors (3 minutes)
+## Part 11: Handle Errors (3 minutes)
 
 ### Error: Invalid API key format
 
@@ -540,7 +618,21 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 
 **Solution:** Verify the key format. OpenAI keys start with `sk-`.
 
-### Error: Rate limit (v2.0.0)
+### Error: No API key for default model provider
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Cannot set default model to claude-haiku-3-5: no API key configured for provider 'anthropic'"
+  }
+}
+```
+
+**Solution:** Add an API key for the model's provider before setting the default model.
+
+### Error: Rate limit
 
 ```json
 {
@@ -552,7 +644,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 }
 ```
 
-**Solution:** Wait and retry. This is NOT an invalid key - the parser correctly identifies rate limits.
+**Solution:** Wait and retry. This is NOT an invalid key — the parser correctly identifies rate limits.
 
 ### Error: Encryption not configured
 
@@ -582,35 +674,36 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 
 **Solution:** Ensure the authenticated user's ID matches the `:uid` parameter.
 
-### Error: OAuth not configured
+### Error: Invalid transcription provider
 
 ```json
 {
   "success": false,
   "error": {
-    "code": "MISCONFIGURED",
-    "message": "Google OAuth is not configured"
+    "code": "INVALID_REQUEST",
+    "message": "Invalid provider: whisper"
   }
 }
 ```
 
-**Solution:** Set `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID` and `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET`.
+**Solution:** Only `speechmatics` is currently supported as a transcription provider.
 
 ---
 
 ## Troubleshooting
 
-| Issue                   | Symptom                         | Solution                                                  |
-| ----------------------- | ------------------------------- | --------------------------------------------------------- |
-| Device code expires     | Polling never succeeds          | Device codes expire in 15 minutes; user must restart flow |
-| Encryption key errors   | Keys fail to save               | Verify 64-character hex string for encryption key         |
-| Auth0 errors            | 401 Unauthorized                | Verify Auth0 client ID/secret are correct                 |
-| OAuth not configured    | Google OAuth returns 503        | Set GOOGLE_OAUTH_CLIENT_ID and SECRET                     |
-| Token refresh fails     | Access token expired            | User may have revoked access; re-authentication required  |
-| Rate limit shown as key | "Invalid API key" for 429 error | Update to v2.0.0 - rate limits now correctly identified   |
-| Test costs money        | Charges on provider account     | Test endpoint makes real API calls; use sparingly         |
-| Pricing fetch fails     | Service fails to start          | Ensure app-settings-service is running and accessible     |
-| Default model rejected  | 400 INVALID_REQUEST             | Model must pass `isFastModel()` validation                |
+| Issue                   | Symptom                         | Solution                                                         |
+| ----------------------- | ------------------------------- | ---------------------------------------------------------------- |
+| Device code expires     | Polling never succeeds          | Device codes expire in 15 minutes; user must restart flow        |
+| Encryption key errors   | Keys fail to save               | Verify 64-character hex string for encryption key                |
+| Auth0 errors            | 401 Unauthorized                | Verify Auth0 client ID/secret are correct                        |
+| OAuth not configured    | Google/GitHub OAuth returns 503 | Set OAuth client ID and secret env vars                          |
+| Token refresh fails     | Access token expired            | User may have revoked access; re-authentication required         |
+| Rate limit misdiagnosed | "Invalid API key" for 429 error | Rate limits are correctly identified — ensure service is current |
+| Test costs money        | Charges on provider account     | Test endpoint makes real API calls; use sparingly                |
+| Pricing fetch fails     | Service fails to start          | Ensure app-settings-service is running and accessible            |
+| Default model rejected  | 400 INVALID_REQUEST             | Model must pass `isFastModel()` AND have API key set             |
+| GitHub token not found  | 404 NOT_FOUND                   | User must connect GitHub account first                           |
 
 ---
 
@@ -630,7 +723,7 @@ Now that you understand the basics:
 
 1. Get the Auth configuration
 2. List your LLM API key status
-3. Check Google OAuth connection status
+3. Check Google and GitHub OAuth connection status
 
 ### Medium
 
@@ -638,23 +731,25 @@ Now that you understand the basics:
 2. Add an API key and verify it's encrypted in Firestore
 3. Test an API key and verify the result is stored
 4. Set a default model and read it back via the internal endpoint
+5. Set a transcription provider preference
 
 ### Hard
 
 1. Build a CLI client that completes device code flow
 2. Implement a service that fetches internal API keys
 3. Create a full OAuth flow handler for calendar integration
+4. Connect GitHub and use the internal endpoint to find a user by username
 
 <details>
 <summary>Solutions</summary>
 
-### Exercise 1: Easy - Get Auth Config
+### Exercise 1: Easy — Get Auth Config
 
 ```bash
 curl https://user-service.intexuraos.com/auth/config
 ```
 
-### Exercise 2: Medium - Add and Test Key
+### Exercise 2: Medium — Add and Test Key
 
 ```bash
 # Add key
@@ -668,7 +763,7 @@ curl -X POST https://user-service.intexuraos.com/users/$UID/settings/llm-keys/op
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Exercise 3: Hard - CLI Device Code Flow
+### Exercise 3: Hard — CLI Device Code Flow
 
 ```typescript
 async function deviceLogin(): Promise<string> {
@@ -701,6 +796,15 @@ async function deviceLogin(): Promise<string> {
     }
   }
 }
+```
+
+### Exercise 4: Hard — Find User by GitHub Username
+
+```bash
+# Connect GitHub first (via OAuth flow in browser)
+# Then look up the user by their GitHub username
+curl https://user-service.intexuraos.com/internal/users/by-github-username/octocat \
+  -H "X-Internal-Auth: $INTERNAL_AUTH_TOKEN"
 ```
 
 </details>

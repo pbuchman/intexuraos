@@ -58,8 +58,8 @@ interface ListActionsResponse {
         "title": "Research quantum computing",
         "status": "awaiting_approval",
         "payload": {},
-        "createdAt": "2026-02-22T10:00:00Z",
-        "updatedAt": "2026-02-22T10:05:00Z"
+        "createdAt": "2026-03-07T10:00:00Z",
+        "updatedAt": "2026-03-07T10:05:00Z"
       }
     ]
   }
@@ -181,7 +181,7 @@ interface BatchGetActionsResponse {
 
 **Endpoint:** `GET /actions/:actionId/preview`
 
-**When to use:** Retrieve a generated preview for a calendar action before approving it.
+**When to use:** Retrieve a generated preview for a calendar action before approving it. Previews are generated synchronously when the approval message is sent, so this endpoint is primarily for UI display.
 
 **Input Schema:**
 
@@ -278,7 +278,7 @@ type ResourceStatus =
 
 interface CodeActionPayload {
   prompt: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   linearIssueId?: string;
   linearIssueTitle?: string;
   approvalEventId?: string;
@@ -294,13 +294,14 @@ interface ApprovalReplyEvent {
   userId: string;
   timestamp: string;
   actionId?: string;
-  // Button ID formats (v4.0.0):
-  //   approve:{actionId}            - approve the action
-  //   reject:{actionId}             - reject the action
-  //   cancel:{actionId}             - cancel (same as reject)
-  //   convert:{actionId}            - reject + convert to Linear issue
-  //   cancel-task:{taskId}:{nonce}  - cancel running code task
-  //   view-task:{taskId}            - view task URL
+  // Button ID formats:
+  //   approve:{actionId}                    - approve the action
+  //   reject:{actionId}                     - reject the action
+  //   cancel:{actionId}                     - cancel (same as reject)
+  //   convert:{actionId}                    - reject + convert to Linear issue
+  //   cancel-task:{taskId}:{nonce}          - cancel running code task
+  //   view-task:{taskId}                    - view task URL
+  //   proceed-implementation:{taskId}       - proceed to phase 2 (INT-628)
   buttonId?: string;
   buttonTitle?: string;
 }
@@ -422,7 +423,7 @@ commands-agent -> action.created -> actions-agent
                         auto-execute OR action.awaiting_approval
 ```
 
-### Approval Reply Flow (v4.0.0 -- buttons only)
+### Approval Reply Flow
 
 ```
 User taps WhatsApp button
@@ -431,12 +432,12 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
                                                   |
                                         handleButtonResponse
                                                   |
-                                    approve         reject/cancel      convert
-                                        |                |                |
-                                updateStatusIf    updateStatusIf    updateStatusIf
-                                (atomic)           (atomic)          (atomic)
-                                        |                |                |
-                                Execute action      Done           "Converting..."
+                    approve     reject/cancel    convert    proceed-implementation
+                        |            |              |               |
+                  updateStatusIf  updateStatusIf  updateStatusIf  submitToPhase2
+                  (atomic)        (atomic)        (atomic)        (code-agent)
+                        |            |              |               |
+                  Execute action   Done         "Converting..."  "Starting impl..."
 ```
 
 ---
@@ -469,7 +470,7 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 | `INTERNAL_ERROR`   | 500  | Processing failure         | Retry with backoff            |
 | `DOWNSTREAM_ERROR` | 502  | Calendar/other service err | Wait and retry                |
 
-### Cancel-task Error Codes (v4.0.0)
+### Cancel-task Error Codes
 
 | Error Code             | HTTP | User Message                                     |
 | ---------------------- | ---- | ------------------------------------------------ |
@@ -478,6 +479,19 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 | `NONCE_EXPIRED`        | 400  | Cancel link has expired.                         |
 | `NOT_OWNER`            | 403  | You are not the owner of this task.              |
 | `TASK_NOT_CANCELLABLE` | 400  | Task cannot be cancelled (may have completed).   |
+
+### Proceed-implementation Error Codes (INT-628)
+
+| Error Code              | User Message                                                   |
+| ----------------------- | -------------------------------------------------------------- |
+| `TASK_NOT_FOUND`        | Task not found.                                                |
+| `INVALID_STATUS`        | Task is not in designed status.                                |
+| `NO_LINEAR_ISSUE`       | Cannot proceed: no Linear issue attached.                      |
+| `LABEL_NOT_READY`       | Task is not ready for implementation.                          |
+| `ALREADY_IMPLEMENTED`   | Implementation has already started.                            |
+| `ACTIVE_TASK_EXISTS`    | An active task already exists for this request.                |
+| `WORKER_NOT_CONFIGURED` | Unable to start implementation: no workers available.          |
+| `NETWORK_ERROR`         | Unable to start implementation: network error. Please retry.   |
 
 ---
 
@@ -492,7 +506,7 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 | bookmarks-agent      | Execute link actions                  | Action marked as failed      |
 | calendar-agent       | Execute calendar actions, previews    | Action marked as failed      |
 | linear-agent         | Execute linear issue creation         | Action marked as failed      |
-| code-agent           | Execute code tasks, cancel tasks      | Action marked as failed      |
+| code-agent           | Execute code tasks, cancel, phase 2   | Action marked as failed      |
 | user-service         | User API keys for LLM pricing         | Startup fails                |
 | app-settings-service | LLM pricing configuration             | Startup fails                |
 | Firestore            | Action persistence                    | All operations fail          |
@@ -500,4 +514,4 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

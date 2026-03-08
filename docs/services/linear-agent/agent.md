@@ -91,6 +91,7 @@ interface ValidatedIssue {
   url: string;
   labels: string[]; // Label names only (color stripped for simplicity)
   childCount: number;
+  parentId: string | null; // Parent issue UUID (null if top-level)
 }
 ```
 
@@ -206,7 +207,7 @@ interface IssueResponse {
 
 ```typescript
 interface UpdateStateInput {
-  state: 'backlog' | 'in_progress' | 'in_review' | 'qa';
+  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa';
 }
 ```
 
@@ -215,6 +216,7 @@ interface UpdateStateInput {
 | Input         | Linear State Name |
 | ------------- | ----------------- |
 | `backlog`     | Backlog           |
+| `todo`        | Todo              |
 | `in_progress` | In Progress       |
 | `in_review`   | In Review         |
 | `qa`          | QA                |
@@ -227,6 +229,248 @@ interface UpdateStateInput {
 
 // Response
 { "success": true, "data": {} }
+```
+
+### Add Comment to Issue
+
+**Endpoint:** `POST /internal/linear/issues/:issueId/comments`
+
+**When to use:** When a code agent needs to add a comment to a Linear issue (e.g., posting progress updates, analysis results, or PR links).
+
+**Auth:** `X-Internal-Auth` header + `X-User-Id` header
+
+**Input Schema:**
+
+```typescript
+interface AddCommentInput {
+  body: string; // Markdown comment body
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface AddCommentOutput {
+  id: string; // Created comment ID
+}
+```
+
+**Example:**
+
+```json
+// Request: POST /internal/linear/issues/issue-uuid-789/comments
+{ "body": "Analysis complete. Found 3 acceptance criteria. See updated description." }
+
+// Response
+{ "id": "comment-uuid-456" }
+```
+
+### Update Issue Metadata
+
+**Endpoint:** `PATCH /internal/linear/issues/:issueId/metadata`
+
+**When to use:** When a code agent needs to update an issue's assignee or labels. Labels are resolved by name against the team's label set — you do not need label IDs.
+
+**Auth:** `X-Internal-Auth` header + `X-User-Id` header
+
+**Input Schema:**
+
+```typescript
+interface UpdateIssueMetadataInput {
+  assigneeId?: string | null; // Linear user ID, or null to unassign
+  addLabels?: string[]; // Label names to add
+  removeLabels?: string[]; // Label names to remove
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface UpdateMetadataOutput {
+  id: string;
+  labels: { id: string; name: string; color: string }[];
+  assignee: { id: string; name: string } | null;
+}
+```
+
+**Example:**
+
+```json
+// Request: PATCH /internal/linear/issues/issue-uuid-789/metadata
+{ "addLabels": ["code-task"], "removeLabels": ["needs-triage"] }
+
+// Response
+{
+  "id": "issue-uuid-789",
+  "labels": [{ "id": "label-1", "name": "code-task", "color": "#4CAF50" }],
+  "assignee": { "id": "user-abc", "name": "Jane Doe" }
+}
+```
+
+### Get Issue Display Data (Batch)
+
+**Endpoint:** `POST /internal/linear/issues/display-batch`
+
+**When to use:** When you need display data for multiple Linear issues in a single call (e.g., rendering a list of related issues). Missing identifiers are silently omitted from the response.
+
+**Auth:** `X-Internal-Auth` header + `X-User-Id` header
+
+**Input Schema:**
+
+```typescript
+interface DisplayBatchInput {
+  identifiers: string[]; // Issue identifiers (e.g., ["INT-123", "INT-456"])
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface DisplayBatchOutput {
+  issues: IssueDisplayResponse[];
+}
+
+interface IssueDisplayResponse {
+  identifier: string;
+  title: string;
+  state: { name: string; type: string };
+  priority: number;
+  assignee: { id: string; name: string } | null;
+  labels: { id: string; name: string }[];
+  url: string;
+  commentCount: number;
+  lastCommentAt: string | null;
+}
+```
+
+**Example:**
+
+```json
+// Request
+{ "identifiers": ["INT-123", "INT-456", "INT-999"] }
+
+// Response (INT-999 not found, omitted)
+{
+  "issues": [
+    {
+      "identifier": "INT-123",
+      "title": "Fix login flow",
+      "state": { "name": "In Progress", "type": "started" },
+      "priority": 2,
+      "assignee": { "id": "user-abc", "name": "Jane Doe" },
+      "labels": [{ "id": "label-1", "name": "bug" }],
+      "url": "https://linear.app/team/issue/INT-123",
+      "commentCount": 5,
+      "lastCommentAt": "2026-03-05T14:30:00Z"
+    }
+  ]
+}
+```
+
+### Get Issue (Internal)
+
+**Endpoint:** `GET /internal/linear/issues/:identifier`
+
+**When to use:** When a code agent needs the full issue detail including description, comment count, and last comment timestamp. Reads from local Firestore sync — does not call Linear API.
+
+**Auth:** `X-Internal-Auth` header + `X-User-Id` header
+
+**Output Schema:**
+
+```typescript
+interface InternalIssueOutput {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  state: { name: string; type: string };
+  priority: number;
+  assignee: { id: string; name: string } | null;
+  labels: { id: string; name: string }[];
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  commentCount: number;
+  lastCommentAt: string | null;
+}
+```
+
+**Example:**
+
+```json
+// GET /internal/linear/issues/INT-445
+// Response
+{
+  "id": "issue-uuid-abc",
+  "identifier": "INT-445",
+  "title": "Implement authentication flow",
+  "description": "## Requirements\n...",
+  "state": { "name": "In Progress", "type": "started" },
+  "priority": 2,
+  "assignee": { "id": "user-abc", "name": "Jane Doe" },
+  "labels": [{ "id": "label-1", "name": "feature" }],
+  "url": "https://linear.app/team/issue/INT-445",
+  "createdAt": "2026-02-10T10:00:00Z",
+  "updatedAt": "2026-03-05T14:30:00Z",
+  "commentCount": 3,
+  "lastCommentAt": "2026-03-05T14:30:00Z"
+}
+```
+
+### Get Issue Tree
+
+**Endpoint:** `GET /internal/issues/:issueId/tree`
+
+**When to use:** When a code agent needs to see an issue and all its recursive descendants (subtasks, sub-subtasks). Reads from local Firestore sync — does not call Linear API. Useful for understanding work breakdown before creating additional subtasks.
+
+**Auth:** `X-Internal-Auth` header + `X-User-Id` header
+
+**Output Schema:**
+
+```typescript
+interface IssueTreeOutput {
+  root: TreeNode;
+  descendants: TreeNode[];
+}
+
+interface TreeNode {
+  id: string;
+  identifier: string;
+  url: string;
+  parentId: string | null;
+  labels: string[]; // Label names only
+  assigneeId: string | null;
+  state: string; // State name
+}
+```
+
+**Example:**
+
+```json
+// GET /internal/issues/issue-uuid-parent/tree
+// Response
+{
+  "root": {
+    "id": "issue-uuid-parent",
+    "identifier": "INT-100",
+    "url": "https://linear.app/team/issue/INT-100",
+    "parentId": null,
+    "labels": ["feature"],
+    "assigneeId": "user-abc",
+    "state": "In Progress"
+  },
+  "descendants": [
+    {
+      "id": "issue-uuid-child-1",
+      "identifier": "INT-101",
+      "url": "https://linear.app/team/issue/INT-101",
+      "parentId": "issue-uuid-parent",
+      "labels": ["code-task"],
+      "assigneeId": "user-abc",
+      "state": "Done"
+    }
+  ]
+}
 ```
 
 ### Full Sync (Service-to-Service)
@@ -436,23 +680,26 @@ interface ConnectionOutput {
 
 ## Constraints
 
-| Rule                         | Description                                                              |
-| ---------------------------- | ------------------------------------------------------------------------ |
-| **Linear API Key Required**  | User must have Linear API key configured via `/linear/connection`        |
-| **Team Scope**               | Issues created in user's configured team                                 |
-| **Priority Scale**           | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low               |
-| **Idempotency**              | Same `actionId` returns cached result, no duplicate issues               |
-| **Auth Required**            | Public endpoints require Bearer token, internal requires X-Internal-Auth |
-| **Internal API Auth**        | Internal issues endpoints also require X-User-Id header                  |
-| **Webhook Secret**           | Webhook events require HMAC-SHA256 signature validation per connection   |
-| **Issue Identifier Format**  | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)         |
-| **Title Length**             | Generated titles are max 80 characters                                   |
-| **Title Error on Failure**   | `generateIssueTitle` returns err() after 2 failed attempts — no fallback |
-| **Dashboard from Firestore** | `GET /linear/issues` reads local cache; sync first if data looks stale   |
-| **Labels in POST /issues**   | `labels` field accepted but not forwarded to Linear API yet              |
-| **sync-all Auth**            | Accepts OIDC (Cloud Scheduler) or X-Internal-Auth                        |
-| **Auto-Trigger Guards**      | Only fires on first assignment, unstarted state, no "Code Task" label    |
-| **Auto-Trigger Fire-Forget** | Code task trigger does not block webhook response; errors logged only    |
+| Rule                         | Description                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| **Linear API Key Required**  | User must have Linear API key configured via `/linear/connection`                |
+| **Team Scope**               | Issues created in user's configured team                                         |
+| **Priority Scale**           | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low                       |
+| **Idempotency**              | Same `actionId` returns cached result, no duplicate issues                       |
+| **Auth Required**            | Public endpoints require Bearer token, internal requires X-Internal-Auth         |
+| **Internal API Auth**        | Internal issues endpoints also require X-User-Id header                          |
+| **Webhook Secret**           | Webhook events require HMAC-SHA256 signature validation per connection           |
+| **Issue Identifier Format**  | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)                 |
+| **Title Length**             | Generated titles are max 80 characters                                           |
+| **Title Error on Failure**   | `generateIssueTitle` returns err() after 2 failed attempts — no fallback         |
+| **Dashboard from Firestore** | `GET /linear/issues` reads local cache; sync first if data looks stale           |
+| **Labels in POST /issues**   | `labels` field accepted but not forwarded to Linear API yet                      |
+| **sync-all Auth**            | Accepts OIDC (Cloud Scheduler) or X-Internal-Auth                                |
+| **Auto-Trigger Guards**      | Only fires on first assignment, backlog or unstarted state, no "Code Task" label |
+| **Auto-Trigger Fire-Forget** | Code task trigger does not block webhook response; errors logged only            |
+| **Metadata Ownership**       | `PATCH /metadata` returns 404 (not 403) if issue belongs to another user         |
+| **Display Batch Omission**   | `POST /display-batch` silently omits identifiers not found in user's sync        |
+| **Tree from Local Sync**     | `GET /tree` uses Firestore data only — no Linear API calls                       |
 
 ---
 
@@ -475,15 +722,17 @@ interface ConnectionOutput {
 1. Code agent validates parent issue: GET /internal/linear/issues/INT-445/validate?userId=...
 2. Code agent generates title: POST /internal/linear/issues/generate-title
 3. Code agent creates subtask: POST /internal/issues {title, description}
-4. Code agent starts work: PATCH /internal/issues/:id/state {state: "in_progress"}
-5. Code agent opens PR: PATCH /internal/issues/:id/state {state: "in_review"}
+4. Code agent adds labels: PATCH /internal/linear/issues/:id/metadata {addLabels: ["code-task"]}
+5. Code agent starts work: PATCH /internal/issues/:id/state {state: "in_progress"}
+6. Code agent posts update: POST /internal/linear/issues/:id/comments {body: "PR opened..."}
+7. Code agent opens PR: PATCH /internal/issues/:id/state {state: "in_review"}
 ```
 
 ### Pattern 3: Dashboard Display
 
 ```
 1. User navigates to Linear dashboard
-2. Frontend calls GET /linear/issues (reads Firestore cache — fast)
+2. Frontend calls GET /linear/issues (reads Firestore cache -- fast)
 3. Display issues in 3-column layout with parent-child nesting and label colors:
    - Planning: todo + backlog
    - Work: in_progress + in_review + to_test
@@ -495,12 +744,14 @@ interface ConnectionOutput {
 ### Pattern 4: Auto-Trigger Code Task on Assignment
 
 ```
-1. User assigns themselves to an unstarted issue in Linear
+1. User assigns themselves to a backlog or unstarted issue in Linear
 2. Linear sends webhook update event to POST /linear/webhook
-3. shouldTriggerCodeTask validates: first assignment, unstarted state, no "Code Task" label
-4. triggerCodeTaskFromAssignment calls code-agent POST /internal/code/process (fire-and-forget)
-5. Code agent enriches issue with requirements, acceptance criteria, test plan
-6. Issue is marked ready for execution (or flagged as unclear)
+3. Webhook fans out to all connected users for the team
+4. shouldTriggerCodeTask validates: first assignment, backlog/unstarted state, no "code-task" label
+5. Checks for "code-task" label to select prompt:
+   - Has "code-task" label -> EXECUTION_PROMPT (implement requirements)
+   - No "code-task" label -> ASSIGNMENT_PROMPT (analyze/enrich/mark ready)
+6. triggerCodeTaskFromAssignment calls code-agent POST /internal/code/process (fire-and-forget)
 ```
 
 ### Pattern 5: Webhook-Based Real-Time Sync
@@ -510,8 +761,9 @@ interface ConnectionOutput {
 2. User saves webhook secret via POST /linear/webhook-config
 3. Linear sends issue events to POST /linear/webhook
 4. linear-agent validates HMAC signature and routes by team ID
-5. syncSingleIssue creates/updates/deletes local SyncedLinearIssue
-6. Dashboard shows updated data on next load
+5. Fans out to all connected users for the team via findUserIdsByTeamId
+6. syncSingleIssue creates/updates/deletes local SyncedLinearIssue per user (composite key: userId_issueId)
+7. Dashboard shows updated data on next load
 ```
 
 ### Pattern 6: Full Sync Recovery
@@ -519,7 +771,7 @@ interface ConnectionOutput {
 ```
 1. User triggers POST /linear/sync (or Cloud Scheduler calls POST /internal/linear/sync-all)
 2. linear-agent fetches all issues from Linear API
-3. Compares with local Firestore records
+3. Compares with local Firestore records (scoped by userId via composite keys)
 4. Upserts new/changed issues, deletes stale ones
 5. Returns SyncStats with created/updated/deleted/total/durationMs
 ```
@@ -533,6 +785,17 @@ interface ConnectionOutput {
    a. Retry via POST /linear/failed-issues/:id/retry (uses real team ID)
    b. Dismiss via DELETE /linear/failed-issues/:id
    c. Create issue manually
+```
+
+### Pattern 8: Code Agent Issue Tree Inspection
+
+```
+1. Code agent receives a parent issue to work on
+2. Fetches issue tree: GET /internal/issues/:issueId/tree
+3. Inspects root and descendants to understand existing subtask breakdown
+4. Creates only the subtasks that don't already exist
+5. Posts batch display: POST /internal/linear/issues/display-batch {identifiers: [...]}
+6. Uses display data to format progress summaries
 ```
 
 ---
@@ -587,16 +850,21 @@ Linear state names map to dashboard columns:
 
 ## Internal Endpoints Summary
 
-| Method | Path                                           | Purpose                            |
-| ------ | ---------------------------------------------- | ---------------------------------- |
-| POST   | `/internal/linear/process-action`              | Create issue from natural language |
-| GET    | `/internal/linear/issues/:identifier/validate` | Validate issue exists + team       |
-| POST   | `/internal/linear/issues/generate-title`       | Generate LLM title from desc       |
-| POST   | `/internal/linear/sync`                        | Full sync for a specific user      |
-| POST   | `/internal/linear/sync-all`                    | Full sync for all users            |
-| POST   | `/internal/issues`                             | Create issue programmatically      |
-| PATCH  | `/internal/issues/:issueId/state`              | Update issue workflow state        |
+| Method | Path                                           | Purpose                              |
+| ------ | ---------------------------------------------- | ------------------------------------ |
+| POST   | `/internal/linear/process-action`              | Create issue from natural language   |
+| GET    | `/internal/linear/issues/:identifier/validate` | Validate issue exists + team         |
+| POST   | `/internal/linear/issues/generate-title`       | Generate LLM title from desc         |
+| POST   | `/internal/linear/sync`                        | Full sync for a specific user        |
+| POST   | `/internal/linear/sync-all`                    | Full sync for all users              |
+| POST   | `/internal/issues`                             | Create issue programmatically        |
+| PATCH  | `/internal/issues/:issueId/state`              | Update issue workflow state          |
+| POST   | `/internal/linear/issues/:issueId/comments`    | Add comment to issue                 |
+| PATCH  | `/internal/linear/issues/:issueId/metadata`    | Update assignee and labels           |
+| POST   | `/internal/linear/issues/display-batch`        | Get display data for multiple issues |
+| GET    | `/internal/linear/issues/:identifier`          | Get issue with comment data          |
+| GET    | `/internal/issues/:issueId/tree`               | Get issue with recursive descendants |
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

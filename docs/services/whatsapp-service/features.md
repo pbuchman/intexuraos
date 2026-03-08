@@ -14,10 +14,10 @@ Built for founders, operators, and knowledge workers juggling multiple projects 
 
 You are in transit when your phone buzzes:
 
-1. A notification arrives: "Monthly report draft is ready for review." You glance at it and keep walking.
+1. A notification arrives: "Monthly report draft is ready for review." You tap the link button to open it directly in your browser.
 2. Seconds later, an approval request: "Create automation: 'Weekly team sync reminder' every Monday 9am?" You tap Approve.
-3. You remember something — record a quick voice note about a topic you want researched. The transcript arrives as a reply to your voice note, and the system routes it to the right agent for processing.
-4. A calendar confirmation: "Team sync moved to Tuesday 10am. Acknowledge?" You reply "yes" without breaking stride.
+3. You remember something — record a quick voice note about a topic you want researched. The srt-service transcribes it asynchronously, and the transcript arrives as a reply to your voice note. The system routes it to the right agent for processing.
+4. A code task update: "PR ready for review." You tap the "View PR" CTA button and the pull request opens in your browser.
 
 Four interactions with four different agents. None required opening an app, logging in, or switching contexts. WhatsApp handled all of it.
 
@@ -31,17 +31,23 @@ Every message you send — text, voice, or image — flows into IntexuraOS and r
 
 The flow works in both directions. When an agent has something to report — a research result, a status update, a scheduling confirmation — it sends a notification to your phone. Every notification arrives in the same conversation thread, formatted for quick scanning on a small screen.
 
-### Voice That Understands Your Domain
+### Voice That Understands Context
 
-Record a voice note and Speechmatics transcribes it with precision — including the domain-specific vocabulary that generic transcription services mangle. The system maintains a custom vocabulary of 90 domain-specific terms: project names, technical jargon, product codes. When you say them, the transcription gets them right. The vocabulary is maintained in the service codebase and updated as the project's terminology evolves.
+Record a voice note and the srt-service transcribes it asynchronously with event-driven processing. Audio files are stored in GCS and a Pub/Sub event triggers transcription. When complete, the transcript and an AI-generated summary arrive as a reply threaded beneath your original voice note. From there, the system routes it to the right agent — if it contains a research question, the research-agent picks it up; if it describes a task, the code-agent gets it.
 
-**Example:** You record a voice note about a project update while walking. Within seconds, the transcript arrives as a reply threaded beneath your original voice note, along with an AI-generated summary. From there, the system routes it to the right agent — if it contains a research question, the research-agent picks it up; if it describes a task, the code-agent gets it. You just talked. The system figured out the rest.
+**Example:** You record a voice note about a project update while walking. Within seconds, the transcript arrives as a reply threaded beneath your original voice note, along with an AI-generated summary of the key points. You just talked. The system figured out the rest.
 
 ### Approvals at the Speed of a Tap
 
 When an agent needs your sign-off, an interactive message arrives with clearly labeled buttons. Tap Approve. Tap Reject. Done. The decision happens immediately — no login, no dashboard, no context switch. If buttons are not convenient, reply with plain text. "Yes" works just as well.
 
 **Example:** The bookmarks-agent wants to add a URL to your reading list. You receive "Add 'AI Trends Report' to Reading List?" with Approve and Cancel buttons. One tap, and you are back to your conversation. The entire interaction takes two seconds.
+
+### Deep Links with CTA Buttons
+
+When an agent completes work that produces a URL — a pull request, a research report, a task dashboard — the notification arrives with a clickable CTA (Call-to-Action) button that opens the link directly in your browser. No copying URLs from chat, no switching between apps.
+
+**Example:** The code-agent finishes a PR. You receive "PR #42 ready for review" with a "View PR" button. One tap opens the GitHub pull request in your browser.
 
 ### Instant Message Capture
 
@@ -55,8 +61,9 @@ Verify your WhatsApp number with a one-time six-digit code sent to your phone. E
 
 ## Key Benefits
 
-- **Domain-aware voice** — Custom vocabulary with 90 terms tuned to your organization's language
+- **Event-driven transcription** — Audio messages are transcribed asynchronously via srt-service with AI-generated summaries
 - **Tap-to-decide** — Interactive buttons or plain text replies for instant approvals on the move
+- **Deep link CTA buttons** — Open pull requests, dashboards, and reports directly from WhatsApp notifications
 - **Unified interface** — Every agent in the system reports to one conversation thread on your phone
 - **Capture and route** — Text, voice, and images flow into the system and trigger the right agent immediately
 - **Nothing to install** — Works inside WhatsApp, the app already on your phone

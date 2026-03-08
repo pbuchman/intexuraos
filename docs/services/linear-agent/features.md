@@ -34,7 +34,7 @@ The AI supports multilingual input — English and Polish are natively understoo
 
 ### Read Urgency Between the Lines
 
-Priority is not a dropdown you remember to set — it is a signal the agent picks up from your words. Say "urgent" or "ASAP" and the issue arrives marked Urgent. Say "high priority" or "important" and it lands as High. Mention "low priority" or "when you have time" and it files as Low. Everything else defaults to Normal. The same cues work in Polish — "pilne" triggers Urgent, "ważne" triggers High.
+Priority is not a dropdown you remember to set — it is a signal the agent picks up from your words. Say "urgent" or "ASAP" and the issue arrives marked Urgent. Say "high priority" or "important" and it lands as High. Mention "low priority" or "when you have time" and it files as Low. Everything else defaults to Normal. The same cues work in Polish — "pilne" triggers Urgent, "wazne" triggers High.
 
 This matters most when you are capturing issues in the heat of a moment. The words you naturally reach for when something is on fire — "blocker," "ASAP," "critical" — are exactly the cues the agent listens for. Your urgency translates directly into your board's priority column.
 
@@ -42,7 +42,7 @@ This matters most when you are capturing issues in the heat of a moment. The wor
 
 ### Load Your Board Before You Blink
 
-The Linear Agent keeps a local copy of your entire board, updated in real time. When something changes in Linear — an issue moves to In Review, a new sub-task appears, a label gets added — the change is pushed to IntexuraOS automatically within seconds. When you open the IntexuraOS dashboard — the web app where you manage everything — it reads from that local copy. No call to Linear's servers. No loading spinner. Just your board, already there.
+The Linear Agent keeps a local copy of your entire board, updated in real time. When something changes in Linear — an issue moves to In Review, a new sub-task appears, a label gets added — the change is pushed to IntexuraOS automatically within seconds via webhook fan-out to all connected users on the team. When you open the IntexuraOS dashboard, it reads from that local copy. No call to Linear's servers. No loading spinner. Just your board, already there.
 
 The dashboard groups your issues into columns that mirror how work actually flows: Backlog, Todo, In Progress, In Review, To Test, and Done — with recently completed items visible for seven days before they archive. Within each column, issues sort by most recently updated, so the work getting attention right now floats to the top. Parent issues carry their children in a nested list, keeping related work grouped together.
 
@@ -58,11 +58,11 @@ This keeps context where you need it. You do not bounce between IntexuraOS and L
 
 ### Let Your Code Agent Update the Board
 
-The Code Agent — another IntexuraOS service that picks up Linear issues and autonomously writes the code to resolve them — updates your board as it works. It creates related issues when implementation breaks into pieces and moves workflow states forward as each piece progresses. Your board reflects what the Code Agent has done without any manual status updates from you.
+The Code Agent — another IntexuraOS service that picks up Linear issues and autonomously writes the code to resolve them — updates your board as it works. It creates related issues when implementation breaks into pieces, moves workflow states forward as each piece progresses, adds comments to track work, and updates labels and assignees. Your board reflects what the Code Agent has done without any manual status updates from you.
 
-This is where the full loop closes. You describe a problem by voice. The Linear Agent structures it into an issue. The Code Agent picks it up and implements it. Your board tracks the progress in real time. You watch the whole thing happen without touching Linear.
+When you assign an issue for the first time, the Linear Agent detects this and automatically triggers a code task. If the issue has a "code-task" label, the agent sends it straight for execution. Otherwise, the agent asks the code agent to first analyze the issue, enrich its description with requirements, acceptance criteria, and a test plan, then mark it ready. In both cases, the dispatched prompt instructs the code agent to read the full Linear issue and all its comments (newest-first) before starting work, so clarifications or follow-up context you added in the comments are never missed.
 
-**Example:** You created an issue from a voice note about a broken CSV export. The code agent picks it up, creates related issues for the parsing fix and the test, and moves workflow states forward as it works. An hour later you glance at the dashboard and see the progress reflected on your board. You never touched Linear.
+**Example:** You created an issue from a voice note about a broken CSV export. The code agent picks it up, creates related issues for the parsing fix and the test, adds comments along the way, and moves workflow states forward as it works. An hour later you glance at the dashboard and see the progress reflected on your board. You never touched Linear.
 
 ### Generate Titles from Descriptions
 
@@ -92,9 +92,10 @@ Connect your Linear account through the settings page — you will need your API
 
 - **Capture without context-switching** — send a voice note or quick message and get a properly structured issue, without opening Linear or leaving your current task.
 - **Priority from your words** — the agent reads urgency cues from natural language, so issues arrive pre-triaged into four priority levels.
-- **Instant board access** — the dashboard reads from a local copy updated in real time, so you never wait for Linear's servers to respond
-- **Living board** — automatic sync, scheduled reconciliation, and manual refresh keep the local copy current across six workflow columns
-- **Code agent continuity** — issues move through your workflow as the code agent creates sub-tasks and updates states, visible on your board without manual status changes.
+- **Instant board access** — the dashboard reads from a local copy updated in real time, so you never wait for Linear's servers to respond.
+- **Living board** — automatic sync, scheduled reconciliation, webhook fan-out to all team users, and manual refresh keep the local copy current across six workflow columns.
+- **Code agent continuity** — issues move through your workflow as the code agent creates sub-tasks, adds comments, updates labels, and transitions states, visible on your board without manual status changes.
+- **Smart auto-trigger** — assign an issue and the code agent starts working automatically, choosing between enrichment and execution based on the issue's labels.
 - **No lost input** — duplicate detection prevents double-creation, and failed extractions queue for review instead of vanishing.
 
 ## Limitations

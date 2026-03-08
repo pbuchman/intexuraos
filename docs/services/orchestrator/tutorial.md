@@ -138,6 +138,8 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
+The `workerType` field controls which AI model handles the task. Valid types are `opus`, `auto`, `sonnet`, `minimax`, `glm`, and `qwen3.5-plus`.
+
 ```bash
 BODY='{
   "taskId": "test-task-001",
@@ -169,7 +171,45 @@ Expected response:
 }
 ```
 
-### Step 3: Monitor the task
+### Step 3: Submit a planning task with agent type
+
+To route a task through the planning agent flow, include `agentType` and the relevant labels:
+
+```bash
+BODY='{
+  "taskId": "plan-task-001",
+  "workerType": "opus",
+  "prompt": "Analyze INT-500 and design the implementation approach",
+  "agentType": "planning",
+  "linearIssueId": "INT-500",
+  "linearIssueTitle": "Add OAuth support",
+  "linearIssueLabels": ["code-task"],
+  "hasChildren": false,
+  "webhookUrl": "http://localhost:3001/webhook",
+  "webhookSecret": "test-secret-123"
+}'
+```
+
+For execution tasks that follow a planning phase, include the planning PR branch so the orchestrator merges it into the execution worktree:
+
+```bash
+BODY='{
+  "taskId": "exec-task-001",
+  "workerType": "opus",
+  "prompt": "Implement the approved plan for INT-500",
+  "agentType": "execution",
+  "planningPrBranch": "planning/INT-500-add-oauth-support",
+  "planningPrUrl": "https://github.com/pbuchman/intexuraos/pull/42",
+  "linearIssueId": "INT-500",
+  "linearIssueTitle": "Add OAuth support",
+  "linearIssueLabels": ["code-task"],
+  "hasChildren": false,
+  "webhookUrl": "http://localhost:3001/webhook",
+  "webhookSecret": "test-secret-123"
+}'
+```
+
+### Step 4: Monitor the task
 
 Check task status:
 
@@ -189,7 +229,26 @@ View orchestrator health:
 curl http://localhost:8199/health | jq
 ```
 
-### Step 4: Cancel a task
+### Step 5: Send a message to a running task
+
+Messages can be sent to running, completed, or failed tasks. For running tasks, the message is queued and delivered when the current attempt finishes. For completed or failed tasks, the task is resumed with a new worker session.
+
+```bash
+BODY='{"message": "Please also add unit tests for the edge cases"}'
+
+eval $(bash sign-request.sh "$BODY")
+
+curl -X POST http://localhost:8199/tasks/test-task-001/message \
+  -H "Content-Type: application/json" \
+  -H "X-Dispatch-Timestamp: ${TIMESTAMP}" \
+  -H "X-Dispatch-Nonce: ${NONCE}" \
+  -H "X-Dispatch-Signature: ${SIGNATURE}" \
+  -d "$BODY"
+```
+
+The message field supports up to 20,000 characters.
+
+### Step 6: Cancel a task
 
 ```bash
 curl -X DELETE http://localhost:8199/tasks/test-task-001
@@ -233,7 +292,7 @@ pnpm --filter orchestrator test:e2e
 pnpm --filter orchestrator build
 ```
 
-This produces `workers/orchestrator/dist/index.js` -- a bundled ESM file.
+This produces `workers/orchestrator/dist/index.js` — a bundled ESM file.
 
 ### Run in production
 
@@ -319,3 +378,6 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)   | Expected on macOS; metrics are non-fatal and show zeros when cgroup path is unavailable                                                           |
 | `INTEXURAOS_GEMINI_APP_API_KEY not set`           | Missing required env var             | Add to `.envrc.local` and run `direnv allow`; completion verification is always required                                                          |
 | Tasks fail with `TASK_COMPLETION_VERIFIER_FAILED` | Gemini API unreachable               | Check network connectivity and Gemini API key validity; tasks fail rather than complete unverified                                                |
+| `INTEXURAOS_MINIMAX_APP_API_KEY not set`          | Missing MiniMax API key              | Required if dispatching `minimax` worker type tasks; add to `.envrc.local`                                                                        |
+| `INTEXURAOS_DASHSCOPE_APP_API_KEY not set`        | Missing Alibaba Cloud API key        | Required if dispatching `qwen3.5-plus` worker type tasks; add to `.envrc.local`                                                                   |
+| Task adopted on restart but fails immediately     | Container state drift                | Container was running but in a bad state; check Docker logs for the container before it was adopted                                               |

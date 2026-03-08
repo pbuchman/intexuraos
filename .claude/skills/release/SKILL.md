@@ -30,7 +30,7 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 
 ## Core Mandates
 
-1. **Single Prioritization Touchpoint**: Phase 1 presents ALL changes grouped by triage category with default priorities. User adjusts priorities, adds optional comments, then confirms. This is the ONLY user interaction before Phase 6.
+1. **Feature-Only Prioritization**: Phase 1 presents only **features** in the interactive prioritizer. User stars highlights, skips unwanted features, reorders, and adds comments. Notable changes and minor fixes are **automatically included** in the changelog without user intervention. This is the ONLY user interaction before Phase 6.
 2. **Silent Batch Processing**: Phase 2 runs service-scribe agents in parallel without user interaction
 3. **CI Gate**: `pnpm run ci:tracked` MUST pass before Phase 6 commits anything
 4. **Tag Push**: Phase 6 creates AND pushes the version tag to remote
@@ -49,18 +49,19 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 | 2     | Service Docs    | Silent Batch | Spawn service-scribe agents in parallel                                                              |
 | 3     | High-Level Docs | Automatic    | Auto-update docs/overview.md via release-docs-updater agent                                          |
 | 4     | README          | Automatic    | Auto-generate "What's New" from High-priority items                                                  |
-| 5     | Website         | Automatic    | Auto-update RecentUpdatesSection from High-priority features                                         |
+| 5     | Website         | Automatic    | Auto-update WhatsNewSection in HomePage.tsx from High-priority features                              |
 | 6     | Finalize        | Automatic    | **Bump ALL versions**, CI check, RAG embeddings, commit, merge dev→main, tag on main, GitHub Release |
 
 ## Tool Verification (Fail Fast)
 
 Before ANY operation, verify all required tools:
 
-| Tool       | Verification Command | Purpose               |
-| ---------- | -------------------- | --------------------- |
-| Git        | `git --version`      | Version control       |
-| GitHub CLI | `gh auth status`     | PR/release operations |
-| Node.js    | `node --version`     | Package management    |
+| Tool       | Verification Command | Purpose                 |
+| ---------- | -------------------- | ----------------------- |
+| Git        | `git --version`      | Version control         |
+| GitHub CLI | `gh auth status`     | PR/release operations   |
+| Node.js    | `node --version`     | Package management      |
+| gsutil     | `gsutil version`     | Prioritizer page upload |
 
 ### Failure Handling
 
@@ -84,15 +85,19 @@ Aborting.
 3. Find last release tag, list merged PRs since last release
 4. Detect modified services (apps changed since last tag)
 5. Run semver analysis to determine version bump (see `reference/semver-analysis.md`)
-6. **Single Prioritization Touchpoint** — present all changes grouped by triage category (Features/Notable/Minor) with default priorities (High/Medium/Low). User adjusts priorities, adds optional feature comments, confirms with "go". For major releases, also ask for marketing slogan.
+6. **Feature Prioritization Touchpoint** — present only **features** in the interactive prioritizer page. User stars highlights (for README/website), skips unwanted features, reorders priority, adds optional comments. Notable changes and minor fixes are **not shown** in the prioritizer — they are automatically included in the changelog. For major releases, also ask for marketing slogan.
 
 ### Phase 2: Service Documentation (Silent)
 
 For each modified service detected in Phase 1:
 
-- Spawn Task tool with `subagent_type: service-scribe`
+- Build per-service release context from Phase 1 data (change groups, triage summaries, user priorities)
+- Spawn Task tool with `subagent_type: service-scribe`, passing the per-service context in the prompt
 - Run all agents in parallel
-- Wait for all to complete before proceeding
+- Wait for all to complete
+- **Post-scribe validation:** For each completed service, spawn `subagent_type: doc-validator` to check for hallucinations, missing coverage, and typographic issues
+- Collect all verdicts — log summary but do NOT block the release (fixes can be applied in a follow-up)
+- **Aggregate commit-docs reports:** Consolidate all per-service coverage tables into a single summary table showing service name, coverage %, and count of active contradictions. Flag any service below 80% coverage for manual review. Log the consolidated report but do not block the release.
 
 ### Phase 3: High-Level Docs (Automatic)
 
@@ -132,19 +137,16 @@ README "What's New" section accumulates features across a MAJOR version:
 
 ### Phase 5: Website Improvements (Automatic)
 
-1. Auto-update `RecentUpdatesSection.tsx` from High-priority features
-2. **If major version release**: also create `VersionHistorySection` content using marketing slogan from Phase 1 touchpoint
-3. Invoke `/frontend-design` skill for implementation
+1. Update version strings in `apps/web/src/pages/HomePage.tsx` (hero badge + footer)
+2. Add/update `WhatsNewSection` in `HomePage.tsx` with feature cards for High-priority items
+3. Uses existing design patterns (gradient cards, lucide-react icons) — no external skill needed
+4. Content filtering: only genuinely new capabilities — migrations and refactors are excluded
+5. **If major version release**: create collapsible version history section
 
-**Version History Pattern (Major Version Release Only):**
+**Accumulation Pattern:**
 
-When releasing a NEW major version (e.g., v3.0.0):
-
-- **Trigger**: Activated when new major version releases
-- **Structure**: Expandable button below "What's New" section
-- **Content**: Combined subreleases (e.g., v2.0.0, v2.1.0 → v2.x paragraph)
-- **Format**: List format with paragraphs, not tiles
-- **Required**: Marketing slogan collected during Phase 1 touchpoint
+- Minor/patch releases: append new cards to existing grid, update version header
+- Major releases: reset section, move old cards to version history
 
 ### Phase 6: Finalize
 
@@ -226,20 +228,23 @@ This reads all `docs/**/*.md`, chunks by headers, generates OpenAI embeddings, a
 
 ## Single Touchpoint Pattern
 
-All user interaction happens in Phase 1 step 7:
+All user interaction happens in Phase 1 step 7 via an **interactive HTML prioritization page**.
+
+**Only features are shown in the prioritizer.** Notable changes and minor fixes bypass the prioritizer entirely and are automatically included in the changelog under the appropriate type subcategories (Added/Changed/Fixed/Improved/Removed).
 
 ```
-1. Present all changes grouped by triage category (Features/Notable/Minor)
-2. Show default priorities: Features=High, Notable=Medium, Minor=Low
-3. User can:
-   - Change priorities: "3 high", "5 skip"
-   - Add comments: "1 comment: Enables voice..."
-   - Expand batched items: "expand 5-8"
-   - Preview changelog: "preview"
-   - Set marketing slogan (major releases): "slogan: ..."
-   - Confirm: "go"
-4. Store priority map + comments map + slogan for all downstream phases
-5. Phases 2-5 run automatically using this data — no further user interaction until Phase 6 completes
+1. Generate prioritizer page with ONLY features using templates/prioritizer.html
+2. Upload to GCS via /share workflow → user gets a URL
+3. User interacts with the page:
+   - ★ Star features for README/website highlights
+   - ✕ Skip features to omit from CHANGELOG
+   - Drag to reorder priority
+   - Add comments to override descriptions
+4. User clicks "Export & Copy", pastes structured text back
+5. Parse export → priority map + comments map + highlight flags
+6. Notable changes + minor fixes → auto-categorized into changelog
+7. For major releases: also collect marketing slogan
+8. Phases 2-5 run automatically using this data — no further user interaction
 ```
 
 ## References

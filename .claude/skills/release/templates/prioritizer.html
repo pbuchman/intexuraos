@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IntexuraOS {{NEW_VERSION}} — Release Prioritizer</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+      :root {
+        --bg: #0a0a0a;
+        --surface: #141414;
+        --surface-hover: #1a1a1a;
+        --border: #2a2a2a;
+        --border-bright: #3a3a3a;
+        --text: #e8e8e8;
+        --text-dim: #888;
+        --text-muted: #555;
+        --accent: #ff6b2b;
+        --accent-dim: #ff6b2b44;
+        --highlight: #ffd700;
+        --highlight-dim: #ffd70022;
+        --danger: #ff3b3b;
+        --skip-bg: #1a1a1a;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Space Grotesk', sans-serif;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+        pointer-events: none;
+        z-index: 9999;
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2rem 1.5rem 4rem;
+      }
+
+      .header {
+        border-bottom: 3px solid var(--accent);
+        padding-bottom: 1.5rem;
+        margin-bottom: 2rem;
+      }
+      .header-top {
+        display: flex;
+        align-items: baseline;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.5rem;
+      }
+      .header h1 {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 800;
+        font-size: 1.6rem;
+        letter-spacing: -0.02em;
+        color: var(--accent);
+        text-transform: uppercase;
+      }
+      .version-badge {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        font-weight: 700;
+        background: var(--accent);
+        color: var(--bg);
+        padding: 0.2rem 0.6rem;
+        letter-spacing: 0.05em;
+      }
+      .header-sub {
+        font-size: 0.85rem;
+        color: var(--text-dim);
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      .stats-bar {
+        display: flex;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        border: 2px solid var(--border);
+        overflow: hidden;
+      }
+      .stat {
+        flex: 1;
+        padding: 0.75rem 1rem;
+        text-align: center;
+        border-right: 2px solid var(--border);
+        background: var(--surface);
+      }
+      .stat:last-child {
+        border-right: none;
+      }
+      .stat-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 800;
+        font-size: 1.4rem;
+        line-height: 1;
+        margin-bottom: 0.25rem;
+      }
+      .stat-label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--text-dim);
+        font-weight: 600;
+      }
+      .stat--total .stat-value {
+        color: var(--text);
+      }
+      .stat--highlight .stat-value {
+        color: var(--highlight);
+      }
+      .stat--high .stat-value {
+        color: var(--accent);
+      }
+      .stat--skipped .stat-value {
+        color: var(--text-muted);
+      }
+
+      .legend {
+        display: flex;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        font-size: 0.75rem;
+        color: var(--text-dim);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      .legend-icon {
+        width: 16px;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+      }
+
+      .section-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin: 1.5rem 0 0.5rem;
+        padding-bottom: 0.4rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .section-title:first-of-type {
+        margin-top: 0;
+      }
+
+      .item-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .item {
+        display: grid;
+        grid-template-columns: 36px 32px 1fr auto;
+        align-items: center;
+        background: var(--surface);
+        border: 2px solid var(--border);
+        cursor: grab;
+        transition: all 0.15s ease;
+        user-select: none;
+      }
+      .item:hover {
+        border-color: var(--border-bright);
+        background: var(--surface-hover);
+      }
+      .item.dragging {
+        opacity: 0.4;
+        border-color: var(--accent);
+      }
+      .item.drag-over {
+        border-top: 3px solid var(--accent);
+      }
+      .item.highlighted {
+        border-left: 3px solid var(--highlight);
+        background: var(--highlight-dim);
+      }
+      .item.skipped {
+        opacity: 0.35;
+        border-left: 3px solid var(--text-muted);
+        background: var(--skip-bg);
+        cursor: default;
+      }
+      .item.skipped .item-title {
+        text-decoration: line-through;
+      }
+
+      .item-rank {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 800;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        text-align: center;
+        padding: 0.8rem 0.4rem;
+        background: rgba(255, 255, 255, 0.02);
+        align-self: stretch;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-right: 2px solid var(--border);
+      }
+      .item.highlighted .item-rank {
+        color: var(--highlight);
+      }
+
+      .item-star {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0.8rem 0.4rem;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        transition: all 0.15s;
+        align-self: stretch;
+      }
+      .item-star:hover {
+        color: var(--highlight);
+        transform: scale(1.2);
+      }
+      .item.highlighted .item-star {
+        color: var(--highlight);
+      }
+      .item.skipped .item-star {
+        pointer-events: none;
+      }
+
+      .item-content {
+        padding: 0.7rem 0.8rem;
+        min-width: 0;
+      }
+      .item-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        line-height: 1.3;
+        margin-bottom: 0.15rem;
+      }
+      .item-desc {
+        font-size: 0.72rem;
+        color: var(--text-dim);
+        line-height: 1.4;
+      }
+      .item-category {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.6rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-top: 0.2rem;
+      }
+
+      .item-comment {
+        margin-top: 0.35rem;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+      .item-comment-text {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.68rem;
+        color: var(--accent);
+        font-style: italic;
+        cursor: pointer;
+        border-bottom: 1px dashed var(--accent-dim);
+        padding-bottom: 1px;
+      }
+      .item-comment-text:hover {
+        color: var(--highlight);
+      }
+      .add-comment-btn {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.62rem;
+        color: var(--text-muted);
+        cursor: pointer;
+        border: none;
+        background: none;
+        padding: 0.2rem 0;
+        transition: color 0.15s;
+        margin-top: 0.25rem;
+      }
+      .add-comment-btn:hover {
+        color: var(--accent);
+      }
+
+      .item-actions {
+        display: flex;
+        align-items: center;
+        padding-right: 0.3rem;
+        align-self: stretch;
+      }
+      .item-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 0.8rem;
+        padding: 0.5rem;
+        color: var(--text-muted);
+        transition: all 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .btn-skip:hover {
+        color: var(--danger);
+      }
+      .btn-restore:hover {
+        color: var(--accent);
+      }
+
+      .skipped-section {
+        margin-top: 2rem;
+        border-top: 2px solid var(--border);
+        padding-top: 1rem;
+      }
+      .skipped-header {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 0.75rem;
+      }
+
+      .export-section {
+        margin-top: 2.5rem;
+        border-top: 3px solid var(--accent);
+        padding-top: 1.5rem;
+      }
+      .export-buttons {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .btn-export {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+        font-size: 0.8rem;
+        padding: 0.75rem 1.5rem;
+        border: 3px solid var(--accent);
+        background: var(--bg);
+        color: var(--accent);
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        transition: all 0.15s;
+      }
+      .btn-export:hover {
+        background: var(--accent);
+        color: var(--bg);
+      }
+      .btn-export--secondary {
+        border-color: var(--border-bright);
+        color: var(--text-dim);
+      }
+      .btn-export--secondary:hover {
+        background: var(--border-bright);
+        color: var(--text);
+      }
+
+      .export-preview {
+        margin-top: 1rem;
+        background: var(--surface);
+        border: 2px solid var(--border);
+        padding: 1rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.72rem;
+        line-height: 1.6;
+        color: var(--text-dim);
+        white-space: pre-wrap;
+        display: none;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .export-preview.visible {
+        display: block;
+      }
+
+      .toast {
+        position: fixed;
+        bottom: 2rem;
+        left: 50%;
+        transform: translateX(-50%) translateY(100px);
+        background: var(--accent);
+        color: var(--bg);
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+        font-size: 0.8rem;
+        padding: 0.6rem 1.5rem;
+        z-index: 10000;
+        opacity: 0;
+        transition: all 0.3s ease;
+        letter-spacing: 0.05em;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 1000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-overlay.visible {
+        display: flex;
+      }
+      .modal {
+        background: var(--surface);
+        border: 3px solid var(--accent);
+        padding: 1.5rem;
+        width: 90%;
+        max-width: 500px;
+      }
+      .modal h3 {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.75rem;
+      }
+      .modal-item-name {
+        font-size: 0.8rem;
+        color: var(--text-dim);
+        margin-bottom: 1rem;
+      }
+      .modal input {
+        width: 100%;
+        background: var(--bg);
+        border: 2px solid var(--border);
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        padding: 0.6rem 0.8rem;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      .modal input:focus {
+        border-color: var(--accent);
+      }
+      .modal-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        justify-content: flex-end;
+      }
+      .modal-btn {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+        font-size: 0.72rem;
+        padding: 0.5rem 1rem;
+        border: 2px solid var(--border);
+        background: var(--bg);
+        color: var(--text-dim);
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        transition: all 0.15s;
+      }
+      .modal-btn:hover {
+        border-color: var(--text-dim);
+        color: var(--text);
+      }
+      .modal-btn--primary {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .modal-btn--primary:hover {
+        background: var(--accent);
+        color: var(--bg);
+      }
+
+      @media (max-width: 600px) {
+        .container {
+          padding: 1rem 0.75rem 3rem;
+        }
+        .header h1 {
+          font-size: 1.1rem;
+        }
+        .stats-bar {
+          flex-wrap: wrap;
+        }
+        .stat {
+          min-width: 50%;
+          border-bottom: 2px solid var(--border);
+        }
+        .stat:nth-child(2) {
+          border-right: none;
+        }
+        .item {
+          grid-template-columns: 30px 28px 1fr auto;
+        }
+        .item-title {
+          font-size: 0.78rem;
+        }
+        .legend {
+          gap: 0.75rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="header-top">
+          <h1>Release Prioritizer</h1>
+          <span class="version-badge">{{NEW_VERSION}}</span>
+        </div>
+        <div class="header-sub">
+          IntexuraOS — {{PR_COUNT}} PRs · {{COMMIT_COUNT}} commits · {{BUMP_TYPE}} bump
+        </div>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat stat--total">
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Active</div>
+        </div>
+        <div class="stat stat--highlight">
+          <div class="stat-value" id="stat-highlight">0</div>
+          <div class="stat-label">Highlight</div>
+        </div>
+        <div class="stat stat--high">
+          <div class="stat-value" id="stat-high">0</div>
+          <div class="stat-label">High</div>
+        </div>
+        <div class="stat stat--skipped">
+          <div class="stat-value" id="stat-skipped">0</div>
+          <div class="stat-label">Skipped</div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-icon" style="color: var(--highlight)">★</div>
+          Highlight = README + website
+        </div>
+        <div class="legend-item">
+          <div class="legend-icon" style="color: var(--accent)">■</div>
+          High = CHANGELOG priority
+        </div>
+        <div class="legend-item">
+          <div class="legend-icon" style="color: var(--text-muted)">✕</div>
+          Skip = omit entirely
+        </div>
+        <div class="legend-item">
+          <div class="legend-icon">⠿</div>
+          Drag to reorder
+        </div>
+      </div>
+
+      <div id="active-list"></div>
+
+      <div class="skipped-section" id="skipped-section" style="display: none">
+        <div class="skipped-header">Skipped <span id="skipped-count"></span></div>
+        <div class="item-list" id="skipped-list"></div>
+      </div>
+
+      <div class="export-section">
+        <div class="export-buttons">
+          <button class="btn-export" onclick="exportAndCopy()">Export & Copy</button>
+          <button class="btn-export btn-export--secondary" onclick="togglePreview()">
+            Preview
+          </button>
+        </div>
+        <div class="export-preview" id="export-preview"></div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal">
+        <h3>Add Comment</h3>
+        <div class="modal-item-name" id="modal-item-name"></div>
+        <input
+          type="text"
+          id="modal-input"
+          placeholder="Override description for changelog..."
+          maxlength="200"
+        />
+        <div class="modal-actions">
+          <button class="modal-btn" onclick="closeModal()">Cancel</button>
+          <button
+            class="modal-btn"
+            onclick="clearComment()"
+            id="modal-clear-btn"
+            style="display: none"
+          >
+            Clear
+          </button>
+          <button class="modal-btn modal-btn--primary" onclick="saveComment()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+      // {{ITEMS_JSON}} is replaced at generation time with an array of:
+      // [{ id, title, desc, category: "feature"|"notable"|"minor" }, ...]
+      const INITIAL_ITEMS = {{ITEMS_JSON}};
+
+      let activeItems = INITIAL_ITEMS.map(it => ({ ...it, highlighted: false, comment: "" }));
+      let skippedItems = [];
+      let dragSrcIndex = null;
+      let commentTargetId = null;
+
+      function render() {
+        const container = document.getElementById('active-list');
+        const categories = [
+          { key: 'feature', label: 'Features (default: High)' },
+          { key: 'notable', label: 'Notable Changes (default: Medium)' },
+          { key: 'minor', label: 'Minor Fixes (default: Low)' }
+        ];
+
+        let html = '';
+        let globalIndex = 0;
+        const indexMap = [];
+
+        for (const cat of categories) {
+          const items = [];
+          const indices = [];
+          for (let i = 0; i < activeItems.length; i++) {
+            if (activeItems[i].category === cat.key) {
+              items.push(activeItems[i]);
+              indices.push(i);
+            }
+          }
+          if (items.length === 0) continue;
+
+          html += `<div class="section-title">${cat.label} (${items.length})</div>`;
+          html += '<div class="item-list">';
+          for (let j = 0; j < items.length; j++) {
+            const item = items[j];
+            const realIndex = indices[j];
+            globalIndex++;
+            html += `
+              <div class="item ${item.highlighted ? 'highlighted' : ''}"
+                   draggable="true" data-index="${realIndex}"
+                   ondragstart="onDragStart(event, ${realIndex})"
+                   ondragover="onDragOver(event)"
+                   ondragenter="onDragEnter(event, ${realIndex})"
+                   ondragleave="onDragLeave(event)"
+                   ondrop="onDrop(event, ${realIndex})"
+                   ondragend="onDragEnd(event)">
+                <div class="item-rank">${globalIndex}</div>
+                <div class="item-star" onclick="toggleHighlight(${item.id})" title="Toggle highlight">${item.highlighted ? '★' : '☆'}</div>
+                <div class="item-content">
+                  <div class="item-title">${esc(item.title)}</div>
+                  <div class="item-desc">${esc(item.desc)}</div>
+                  ${item.comment ? `<div class="item-comment"><span class="item-comment-text" onclick="openComment(${item.id})" title="Edit comment">→ ${esc(item.comment)}</span></div>` : `<button class="add-comment-btn" onclick="openComment(${item.id})">+ comment</button>`}
+                </div>
+                <div class="item-actions">
+                  <button class="item-btn btn-skip" onclick="skipItem(${item.id})" title="Skip">✕</button>
+                </div>
+              </div>`;
+          }
+          html += '</div>';
+        }
+        container.innerHTML = html;
+
+        const skippedList = document.getElementById('skipped-list');
+        const skippedSection = document.getElementById('skipped-section');
+        if (skippedItems.length > 0) {
+          skippedSection.style.display = 'block';
+          document.getElementById('skipped-count').textContent = `(${skippedItems.length})`;
+          skippedList.innerHTML = skippedItems.map(item => `
+            <div class="item skipped">
+              <div class="item-rank">—</div>
+              <div class="item-star">☆</div>
+              <div class="item-content">
+                <div class="item-title">${esc(item.title)}</div>
+                <div class="item-desc">${esc(item.desc)}</div>
+              </div>
+              <div class="item-actions">
+                <button class="item-btn btn-restore" onclick="restoreItem(${item.id})" title="Restore">↩</button>
+              </div>
+            </div>`).join('');
+        } else {
+          skippedSection.style.display = 'none';
+        }
+        updateStats();
+      }
+
+      function updateStats() {
+        const highlighted = activeItems.filter(i => i.highlighted).length;
+        document.getElementById('stat-total').textContent = activeItems.length;
+        document.getElementById('stat-highlight').textContent = highlighted;
+        document.getElementById('stat-high').textContent = activeItems.length - highlighted;
+        document.getElementById('stat-skipped').textContent = skippedItems.length;
+      }
+
+      function toggleHighlight(id) {
+        const item = activeItems.find(i => i.id === id);
+        if (item) { item.highlighted = !item.highlighted; render(); }
+      }
+
+      function skipItem(id) {
+        const idx = activeItems.findIndex(i => i.id === id);
+        if (idx === -1) return;
+        const [item] = activeItems.splice(idx, 1);
+        item.highlighted = false;
+        skippedItems.push(item);
+        render();
+      }
+
+      function restoreItem(id) {
+        const idx = skippedItems.findIndex(i => i.id === id);
+        if (idx === -1) return;
+        const [item] = skippedItems.splice(idx, 1);
+        activeItems.push(item);
+        render();
+      }
+
+      function onDragStart(e, index) {
+        dragSrcIndex = index;
+        e.currentTarget.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', index);
+      }
+      function onDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+      function onDragEnter(e, index) {
+        e.preventDefault();
+        if (dragSrcIndex === null || dragSrcIndex === index) return;
+        document.querySelectorAll('.item').forEach(el => el.classList.remove('drag-over'));
+        e.currentTarget.classList.add('drag-over');
+      }
+      function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+      function onDrop(e, targetIndex) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+        if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
+        const [moved] = activeItems.splice(dragSrcIndex, 1);
+        activeItems.splice(targetIndex, 0, moved);
+        dragSrcIndex = null;
+        render();
+      }
+      function onDragEnd(e) {
+        e.currentTarget.classList.remove('dragging');
+        document.querySelectorAll('.item').forEach(el => el.classList.remove('drag-over'));
+        dragSrcIndex = null;
+      }
+
+      function openComment(id) {
+        commentTargetId = id;
+        const item = activeItems.find(i => i.id === id);
+        if (!item) return;
+        document.getElementById('modal-item-name').textContent = item.title;
+        document.getElementById('modal-input').value = item.comment || '';
+        document.getElementById('modal-clear-btn').style.display = item.comment ? 'inline-block' : 'none';
+        document.getElementById('modal-overlay').classList.add('visible');
+        setTimeout(() => document.getElementById('modal-input').focus(), 100);
+      }
+      function closeModal() { document.getElementById('modal-overlay').classList.remove('visible'); commentTargetId = null; }
+      function saveComment() {
+        if (commentTargetId === null) return;
+        const item = activeItems.find(i => i.id === commentTargetId);
+        if (item) { item.comment = document.getElementById('modal-input').value.trim(); }
+        closeModal(); render();
+      }
+      function clearComment() { document.getElementById('modal-input').value = ''; saveComment(); }
+      document.getElementById('modal-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveComment(); if (e.key === 'Escape') closeModal(); });
+      document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+      function buildExport() {
+        const highlights = activeItems.filter(i => i.highlighted);
+        const high = activeItems.filter(i => !i.highlighted);
+        let out = `RELEASE PRIORITIZATION — {{NEW_VERSION}}\n${'='.repeat(45)}\n\n`;
+        if (highlights.length > 0) {
+          out += `HIGHLIGHTS (${highlights.length}) — README + Website\n`;
+          highlights.forEach((item, i) => {
+            out += `  ${i + 1}. ${item.title}`;
+            out += item.comment ? ` | ${item.comment}` : ` — ${item.desc}`;
+            out += ` [${item.category}]\n`;
+          });
+          out += '\n';
+        }
+        if (high.length > 0) {
+          out += `HIGH (${high.length}) — CHANGELOG\n`;
+          high.forEach((item, i) => {
+            out += `  ${i + 1}. ${item.title}`;
+            out += item.comment ? ` | ${item.comment}` : ` — ${item.desc}`;
+            out += ` [${item.category}]\n`;
+          });
+          out += '\n';
+        }
+        if (skippedItems.length > 0) {
+          out += `SKIPPED (${skippedItems.length})\n`;
+          skippedItems.forEach((item, i) => { out += `  ${i + 1}. ${item.title} [${item.category}]\n`; });
+          out += '\n';
+        }
+        out += `${'─'.repeat(45)}\nTotal: ${activeItems.length} active, ${skippedItems.length} skipped\nHighlighted: ${highlights.length}\n`;
+        return out;
+      }
+
+      function exportAndCopy() {
+        navigator.clipboard.writeText(buildExport()).then(() => showToast('COPIED TO CLIPBOARD')).catch(() => togglePreview());
+      }
+      function togglePreview() {
+        const el = document.getElementById('export-preview');
+        el.textContent = buildExport();
+        el.classList.toggle('visible');
+      }
+      function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2000);
+      }
+      function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+      render();
+    </script>
+  </body>
+</html>

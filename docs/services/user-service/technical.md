@@ -1,8 +1,8 @@
-# User Service - Technical Reference
+# User Service — Technical Reference
 
 ## Overview
 
-User-service provides authentication, user settings management, LLM API key storage with encryption, and OAuth token management. It integrates with Auth0 for identity management and uses AES-256-GCM encryption for all sensitive data. Runs on Cloud Run with Fastify.
+User-service provides authentication, user settings management, LLM API key storage with encryption, and OAuth token management for Google and GitHub. It integrates with Auth0 for identity management and uses AES-256-GCM encryption for all sensitive data. Runs on Cloud Run with Fastify.
 
 ## Architecture
 
@@ -28,15 +28,20 @@ graph TB
         RA[Research Agent] -->|Internal Auth| US
         IA[Image Service] -->|Internal Auth| US
         CA[Calendar Agent] -->|Internal Auth| US
+        CD[Code Agent] -->|Internal Auth| US
         US -->|Decrypted Keys| RA
         US -->|Decrypted Keys| IA
-        US -->|OAuth Token| CA
+        US -->|Google OAuth Token| CA
+        US -->|GitHub OAuth Token| CD
     end
 
-    subgraph "OAuth Flow"
+    subgraph "OAuth Flows"
         Web -->|OAuth Consent| Google[Google OAuth]
         Google -->|Auth Code| US
         US -->|Refresh Token| Google
+
+        Web -->|OAuth Consent| GitHub[GitHub OAuth]
+        GitHub -->|Auth Code| US
     end
 ```
 
@@ -85,21 +90,21 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                       | Date       |
-| ---------- | ------------------------------------------------- | ---------- |
-| `b3f34d85` | Release v3.1.0                                    | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                    | 2026-02-19 |
-| `6063175b` | Dev-mode log formatting for PM2 readability       | 2026-02-16 |
-| `a52a6bbc` | Dash0 OpenTelemetry integration                   | 2026-02-16 |
-| `d5fbb354` | Fix start:local to use tsx instead of node        | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter             | 2026-02-14 |
-| `65b90801` | Simplify local dev to Pub/Sub emulator only       | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform fallback | 2026-02-08 |
-| `308ba74e` | Add v8 ignore for JWT claims type guards          | 2026-02-08 |
-| `f33b6251` | Fix namespaced Auth0 claims for user profile      | 2026-02-08 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement           | 2026-02-01 |
-| `9723dc24` | Standardize DELETE endpoints response contract    | 2026-02-01 |
-| `c3198407` | Fix all 132 response contract violations          | 2026-02-01 |
+| Commit     | Description                                                       | Date       |
+| ---------- | ----------------------------------------------------------------- | ---------- |
+| `1e742bbc` | Fix: remove schema enum to make isTranscriptionProvider coverable | 2026-03-06 |
+| `ab863ba5` | Refactor: add isTranscriptionProvider type guard                  | 2026-03-06 |
+| `0fff5af7` | Feat: add transcription preferences to user settings              | 2026-03-06 |
+| `99febe66` | Fix: wire GitHub OAuth integration and update cross-service mocks | 2026-03-02 |
+| `e07de959` | Feat: add GitHub OAuth integration (Stream A, tasks A1–A5)        | 2026-03-01 |
+| `1478b385` | INT-571: log cascade failure + document over-clearing assumption  | 2026-02-22 |
+| `cbd5d845` | INT-571: restrict default model selection to configured API keys  | 2026-02-22 |
+| `b3f34d85` | Release v3.1.0                                                    | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                                    | 2026-02-19 |
+| `6063175b` | Dev-mode log formatting for PM2 readability                       | 2026-02-16 |
+| `a52a6bbc` | Dash0 OpenTelemetry integration                                   | 2026-02-16 |
+| `d5fbb354` | Fix start:local to use tsx instead of node                        | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter                             | 2026-02-14 |
 
 ## API Endpoints
 
@@ -115,21 +120,22 @@ sequenceDiagram
 | GET    | `/auth/config`          | Get Auth0 configuration                 | None         |
 | POST   | `/auth/firebase-token`  | Exchange Auth0 token for Firebase token | Bearer token |
 | GET    | `/auth/me`              | Get current user info                   | Bearer token |
-| GET    | `/auth/login`           | Frontend login page                     | None         |
-| GET    | `/auth/logout`          | Frontend logout page                    | None         |
+| GET    | `/auth/login`           | Frontend login redirect                 | None         |
+| GET    | `/auth/logout`          | Frontend logout redirect                | None         |
 
 ### User Settings Endpoints
 
-| Method | Path                                           | Description                              | Auth         |
-| ------ | ---------------------------------------------- | ---------------------------------------- | ------------ |
-| GET    | `/users/:uid/settings`                         | Get user settings                        | Bearer token |
-| PATCH  | `/users/:uid/settings`                         | Update default LLM model                 | Bearer token |
-| GET    | `/users/:uid/settings/llm-keys`                | Get LLM API keys (masked) + defaultModel | Bearer token |
-| PATCH  | `/users/:uid/settings/llm-keys`                | Set/update LLM API key                   | Bearer token |
-| POST   | `/users/:uid/settings/llm-keys/:provider/test` | Test LLM API key                         | Bearer token |
-| DELETE | `/users/:uid/settings/llm-keys/:provider`      | Delete LLM API key                       | Bearer token |
+| Method | Path                                            | Description                              | Auth         |
+| ------ | ----------------------------------------------- | ---------------------------------------- | ------------ |
+| GET    | `/users/:uid/settings`                          | Get user settings                        | Bearer token |
+| PATCH  | `/users/:uid/settings`                          | Update default LLM model                 | Bearer token |
+| PATCH  | `/users/:uid/settings/transcription`            | Update transcription provider preference | Bearer token |
+| GET    | `/users/:uid/settings/llm-keys`                 | Get LLM API keys (masked) + defaultModel | Bearer token |
+| PATCH  | `/users/:uid/settings/llm-keys`                 | Set/update LLM API key                   | Bearer token |
+| POST   | `/users/:uid/settings/llm-keys/:provider/test`  | Test LLM API key                         | Bearer token |
+| DELETE | `/users/:uid/settings/llm-keys/:provider`       | Delete LLM API key                       | Bearer token |
 
-### OAuth Connection Endpoints
+### OAuth Connection Endpoints (Google)
 
 | Method | Path                                 | Description               | Auth         |
 | ------ | ------------------------------------ | ------------------------- | ------------ |
@@ -138,28 +144,40 @@ sequenceDiagram
 | GET    | `/oauth/connections/google/status`   | Get connection status     | Bearer token |
 | DELETE | `/oauth/connections/google`          | Disconnect Google account | Bearer token |
 
+### OAuth Connection Endpoints (GitHub)
+
+| Method | Path                                 | Description               | Auth         |
+| ------ | ------------------------------------ | ------------------------- | ------------ |
+| POST   | `/oauth/connections/github/initiate` | Start GitHub OAuth flow   | Bearer token |
+| GET    | `/oauth/connections/github/callback` | Handle OAuth callback     | None         |
+| GET    | `/oauth/connections/github/status`   | Get connection status     | Bearer token |
+| DELETE | `/oauth/connections/github`          | Disconnect GitHub account | Bearer token |
+
 ### Internal Endpoints
 
-| Method | Path                                                | Description                  | Auth            |
-| ------ | --------------------------------------------------- | ---------------------------- | --------------- |
-| GET    | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM API keys   | Internal header |
-| POST   | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp   | Internal header |
-| GET    | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token | Internal header |
-| GET    | `/internal/users/:uid/settings`                     | Get user LLM preferences     | Internal header |
+| Method | Path                                                | Description                     | Auth            |
+| ------ | --------------------------------------------------- | ------------------------------- | --------------- |
+| GET    | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM API keys      | Internal header |
+| POST   | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp      | Internal header |
+| GET    | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token    | Internal header |
+| GET    | `/internal/users/:uid/oauth/github/token`           | Get GitHub OAuth token          | Internal header |
+| GET    | `/internal/users/:uid/settings`                     | Get user preferences            | Internal header |
+| GET    | `/internal/users/by-github-username/:username`      | Find user by GitHub username    | Internal header |
 
 ## Domain Models
 
 ### UserSettings
 
-| Field            | Type                 | Description                   |
-| ---------------- | -------------------- | ----------------------------- |
-| `userId`         | string               | User identifier               |
-| `llmApiKeys`     | LlmApiKeys           | AES-256 encrypted API keys    |
-| `llmTestResults` | LlmTestResults       | Last test result per provider |
-| `llmPreferences` | LlmPreferences       | User's default model settings |
-| `notifications`  | NotificationSettings | Notification filter rules     |
-| `createdAt`      | string               | Creation timestamp            |
-| `updatedAt`      | string               | Last update timestamp         |
+| Field                        | Type                      | Description                        |
+| ---------------------------- | ------------------------- | ---------------------------------- |
+| `userId`                     | string                    | User identifier                    |
+| `llmApiKeys`                 | LlmApiKeys                | AES-256 encrypted API keys         |
+| `llmTestResults`             | LlmTestResults            | Last test result per provider      |
+| `llmPreferences`             | LlmPreferences            | User's default model settings      |
+| `transcriptionPreferences`   | TranscriptionPreferences  | User's transcription provider      |
+| `notifications`              | NotificationSettings      | Notification filter rules          |
+| `createdAt`                  | string                    | Creation timestamp                 |
+| `updatedAt`                  | string                    | Last update timestamp              |
 
 ### LlmApiKeys
 
@@ -173,37 +191,43 @@ sequenceDiagram
 
 ### LlmTestResult
 
-| Field      | Type                   | Description           |
-| ---------- | ---------------------- | --------------------- |
-| `status`   | 'success' \            | 'failure'             | Test outcome |
-| `message`  | string                 | LLM response or error |
-| `testedAt` | string                 | ISO 8601 timestamp    |
+| Field      | Type                       | Description           |
+| ---------- | -------------------------- | --------------------- |
+| `status`   | `'success' \               | 'failure'`            | Test outcome |
+| `message`  | string                     | LLM response or error |
+| `testedAt` | string                     | ISO 8601 timestamp    |
 
 ### LlmPreferences
 
-| Field          | Type     | Description                          |
-| -------------- | -------- | ------------------------------------ |
-| `defaultModel` | LLMModel | User's preferred default fast model  |
+| Field          | Type     | Description                         |
+| -------------- | -------- | ----------------------------------- |
+| `defaultModel` | LLMModel | User's preferred default fast model |
+
+### TranscriptionPreferences
+
+| Field      | Type                  | Description                    |
+| ---------- | --------------------- | ------------------------------ |
+| `provider` | TranscriptionProvider | `'speechmatics'` (only option) |
 
 ### OAuthConnection
 
-| Field       | Type        | Description                |
-| ----------- | ----------- | -------------------------- |
-| `userId`    | string      | User identifier            |
-| `provider`  | 'google'    | OAuth provider             |
-| `email`     | string      | User's email from provider |
-| `tokens`    | OAuthTokens | Encrypted tokens           |
-| `createdAt` | string      | Connection timestamp       |
-| `updatedAt` | string      | Last refresh timestamp     |
+| Field       | Type                       | Description              |
+| ----------- | -------------------------- | ------------------------ |
+| `userId`    | string                     | User identifier          |
+| `provider`  | `'google' \                | 'github'`                | OAuth provider |
+| `email`     | string                     | User's email or username |
+| `tokens`    | OAuthTokens                | Encrypted tokens         |
+| `createdAt` | string                     | Connection timestamp     |
+| `updatedAt` | string                     | Last refresh timestamp   |
 
 ### OAuthTokens
 
-| Field          | Type   | Description             |
-| -------------- | ------ | ----------------------- |
-| `accessToken`  | string | Encrypted access token  |
-| `refreshToken` | string | Encrypted refresh token |
-| `expiresAt`    | string | Access token expiry     |
-| `scope`        | string | Granted scopes          |
+| Field          | Type   | Description                                   |
+| -------------- | ------ | --------------------------------------------- |
+| `accessToken`  | string | Encrypted access token                        |
+| `refreshToken` | string | Encrypted refresh token (empty for GitHub)    |
+| `expiresAt`    | string | Access token expiry (far-future for GitHub)   |
+| `scope`        | string | Granted scopes                                |
 
 ### AuthTokens
 
@@ -216,7 +240,7 @@ sequenceDiagram
 | `scope`        | string | Granted scopes (optional)      |
 | `idToken`      | string | OIDC ID token (optional)       |
 
-## LLM Error Formatting (v2.0.0)
+## LLM Error Formatting
 
 The `formatLlmError()` function parses provider-specific error responses and returns user-friendly messages. Error detection follows a specific precedence order.
 
@@ -229,7 +253,7 @@ The `formatLlmError()` function parses provider-specific error responses and ret
 4. Generic fallback (with rate limit precedence)
 ```
 
-### Rate Limit Precedence (INT-199 Fix)
+### Rate Limit Precedence
 
 The generic error parser checks for rate limits BEFORE API key errors. This prevents 429 responses from being misdiagnosed as invalid keys:
 
@@ -280,25 +304,27 @@ Validation prompt: `Say "API key validated" in exactly 3 words.`
 
 ## Pub/Sub Events
 
-None - user-service does not publish or subscribe to Pub/Sub events.
+None — user-service does not publish or subscribe to Pub/Sub events.
 
 ## Dependencies
 
 ### External Services
 
-| Service      | Purpose                             |
-| ------------ | ----------------------------------- |
-| Auth0        | Identity management, authentication |
-| Google OAuth | OAuth token management              |
-| LLM APIs     | Key validation (5 providers)        |
+| Service       | Purpose                             |
+| ------------- | ----------------------------------- |
+| Auth0         | Identity management, authentication |
+| Google OAuth  | OAuth token management              |
+| GitHub OAuth  | OAuth token management              |
+| LLM APIs      | Key validation (5 providers)        |
 
 ### Internal Services
 
-| Service        | Communication Direction         |
-| -------------- | ------------------------------- |
-| research-agent | <- provides decrypted LLM keys  |
-| image-service  | <- provides decrypted LLM keys  |
-| calendar-agent | <- provides Google OAuth tokens |
+| Service        | Communication Direction          |
+| -------------- | -------------------------------- |
+| research-agent | <- provides decrypted LLM keys   |
+| image-service  | <- provides decrypted LLM keys   |
+| calendar-agent | <- provides Google OAuth tokens  |
+| code-agent     | <- provides GitHub OAuth tokens  |
 
 ### Infrastructure
 
@@ -327,6 +353,8 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_WEB_APP_URL`                | Yes      | Web app URL for OAuth redirects                           |
 | `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes      | Google OAuth client ID                                    |
 | `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes      | Google OAuth client secret                                |
+| `INTEXURAOS_GITHUB_OAUTH_CLIENT_ID`     | Yes      | GitHub OAuth client ID                                    |
+| `INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET` | Yes      | GitHub OAuth client secret                                |
 | `INTEXURAOS_SENTRY_DSN`                 | No       | Sentry DSN for error tracking (optional)                  |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`        | No       | Dash0 OTLP endpoint for tracing/metrics (no-op if unset)  |
 
@@ -340,19 +368,21 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 
 **Device code polling**: The `interval` from Auth0's device code response should be respected to avoid rate limiting.
 
-**OAuth token refresh**: If refresh fails (token revoked), the connection is marked invalid but not deleted. User must re-authenticate.
+**OAuth token refresh**: If Google refresh fails (token revoked), the connection is deleted and user must reconnect. GitHub tokens never expire unless revoked.
 
 **API key masking**: In logs and API responses, keys are masked showing only first 4 and last 4 characters.
 
 **LLM key testing costs money**: The `/test` endpoint validates keys by making actual API calls to the provider.
 
-**Rate limit vs API key errors**: Error parser checks rate limits before API key patterns to avoid misdiagnosis (v2.0.0 fix).
+**Rate limit vs API key errors**: Error parser checks rate limits before API key patterns to avoid misdiagnosis.
 
 **Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`, `zai`) differ from display names.
 
 **Internal endpoints use response contract**: All internal endpoints return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`. Callers must read from `response.data` instead of the top level.
 
-**Default model validation**: `PATCH /users/:uid/settings` validates `defaultModel` against `isFastModel()` from `@intexuraos/llm-contract`. Unsupported model names return 400 `INVALID_REQUEST`.
+**Default model validation**: `PATCH /users/:uid/settings` validates `defaultModel` against `isFastModel()` from `@intexuraos/llm-contract` AND verifies the user has an API key configured for that model's provider. Unsupported model names return 400 `INVALID_REQUEST`.
+
+**Default model cascade on key deletion**: Deleting an LLM API key automatically clears `defaultModel` if the current default belongs to the deleted provider.
 
 **OAuth2 routes use raw send**: OAuth2 spec routes (`/auth/oauth/token`, `/auth/oauth/authorize`) intentionally bypass the response contract via `@allow-raw-send` annotations because the OAuth2 spec requires flat `{ error, error_description }` responses.
 
@@ -361,6 +391,14 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 **Error code mapping**: Internal endpoint error codes follow the standard response contract codes: `UNAUTHORIZED` (401), `NOT_FOUND` (404), `MISCONFIGURED` (503), `DOWNSTREAM_ERROR` (502).
 
 **Pricing context at startup**: The service fetches LLM pricing from `app-settings-service` at boot. If that service is unavailable, startup fails.
+
+**GitHub tokens never expire**: GitHub access tokens are stored with a far-future expiry (`9999-12-31`). They do not need refresh logic but can be revoked at any time.
+
+**GitHub username as email**: GitHub connections store the GitHub username in the `email` field of OAuthConnection. The `findByProviderEmail` query is used to look up users by GitHub username.
+
+**OAuth state TTL**: OAuth state tokens (base64url-encoded JSON) expire after 10 minutes. Expired state returns `INVALID_STATE`.
+
+**Transcription provider validation**: Only `speechmatics` is currently a valid transcription provider. The `isTranscriptionProvider()` type guard validates at runtime.
 
 ## File Structure
 
@@ -378,7 +416,7 @@ apps/user-service/src/
         refreshAccessToken.ts  # Token refresh logic
     settings/
       models/
-        UserSettings.ts        # Settings aggregate
+        UserSettings.ts        # Settings aggregate (LLM keys, preferences, transcription)
         SettingsError.ts       # Settings error types
       ports/
         UserSettingsRepository.ts # Settings storage
@@ -391,16 +429,20 @@ apps/user-service/src/
       formatLlmError.ts        # Error message formatting
     oauth/
       models/
-        OAuthConnection.ts     # OAuth connection types
+        OAuthConnection.ts     # OAuth connection types (Google + GitHub)
         OAuthError.ts          # OAuth error types
       ports/
         GoogleOAuthClient.ts   # Google OAuth interface
+        GitHubOAuthClient.ts   # GitHub OAuth interface
         OAuthConnectionRepository.ts
       usecases/
-        initiateOAuthFlow.ts   # Start OAuth
-        exchangeOAuthCode.ts   # Exchange code for tokens
-        getValidAccessToken.ts # Get/refresh access token
-        disconnectProvider.ts  # Revoke OAuth connection
+        initiateOAuthFlow.ts         # Start Google OAuth
+        exchangeOAuthCode.ts         # Exchange Google code for tokens
+        getValidAccessToken.ts       # Get/refresh Google access token
+        disconnectProvider.ts        # Revoke Google OAuth connection
+        initiateGitHubOAuthFlow.ts   # Start GitHub OAuth
+        exchangeGitHubOAuthCode.ts   # Exchange GitHub code for tokens
+        disconnectGitHubProvider.ts  # Revoke GitHub OAuth connection
   infra/
     auth0/
       client.ts                # Auth0 SDK wrapper
@@ -410,10 +452,12 @@ apps/user-service/src/
     firestore/
       authTokenRepository.ts   # Token storage
       userSettingsRepository.ts # Settings storage
-      oauthConnectionRepository.ts
+      oauthConnectionRepository.ts # OAuth connection storage
       encryption.ts            # Firestore encryption helpers
     google/
       googleOAuthClient.ts     # Google OAuth client
+    github/
+      gitHubOAuthClient.ts     # GitHub OAuth client
     llm/
       LlmValidatorImpl.ts      # Key validation (5 providers)
   routes/
@@ -422,11 +466,12 @@ apps/user-service/src/
     firebaseRoutes.ts          # Firebase token exchange
     oauthRoutes.ts             # OAuth2 endpoints (ChatGPT Actions)
     oauthConnectionRoutes.ts   # Google OAuth connection management
+    gitHubOAuthConnectionRoutes.ts # GitHub OAuth connection management
     configRoutes.ts            # Auth0 config
-    settingsRoutes.ts          # User settings + default model
+    settingsRoutes.ts          # User settings + default model + transcription
     llmKeysRoutes.ts           # LLM key management (CRUD + test)
     frontendRoutes.ts          # Login/logout/me pages
-    internalRoutes.ts          # Service-to-service (4 endpoints)
+    internalRoutes.ts          # Service-to-service (6 endpoints)
     schemas.ts                 # Zod request schemas
     shared.ts                  # Shared helpers (loadAuth0Config)
     httpClient.ts              # HTTP client for Auth0 calls
