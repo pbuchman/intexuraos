@@ -221,8 +221,7 @@ function IssueTimeline({ tasks, referenceLocation, onCollapse }: IssueTimelinePr
         onClick={onCollapse}
         className="mt-2 w-full text-center text-xs text-slate-500 transition-colors hover:text-slate-400"
       >
-        {String(tasks.length)} tasks &middot; {String(archivedCount)} archived &middot; click to
-        collapse
+        {String(tasks.length)} tasks{archivedCount > 0 ? <> &middot; {String(archivedCount)} archived</> : null} &middot; click to collapse
       </button>
     </div>
   );
