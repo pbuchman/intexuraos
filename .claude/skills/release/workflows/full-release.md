@@ -14,6 +14,7 @@ Verify all required tools are available:
 git --version
 gh auth status
 node --version
+gsutil version
 ```
 
 If any fails, ABORT with clear error message.
@@ -107,73 +108,110 @@ Execute the semver analysis per [`reference/semver-analysis.md`](../reference/se
 
 ### 1.7 Single Prioritization Touchpoint
 
-**This is the ONLY user interaction point before Phase 6.** Present all categorized changes in a consolidated view and collect priorities + optional comments.
+**This is the ONLY user interaction point before Phase 6.** An interactive HTML page is generated, shared via `/share`, and the user prioritizes **features only**. Notable changes and minor fixes bypass the prioritizer and are automatically included in the changelog.
 
-Use `AskUserQuestion` tool with this format:
+#### 1.7.1 Generate Interactive Prioritization Page
 
-```
-Release Prioritization — vCURRENT → vNEW
+1. Read the `## Triage Summary` from `.prerelease-data.md` (or from the semver analysis output if collected inline)
+2. Build a JSON array of **only features** (NOT notable changes or minor fixes):
 
-Modified services: [list]
-PRs merged: [count]
-Suggested bump: [major/minor/patch]
-
-Priority guide:
-  High   = First in CHANGELOG, top 3 become GitHub Release highlights, used for README/website
-  Medium = Standard position in CHANGELOG
-  Low    = Last in CHANGELOG
-  Skip   = Omitted from CHANGELOG entirely
-
-## Changes (adjust priorities, add comments, then type "go")
-
-### Features (default: High)
-  1. [Feature description] — PR #XXX / INT-XXX
-  2. [Feature description] — PR #XXX / INT-XXX
-
-### Notable Changes (default: Medium)
-  3. [Change description] — PR #XXX
-  4. [Change description] — PR #XXX
-
-### Minor Fixes (default: Low)
-  5-8. 4 bug fixes:
-       - whatsapp: [fix description] (#XXX)
-       - calendar: [fix description] (#XXX)
-       - bookmarks: [fix description] (#XXX)
-       - research: [fix description] (#XXX)
-
-Commands:
-  "3 high" — change #3 to High priority
-  "1 comment: Voice transcription enables..." — add description comment to #1
-  "5 skip" — exclude #5 from changelog (targets entire batch if 5 is a batched range; use "expand 5-8" first to target individual items)
-  "expand 5-8" — show individual items in a batched group (assigns each a unique number for individual commands)
-  "preview" — show final changelog preview before confirming
-  "slogan: End-to-end AI autonomy..." — set marketing slogan (major releases only)
-  "go" or "approve" — confirm and proceed
+```json
+[{ "id": 1, "title": "Feature name", "desc": "User-facing description", "category": "feature" }]
 ```
 
-**Command validation:** If the user types an unrecognized command, respond with the valid command list and ask them to try again.
+**Notable changes and minor fixes are NOT included in the prioritizer.** They are automatically categorized into changelog type subcategories (Added/Changed/Fixed/Improved/Removed) during step 1.7.4.
 
-**Batching rules:**
+3. Read the template from [`templates/prioritizer.html`](../templates/prioritizer.html)
+4. Replace the following placeholders in the template:
+   - `{{NEW_VERSION}}` → e.g., `v3.2.0`
+   - `{{PR_COUNT}}` → number of merged PRs
+   - `{{COMMIT_COUNT}}` → number of commits
+   - `{{BUMP_TYPE}}` → `MAJOR`, `MINOR`, or `PATCH`
+   - `{{ITEMS_JSON}}` → the JSON array from step 2 (features only)
+5. Write the result to `/tmp/release-prioritizer.html`
 
-- Features: shown individually (each gets its own number)
-- Notable changes: shown individually
-- Minor fixes: batched by area if >4 (e.g., "5-8. 4 bug fixes across whatsapp, calendar services")
-- **Batch command semantics:** Commands targeting a batch number (e.g., "5 skip") apply to the **entire batch**. To target individual items within a batch, the user must first "expand 5-8" to assign unique numbers, then use those individual numbers.
+#### 1.7.2 Share the Page
 
-**For major version releases**, also prompt:
+Upload via the `/share` skill's GCS workflow (skip `/frontend-design` — the HTML is already self-contained):
+
+```bash
+SLUG="release-prioritizer-v$(echo $NEW_VERSION | tr '.' '')"
+
+# Check collision
+gsutil ls gs://intexuraos-shared-content-dev/claude/$SLUG.html 2>&1
+
+# Upload (overwrite if same version slug)
+gsutil -h "Cache-Control:public, max-age=60" \
+  -h "Content-Type:text/html; charset=utf-8" \
+  cp /tmp/release-prioritizer.html \
+  gs://intexuraos-shared-content-dev/claude/$SLUG.html
+
+rm /tmp/release-prioritizer.html
+```
+
+**Use a short cache TTL (60s)** — the user may reload after re-uploading with adjustments.
+
+#### 1.7.3 Present URL and Wait
+
+Present the URL to the user and wait for them to paste back the export:
 
 ```
-  This is a MAJOR version release. Please provide a marketing slogan for the
-  previous major version (vX.x) for the Version History section, or type "skip".
+Release Prioritizer ready:
+https://intexuraos.cloud/share/claude/<slug>.html
+
+Instructions:
+1. Open the page
+2. ★ Star items for README/website highlights
+3. ✕ Skip items to omit from CHANGELOG
+4. Drag to reorder priority
+5. Add comments to override descriptions
+6. Click "Export & Copy" and paste the result here
 ```
 
-**After user confirms ("go"):**
+**For major version releases**, also ask:
 
-1. Store the **priority map** (change number → High/Medium/Low/Skip)
-2. Store the **comments map** (change number → user comment text)
+```
+This is a MAJOR version release. Please also provide a marketing slogan for the
+previous major version (vX.x) for the Version History section, or type "skip".
+```
+
+#### 1.7.4 Parse the Export
+
+The user pastes structured text from the page's export. Parse it to extract:
+
+```
+RELEASE PRIORITIZATION — vX.Y.Z
+=============================================
+
+HIGHLIGHTS (N) — README + Website
+  1. Title | comment or — description [category]
+  2. Title — description [category]
+
+HIGH (N) — CHANGELOG
+  1. Title | comment [category]
+  2. Title — description [category]
+
+SKIPPED (N)
+  1. Title [category]
+```
+
+**Parsing rules:**
+
+- `HIGHLIGHTS` section → priority = High, highlight = true (used for README/website)
+- `HIGH` section → priority = High, highlight = false
+- `SKIPPED` section → priority = Skip
+- Items with `|` have user comments (text after `|`, before `[category]`)
+- Items with `—` use default descriptions (text after `—`, before `[category]`)
+- `[feature]` / `[notable]` / `[minor]` → original category for changelog type grouping
+
+**After parsing:**
+
+1. Store the **priority map** (title → High/Skip + highlight flag) — features only
+2. Store the **comments map** (title → user comment text) — features only
 3. Store the **marketing slogan** (if major release)
-4. Build changelog entry per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7
-5. Build GitHub Release body per Step 7.1
+4. **Auto-include notable changes and minor fixes** — categorize all notable changes and minor fixes from the triage summary into changelog type subcategories (Added/Changed/Fixed/Improved/Removed). These are NOT subject to user prioritization and are always included.
+5. Build changelog entry per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7 — combining user-prioritized features with auto-included notable changes and minor fixes
+6. Build GitHub Release body per Step 7.1
 
 Store all results for downstream phases.
 
@@ -181,18 +219,69 @@ Store all results for downstream phases.
 
 ## Phase 2: Service Documentation (Silent Batch)
 
-### 2.1 For Each Modified Service
+### 2.1 Build Per-Service Release Context
+
+For each service in `MODIFIED_SERVICES`, assemble a release context block from Phase 1 data:
+
+1. **Filter Features from Change Groups**: From the `## Change Groups` → `### Features` table, select rows where "Services Touched" contains the service name
+2. **Map to Triage Descriptions**: For each matching feature group, find the corresponding line in `## Triage Summary` → `### Features` (match by PR numbers)
+3. **Include Notable Changes**: From `## Triage Summary` → `### Notable Changes`, include lines whose PR numbers appear in commits that touched this service's directory (use the commits section's file paths for matching)
+4. **Attach User Prioritization**: For each triage item, look up the priority map from Phase 1.7 — attach priority (High/Skip), highlight flag, and user comment (if any)
+
+Assemble into a structured markdown block per service:
+
+```markdown
+## Release Context
+
+Version: vX.Y.Z (from vPREV)
+Last tag: vPREV
+
+### Features Touching This Service
+
+**[Highlighted]** <feature-group-name>
+
+- Triage: <user-facing description from Triage Summary>
+- PRs: #N, #N, #N
+- Linear: INT-NNN, INT-NNN
+- Priority: High | Highlight: yes
+- User comment: "<user's comment from prioritizer, or —>"
+
+<feature-group-name>
+- Triage: <user-facing description from Triage Summary>
+- PRs: #N, #N
+- Linear: INT-NNN
+- Priority: High | Highlight: no
+- User comment: —
+
+### Notable Changes Touching This Service
+
+- <notable change description> (INT-NNN, PR #N)
+- <notable change description> (PR #N)
+```
+
+**Rules for the context block:**
+
+- **Omit Skip-priority features entirely** — if the user skipped a feature in the prioritizer, the doc agent should not emphasize it
+- **Mark highlighted items with `[Highlighted]`** — these are README/website headline features
+- **Include user comments** — the user's own words about what matters
+- **Include all notable changes** that touch the service — these are auto-included in the release (not subject to prioritization)
+- **Omit minor fixes** — too granular; the agent's own `git log` handles these
+
+### 2.2 For Each Modified Service
 
 For each service in `MODIFIED_SERVICES`:
 
 ```
 Use Task tool with:
 - subagent_type: "service-scribe"
-- prompt: "Generate documentation for the <service-name> service"
+- prompt: |
+    Generate documentation for the <service-name> service.
+
+    <release-context-block from step 2.1>
 - run_in_background: false (wait for completion)
 ```
 
-### 2.2 Parallel Execution
+### 2.3 Parallel Execution
 
 Launch ALL service-scribe agents in a single message with multiple Task tool calls:
 
@@ -203,7 +292,7 @@ Task 3: service-scribe for research-agent
 ... etc
 ```
 
-### 2.3 Wait for Completion
+### 2.4 Wait for Completion
 
 All agents must complete before proceeding. Do NOT ask for user confirmation here — this is silent batch processing.
 
@@ -284,82 +373,80 @@ Use Edit tool to apply the "What's New" section following the accumulation patte
 
 ---
 
-## Phase 5: Website Improvements (Automatic)
+## Phase 5: Website Improvements
 
-### 5.1 Detect Major Version Release
+**Target file:** `apps/web/src/pages/HomePage.tsx` — all website updates happen in this single file.
 
-Check if this is a MAJOR version bump (X+1.0.0):
+**Guard condition:** Skip this phase ONLY if there are zero High-priority features. The absence of a component is NOT a reason to skip — create it.
 
-```bash
-# Compare current version with new version
-CURRENT_VERSION="2.1.0"  # From package.json
-NEW_VERSION="3.0.0"       # From Phase 1 calculation
+### 5.1 Update Version Strings
 
-if [[ $(echo "$NEW_VERSION" | cut -d'.' -f1) -gt $(echo "$CURRENT_VERSION" | cut -d'.' -f1) ]]; then
-  echo "MAJOR VERSION RELEASE"
-  # Need to create VersionHistorySection
-fi
+Find and replace the version in two hardcoded locations:
+
+1. **Hero badge** — inside the `HeroSection` function, find the `IntexuraOS vX.Y.Z` text and update to new version
+2. **Footer** — inside the `Footer` function, find the `<span>` containing `vX.Y.Z` and update
+
+Search the file for the previous version string to confirm zero remaining references.
+
+### 5.2 Add or Update WhatsNewSection
+
+For each High-priority feature from Phase 1, create a feature card in the `WhatsNewSection` function.
+
+**If `WhatsNewSection` already exists:** Update its content — replace the version in the header, add/remove/update feature cards to match the current release.
+
+**If `WhatsNewSection` does not exist:** Create it as a new function and insert `<WhatsNewSection />` between `<IntegrationsSection />` and `<GettingStartedSection />` in the `HomePage` render.
+
+**Design pattern** (matches existing sections):
+
+```tsx
+const features = [
+  {
+    title: 'Feature Name',
+    description: 'One-line user-facing description.',
+    icon: LucideIconComponent,
+    borderColor: 'border-purple-200',
+    bgGradient: 'bg-gradient-to-br from-purple-50 to-white',
+    iconBg: 'bg-purple-100',
+    iconColor: 'text-purple-700',
+  },
+  // ... one per High-priority feature
+];
 ```
 
-### 5.2 Auto-Update RecentUpdatesSection
+- **Grid:** `grid gap-6 md:grid-cols-2 lg:grid-cols-3`
+- **Card style:** `rounded-2xl`, gradient border (`border-{color}-200`), gradient bg (`bg-gradient-to-br from-{color}-50 to-white`), hover lift via `motion.div` with `whileHover={{ y: -5 }}`, icon in `rounded-xl` container
+- **Icons:** `lucide-react` — select icons that match the feature domain
+- **Color palette:** purple, cyan, emerald, blue, violet, amber, green (one per card, vary)
+- **No external skill invocations** — write JSX directly using existing patterns
+- **Content filtering:** Only genuinely new capabilities become cards. Migrations, internal refactors, and moved functionality are excluded. If a feature existed before and was moved to a new service, it is a migration — not a new feature.
 
-Map High-priority features from Phase 1 to website-ready content:
+**Section header pattern:**
 
-- Transform feature descriptions into user-facing language
-- Use user comments from Phase 1 touchpoint for richer descriptions
-- Use brutalist design: `BrutalistCard` with icon, title, description
-- Color coding (optional):
-  - Green → user-facing improvements
-  - Purple → AI/classification features
-  - Yellow → calendar/time features
-  - Cyan → model control
-  - Orange → dashboard/organization
-  - Red → safety/reliability
-
-**Tile Grid Layout:**
-
-- Mobile: 1 column
-- Tablet: 2 columns (md:grid-cols-2)
-- Desktop: 3 columns (lg:grid-cols-3)
-
-### 5.3 Generate VersionHistorySection Content (Major Release Only)
-
-**ONLY for major version releases**, create expandable version history section.
-
-**Structure:**
-
-- Expandable button below "What's New" section
-- Combined subreleases (e.g., v2.0.0, v2.1.0 → v2.x paragraph)
-- List format: paragraphs, not tiles
-- Marketing slogan from Phase 1 touchpoint (collected during step 1.7)
-
-**Example v1.x content:**
-
-```markdown
-v1.x — Launch
-
-End-to-end AI autonomy: From your mobile to the cloud and back. IntexuraOS went from architecture document to handling live traffic — voice to research, links to bookmarks, dates to calendar events. The full AI agent pipeline is now processing real user requests in production.
+```tsx
+<p className="mb-4 text-sm font-semibold uppercase tracking-wider text-cyan-600">What's New</p>
+<h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
+  vX.Y.Z —{' '}
+  <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
+    N new capabilities.
+  </span>
+</h2>
 ```
 
-### 5.4 Implement Changes
+### 5.3 Version History (Major Release Only)
 
-**Guard:** If no features were marked High priority in the Phase 1 priority map, skip the RecentUpdatesSection update. Only invoke frontend-design when there are concrete features to display.
+When releasing a NEW major version (e.g., v3.0.0):
 
-Invoke the frontend-design skill for the website updates:
+- Create a collapsible version history section below What's New
+- Content: combined features from previous major version's sub-releases
+- Format: expandable panel, not tiles
+- Uses marketing slogan from Phase 1 touchpoint
 
-```
-Use Skill tool with:
-- skill: "frontend-design"
-- args: "Update RecentUpdatesSection with [N] new feature tiles from release vX.Y.Z: [list of High-priority features with descriptions]"
-```
+**Skip condition:** Only for major version releases.
 
-For major releases, invoke VersionHistorySection **after** RecentUpdatesSection completes (sequential, not parallel — both touch the same web files):
+### Accumulation Pattern
 
-```
-Use Skill tool with:
-- skill: "frontend-design"
-- args: "Create VersionHistorySection for vX.x with marketing slogan: [slogan from Phase 1]"
-```
+- **Minor/patch releases:** Append new cards to existing `WhatsNewSection` grid, update version header
+- **Major releases:** Reset section content, move old cards to version history
 
 ---
 
@@ -502,7 +589,40 @@ OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY pnpm run embed-docs
 
 **Environment note:** The `FIRESTORE_EMULATOR_HOST=""` and `GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman` overrides are required because direnv sets emulator variables locally. Without them, the script targets the non-running emulator instead of production Firestore.
 
-### 6.5 Stage & Commit on Development
+### 6.5 Pre-Merge Release Validation (MANDATORY)
+
+Before staging the commit, verify every phase produced its expected output. Walk through this checklist and confirm each item. If any item fails, go back and fix it before committing.
+
+#### Content Checklist
+
+| Check                  | How to Verify                                                                         | Expected                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Version strings**    | Search `HomePage.tsx` for previous version string                                     | Zero matches — all updated to new version                              |
+| **What's New section** | Check `HomePage.tsx` for `WhatsNewSection`                                            | Present with cards for each High-priority feature (unless all skipped) |
+| **README What's New**  | Read the "What's New in vX.Y.Z" table in README.md                                    | Updated with new version, contains High-priority features              |
+| **CHANGELOG**          | Read top of CHANGELOG.md                                                              | Contains `## X.Y.Z` section with categorized entries                   |
+| **Package versions**   | Spot-check 3 random package.json files                                                | All show new version                                                   |
+| **docs/overview.md**   | Read the overview narrative                                                           | Reflects any new capabilities added in this release                    |
+| **Service docs**       | For each modified service, check `docs/services/<name>/technical.md` "Recent Changes" | Contains entries from this release                                     |
+
+#### Accuracy Checklist
+
+| Check                         | How to Verify                                  | Expected                                                                         |
+| ----------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
+| **No false "new" features**   | Review What's New cards and README table       | Migrations, refactors, and moved functionality are NOT presented as new features |
+| **Version numbers grounded**  | Search all modified docs for `vX.Y.Z` patterns | Every version mentioned exists in `git tag -l "v*"`                              |
+| **No hallucinated endpoints** | Spot-check 2 service technical.md files        | Every endpoint listed exists in the actual route files                           |
+
+#### Improvement Loop
+
+If any check fails:
+
+1. Fix the issue
+2. Re-run `pnpm run ci:tracked` if code was changed
+3. Re-verify the failed check
+4. Continue only when all checks pass
+
+### 6.6 Stage & Commit on Development
 
 ```bash
 git status
@@ -527,13 +647,13 @@ EOF
 )"
 ```
 
-### 6.6 Push Development
+### 6.7 Push Development
 
 ```bash
 git push origin development
 ```
 
-### 6.7 Merge Development → Main
+### 6.8 Merge Development → Main
 
 ```bash
 # Check if a dev→main PR already exists
@@ -563,7 +683,7 @@ fi
 
 **Why merge before tagging?** Tags should point to `main` — the canonical release branch. Tagging on `development` means the tag references a commit that may never reach `main` in the same form (merge commits change SHAs).
 
-### 6.8 Tag on Main
+### 6.9 Tag on Main
 
 ```bash
 # Tag the merge commit on main (not development)
@@ -573,7 +693,7 @@ git tag -a "v$NEW_VERSION" "$MAIN_SHA" -m "Release v$NEW_VERSION"
 git push origin "v$NEW_VERSION"
 ```
 
-### 6.9 Create GitHub Release
+### 6.10 Create GitHub Release
 
 ```bash
 # Verify release notes file exists
@@ -590,7 +710,7 @@ gh release create "v$NEW_VERSION" \
 
 The release notes file is built during step 6.2 (CHANGELOG and release notes generation). See the **Build GitHub Release Body** step in [`reference/semver-analysis.md`](../reference/semver-analysis.md) for the generation logic.
 
-### 6.10 Post-Release Validation
+### 6.11 Post-Release Validation
 
 Run all checks and report results. **Do NOT skip any check.**
 
@@ -639,7 +759,7 @@ CURRENT=$(git branch --show-current)
 | Merge to main fails       | Detect conflicts, STOP, ask user for guidance. Do NOT force-push or auto-resolve |
 | Wrong branch              | `git checkout development`                                                       |
 
-### 6.11 Display Summary
+### 6.12 Display Summary
 
 Use template from [`templates/release-summary.md`](../templates/release-summary.md).
 

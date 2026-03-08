@@ -8,16 +8,20 @@ An AI platform that connects to five different providers needs five different AP
 
 Then there is authentication itself. A platform that works across a web dashboard, a command-line tool, and a mobile app needs login flows that work in all three contexts — including the awkward case where there is no browser available.
 
+And then there are the integrations. Connecting Google Calendar requires OAuth tokens that expire and must be refreshed silently. Connecting GitHub for code automation requires storing tokens that never expire but can be revoked at any time. Each provider has its own rules, and the user should never have to think about any of them.
+
 ## Use Case: Setting Up for the First Time
 
 You have just signed up and opened Settings.
 
 1. You paste your OpenAI API key. Before storing it, the service makes a real call to OpenAI using the cheapest available model. Two seconds later: a green checkmark. The key works.
 2. You add an Anthropic key, but this one has expired billing. Instead of accepting it silently and failing later when you submit a research query, the service tells you now: "Insufficient Anthropic API credits."
-3. You select "Claude Haiku 3.5" as your default fast model. Every agent across the platform now uses it for quick generation tasks.
+3. You select "Claude Haiku 3.5" as your default fast model. The service verifies you have an Anthropic API key configured before accepting — you cannot select a model for a provider you have not set up. Every agent across the platform now uses it for quick generation tasks.
 4. You connect your Google account for calendar access. One OAuth flow, and the calendar-agent can read your schedule indefinitely — tokens refresh automatically in the background.
+5. You connect your GitHub account for code automation. Another OAuth flow, and the code-agent can create pull requests on your behalf. GitHub tokens do not expire, so there is nothing to refresh.
+6. You set Speechmatics as your preferred transcription provider. Voice notes from WhatsApp are now processed through your chosen engine.
 
-Four settings, configured once. From this point on, you never think about credentials again.
+Six settings, configured once. From this point on, you never think about credentials again.
 
 ## How It Helps
 
@@ -39,9 +43,19 @@ When a provider returns an error, the raw response is often opaque — a cryptic
 
 ### Authentication Everywhere
 
-Login works across every surface the platform supports. The web dashboard uses Auth0 Universal Login. No browser available? The command-line tool and mobile apps show you a short code on screen. You visit a URL on any device, enter the code, and you are authenticated — no redirect, no pop-up. Token refresh happens silently. A separate OAuth2-compatible endpoint exists for third-party integrations.
+Login works across every surface the platform supports. The web dashboard uses Auth0 Universal Login. No browser available? The command-line tool and mobile apps show you a short code on screen. You visit a URL on any device, enter the code, and you are authenticated — no redirect, no pop-up. Token refresh happens silently. A separate OAuth2-compatible endpoint exists for third-party integrations like ChatGPT Actions.
+
+### Connect Your Accounts
 
 Google OAuth connects your Google account for calendar access. Tokens are encrypted with the same AES-256-GCM encryption used for API keys, and the service refreshes them automatically within five minutes of expiry. Connect once, and the calendar-agent handles the rest.
+
+GitHub OAuth connects your GitHub account for code automation. The code-agent uses your GitHub token to create branches, push commits, and open pull requests on your behalf. GitHub tokens do not expire unless revoked, so there is no refresh logic — but if you revoke access at GitHub, the service detects it on the next request and surfaces the issue clearly.
+
+### Personalized AI Preferences
+
+Choose your default fast model — the model every agent uses for quick generation tasks. The service validates that you have a working API key for the model's provider before accepting your choice, preventing configuration errors that would only surface at runtime. If you delete an API key, any default model that depends on that provider is automatically cleared.
+
+Set your preferred transcription provider for voice note processing. When you send a voice message via WhatsApp, the platform uses your chosen provider instead of the system default.
 
 ## Key Benefits
 
@@ -51,14 +65,17 @@ Google OAuth connects your Google account for calendar access. Tokens are encryp
 - **One default model, every agent** — Set your preferred fast model once and all agents inherit it
 - **Automatic token refresh** — Google OAuth tokens refresh before expiry with no user interaction
 - **Works without a browser** — Device code flow supports CLI and mobile authentication
+- **Multi-provider OAuth** — Google and GitHub accounts connect with a single flow each
+- **Cascading cleanup** — Deleting an API key automatically clears any dependent preferences
 
 ## Limitations
 
 - **Auth0 dependency** — All authentication routes through Auth0; there is no built-in username and password option
-- **Google OAuth only** — Google is the only connected OAuth provider today; Microsoft is not yet supported
+- **Two OAuth providers** — Google and GitHub are the only connected OAuth providers today; Microsoft and Notion are not yet supported
 - **Validation has a cost** — Testing a key makes a real API call to the provider, which incurs a small charge (mitigated by always using the cheapest model)
 - **No user-side rate limits** — Rate limiting is enforced by the providers themselves, not configurable per user
 - **Re-authentication on revocation** — If you revoke OAuth access at the provider, you must reconnect manually
+- **One transcription provider** — Only Speechmatics is currently supported as a transcription provider
 
 ---
 

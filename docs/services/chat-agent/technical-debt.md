@@ -1,7 +1,7 @@
-# Chat Agent -- Technical Debt
+# Chat Agent — Technical Debt
 
-**Last Updated:** 2026-02-22
-**Analysis Run:** [2026-02-22 entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-07
+**Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
 
 ---
 
@@ -13,7 +13,7 @@
 | Architectural concerns | 3      | Medium   |
 | Missing features       | 4      | Medium   |
 | Test coverage gaps     | 1      | Low      |
-| **Total**              | **13** | --       |
+| **Total**              | **13** | —        |
 
 ---
 
@@ -45,7 +45,7 @@ The current implementation waits for the full LLM response before returning. Ser
 
 The rate limiter stores usage data in a `Map` local to the process. When Cloud Run scales to multiple instances or restarts, rate limiting state is lost. For production-grade enforcement, this should move to Redis or Firestore with TTL documents.
 
-**Severity:** Medium -- guest abuse possible during scale events.
+**Severity:** Medium — guest abuse possible during scale events.
 
 ### Hardcoded Embedding Model
 
@@ -53,7 +53,7 @@ The rate limiter stores usage data in a `Map` local to the process. When Cloud R
 
 The OpenAI embedding model (`text-embedding-3-small`) is hardcoded as a default. Changing the model requires reindexing all documents in `doc_embeddings` because different models produce incompatible vector spaces.
 
-**Severity:** Medium -- model upgrades require manual migration.
+**Severity:** Medium — model upgrades require manual migration.
 
 ### Action Extraction via Regex
 
@@ -61,7 +61,7 @@ The OpenAI embedding model (`text-embedding-3-small`) is hardcoded as a default.
 
 The `extractSuggestedAction` function uses a regex (`/\[ACTION:\s*(create_command)\s+({.*?})\]/s`) to detect structured actions from raw LLM output. This is fragile: if the LLM slightly varies the format, the regex misses it. A structured output format (JSON mode or function calling) would be more reliable.
 
-**Severity:** Medium -- action detection silently fails on format variations.
+**Severity:** Medium — action detection silently fails on format variations.
 
 ---
 
@@ -122,25 +122,26 @@ No TODO or FIXME comments found in the codebase.
 
 | File                                  | Lines | Concern                                                                            |
 | ------------------------------------- | ----- | ---------------------------------------------------------------------------------- |
-| `__tests__/fakes.fixture.ts`          | 317   | Contains 6 fake classes. Could split into per-class files if it grows.             |
+| `__tests__/fakes.fixture.ts`          | 322   | Contains 7 fake classes. Could split into per-class files if it grows.             |
 | `domain/usecases/generateResponse.ts` | 300   | At the threshold. Contains main use case + 4 helper functions. Acceptable for now. |
 
 ---
 
 ## Resolved Issues
 
-| Issue      | Description                                           | Resolution                                                       |
-| ---------- | ----------------------------------------------------- | ---------------------------------------------------------------- |
-| `e6782f64` | INTEXURAOS_LLM_MODEL env var no longer needed         | Removed; model selection via user-service                        |
-| `332fd990` | EmbeddingClient had tight OpenAI coupling             | Refactored to function injection pattern                         |
-| `0f37ed41` | Shared LLM client across all users                    | Refactored to per-request client from user-service               |
-| `63170e4a` | Inconsistent GLM "free" terminology in LLM factory    | Removed; all clients now created via `createLlmClient` uniformly |
-| `c72b7c53` | Default LLM (GLM) had no Gemini fallback for platform | Switched default to Gemini 2.5 Flash; added Gemini platform key  |
+| Issue      | Description                                           | Resolution                                                          |
+| ---------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
+| `99febe66` | FakeUserServiceClient missing resolveGitHubUsername   | Added stub method to conform to updated UserServiceClient interface |
+| `e6782f64` | INTEXURAOS_LLM_MODEL env var no longer needed         | Removed; model selection via user-service                           |
+| `332fd990` | EmbeddingClient had tight OpenAI coupling             | Refactored to function injection pattern                            |
+| `0f37ed41` | Shared LLM client across all users                    | Refactored to per-request client from user-service                  |
+| `63170e4a` | Inconsistent GLM "free" terminology in LLM factory    | Removed; all clients now created via `createLlmClient` uniformly    |
+| `c72b7c53` | Default LLM (GLM) had no Gemini fallback for platform | Switched default to Gemini 2.5 Flash; added Gemini platform key     |
 
 ---
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

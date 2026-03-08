@@ -15,7 +15,7 @@ The commands agent eliminates that second step entirely. Send a message — from
 You are an operator who spent the weekend collecting thoughts — some typed, some spoken, some shared from other apps.
 
 1. Saturday afternoon, you tap "Share" on an article about competitor pricing from `https://research-tracker.io/pricing-analysis`. The system sees the share action, recognizes you did not ask it to investigate anything, and saves the link as a bookmark with a summary.
-2. Saturday evening, you hold down the microphone and say: "Zbadaj jakie są najnowsze trendy w logistyce ostatniej mili." You spoke in Polish, but the system does not translate and re-interpret — it understands the intent natively. "Zbadaj" means investigate. A research task is created.
+2. Saturday evening, you hold down the microphone and say: "Zbadaj jakie sa najnowsze trendy w logistyce ostatniej mili." You spoke in Polish, but the system does not translate and re-interpret — it understands the intent natively. "Zbadaj" means investigate. A research task is created.
 3. Sunday morning, you type: "Create a todo to research competitor onboarding flows." The word "research" is right there in the sentence, but so is "create a todo." The system reads the explicit instruction first. A to-do item appears, not a research task.
 4. Sunday night, you record a voice note rambling about a bug in the checkout flow. The transcription feeds through the same classification path as typed text. The system detects an engineering task and routes it to code.
 
@@ -33,11 +33,11 @@ The commands agent reads your messages through a five-step decision process that
 
 ### Speaks Your Language
 
-The system does not translate your Polish into English and then try to interpret the translation. It recognizes intent phrases in both English and Polish as first-class inputs. "Investigate this" and "zbadaj to" carry the same weight. "Save a bookmark" and "zapisz zakładkę" route to the same place. "Add to calendar" and "dodaj do kalendarza" trigger the same action.
+The system does not translate your Polish into English and then try to interpret the translation. It recognizes intent phrases in both English and Polish as first-class inputs. "Investigate this" and "zbadaj to" carry the same weight. "Save a bookmark" and "zapisz zakladke" route to the same place. "Add to calendar" and "dodaj do kalendarza" trigger the same action.
 
 This matters because translation introduces ambiguity. A phrase that is perfectly clear in Polish can become vague in English, and a system that relies on translation will misclassify the vague version. By understanding both languages natively, the commands agent preserves the clarity of your original words.
 
-**Example:** You say "zbadaj jakie są najnowsze trendy w e-commerce." The system recognizes "zbadaj" as an investigation intent and creates a research task — no intermediate translation step, no loss of meaning.
+**Example:** You say "zbadaj jakie sa najnowsze trendy w e-commerce." The system recognizes "zbadaj" as an investigation intent and creates a research task — no intermediate translation step, no loss of meaning.
 
 ### Handles Every Input the Same Way
 

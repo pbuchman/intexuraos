@@ -1,4 +1,4 @@
-# image-service -- Agent Interface
+# image-service — Agent Interface
 
 > Machine-readable specification for AI agents interacting with image-service.
 
@@ -26,7 +26,7 @@
 
 ```typescript
 interface GeneratePromptInput {
-  text: string;   // Content to visualize (10-60000 characters)
+  text: string;   // Content to visualize (10–60000 characters)
   model: 'gpt-4.1' | 'gemini-2.5-pro';  // LLM for prompt generation
   userId: string;  // User ID for API key lookup
 }
@@ -38,15 +38,12 @@ interface GeneratePromptInput {
 interface ThumbnailPrompt {
   title: string;           // Short title (max 10 words)
   visualSummary: string;   // One sentence visual metaphor (max 25 words)
-  prompt: string;          // Image generation prompt (80-180 words)
-  negativePrompt: string;  // What to avoid (20-80 words)
+  prompt: string;          // Image generation prompt (80–180 words)
+  negativePrompt: string;  // What to avoid (20–80 words)
   parameters: {
-    aspectRatio: '16:9';
     framing: string;
-    textOnImage: 'none';
     realism: 'photorealistic' | 'cinematic illustration' | 'clean vector';
     people: string;
-    logosTrademarks: 'none';
   };
 }
 ```
@@ -70,12 +67,9 @@ interface ThumbnailPrompt {
     "prompt": "A professional visualization of artificial intelligence research, featuring neural network patterns and data flow in a modern digital art style with deep blue and purple colors",
     "negativePrompt": "blurry, low quality, distorted, ugly, poorly drawn, text, watermark",
     "parameters": {
-      "aspectRatio": "16:9",
       "framing": "centered composition with leading space",
-      "textOnImage": "none",
       "realism": "cinematic illustration",
-      "people": "no people",
-      "logosTrademarks": "none"
+      "people": "no people"
     }
   }
 }
@@ -91,7 +85,7 @@ interface ThumbnailPrompt {
 
 ```typescript
 interface GenerateImageInput {
-  prompt: string;  // Image generation prompt (10-2000 characters)
+  prompt: string;  // Image generation prompt (10–2000 characters)
   model: 'gpt-image-1' | 'gemini-2.5-flash-image';  // Image generation model
   userId: string;  // User ID for API key lookup and ownership
   title?: string;  // Optional title for slug-based filename (max 100 chars)
@@ -175,8 +169,8 @@ interface DeleteImageOutput {
 - Call image generation without first ensuring the user has the required provider API key (or platform fallback keys are configured)
 - Send prompt text under 10 characters or over 60000 characters
 - Send image generation prompts under 10 characters or over 2000 characters
-- Expect image editing, inpainting, or variation generation -- only new image creation is supported
-- Assume deduplication -- identical prompts generate separate images with unique IDs
+- Expect image editing, inpainting, or variation generation — only new image creation is supported
+- Assume deduplication — identical prompts generate separate images with unique IDs
 
 **Requires:**
 
@@ -223,14 +217,14 @@ interface DeleteImageOutput {
 
 ## Error Handling
 
-| Error Code         | HTTP Status | Meaning                          | Recovery Action                             |
-| ------------------ | ----------- | -------------------------------- | ------------------------------------------- |
-| `UNAUTHORIZED`     | 401         | Invalid internal auth header     | Fix X-Internal-Auth header value            |
-| `INVALID_REQUEST`  | 400         | Missing API key for provider     | User must add API key or configure fallback |
-| `RATE_LIMITED`     | 429         | Provider rate limit exceeded     | Retry with exponential backoff              |
-| `DOWNSTREAM_ERROR` | 502         | Provider or user-service failure | Check provider/service status, retry        |
-| `INTERNAL_ERROR`   | 500         | Firestore save failed            | GCS image cleaned up; retry full operation  |
-| `PARSE_ERROR`      | 502         | LLM response malformed           | Retry with same or different model          |
+| Error Code         | HTTP Status | Meaning                      | Recovery Action                             |
+| ------------------ | ----------- | ---------------------------- | ------------------------------------------- |
+| `UNAUTHORIZED`     | 401         | Invalid internal auth header | Fix X-Internal-Auth header value            |
+| `INVALID_REQUEST`  | 400         | Missing API key for provider | User must add API key or configure fallback |
+| `RATE_LIMITED`     | 429         | Provider rate limit exceeded | Retry with exponential backoff              |
+| `DOWNSTREAM_ERROR` | 502         | Provider or service failure  | Check provider/service status, retry        |
+| `INTERNAL_ERROR`   | 500         | Firestore save failed        | GCS image cleaned up; retry full operation  |
+| `PARSE_ERROR`      | 502         | LLM response malformed       | Retry with same or different model          |
 
 ---
 
@@ -253,14 +247,14 @@ None. Image-service does not publish Pub/Sub events.
 
 ## Dependencies
 
-| Service           | Why Needed                                 | Failure Behavior                                 |
-| ----------------- | ------------------------------------------ | ------------------------------------------------ |
-| user-service      | Fetch encrypted API keys per provider      | Rejects request with 502 DOWNSTREAM_ERROR        |
-| GCS               | Store generated images and thumbnails      | Returns STORAGE_ERROR; image generation reverted |
-| Firestore         | Persist image metadata for tracking        | Cleans up GCS image, returns 500 INTERNAL_ERROR  |
-| OpenAI API        | GPT Image 1 generation, GPT-4.1 prompts    | Returns DOWNSTREAM_ERROR to caller               |
-| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro prompts | Returns DOWNSTREAM_ERROR to caller               |
+| Service           | Why Needed                            | Failure Behavior                                 |
+| ----------------- | ------------------------------------- | ------------------------------------------------ |
+| user-service      | Fetch encrypted API keys per provider | Rejects request with 502 DOWNSTREAM_ERROR        |
+| GCS               | Store generated images and thumbnails | Returns STORAGE_ERROR; image generation reverted |
+| Firestore         | Persist image metadata for tracking   | Cleans up GCS image, returns 500 INTERNAL_ERROR  |
+| OpenAI API        | GPT Image 1 generation, GPT-4.1       | Returns DOWNSTREAM_ERROR to caller               |
+| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro    | Returns DOWNSTREAM_ERROR to caller               |
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

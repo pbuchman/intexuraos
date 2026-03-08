@@ -1,6 +1,6 @@
-# Image Service -- Technical Debt
+# Image Service — Technical Debt
 
-**Last Updated:** 2026-02-22
+**Last Updated:** 2026-03-07
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -10,13 +10,13 @@
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
 | Code Smells         | 1     | Medium   |
-| TODO/FIXME Comments | 0     | -        |
-| Test Coverage Gaps  | 0     | -        |
-| TypeScript Issues   | 0     | -        |
-| SRP Violations      | 0     | -        |
+| TODO/FIXME Comments | 0     | —        |
+| Test Coverage Gaps  | 0     | —        |
+| TypeScript Issues   | 0     | —        |
+| SRP Violations      | 0     | —        |
 | Code Duplicates     | 1     | Low      |
-| Deprecations        | 0     | -        |
-| **Total**           | **2** | --       |
+| Deprecations        | 0     | —        |
+| **Total**           | **2** | —        |
 
 ---
 
@@ -24,24 +24,21 @@
 
 ### Additional Image Providers
 
-Planned support for:
+The port-based architecture (`ImageGenerator` interface) makes adding new providers straightforward. Potential additions:
 
-1. **Midjourney** -- Via API when available
-2. **Stable Diffusion** -- Self-hosted option for cost control
-3. **Ideogram** -- For text-in-image generation use cases
+1. **Stable Diffusion** — Self-hosted option for cost control
+2. **Ideogram** — For text-in-image generation use cases
 
 ### Enhanced Features
 
-1. **Image editing** -- Inpainting, outpainting, and variation generation
-2. **Style presets** -- Pre-defined artistic styles for consistent branding
-3. **Batch generation** -- Generate multiple variations from a single prompt
-4. **Image search** -- Find similar images in a user's collection
+1. **Image editing** — Inpainting, outpainting, and variation generation
+2. **Style presets** — Pre-defined artistic styles for consistent branding
+3. **Batch generation** — Generate multiple variations from a single prompt
 
 ### Cost Management
 
-1. **Per-user budgets** -- Enforce spending limits on image generation
-2. **Cost estimation** -- Preview cost before generating an image
-3. **Usage analytics** -- Track generation patterns and provider costs
+1. **Per-user budgets** — Enforce spending limits on image generation
+2. **Cost estimation** — Preview cost before generating an image
 
 ---
 
@@ -49,9 +46,9 @@ Planned support for:
 
 ### Medium Priority
 
-| File                       | Issue                          | Impact                                                                                                                                                                                                     |
-| -------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts` + `services.ts` | Pricing model mismatch         | `REQUIRED_MODELS` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but prompt adapters use `gemini-2.5-pro` and `gpt-4.1`. Cost tracking may use incorrect per-token rates for prompt generation. |
+| File                       | Issue                  | Impact                                                                                                                                                                                                     |
+| -------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts` + `services.ts` | Pricing model mismatch | `REQUIRED_MODELS` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but prompt adapters use `gemini-2.5-pro` and `gpt-4.1`. Cost tracking may use incorrect per-token rates for prompt generation. |
 
 ### Low Priority
 
@@ -70,6 +67,7 @@ Comprehensive test coverage achieved. All adapters, routes, and infrastructure l
 - GCS storage: Upload, delete, and path building tested
 - Routes: Internal endpoints with auth validation, error handling, and success paths tested
 - Models: Validation functions and configuration objects tested
+- Parser: INT-605 contract alignment verified with explicit tests confirming stale fields are excluded
 
 No v8 ignore comments present in the codebase.
 
@@ -95,18 +93,7 @@ No TODO, FIXME, HACK, or XXX comments found in the source code.
 
 ### None Detected
 
-All files are within reasonable size limits:
-
-| File                                         | Lines | Status |
-| -------------------------------------------- | ----- | ------ |
-| `routes/internalRoutes.ts`                   | 288   | OK     |
-| `services.ts`                                | 131   | OK     |
-| `infra/storage/GcsImageStorage.ts`           | 112   | OK     |
-| `infra/image/GoogleImageGenerator.ts`        | 112   | OK     |
-| `infra/image/OpenAIImageGenerator.ts`        | 111   | OK     |
-| `infra/llm/parseResponse.ts`                 | 107   | OK     |
-| `infra/llm/GeminiPromptAdapter.ts`           | 74    | OK     |
-| `infra/llm/GptPromptAdapter.ts`              | 74    | OK     |
+All files are within reasonable size limits. The largest file is `routes/internalRoutes.ts` which handles three related endpoints in a single route plugin — an appropriate grouping for internal image operations.
 
 ---
 
@@ -130,6 +117,16 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### 2026-02-27: INT-605 Thumbnail Output Contract Alignment
+
+**Issue:** `ThumbnailPromptParameters` included `aspectRatio`, `textOnImage`, and `logosTrademarks` fields that were produced by the LLM but never consumed by the parser or downstream code.
+
+**Resolution:**
+- `ThumbnailPrompt.ts` trimmed to 3 fields: `framing`, `realism`, `people`
+- `parseResponse.ts` only validates consumed fields
+- `promptSchemas.ts` response schema updated to match
+- Test fixtures cleaned of stale fields in `7fbf7668`
 
 ### 2026-02-16: Dev-Mode Log Formatting
 
@@ -233,8 +230,8 @@ No deprecated APIs or dependencies in use.
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
-- [Tutorial](tutorial.md) -- Getting-started guide
-- [Agent](agent.md) -- Machine-readable interface
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
+- [Tutorial](tutorial.md) — Getting-started guide
+- [Agent](agent.md) — Machine-readable interface
 - [Documentation Run Log](../../documentation-runs.md)

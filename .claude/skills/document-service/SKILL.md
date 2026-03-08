@@ -22,15 +22,17 @@ Generate comprehensive documentation for IntexuraOS services (apps, workers, and
 ## Core Mandates
 
 1. **Code-First Analysis**: Always analyze actual code before generating docs
-2. **Preserve User Insights**: Never lose user-provided context from previous runs
-3. **Incremental Updates**: Website content updates are additive, not full regenerations
-4. **Quality Assurance**: Self-critique before writing files to disk
-5. **Debt Tracking**: Archive resolved items, never delete history
-6. **Cross-Validation**: After generation, validate docs against code and other service docs
+2. **No Fabrication**: Never invent version numbers, endpoints, env vars, resource limits, line counts, or method names — only document what exists in source code. See `workflows/autonomous.md` Phase 3.5 for grounding rules
+3. **Preserve User Insights**: Never lose user-provided context from previous runs
+4. **Incremental Updates**: Website content updates are additive, not full regenerations
+5. **Quality Assurance**: Self-critique before writing files to disk — includes mandatory factual validation (Phase 4.5)
+6. **Debt Tracking**: Archive resolved items, never delete history
+7. **Cross-Validation**: After generation, validate docs against code and other service docs
+8. **Typographic Consistency**: Use em-dashes (`—`) not ASCII double-dashes (`--`) for parenthetical statements
 
 ## Output Files
 
-### Per Service (apps/workers) -- 5 files
+### Per Service (apps/workers) — 5 files
 
 | File                | Purpose                                      | Audience              |
 | ------------------- | -------------------------------------------- | --------------------- |

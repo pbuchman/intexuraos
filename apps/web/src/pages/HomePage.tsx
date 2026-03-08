@@ -12,7 +12,9 @@ import {
   Container,
   Eye,
   GitPullRequest,
+  GitPullRequestArrow,
   Layers,
+  LayoutGrid,
   Lock,
   Mail,
   MessageSquare,
@@ -20,6 +22,7 @@ import {
   Shield,
   Smartphone,
   Terminal,
+  Waypoints,
   Zap,
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
@@ -279,7 +282,7 @@ function HeroSection(): React.JSX.Element {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
             </span>
-            IntexuraOS v3.1.0
+            IntexuraOS v3.2.0
           </div>
 
           <p className="mx-auto mb-4 max-w-xl text-lg leading-relaxed text-neutral-600">
@@ -667,6 +670,125 @@ function IntegrationsSection(): React.JSX.Element {
   );
 }
 
+function WhatsNewSection(): React.JSX.Element {
+  const features: {
+    title: string;
+    description: string;
+    icon: React.ElementType;
+    borderColor: string;
+    bgGradient: string;
+    iconBg: string;
+    iconColor: string;
+  }[] = [
+    {
+      title: 'Agent-Based Routing',
+      description: 'Requests automatically routed to the right specialist based on issue labels.',
+      icon: Waypoints,
+      borderColor: 'border-purple-200',
+      bgGradient: 'bg-gradient-to-br from-purple-50 to-white',
+      iconBg: 'bg-purple-100',
+      iconColor: 'text-purple-700',
+    },
+    {
+      title: 'One-Click Implement',
+      description: 'Planned tasks go from design to pull request with a single button press.',
+      icon: Zap,
+      borderColor: 'border-cyan-200',
+      bgGradient: 'bg-gradient-to-br from-cyan-50 to-white',
+      iconBg: 'bg-cyan-100',
+      iconColor: 'text-cyan-700',
+    },
+    {
+      title: 'Task Queueing',
+      description: 'New requests wait in line when workers are busy instead of being dropped.',
+      icon: LayoutGrid,
+      borderColor: 'border-emerald-200',
+      bgGradient: 'bg-gradient-to-br from-emerald-50 to-white',
+      iconBg: 'bg-emerald-100',
+      iconColor: 'text-emerald-700',
+    },
+    {
+      title: 'PR Comment Tasks',
+      description: 'Leave a comment on a pull request and a code task is created automatically.',
+      icon: GitPullRequestArrow,
+      borderColor: 'border-blue-200',
+      bgGradient: 'bg-gradient-to-br from-blue-50 to-white',
+      iconBg: 'bg-blue-100',
+      iconColor: 'text-blue-700',
+    },
+    {
+      title: 'More AI Models',
+      description: 'Qwen, Sonnet, and MiniMax worker types join the coding agent lineup.',
+      icon: Bot,
+      borderColor: 'border-violet-200',
+      bgGradient: 'bg-gradient-to-br from-violet-50 to-white',
+      iconBg: 'bg-violet-100',
+      iconColor: 'text-violet-700',
+    },
+    {
+      title: 'WhatsApp Deep Links',
+      description: 'Tap CTA buttons to navigate directly to tasks and dashboards.',
+      icon: Smartphone,
+      borderColor: 'border-green-200',
+      bgGradient: 'bg-gradient-to-br from-green-50 to-white',
+      iconBg: 'bg-green-100',
+      iconColor: 'text-green-700',
+    },
+  ];
+
+  return (
+    <section className="bg-white px-6 py-24">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-16 max-w-2xl">
+          <div className="flex items-center gap-3">
+            <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-cyan-600">What's New</p>
+            <a
+              href="https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View full changelog"
+              className="mb-4 ml-auto text-xs font-medium text-neutral-400 transition-colors hover:text-cyan-600"
+            >
+              Full Changelog →
+            </a>
+          </div>
+          <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
+            v3.2.0 —{' '}
+            <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
+              Six new capabilities.
+            </span>
+          </h2>
+          <p className="text-lg leading-relaxed text-neutral-600">
+            Agent-based routing, one-click implementation, task queueing, and more.
+          </p>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {features.map((feature) => {
+            const Icon = feature.icon;
+            return (
+              <motion.div
+                key={feature.title}
+                whileHover={{ y: -5 }}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className={`overflow-hidden rounded-2xl border ${feature.borderColor} ${feature.bgGradient} p-6 shadow-sm transition-all hover:shadow-md`}
+              >
+                <div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl ${feature.iconBg} ${feature.iconColor}`}>
+                  <Icon className="h-6 w-6" />
+                </div>
+                <h3 className="mb-2 text-lg font-bold text-neutral-900">{feature.title}</h3>
+                <p className="text-neutral-600">{feature.description}</p>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function GettingStartedSection(): React.JSX.Element {
   return (
     <section className="bg-gradient-to-b from-cyan-50 to-white px-6 py-24">
@@ -904,7 +1026,7 @@ function Footer(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-md bg-cyan-600" />
           <span className="font-bold text-neutral-900">IntexuraOS</span>
-          <span className="text-xs text-neutral-400">v3.1.0</span>
+          <span className="text-xs text-neutral-400">v3.2.0</span>
         </div>
         <p className="text-sm text-neutral-500">
           &copy; {new Date().getFullYear()}{' '}
@@ -943,6 +1065,7 @@ export function HomePage(): React.JSX.Element {
       <SelfBuildingSection />
       <CouncilSection />
       <IntegrationsSection />
+      <WhatsNewSection />
       <GettingStartedSection />
       <LimitationsSection />
       <EngineeringSection />

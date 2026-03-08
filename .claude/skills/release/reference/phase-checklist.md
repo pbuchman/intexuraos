@@ -66,9 +66,10 @@ Multiple Task calls in single message for parallel execution
 
 ## Phase 5: Website (Automatic)
 
-- [ ] Auto-update RecentUpdatesSection from High-priority features
-- [ ] If major version: create VersionHistorySection with marketing slogan from Phase 1
-- [ ] Invoke `/frontend-design` skill for implementation
+- [ ] Update version strings in `HomePage.tsx` (hero badge + footer)
+- [ ] Add/update `WhatsNewSection` with High-priority feature cards
+- [ ] If major version: create version history section
+- [ ] Content filter: exclude migrations and refactors from feature cards
 
 **No user interaction required.**
 
@@ -80,6 +81,14 @@ Multiple Task calls in single message for parallel execution
 - [ ] Update CHANGELOG.md with new version entry (sorted type subcategories)
 - [ ] Run `pnpm run ci:tracked` — **MUST PASS**
 - [ ] Refresh RAG embeddings: `pnpm run embed-docs` (with prod env overrides)
+- [ ] **Pre-merge release validation** — verify all phases produced output:
+  - [ ] Version strings updated in `HomePage.tsx`
+  - [ ] `WhatsNewSection` present with feature cards (or all features skipped)
+  - [ ] README "What's New" updated
+  - [ ] CHANGELOG contains new version
+  - [ ] Package versions match
+  - [ ] No false "new" features (migrations/refactors excluded)
+  - [ ] No hallucinated version numbers or endpoints
 - [ ] Stage & commit on `development`
 - [ ] Push `development` branch
 - [ ] Merge `development` → `main` (via existing PR or direct merge)

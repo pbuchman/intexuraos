@@ -1,7 +1,7 @@
 # Research Agent - Technical Debt
 
-**Last Updated:** 2026-02-22
-**Analysis Run:** v3.1.0 documentation update
+**Last Updated:** 2026-03-07
+**Analysis Run:** v3.2.0 documentation refresh
 
 ---
 
@@ -41,7 +41,7 @@ Currently, research results are returned in bulk when all LLMs complete. Future 
 2. **Tags** - Add custom tags for organization
 3. **Search** - Full-text search across researches
 
-### Model Selection Improvements (v2.0.0 follow-up)
+### Model Selection Improvements
 
 1. **Learning from user preferences** - Track which models users typically select
 2. **Cost-aware selection** - Suggest cheaper models for simple queries
@@ -76,10 +76,16 @@ Comprehensive test coverage across all layers with 100% branch coverage enforced
 
 - **Models**: Research entity creation, enhancement, factories, NotionExportInfo
 - **Use Cases**: Process research, synthesis, retry, enhance, unshare, extractModelPreferences, toggleResearchFavourite
-- **Infrastructure**: All LLM adapters with nock mocks, ContextInferenceAdapter with repair scenarios, InputValidationAdapter with Zod schemas, NotionResearchExporter, markdownToNotionBlocks, researchExportSettingsRepository, notionServiceClient
+- **Infrastructure**: All LLM adapters with nock mocks, ContextInferenceAdapter with repair scenarios, InputValidationAdapter with Zod schemas and structural checks, NotionResearchExporter, markdownToNotionBlocks, researchExportSettingsRepository, notionServiceClient
 - **Routes**: PubSub endpoints, research CRUD, export-notion, export settings with auth validation
 
-### v2.2.0 Test Additions
+### Recent Test Additions
+
+| File                             | Coverage | Notes                                                              |
+| -------------------------------- | -------- | ------------------------------------------------------------------ |
+| `InputValidationAdapter.test.ts` | 100%     | Structural validation with repair pattern (INT-609)                |
+
+### Test Additions (Notion Export)
 
 | File                                       | Coverage | Notes                                        |
 | ------------------------------------------ | -------- | -------------------------------------------- |
@@ -92,7 +98,7 @@ Comprehensive test coverage across all layers with 100% branch coverage enforced
 | `researchExportRoutes.test.ts`             | 100%     | Settings GET/POST and validate endpoints     |
 | `toggleResearchFavourite.test.ts`          | 100%     | Favourite toggle with error branches         |
 
-### v2.0.0 Test Additions
+### Test Additions (Model Preferences)
 
 | File                              | Coverage | Notes                                     |
 | --------------------------------- | -------- | ----------------------------------------- |
@@ -166,6 +172,19 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 
 ## Resolved Issues
 
+### 2026-03-07 - Input Improvement Structural Checks (INT-609)
+
+| Date       | Issue                                                         | Resolution                                                                                     |
+| ---------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 2026-02-27 | Structurally invalid LLM repairs could pass validation        | Added structural checks (prefix, JSON, length, explanatory text) to `validateImprovedPrompt`   |
+| 2026-03-07 | Multi-option detection and language drift heuristics removed  | Checks were too aggressive with false positives; removed in v3.2.0                             |
+
+### 2026-02-27 - Thumbnail Output Contract (INT-605)
+
+| Date       | Issue                                    | Resolution                                                    |
+| ---------- | ---------------------------------------- | ------------------------------------------------------------- |
+| 2026-02-27 | Thumbnail parser fields misaligned       | Aligned thumbnail output contract with consumed parser fields |
+
 ### 2026-02-22 - v3.1.0 Prompt Audit & Version Alignment
 
 | Date       | Issue                                         | Resolution                                                                           |
@@ -173,14 +192,14 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 | 2026-02-22 | Unsafe casts in ContextInferenceAdapter       | Simplified with safer fallback defaults during adversarial dual-agent prompt audit   |
 | 2026-02-22 | Package version behind monorepo-wide releases | Aligned to v3.1.0 (v3.0.0 and v3.1.0 were version bumps only for research-agent)     |
 
-### 2026-02-19 - v2.4.0 Observability & Developer Experience
+### 2026-02-19 — Observability & Developer Experience
 
 | Date       | Issue                                  | Resolution                                                       |
 | ---------- | -------------------------------------- | ---------------------------------------------------------------- |
 | 2026-02-19 | No distributed tracing across services | Added Dash0 OTLP via `packages/infra-otel` preload in Dockerfile |
 | 2026-02-19 | PM2 log output unreadable (raw JSON)   | Added `createLogStream()` for colorized dev-mode formatting      |
 
-### 2026-02-19 - v2.3.0 Platform Fallbacks & Prompt Improvements
+### 2026-02-19 — Platform Fallbacks & Prompt Improvements
 
 | Date       | Issue                                               | Resolution                                                                    |
 | ---------- | --------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -239,7 +258,7 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 
 ### Historical Issues
 
-No previously resolved issues tracked prior to v2.0.0.
+No previously resolved issues tracked prior to initial release.
 
 ---
 
@@ -249,13 +268,14 @@ No previously resolved issues tracked prior to v2.0.0.
 
 1. **Type-safe validation** - All LLM response validation uses Zod schemas (ResearchContext, SynthesisContext, InputQuality)
 2. **Self-healing** - Parser + repair pattern handles malformed LLM responses gracefully
-3. **Standardized clients** - `@intexuraos/internal-clients` provides consistent service-to-service communication
-4. **One model per provider** - Clear constraint prevents duplicate costs
-5. **Notion integration** - Clean separation between export use case, exporter, markdown converter, and service client
-6. **100% branch coverage** - Strict enforcement with categorized v8 ignore exemptions
-7. **Sentry integration** - All loggers use `createAppLogger()` for error forwarding
-8. **Distributed tracing** - Dash0 OpenTelemetry preload provides transparent trace propagation across all services
-9. **Prompt versioning** - All prompts follow semver; adversarial audit ensured quality (v3.1.0)
+3. **Structural guardrails** — Input improvement validation catches malformed responses (unwanted prefixes, JSON markers, explanatory text) before they reach users
+4. **Standardized clients** - `@intexuraos/internal-clients` provides consistent service-to-service communication
+5. **One model per provider** - Clear constraint prevents duplicate costs
+6. **Notion integration** - Clean separation between export use case, exporter, markdown converter, and service client
+7. **100% branch coverage** - Strict enforcement with categorized v8 ignore exemptions
+8. **Sentry integration** - All loggers use `createAppLogger()` for error forwarding
+9. **Distributed tracing** - Dash0 OpenTelemetry preload provides transparent trace propagation across all services
+10. **Prompt versioning** - All prompts follow semver; adversarial audit ensured quality (v3.1.0)
 
 ### Areas for Future Improvement
 

@@ -1,4 +1,4 @@
-# orchestrator -- Agent Interface
+# orchestrator — Agent Interface
 
 > Machine-readable interface definition for AI agents interacting with the orchestrator.
 
@@ -23,7 +23,7 @@ interface OrchestratorTools {
   // Submit a new code task for execution
   submitTask(params: {
     taskId: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
     prompt: string;
     repository?: string;
     baseBranch?: string;
@@ -32,6 +32,8 @@ interface OrchestratorTools {
     linearIssueLabels: string[];
     hasChildren: boolean;
     agentType?: 'planning' | 'execution' | 'pull_request';
+    planningPrBranch?: string;
+    planningPrUrl?: string;
     slug?: string;
     webhookUrl: string;
     webhookSecret: string;
@@ -55,7 +57,7 @@ interface OrchestratorTools {
   // - Completed/failed/interrupted task: task is resumed with a new worker session
   sendMessage(params: {
     taskId: string;
-    message: string; // max 10000 chars
+    message: string; // max 20000 chars
   }): Promise<SendMessageResult>;
   // Auth: HMAC-signed
   // Errors: 400 (validation), 404 (not found), 409 (invalid status, e.g. cancelled)
@@ -118,7 +120,7 @@ interface OrchestratorResources {
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   prompt: string;
   repository: string;
   baseBranch: string;
@@ -131,6 +133,9 @@ interface Task {
   webhookSecret: string;
   actionId?: string;
   retriedFrom?: string; // Original task ID for retry chains
+  agentType?: 'planning' | 'execution' | 'pull_request';
+  planningPrBranch?: string; // Branch name of planning PR to merge into execution worktree
+  planningPrUrl?: string; // PR URL to close after successful execution
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
   containerId: string;
@@ -140,17 +145,14 @@ interface Task {
   maxAttempts?: number; // Maximum before terminal failure
   lastExitCode?: number; // Exit code of most recent attempt
   verificationHistory?: TaskVerificationRecord[]; // Completion verifier results per attempt
+  resumedAfterSuccess?: boolean; // Set when a completed task is resumed via sendMessage()
 }
 
 interface TaskVerificationRecord {
   attempt: number;
   passed: boolean;
-  confidence: number;
-  reasons: string[];
-  missingCriteria: string[];
-  resumeInstruction: string;
-  usedLlm: boolean;
-  verifierFailure?: boolean; // true if Gemini was unreachable or returned invalid JSON
+  missingFields: string[];
+  verifierFailure: boolean; // true if Gemini was unreachable or returned invalid JSON
   createdAt: string;
 }
 ```
@@ -169,22 +171,21 @@ interface SendMessageResult {
 ```typescript
 interface TaskResult {
   prUrl?: string;
-  branch: string;
-  commits: number;
+  branch?: string;
+  commits?: number;
   summary?: string;
   ciFailed?: boolean;
+  comment_replied?: boolean;
   planning_outcome_label?: 'planned' | 'unclear';
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_linear_url?: string;
   planning_is_complex?: '0' | '1';
+  planning_subtask_urls?: string;
   planning_pr_url?: string;
-  planning_clarification_message?: string;
+  planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented';
   execution_superpowers_executing_plans_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
-  execution_trivial_task?: '0' | '1';
-  execution_subagents?: string;
-  execution_review_iterations?: number;
   execution_linear_issue_url?: string;
   rebaseResult?: {
     attempted: boolean;
@@ -347,18 +348,32 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 ### Task Execution Flow
 
 1. Create git worktree from `origin/{baseBranch}`
-2. Validate Anthropic API key (for `opus`/`auto` workers)
-3. Build system prompt (agent-specific: planning/execution/pull_request via labels + `agentType`)
-4. Spawn Docker container with Claude Code in interactive mode
-5. Write system prompt to container stdin
-6. Stream logs to code-agent via LogForwarder
-7. Monitor container exit (30s polling)
-8. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
-9. Run completion verification (agent-specific: planning/pull_request use deterministic + Gemini; execution uses Gemini semantic validation of Claude responses + `execution_*` extraction)
-10. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria → go to step 4
-11. If verification **passes** or max attempts reached: collect turn metrics, send webhook with result or error
-12. Clean up token refresher, log forwarder, and task timers
-13. If any queued messages arrived during execution: deliver them immediately as a new session
+2. If `planningPrBranch` is set, merge planning branch into worktree
+3. Validate API key for the target model provider (cached 5 minutes)
+4. Build system prompt (agent-specific: planning/execution/pull_request via labels + `agentType`)
+5. Spawn Docker container with Claude Code in interactive mode
+6. Write system prompt to container stdin
+7. Stream logs to code-agent via LogForwarder
+8. Monitor container exit (30s polling)
+9. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
+10. Run completion verification (Gemini semantic validation of Claude responses with agent-specific Zod schemas)
+11. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria
+12. If verification **passes** or max attempts reached: collect turn metrics, send webhook with result or error
+13. Clean up token refresher, log forwarder, and task timers
+14. If any queued messages arrived during execution: deliver them immediately as a new session
+
+### Startup Recovery
+
+On startup, the orchestrator:
+
+1. Loads persisted state from `state.json`
+2. Finds tasks with `running` status
+3. Attempts to discover running Docker containers (5s timeout)
+4. For each running task:
+   - If container is still running: adopt it (re-attach monitoring, log forwarding, token refresh)
+   - If container has exited or is unreachable: send `interrupted` webhook
+5. Updates task status accordingly
+6. Starts webhook retry for pending deliveries
 
 ### Timeout Behavior
 
@@ -366,16 +381,6 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 | --------- | ------------------------------------------ |
 | 1h 55m    | Log warning                                |
 | 2h 0m     | Kill container, send `interrupted` webhook |
-
-### Recovery Behavior
-
-On startup, the orchestrator:
-
-1. Loads persisted state from `state.json`
-2. Finds tasks with `running` status
-3. Sends `interrupted` webhook for each
-4. Updates task status to `interrupted`
-5. Starts webhook retry for pending deliveries
 
 ---
 
@@ -394,6 +399,8 @@ On startup, the orchestrator:
 | `INTEXURAOS_SENTRY_AUTH_TOKEN`                 | Yes      | -                             |
 | `INTEXURAOS_GEMINI_APP_API_KEY`                | Yes      | -                             |
 | `INTEXURAOS_ZAI_APP_API_KEY`                   | Yes      | -                             |
+| `INTEXURAOS_MINIMAX_APP_API_KEY`               | Yes      | -                             |
+| `INTEXURAOS_DASHSCOPE_APP_API_KEY`             | Yes      | -                             |
 | `GOOGLE_APPLICATION_CREDENTIALS`               | Yes      | -                             |
 | `INTEXURAOS_REPOSITORY_PATH`                   | No       | `~/.claude-orchestrator/repo` |
 | `INTEXURAOS_WORKER_CAPACITY`                   | No       | `2`                           |
@@ -402,6 +409,10 @@ On startup, the orchestrator:
 | `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | No       | (GCR Artifact Registry)       |
 | `INTEXURAOS_GIT_USER_NAME`                     | No       | (host git config)             |
 | `INTEXURAOS_GIT_USER_EMAIL`                    | No       | (host git config)             |
+| `INTEXURAOS_FORENSICS_ENABLED`                 | No       | `0`                           |
+| `INTEXURAOS_FORENSICS_CORE_DUMPS`              | No       | `0`                           |
+| `INTEXURAOS_FORENSICS_EXEC_PERSISTENCE`        | No       | `0`                           |
+| `INTEXURAOS_FORENSICS_CRASH_SNAPSHOTS`         | No       | `0`                           |
 | `PORT`                                         | No       | `8199`                        |
 | `LOG_LEVEL`                                    | No       | `info`                        |
 
@@ -430,7 +441,7 @@ On startup, the orchestrator:
 - Maximum concurrent tasks: configurable (default 2, via `INTEXURAOS_WORKER_CAPACITY`)
 - Maximum task duration: 2 hours per attempt (hard timeout); multi-attempt tasks can run longer
 - Maximum completion attempts: configurable (default 3, via `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`)
-- Maximum message length for `/tasks/:id/message`: 10,000 characters
+- Maximum message length for `/tasks/:id/message`: 20,000 characters
 - Maximum log size per task: 4 MB
 - Log chunk size: 64 KB max
 - Webhook retry: 3 attempts with 5s/15s/45s delays
@@ -443,3 +454,5 @@ On startup, the orchestrator:
 - Container CPU limit: 4 cores
 - Turn metrics: non-fatal; zero values returned when cgroup path unavailable (macOS)
 - Completion verifier: required; verifier failure marks task `failed` (no false positives)
+- Container adoption timeout: 5 seconds on startup
+- Worker types: 6 (opus, auto, sonnet for Anthropic; glm for ZAI; minimax for MiniMax; qwen3.5-plus for Alibaba Cloud)

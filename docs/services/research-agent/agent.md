@@ -1,4 +1,4 @@
-# research-agent -- Agent Interface
+# research-agent — Agent Interface
 
 > Machine-readable interface definition for AI agents interacting with research-agent.
 
@@ -106,7 +106,9 @@ interface ResearchAgentTools {
   // Toggle favourite status
   toggleFavourite(id: string, params: { favourite: boolean }): Promise<Research>;
 
-  // Validate input quality before research (v2.1.0: Zod-validated)
+  // Validate input quality before research
+  // Returns quality 0 (rejected), 1 (weak, improvement available), 2 (good)
+  // Structural checks reject malformed improvements (prefixes, JSON, length)
   validateInput(params: {
     prompt: string;
     includeImprovement?: boolean;
@@ -115,17 +117,17 @@ interface ResearchAgentTools {
   // Force-improve input prompt
   improveInput(params: { prompt: string }): Promise<{ improvedPrompt: string }>;
 
-  // Manually export completed research to Notion (v2.2.0)
+  // Manually export completed research to Notion
   exportToNotion(id: string): Promise<Research>;
 
-  // Get Notion export settings (v2.2.0)
+  // Get Notion export settings
   getNotionSettings(): Promise<{
     researchPageId: string | null;
     researchPageTitle: string | null;
     researchPageUrl: string | null;
   }>;
 
-  // Save Notion export settings (v2.2.0)
+  // Save Notion export settings
   saveNotionSettings(params: {
     researchPageId: string;
     researchPageTitle: string;
@@ -138,7 +140,7 @@ interface ResearchAgentTools {
     updatedAt: string;
   }>;
 
-  // Validate a Notion page ID and get preview (v2.2.0)
+  // Validate a Notion page ID and get preview
   validateNotionPage(params: { researchPageId: string }): Promise<{ title: string; url: string }>;
 }
 ```
@@ -165,6 +167,7 @@ type ResearchStatus =
   | 'processing'
   | 'synthesizing'
   | 'awaiting_confirmation'
+  | 'retrying'
   | 'completed'
   | 'failed';
 
@@ -173,22 +176,26 @@ interface Research {
   userId: string;
   title: string;
   prompt: string;
+  originalPrompt?: string;
   selectedModels: ResearchModel[];
   synthesisModel: ResearchModel;
   status: ResearchStatus;
   llmResults: LlmResult[];
   synthesizedResult?: string;
-  researchContext?: ResearchContext; // v2.0.0: Zod-validated context
-  synthesisContext?: SynthesisContext; // v2.0.0: Zod-validated context
+  researchContext?: ResearchContext;
   inputContexts?: InputContext[];
   shareInfo?: ShareInfo;
   favourite?: boolean;
-  notionExportInfo?: NotionExportInfo; // v2.2.0
+  notionExportInfo?: NotionExportInfo;
+  attributionStatus?: 'complete' | 'incomplete' | 'repaired';
+  totalCostUsd?: number;
+  auxiliaryCostUsd?: number;
+  sourceLlmCostUsd?: number;
+  sourceResearchId?: string;
   startedAt: string;
   completedAt?: string;
 }
 
-// v2.2.0: Notion export tracking
 interface NotionExportInfo {
   mainPageId: string;
   mainPageUrl: string;
@@ -214,34 +221,44 @@ interface LlmResult {
 
 type LlmProvider = 'anthropic' | 'openai' | 'google' | 'perplexity' | 'zai';
 
-// v2.0.0: Zod-validated context types
+interface InputContext {
+  id: string;
+  content: string;
+  label?: string;
+  addedAt: string;
+}
+
+interface ShareInfo {
+  shareToken: string;
+  slug: string;
+  shareUrl: string;
+  sharedAt: string;
+  gcsPath: string;
+  coverImageId?: string;
+  coverImageUrl?: string;
+}
+
 interface ResearchContext {
   language: string;
-  domain: 'technical' | 'business' | 'academic' | 'creative' | 'general';
-  mode: 'deep_dive' | 'quick_answer' | 'comparison' | 'standard';
+  domain: string;
+  mode: 'compact' | 'standard' | 'audit';
   intent_summary: string;
-  answer_style: AnswerStyle[];
-  time_scope?: TimeScope;
-  locale_scope?: LocaleScope;
-  research_plan?: ResearchPlan;
+  answer_style: string[];
+  time_scope?: { as_of_date: string; prefers_recent_years: number; is_time_sensitive: boolean };
+  locale_scope?: { country: string; region?: string };
+  research_plan?: { key_questions: string[]; preferred_source_types: string[] };
 }
 
-interface SynthesisContext {
-  synthesis_goals: SynthesisGoal[];
-  detected_conflicts?: DetectedConflict[];
-}
-
-// v2.1.0: Zod-validated input quality result
 interface InputQualityResult {
-  quality: 0 | 1 | 2; // 0: poor, 1: fair, 2: good
+  quality: 0 | 1 | 2; // 0: rejected, 1: weak (improvement available), 2: good
   reason: string;
-  improvedPrompt?: string;
+  improvedPrompt?: string; // Only when quality === 1 and includeImprovement === true
 }
 ```
 
 ---
 
-## Model Selection (v2.0.0)
+## Model Selection
 
 ### Natural Language Extraction
 
@@ -261,7 +278,7 @@ When creating draft research via actions-agent, model preferences are extracted 
 
 ### API Key Filtering
 
-Extracted models are filtered by user's configured API keys (via `@intexuraos/internal-clients` in v2.1.0):
+Extracted models are filtered by user's configured API keys (via `@intexuraos/internal-clients`):
 
 ```typescript
 // Example: User says "Use Claude and Gemini"
@@ -280,7 +297,7 @@ The system enforces maximum one model per provider:
 // Result: Only one is selected (first match wins)
 ```
 
-### Platform API Key Fallbacks (v2.3.0)
+### Platform API Key Fallbacks
 
 When a user has no API key for a provider, `getLlmClient` tries platform-owned keys:
 
@@ -307,12 +324,14 @@ Model extraction failures do not block draft creation:
 | Rule                       | Description                                                    |
 | -------------------------- | -------------------------------------------------------------- |
 | **API Keys Required**      | User must have API keys configured for selected models         |
-| **One Model Per Provider** | Maximum one model from each provider (v2.0.0)                  |
+| **One Model Per Provider** | Maximum one model from each provider                           |
 | **At Least One Source**    | Research requires either models or input contexts              |
 | **Synthesis Model Key**    | Synthesis model's provider API key must be available           |
 | **Draft Before Approve**   | Can only approve researches in 'draft' status                  |
 | **Retry Only Failed**      | Can only retry from 'failed' or 'awaiting_confirmation' status |
 | **Enhance Only Completed** | Can only enhance 'completed' researches                        |
+| **Max 5 Contexts**         | Up to 5 input contexts, each max 60,000 characters             |
+| **Max 6 Models**           | Up to 6 selected models per research                           |
 
 ---
 
@@ -341,7 +360,35 @@ if (research.status === 'completed') {
 }
 ```
 
-### Natural Language Model Selection (v2.0.0)
+### Validate-Then-Create Flow
+
+```typescript
+// 1. Validate input quality
+const validation = await validateInput({
+  prompt: userInput,
+  includeImprovement: true,
+});
+
+// 2. Use improved prompt if quality is weak
+const finalPrompt = validation.quality === 1 && validation.improvedPrompt
+  ? validation.improvedPrompt
+  : userInput;
+
+// 3. Reject if quality is 0
+if (validation.quality === 0) {
+  throw new Error(`Prompt rejected: ${validation.reason}`);
+}
+
+// 4. Create research with validated prompt
+const { id } = await createResearch({
+  prompt: finalPrompt,
+  originalPrompt: validation.quality === 1 ? userInput : undefined,
+  selectedModels: ['gemini-2.5-pro'],
+  synthesisModel: 'gemini-2.5-pro',
+});
+```
+
+### Natural Language Model Selection
 
 ```typescript
 // Via actions-agent with natural language
@@ -390,20 +437,34 @@ if (research.status === 'awaiting_confirmation') {
 
 ---
 
-## Public Endpoints (v2.2.0 additions)
+## Public Endpoints
 
-| Method | Path                                 | Purpose                              |
-| ------ | ------------------------------------ | ------------------------------------ |
-| POST   | `/research/:id/export-notion`        | Manually export to Notion (v2.2.0)   |
-| GET    | `/research/settings/notion`          | Get Notion export settings (v2.2.0)  |
-| POST   | `/research/settings/notion`          | Save Notion export settings (v2.2.0) |
-| POST   | `/research/settings/notion/validate` | Validate Notion page ID (v2.2.0)     |
+| Method | Path                                 | Purpose                        |
+| ------ | ------------------------------------ | ------------------------------ |
+| POST   | `/research`                          | Create new research            |
+| POST   | `/research/draft`                    | Save as draft                  |
+| PATCH  | `/research/:id`                      | Update draft                   |
+| GET    | `/research`                          | List researches                |
+| GET    | `/research/:id`                      | Get research by ID             |
+| DELETE | `/research/:id`                      | Delete research                |
+| POST   | `/research/:id/approve`              | Approve draft                  |
+| POST   | `/research/:id/enhance`              | Enhance completed research     |
+| POST   | `/research/:id/retry`                | Retry failed LLMs              |
+| POST   | `/research/:id/confirm`              | Confirm partial failure        |
+| POST   | `/research/:id/export-notion`        | Export to Notion               |
+| DELETE | `/research/:id/share`                | Remove public sharing          |
+| PATCH  | `/research/:id/favourite`            | Toggle favourite               |
+| POST   | `/research/validate-input`           | Validate input quality         |
+| POST   | `/research/improve-input`            | Improve research prompt        |
+| GET    | `/research/settings/notion`          | Get Notion export settings     |
+| POST   | `/research/settings/notion`          | Save Notion export settings    |
+| POST   | `/research/settings/notion/validate` | Validate Notion page ID        |
 
 ## Internal Endpoints
 
 | Method | Path                                    | Purpose                                     |
 | ------ | --------------------------------------- | ------------------------------------------- |
-| POST   | `/internal/research/draft`              | Create draft with model extraction (v2.0.0) |
+| POST   | `/internal/research/draft`              | Create draft with model extraction          |
 | POST   | `/internal/llm/pubsub/process-research` | Process research from Pub/Sub               |
 | POST   | `/internal/llm/pubsub/process-llm-call` | Process individual LLM call                 |
 | POST   | `/internal/llm/pubsub/report-analytics` | Report LLM analytics                        |
@@ -411,6 +472,13 @@ if (research.status === 'awaiting_confirmation') {
 ---
 
 ## Error Handling
+
+### Input Validation Errors
+
+| Error                        | Cause                                      | Resolution                         |
+| ---------------------------- | ------------------------------------------ | ---------------------------------- |
+| Quality 0 (rejected)         | Prompt too vague or inappropriate          | Rewrite with more specificity      |
+| Malformed improvement        | LLM returned invalid format (prefix, JSON) | System retries automatically       |
 
 ### Model Selection Errors
 
@@ -435,25 +503,25 @@ if (research.status === 'awaiting_confirmation') {
 
 ```
 draft --approve--> pending --process--> processing --all_complete--> synthesizing --synth_done--> completed
-                      |                     |                            |
-                      |                     | partial_failure            | synth_error
-                      |                     v                            v
-                      |              awaiting_confirmation            failed
-                      |                     |
-                      |                     | proceed/retry/cancel
-| v |
-|  |
+                                            |                            |
+                                            | partial_failure            | synth_error
+                                            v                            v
+                                     awaiting_confirmation            failed
+                                            |
+                                            | proceed/retry/cancel
+                                            v
+                                   synthesizing / retrying / failed
 ```
 
 ---
 
-## Dependencies (v3.1.0)
+## Dependencies
 
 | Package                        | Purpose                                              |
 | ------------------------------ | ---------------------------------------------------- |
-| `@intexuraos/internal-clients` | User service client (v2.1.0)                         |
-| `@intexuraos/infra-notion`     | Notion client and error mapping (v2.2.0)             |
-| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry preload instrumentation (v2.4.0) |
+| `@intexuraos/internal-clients` | User service client                                  |
+| `@intexuraos/infra-notion`     | Notion client and error mapping                      |
+| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry preload instrumentation          |
 | `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                        |
 | `@intexuraos/llm-contract`     | Model types, provider mapping                        |
 | `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                         |
@@ -465,4 +533,4 @@ draft --approve--> pending --process--> processing --all_complete--> synthesizin
 
 ---
 
-**Last updated:** 2026-02-22 (v3.1.0)
+**Last updated:** 2026-03-07 (v3.1.0)

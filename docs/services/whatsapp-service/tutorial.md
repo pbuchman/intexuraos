@@ -1,6 +1,6 @@
-# WhatsApp Service - Tutorial
+# WhatsApp Service — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** GCP project access, WhatsApp Business API setup, IntexuraOS development environment
 > **You'll learn:** How to integrate with whatsapp-service for message sending, approval workflows, and reply correlation
 
@@ -12,6 +12,7 @@ A working integration that:
 
 - Sends WhatsApp messages to users via the internal API
 - Sends interactive approval messages with buttons
+- Sends CTA URL messages with clickable links
 - Tracks outbound messages for reply correlation
 - Handles approval responses (buttons and text replies)
 - Processes the approval workflow end-to-end
@@ -43,6 +44,7 @@ Outgoing: Your Service -> Pub/Sub -> whatsapp-service -> WhatsApp
 1. **User Mapping**: Phone numbers are mapped to userId internally
 2. **OutboundMessage Tracking**: Sent messages are stored with correlationId for reply correlation
 3. **Approval Correlation**: CorrelationId format `action-{type}-approval-{actionId}` enables actionId extraction
+4. **Event-Driven Transcription**: Audio files are stored in GCS, then srt-service transcribes asynchronously
 
 ---
 
@@ -58,7 +60,8 @@ interface SendMessageEvent {
   userId: string; // IntexuraOS user ID
   message: string; // Message text
   replyToMessageId?: string; // Optional: reply to specific message
-  buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons (v3.0.0)
+  buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons
+  ctaUrl?: { displayText: string; url: string }; // Optional: CTA URL button
   correlationId: string; // For tracking and reply correlation
   timestamp: string; // ISO 8601
 }
@@ -72,7 +75,9 @@ interface WhatsAppInteractiveButton {
 }
 ```
 
-### Step 2.2: Publish to Pub/Sub
+**Important:** `buttons` and `ctaUrl` are mutually exclusive (WhatsApp API constraint).
+
+### Step 2.2: Publish a Plain Text Message
 
 ```typescript
 import { PubSub } from '@google-cloud/pubsub';
@@ -94,15 +99,37 @@ await topic.publishMessage({
 });
 ```
 
+### Step 2.3: Send a CTA URL Message
+
+CTA URL messages include a clickable button that opens a link in the user's browser:
+
+```typescript
+const ctaEvent: SendMessageEvent = {
+  type: 'whatsapp.message.send',
+  userId: 'user-abc-123',
+  message: 'Your PR is ready for review!',
+  ctaUrl: {
+    displayText: 'View PR',
+    url: 'https://github.com/org/repo/pull/42',
+  },
+  correlationId: 'pr-ready-pr-42',
+  timestamp: new Date().toISOString(),
+};
+
+await topic.publishMessage({
+  data: Buffer.from(JSON.stringify(ctaEvent)),
+});
+```
+
 ### What Just Happened?
 
 1. Event published to `whatsapp-message-send` topic
 2. WhatsApp-service receives via push subscription
 3. Service looks up phone number for userId
-4. Message sent via WhatsApp Cloud API
+4. Message sent via WhatsApp Cloud API (text, interactive, or CTA based on payload)
 5. OutboundMessage saved with wamid and correlationId
 
-**Checkpoint:** User receives message on WhatsApp within 2-5 seconds.
+**Checkpoint:** User receives message on WhatsApp within 2–5 seconds.
 
 ---
 
@@ -119,7 +146,7 @@ const actionType = 'todo';
 const approvalEvent: SendMessageEvent = {
   type: 'whatsapp.message.send',
   userId: 'user-abc-123',
-  message: '👷 Create todo: "Review quarterly report"?',
+  message: 'Create todo: "Review quarterly report"?',
   buttons: [
     { type: 'reply', reply: { id: `approve:${actionId}`, title: 'Approve' } },
     { type: 'reply', reply: { id: `cancel:${actionId}`, title: 'Cancel' } },
@@ -136,8 +163,6 @@ await topic.publishMessage({
 
 When buttons are provided, the message is sent as a WhatsApp interactive message. Users can tap buttons directly instead of typing replies. Text replies still work as a fallback.
 
-**Note:** As of v4.0.0 (INT-524), button IDs use the format `intent:actionId` — nonces are no longer included.
-
 ### Step 3.2: Handle Approval Responses
 
 When the user taps a button or replies, whatsapp-service publishes an `action.approval.reply` event:
@@ -146,7 +171,7 @@ When the user taps a button or replies, whatsapp-service publishes an `action.ap
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
   replyToWamid: string; // Original approval message wamid
-  replyText: string; // "yes", "no", "convert", "cancel-task", "view-task"
+  replyText: string; // "yes", "no", "convert", "cancel-task", "view-task", "proceed-implementation"
   userId: string;
   timestamp: string;
   actionId?: string; // Extracted from buttonId or correlationId
@@ -192,7 +217,7 @@ function classifyIntent(text: string): 'approve' | 'reject' | 'ambiguous' {
 }
 ```
 
-**Checkpoint:** Full approval flow working - send approval, receive reply, process action.
+**Checkpoint:** Full approval flow working — send approval, receive reply, process action.
 
 ---
 
@@ -202,15 +227,16 @@ function classifyIntent(text: string): 'approve' | 'reject' | 'ambiguous' {
 
 Buttons and text replies both produce the same `ApprovalReplyEvent`:
 
-| Response Type    | `replyText` | `buttonId`        | `actionId`         |
-| ---------------- | ----------- | ----------------- | ------------------ |
-| Button "Approve" | "yes"       | `approve:act-123` | `act-123`          |
-| Button "Cancel"  | "no"        | `cancel:act-123`  | `act-123`          |
-| Button "Reject"  | "no"        | `reject:act-123`  | `act-123`          |
-| Text reply "yes" | "yes"       | undefined         | from correlationId |
-| Text reply "no"  | "no"        | undefined         | from correlationId |
+| Response Type              | `replyText`              | `buttonId`                    | `actionId`         |
+| -------------------------- | ------------------------ | ----------------------------- | ------------------ |
+| Button "Approve"           | "yes"                    | `approve:act-123`             | `act-123`          |
+| Button "Cancel"            | "no"                     | `cancel:act-123`              | `act-123`          |
+| Button "Reject"            | "no"                     | `reject:act-123`              | `act-123`          |
+| Button "Proceed"           | "proceed-implementation" | `proceed-implementation:id`   | from buttonId      |
+| Text reply "yes"           | "yes"                    | undefined                     | from correlationId |
+| Text reply "no"            | "no"                     | undefined                     | from correlationId |
 
-**Note:** Emoji reactions (`👍`/`👎`) are no longer supported as of v4.0.0. They are ignored with status `REACTION_NOT_SUPPORTED`.
+**Note:** Emoji reactions are not supported. They are ignored with status `REACTION_NOT_SUPPORTED`.
 
 ### Step 4.2: No Code Changes Needed!
 
@@ -274,6 +300,19 @@ await actionRepository.save({
 });
 ```
 
+### Scenario D: Audio Message Processing
+
+Audio messages follow an event-driven flow:
+
+1. User sends voice note via WhatsApp
+2. whatsapp-service downloads audio and stores it in GCS
+3. `whatsapp.audio.stored` event is published
+4. srt-service transcribes the audio asynchronously
+5. `srt.transcription.completed` event is received
+6. whatsapp-service updates message, sends transcript to user, and publishes `command.ingest`
+
+You do not need to handle any of this — subscribe to `command.ingest` events with `sourceType: 'whatsapp_voice'` to receive the final text.
+
 ---
 
 ## Troubleshooting
@@ -285,8 +324,9 @@ await actionRepository.save({
 | "No approval event received" | Verify buttonId format or correlationId format                        |
 | "actionId is undefined"      | User replied to non-approval message, check correlationId in DB       |
 | "Duplicate actions created"  | Ensure not publishing both approval reply AND command.ingest handlers |
-| "Reaction not processed"     | Emoji reactions removed in v4.0.0; only buttons and text replies work |
+| "Reaction not processed"     | Emoji reactions removed; only buttons and text replies work           |
 | "Button title truncated"     | WhatsApp limits button titles to 20 characters                        |
+| "CTA button not showing"     | Ensure `buttons` and `ctaUrl` are not both provided                   |
 
 ---
 
@@ -302,18 +342,17 @@ Now that you understand the basics:
 
 ## Quick Reference
 
-### Button ID Format for Approvals (v4.0.0)
+### Button ID Format for Approvals
 
 ```
-approve:{actionId}    -- Approve
-cancel:{actionId}     -- Cancel/reject
-reject:{actionId}     -- Explicitly reject
-convert:{actionId}    -- Convert to different type
-cancel-task:{taskId}  -- Cancel running task
-view-task:{taskId}    -- View task status
+approve:{actionId}              -- Approve
+cancel:{actionId}               -- Cancel/reject
+reject:{actionId}               -- Explicitly reject
+convert:{actionId}              -- Convert to different type
+cancel-task:{taskId}            -- Cancel running task
+view-task:{taskId}              -- View task status
+proceed-implementation:{taskId} -- Proceed with implementation
 ```
-
-**Note:** Nonces were removed in v4.0.0. Old format `approve:{actionId}:{nonce}` is no longer used.
 
 ### CorrelationId Format for Text Reply Correlation
 
@@ -329,16 +368,19 @@ Examples:
 
 ### Event Types
 
-| Event                   | Direction | Purpose                        |
-| ----------------------- | --------- | ------------------------------ |
-| `whatsapp.message.send` | Outgoing  | Send message to user           |
-| `action.approval.reply` | Incoming  | User responded to approval     |
-| `command.ingest`        | Incoming  | Regular message for processing |
+| Event                          | Direction | Purpose                               |
+| ------------------------------ | --------- | ------------------------------------- |
+| `whatsapp.message.send`        | Outgoing  | Send message to user                  |
+| `action.approval.reply`        | Incoming  | User responded to approval            |
+| `command.ingest`               | Incoming  | Regular message for processing        |
+| `whatsapp.audio.stored`        | Published | Audio ready for transcription         |
+| `srt.transcription.completed`  | Received  | Transcription result from srt-service |
 
 ### Response Types Reference
 
 ```
 Button tap   -> replyText from intent, buttonId present
 Text reply   -> raw replyText, no buttonId
-Emoji reacts -> NOT supported (v4.0.0)
+Emoji reacts -> NOT supported
+CTA URL      -> One-way notification, no response expected
 ```

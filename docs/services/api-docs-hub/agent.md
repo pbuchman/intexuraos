@@ -1,4 +1,4 @@
-# api-docs-hub -- Agent Interface
+# api-docs-hub — Agent Interface
 
 > Machine-readable specification for AI agent integration
 
@@ -7,9 +7,9 @@
 | Attribute   | Value                                                                   |
 | ----------- | ----------------------------------------------------------------------- |
 | **Name**    | api-docs-hub                                                            |
-| **Role**    | Aggregates OpenAPI specs from 15 services into a single Swagger UI      |
+| **Role**    | Aggregates OpenAPI specs from 18 services into a single Swagger UI      |
 | **Goal**    | Provide a unified documentation portal for all IntexuraOS service APIs  |
-| **Version** | 3.1.0 (package) / 0.0.4 (OpenAPI spec)                                  |
+| **Version** | 3.2.0 (package) / 0.0.5 (OpenAPI spec)                                  |
 
 ---
 
@@ -23,7 +23,7 @@
 
 **Note:** This endpoint serves an HTML page (Swagger UI). It is browser-only and not useful for programmatic access by agents.
 
-**Output:** Interactive Swagger UI HTML page with a service selector dropdown listing all 15 configured services.
+**Output:** Interactive Swagger UI HTML page with a service selector dropdown listing all 18 configured services.
 
 ### Check Health
 
@@ -37,7 +37,7 @@
 interface HealthResponse {
   status: 'healthy' | 'degraded' | 'down';
   serviceName: 'api-docs-hub';
-  version: '0.0.4';
+  version: '0.0.5';
   checks: HealthCheck[];
 }
 
@@ -46,7 +46,7 @@ interface HealthCheck {
   status: 'ok' | 'down';
   latencyMs: number;
   details: {
-    sourceCount: number;  // Expected: 15
+    sourceCount: number;  // Expected: 18
   };
 }
 ```
@@ -61,13 +61,13 @@ interface HealthCheck {
 {
   "status": "healthy",
   "serviceName": "api-docs-hub",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "checks": [
     {
       "name": "config",
       "status": "ok",
       "latencyMs": 0,
-      "details": { "sourceCount": 15 }
+      "details": { "sourceCount": 18 }
     }
   ]
 }
@@ -79,13 +79,13 @@ interface HealthCheck {
 
 **Do NOT:**
 
-- Use `/docs` for programmatic API discovery -- it serves HTML, not machine-readable data
-- Expect the hub to proxy or cache OpenAPI specs -- specs are fetched client-side by the browser
-- Call this service for any data mutation -- it is entirely read-only
+- Use `/docs` for programmatic API discovery — it serves HTML, not machine-readable data
+- Expect the hub to proxy or cache OpenAPI specs — specs are fetched client-side by the browser
+- Call this service for any data mutation — it is entirely read-only
 
 **Requires:**
 
-- All 15 `INTEXURAOS_*_OPENAPI_URL` environment variables set at startup
+- All 18 `INTEXURAOS_*_OPENAPI_URL` environment variables set at startup
 - Target services must be running and CORS-enabled for the browser to fetch their specs
 
 ---
@@ -97,7 +97,7 @@ interface HealthCheck {
 ```
 1. GET /health
 2. Assert response.status === 'healthy'
-3. Assert response.checks[0].details.sourceCount === 15
+3. Assert response.checks[0].details.sourceCount === 18
 ```
 
 ### Pattern 2: Direct Service Spec Access
@@ -112,7 +112,7 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 
 ---
 
-## Available Service Specs (15)
+## Available Service Specs (18)
 
 | Service                          | Env Var Key                                               |
 | -------------------------------- | --------------------------------------------------------- |
@@ -131,6 +131,9 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 | Bookmarks Agent API              | `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`                  |
 | Calendar Agent API               | `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`                   |
 | Chat Agent API                   | `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                       |
+| Code Agent API                   | `INTEXURAOS_CODE_AGENT_OPENAPI_URL`                       |
+| Linear Agent API                 | `INTEXURAOS_LINEAR_AGENT_OPENAPI_URL`                     |
+| Web Agent API                    | `INTEXURAOS_WEB_AGENT_OPENAPI_URL`                        |
 
 ---
 
@@ -141,7 +144,7 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 | 200    | Success                              | None needed                                          |
 | 404    | Unknown path                         | Use `/docs` or `/health` only                        |
 | 500    | Server error                         | Check logs for startup misconfiguration              |
-| N/A    | Service fails to start               | Verify all 15 env vars are set; check `direnv allow` |
+| N/A    | Service fails to start               | Verify all 18 env vars are set; check `direnv allow` |
 
 ---
 
@@ -157,15 +160,13 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 
 ## Architecture
 
-```
-Browser ──GET /docs──> API Docs Hub ──serves HTML──> Browser
-                                                        |
-Browser ──GET /openapi.json──> Service 1 ──────────> Browser renders spec
-Browser ──GET /openapi.json──> Service 2 ──────────> Browser renders spec
-  ...
-Browser ──GET /openapi.json──> Service 15 ─────────> Browser renders spec
-```
+The hub serves Swagger UI HTML to the browser. The browser then fetches OpenAPI specs directly from each of the 18 target services. The hub does not proxy or cache any specs.
+
+1. Browser sends `GET /docs` to API Docs Hub
+2. Hub returns Swagger UI HTML with `urls` config listing all 18 services
+3. Browser fetches `GET /openapi.json` from the selected target service
+4. Browser renders the interactive API documentation
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07
