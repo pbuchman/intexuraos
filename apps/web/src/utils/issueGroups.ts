@@ -140,6 +140,10 @@ function sortByUpdatedAtDesc(a: CodeTask, b: CodeTask): number {
   return b.updatedAt.localeCompare(a.updatedAt);
 }
 
+function sortByCreatedAtAsc(a: CodeTask, b: CodeTask): number {
+  return a.createdAt.localeCompare(b.createdAt);
+}
+
 export function groupByLinearIssue(tasks: CodeTask[]): IssueGroup[] {
   if (tasks.length === 0) {
     return [];
@@ -164,14 +168,17 @@ export function groupByLinearIssue(tasks: CodeTask[]): IssueGroup[] {
   const groups: IssueGroup[] = [];
 
   for (const group of groupMap.values()) {
-    // Sort tasks by updatedAt desc
+    // Sort by updatedAt desc to derive pipeline, status, and latestTask
     group.tasks.sort(sortByUpdatedAtDesc);
 
     const pipeline = derivePipeline(group.tasks);
     const aggregateStatus = deriveAggregateStatus(group.tasks, pipeline);
 
-    // latestTask is tasks[0] (already sorted)
+    // latestTask is tasks[0] (most recently updated)
     const latestTask = group.tasks[0];
+
+    // Re-sort by createdAt ascending for chronological display
+    group.tasks.sort(sortByCreatedAtAsc);
     if (latestTask === undefined) {
       continue;
     }
