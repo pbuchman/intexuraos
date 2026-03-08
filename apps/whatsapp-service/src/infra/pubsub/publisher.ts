@@ -7,12 +7,12 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type {
   ApprovalReplyEvent,
+  AudioStoredEvent,
   CommandIngestEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   WhatsAppError,
   MediaCleanupEvent,
-  TranscribeAudioEvent,
   WebhookProcessEvent,
 } from '../../domain/whatsapp/index.js';
 
@@ -21,7 +21,7 @@ export interface GcpPubSubPublisherConfig {
   mediaCleanupTopic: string;
   commandsIngestTopic?: string;
   webhookProcessTopic?: string;
-  transcriptionTopic?: string;
+  audioStoredTopic?: string;
   approvalReplyTopic?: string;
   logger: Logger;
 }
@@ -33,7 +33,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
   private readonly mediaCleanupTopic: string;
   private readonly commandsIngestTopic: string | null;
   private readonly webhookProcessTopic: string | null;
-  private readonly transcriptionTopic: string | null;
+  private readonly audioStoredTopic: string | null;
   private readonly approvalReplyTopic: string | null;
 
   constructor(config: GcpPubSubPublisherConfig) {
@@ -41,7 +41,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
     this.mediaCleanupTopic = config.mediaCleanupTopic;
     this.commandsIngestTopic = config.commandsIngestTopic ?? null;
     this.webhookProcessTopic = config.webhookProcessTopic ?? null;
-    this.transcriptionTopic = config.transcriptionTopic ?? null;
+    this.audioStoredTopic = config.audioStoredTopic ?? null;
     this.approvalReplyTopic = config.approvalReplyTopic ?? null;
   }
 
@@ -75,12 +75,12 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
     return this.mapToWhatsAppError(result);
   }
 
-  async publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, WhatsAppError>> {
+  async publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
     const result = await this.publishToTopic(
-      this.transcriptionTopic,
+      this.audioStoredTopic,
       event,
       { messageId: event.messageId },
-      'transcribe audio'
+      'audio stored'
     );
     return this.mapToWhatsAppError(result);
   }

@@ -49,7 +49,7 @@ Features that are planned but not yet implemented:
 
 | File                | Lines | Issue                                             | Suggestion                                             |
 | ------------------- | ----- | ------------------------------------------------- | ------------------------------------------------------ |
-| `bookmarkRoutes.ts` | 662   | CRUD routes + image proxy + schema definitions    | Extract image proxy to separate routes file             |
+| `bookmarkRoutes.ts` | 662   | CRUD routes + image proxy + schema definitions    | Extract image proxy to separate routes file            |
 
 The `bookmarkRoutes.ts` file handles 7 CRUD endpoints plus the image proxy endpoint, with inline JSON schema definitions for each. While still readable, the image proxy is a distinct concern that could be extracted to `imageRoutes.ts`.
 
@@ -59,9 +59,9 @@ The `bookmarkRoutes.ts` file handles 7 CRUD endpoints plus the image proxy endpo
 
 ### Low Priority
 
-| Pattern                    | Locations                                        | Suggestion                                                 |
-| -------------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
-| `formatBookmark()` function | `bookmarkRoutes.ts`, `internalRoutes.ts`        | Extract to shared utility in `domain/` or `routes/shared/` |
+| Pattern                     | Locations                                        | Suggestion                                                 |
+| --------------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
+| `formatBookmark()` function | `bookmarkRoutes.ts`, `internalRoutes.ts`         | Extract to shared utility in `domain/` or `routes/shared/` |
 
 Both route files define an identical `formatBookmark()` function that converts domain `Bookmark` objects to JSON-serializable response objects. This could be a single shared function.
 

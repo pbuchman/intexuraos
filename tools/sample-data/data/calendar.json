@@ -1,0 +1,62 @@
+[
+  {
+    "id": "cal-01",
+    "domain": "Work / Meeting",
+    "sourceType": "whatsapp_voice",
+    "text": "I have a board meeting next Thursday at 2pm, should last about two hours. It's at the main office, conference room B. Need to prepare the quarterly presentation beforehand."
+  },
+  {
+    "id": "cal-02",
+    "domain": "Health",
+    "sourceType": "whatsapp_text",
+    "text": "Schedule dentist appointment on March 3rd at 10:30 in the morning. Dr. Kowalski's clinic on Pulawska 67. Should take about 45 minutes, it's for that loose filling."
+  },
+  {
+    "id": "cal-03",
+    "domain": "Social",
+    "sourceType": "whatsapp_text",
+    "text": "Dinner with Kasia and Tomasz this Saturday at 7pm at Trattoria Napoli in Mokotow. Reservation is under my name, table for 4 because Anna might join us."
+  },
+  {
+    "id": "cal-04",
+    "domain": "Work / Recurring",
+    "sourceType": "whatsapp_text",
+    "text": "Set up a weekly standup every Monday at 9:15am starting next week. 15 minutes max, video call on Google Meet. Invite the whole product team — Anna, Derek, Tomasz, and Lisa."
+  },
+  {
+    "id": "cal-05",
+    "domain": "Personal / Fitness",
+    "sourceType": "whatsapp_voice",
+    "text": "Personal training session with Marek tomorrow morning at 7am at CityFit gym. He said we're focusing on deadlift form this time so I should bring my lifting belt."
+  },
+  {
+    "id": "cal-06",
+    "domain": "Learning",
+    "sourceType": "whatsapp_text",
+    "text": "AWS certification exam is on March 18th at 3pm. It's an online proctored exam, takes 130 minutes. I need to be at my desk with a clean room and stable internet at least 30 minutes before start time."
+  },
+  {
+    "id": "cal-07",
+    "domain": "Family",
+    "sourceType": "whatsapp_text",
+    "text": "Mom's birthday dinner on March 15th at 6:30pm. Italian place in Mokotow — Osteria del Sole. 8 people total. Need to pick up the cake from the bakery on Puławska before 5pm that day."
+  },
+  {
+    "id": "cal-08",
+    "domain": "Work / Travel",
+    "sourceType": "pwa-shared",
+    "text": "Flying to London for the engineering offsite in two weeks. March 9-11. Flight from Warsaw Chopin at 6:40am on the 9th, returning March 11th at 8:55pm. Hotel is the Premier Inn near Old Street, confirmation number PI-882941."
+  },
+  {
+    "id": "cal-09",
+    "domain": "Home",
+    "sourceType": "whatsapp_voice",
+    "text": "The plumber is coming on Friday around noon, give or take half an hour. He needs to look at the kitchen faucet and the water heater filter. I should be home by 11:30 just in case he's early."
+  },
+  {
+    "id": "cal-10",
+    "domain": "Work / Deadline",
+    "sourceType": "whatsapp_text",
+    "text": "Meridian Group contract deadline is end of day March 21st. The legal team needs the signed version by 5pm CET. Block the whole afternoon of March 20th for final review with Derek and the procurement team."
+  }
+]

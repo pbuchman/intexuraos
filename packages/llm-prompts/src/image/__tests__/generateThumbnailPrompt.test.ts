@@ -1,7 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { LLMClient, NormalizedUsage } from '@intexuraos/llm-contract';
 import { generateThumbnailPrompt } from '../generateThumbnailPrompt.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const sourceFilePath = resolve(__dirname, '../generateThumbnailPrompt.ts');
 
 const mockUsage: NormalizedUsage = {
   inputTokens: 100,
@@ -30,16 +36,41 @@ const validResponse = JSON.stringify({
   prompt: 'A detailed prompt for image generation',
   negativePrompt: 'Things to avoid in the image',
   parameters: {
-    aspectRatio: '16:9',
     framing: 'centered composition',
-    textOnImage: 'none',
     realism: 'photorealistic',
     people: 'generic silhouettes',
-    logosTrademarks: 'none',
   },
 });
 
 describe('generateThumbnailPrompt', () => {
+  describe('F-012 version metadata contract', () => {
+    it('contains a valid prompt version comment', () => {
+      const source = readFileSync(sourceFilePath, 'utf8');
+      const versionPattern = /\/\/ Prompt version: \d+\.\d+\.\d+/;
+      expect(source).toMatch(versionPattern);
+    });
+
+    it('uses valid semver format in version comment', () => {
+      const source = readFileSync(sourceFilePath, 'utf8');
+      const match = /\/\/ Prompt version: (\d+\.\d+\.\d+)/.exec(source);
+      expect(match).not.toBeNull();
+      const version = match?.[1] ?? '';
+      const parts = version.split('.').map(Number);
+      expect(parts[0]).toBeGreaterThanOrEqual(1);
+      expect(parts[1]).toBeGreaterThanOrEqual(0);
+      expect(parts[2]).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('F-012 version metadata regression', () => {
+    it('version comment is not missing (regression: previously absent)', () => {
+      const source = readFileSync(sourceFilePath, 'utf8');
+      // The audit found this file lacked a version comment entirely.
+      // This test ensures the failure path (no version) cannot recur.
+      expect(source).toMatch(/\/\/ Prompt version:/);
+    });
+  });
+
   describe('successful generation', () => {
     it('returns thumbnail prompt with usage on success', async () => {
       const client = createMockClient(validResponse);
@@ -448,34 +479,49 @@ describe('generateThumbnailPrompt', () => {
     });
   });
 
-  describe('fixed parameters', () => {
-    it('always sets aspectRatio to 16:9', async () => {
+  describe('F-011 contract alignment', () => {
+    it('output contract only contains consumed fields (no aspectRatio, textOnImage, logosTrademarks)', async () => {
       const client = createMockClient(validResponse);
       const result = await generateThumbnailPrompt(client, 'Test');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.thumbnailPrompt.parameters.aspectRatio).toBe('16:9');
+        const paramKeys = Object.keys(result.value.thumbnailPrompt.parameters);
+        expect(paramKeys).toEqual(['framing', 'realism', 'people']);
+        expect(paramKeys).not.toContain('aspectRatio');
+        expect(paramKeys).not.toContain('textOnImage');
+        expect(paramKeys).not.toContain('logosTrademarks');
       }
     });
 
-    it('always sets textOnImage to none', async () => {
-      const client = createMockClient(validResponse);
+    it('parser gracefully handles model responses that include removed fields (regression)', async () => {
+      const responseWithExtraFields = JSON.stringify({
+        title: 'Title With Extras',
+        visualSummary: 'Summary with extra fields',
+        prompt: 'A prompt from a model that includes extra fields',
+        negativePrompt: 'Negative prompt',
+        parameters: {
+          aspectRatio: '16:9',
+          framing: 'wide shot',
+          textOnImage: 'none',
+          realism: 'cinematic illustration',
+          people: 'silhouettes',
+          logosTrademarks: 'none',
+        },
+      });
+      const client = createMockClient(responseWithExtraFields);
       const result = await generateThumbnailPrompt(client, 'Test');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.thumbnailPrompt.parameters.textOnImage).toBe('none');
-      }
-    });
-
-    it('always sets logosTrademarks to none', async () => {
-      const client = createMockClient(validResponse);
-      const result = await generateThumbnailPrompt(client, 'Test');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.thumbnailPrompt.parameters.logosTrademarks).toBe('none');
+        const params = result.value.thumbnailPrompt.parameters;
+        expect(params.framing).toBe('wide shot');
+        expect(params.realism).toBe('cinematic illustration');
+        expect(params.people).toBe('silhouettes');
+        const paramKeys = Object.keys(params);
+        expect(paramKeys).not.toContain('aspectRatio');
+        expect(paramKeys).not.toContain('textOnImage');
+        expect(paramKeys).not.toContain('logosTrademarks');
       }
     });
   });

@@ -52,12 +52,9 @@ describe('GptPromptAdapter', () => {
         prompt: 'A futuristic AI interface with holographic displays',
         negativePrompt: 'blurry, low quality',
         parameters: {
-          aspectRatio: '16:9',
           framing: 'medium shot',
-          textOnImage: 'none',
           realism: 'photorealistic',
           people: 'none',
-          logosTrademarks: 'none',
         },
       };
 
@@ -238,12 +235,9 @@ describe('GptPromptAdapter', () => {
         prompt: 'Prompt',
         negativePrompt: 'Negative',
         parameters: {
-          aspectRatio: '16:9',
           framing: 'center',
-          textOnImage: 'none',
           realism: 'clean vector',
           people: 'none',
-          logosTrademarks: 'none',
         },
       };
 

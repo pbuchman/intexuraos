@@ -179,13 +179,16 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     });
   }
 
-  async findUserIdByTeamId(teamId: string): Promise<Result<string | null, LinearError>> {
+  async findUserIdsByTeamId(teamId: string): Promise<Result<string[], LinearError>> {
     if (this.shouldFailGetConnection) return err(this.failError);
 
+    const userIds: string[] = [];
     for (const [userId, conn] of this.connections.entries()) {
-      if (conn.connected && conn.teamId === teamId) return ok(userId);
+      if (conn.connected && conn.teamId === teamId) {
+        userIds.push(userId);
+      }
     }
-    return ok(null);
+    return ok(userIds);
   }
 
   async findWebhookSecretByTeamId(
@@ -342,6 +345,37 @@ export class FakeLinearApiClient implements LinearApiClient {
     issue.updatedAt = new Date().toISOString();
 
     return ok(issue);
+  }
+
+  async updateIssue(
+    _apiKey: string,
+    issueId: string,
+    _input: { assigneeId?: string | null; labelIds?: string[]; parentId?: string | null }
+  ): Promise<Result<LinearIssue, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    const issue = this.issues.find((i) => i.id === issueId);
+    if (!issue) {
+      return err({ code: 'API_ERROR', message: 'Issue not found' });
+    }
+    issue.updatedAt = new Date().toISOString();
+    return ok(issue);
+  }
+
+  async createComment(
+    _apiKey: string,
+    _issueId: string,
+    _body: string
+  ): Promise<Result<{ id: string }, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok({ id: `comment-${Date.now()}` });
+  }
+
+  async listIssueLabels(
+    _apiKey: string,
+    _teamId: string
+  ): Promise<Result<{ id: string; name: string; color: string }[], LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok([]);
   }
 
   async getWorkflowStates(
@@ -566,28 +600,41 @@ export class FakeProcessedActionRepository implements ProcessedActionRepository 
 }
 
 export class FakeLinearIssueRepository implements LinearIssueRepository {
+  /** Storage uses composite key (userId_issueId) to match real Firestore behavior */
   private issues = new Map<string, SyncedLinearIssue>();
   private shouldFail = false;
   private shouldFailSave = false;
   private shouldFailListByUserId = false;
   private shouldFailDeleteById = false;
+  private saveFailUserIds = new Set<string>();
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
+
+  private compositeKey(userId: string, issueId: string): string {
+    return `${userId}_${issueId}`;
+  }
 
   async save(issue: SyncedLinearIssue): Promise<Result<SyncedLinearIssue, LinearError>> {
     if (this.shouldFail || this.shouldFailSave) return err(this.failError);
-    this.issues.set(issue.id, { ...issue });
+    if (this.saveFailUserIds.has(issue.userId)) return err(this.failError);
+    this.issues.set(this.compositeKey(issue.userId, issue.id), { ...issue });
     return ok(issue);
   }
 
   async findById(id: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
     if (this.shouldFail) return err(this.failError);
-    return ok(this.issues.get(id) ?? null);
+    for (const issue of this.issues.values()) {
+      if (issue.id === id) return ok(issue);
+    }
+    return ok(null);
   }
 
-  async findByIdentifier(identifier: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
+  async findByIdentifier(identifier: string, userId?: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
     if (this.shouldFail) return err(this.failError);
     for (const issue of this.issues.values()) {
-      if (issue.identifier === identifier) return ok(issue);
+      if (issue.identifier === identifier) {
+        if (userId !== undefined && issue.userId !== userId) continue;
+        return ok(issue);
+      }
     }
     return ok(null);
   }
@@ -598,10 +645,21 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(userIssues);
   }
 
-  async deleteById(id: string): Promise<Result<void, LinearError>> {
+  async deleteById(id: string, userId: string): Promise<Result<void, LinearError>> {
     if (this.shouldFail || this.shouldFailDeleteById) return err(this.failError);
-    this.issues.delete(id);
+    this.issues.delete(this.compositeKey(userId, id));
     return ok(undefined);
+  }
+
+  async findUserIdsByIssueId(issueId: string): Promise<Result<string[], LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    const userIds: string[] = [];
+    for (const issue of this.issues.values()) {
+      if (issue.id === issueId) {
+        userIds.push(issue.userId);
+      }
+    }
+    return ok(userIds);
   }
 
   setFailure(fail: boolean, error?: LinearError): void {
@@ -624,16 +682,24 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     if (error) this.failError = error;
   }
 
+  /** Make save fail only for specific userIds (for partial fan-out failure testing) */
+  setSaveFailureForUsers(userIds: string[]): void {
+    for (const uid of userIds) {
+      this.saveFailUserIds.add(uid);
+    }
+  }
+
   reset(): void {
     this.issues.clear();
     this.shouldFail = false;
     this.shouldFailSave = false;
     this.shouldFailListByUserId = false;
     this.shouldFailDeleteById = false;
+    this.saveFailUserIds.clear();
   }
 
   seedIssue(issue: SyncedLinearIssue): void {
-    this.issues.set(issue.id, issue);
+    this.issues.set(this.compositeKey(issue.userId, issue.id), issue);
   }
 
   get count(): number {
@@ -716,6 +782,10 @@ export class FakeUserServiceClient implements UserServiceClient {
   setFailure(fail: boolean, error?: UserServiceError): void {
     this.shouldFail = fail;
     if (error !== undefined) this.failError = error;
+  }
+
+  async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, UserServiceError>> {
+    return ok(null);
   }
 
   reset(): void {
@@ -809,7 +879,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     userId: string;
     linearIssueId: string;
     prompt: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
     actionId: string;
     approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>> {

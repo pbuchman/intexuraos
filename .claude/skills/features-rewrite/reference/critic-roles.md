@@ -4,18 +4,19 @@
 
 ## Role Assignments
 
-| # | Role | Model | Primary Axis | Rationale |
-|---|------|-------|-------------|-----------|
-| 1 | Platform Architect (PA) | Opus | Factual accuracy | Deep cross-referencing against technical.md and route files requires Opus-level reasoning |
-| 2 | External Developer | Sonnet | Zero-context comprehensibility | Evaluates clarity from fresh perspective — Sonnet's "naive" reading is an asset |
-| 3 | Product Strategist | Sonnet | Value proposition | Subjective evaluation of messaging and positioning |
-| 4 | End User | Sonnet | Non-technical accessibility | Catches jargon that all technical critics miss — proven most valuable for readability |
-| 5 | First-Time Builder | Sonnet | Architecture clarity | Evaluates whether the doc inspires and educates about system design |
-| 6 | Competitor Analyst | Sonnet | Competitive positioning | Hardest to satisfy — consistently scores lowest but sharpens differentiation |
+| #   | Role                    | Model  | Primary Axis                   | Rationale                                                                                 |
+| --- | ----------------------- | ------ | ------------------------------ | ----------------------------------------------------------------------------------------- |
+| 1   | Platform Architect (PA) | Opus   | Factual accuracy               | Deep cross-referencing against technical.md and route files requires Opus-level reasoning |
+| 2   | External Developer      | Sonnet | Zero-context comprehensibility | Evaluates clarity from fresh perspective — Sonnet's "naive" reading is an asset           |
+| 3   | Product Strategist      | Sonnet | Value proposition              | Subjective evaluation of messaging and positioning                                        |
+| 4   | End User                | Sonnet | Non-technical accessibility    | Catches jargon that all technical critics miss — proven most valuable for readability     |
+| 5   | First-Time Builder      | Sonnet | Architecture clarity           | Evaluates whether the doc inspires and educates about system design                       |
+| 6   | Competitor Analyst      | Sonnet | Competitive positioning        | Hardest to satisfy — consistently scores lowest but sharpens differentiation              |
 
 ## Why PA Gets Opus
 
 The Platform Architect is the only critic that performs **factual verification** — reading technical.md to check whether claimed capabilities actually exist. This requires:
+
 - Cross-referencing specific claims against documentation
 - Detecting fabricated features (writers sometimes invent capabilities when asked to strengthen positioning)
 - Verifying numbers and specifics

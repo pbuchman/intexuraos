@@ -70,19 +70,19 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                       | Date       |
-| ---------- | ------------------------------------------------- | ---------- |
-| `b3f34d85` | Release v3.1.0                                    | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                    | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability   | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (#803)        | 2026-02-16 |
-| `d5fbb354` | Fix start:local to use tsx (not node strip-types) | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter start:local | 2026-02-14 |
-| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement  | 2026-01-31 |
-| `9723dc24` | Standardize DELETE endpoint response              | 2026-01-31 |
-| `c3198407` | Fix response contract violations (reply.ok/fail)  | 2026-01-30 |
-| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)     | 2026-01-30 |
-| `3a25d55e` | Add Notion page validation for Research Export    | 2026-01-29 |
+| Commit     | Description                                        | Date       |
+| ---------- | -------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0                                     | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                     | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability    | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (#803)         | 2026-02-16 |
+| `d5fbb354` | Fix start:local to use tsx (not node strip-types)  | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter start:local  | 2026-02-14 |
+| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement   | 2026-01-31 |
+| `9723dc24` | Standardize DELETE endpoint response               | 2026-01-31 |
+| `c3198407` | Fix response contract violations (reply.ok/fail)   | 2026-01-30 |
+| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)      | 2026-01-30 |
+| `3a25d55e` | Add Notion page validation for Research Export     | 2026-01-29 |
 | `7c5e9153` | INT-319: Remove PromptVault, keep Notion connector | 2026-01-26 |
 
 ## API Endpoints
@@ -103,8 +103,8 @@ sequenceDiagram
 
 ### Internal Endpoints
 
-| Method | Path                                                   | Purpose                     | Auth                  |
-| ------ | ------------------------------------------------------ | --------------------------- | --------------------- |
+| Method | Path                                                   | Purpose                      | Auth                  |
+| ------ | ------------------------------------------------------ | ---------------------------- | --------------------- |
 | GET    | `/internal/notion/users/:userId/context`               | Get connection context/token | X-Internal-Auth       |
 | GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | Get Notion page preview      | X-Internal-Auth       |
 
@@ -224,10 +224,10 @@ sequenceDiagram
 
 ### NotionConnectionPublic
 
-| Field       | Type      | Description                   |
-| ----------- | --------- | ----------------------------- |
-| `connected` | `boolean` | Whether connection is active  |
-| `createdAt` | `string`  | ISO 8601 creation timestamp   |
+| Field       | Type      | Description                    |
+| ----------- | --------- | ------------------------------ |
+| `connected` | `boolean` | Whether connection is active   |
+| `createdAt` | `string`  | ISO 8601 creation timestamp    |
 | `updatedAt` | `string`  | ISO 8601 last update timestamp |
 
 ### NotionConnectionDoc (Firestore)
@@ -279,23 +279,23 @@ sequenceDiagram
 
 ### Internal Services (Consumed By)
 
-| Service        | Endpoint                                               | Purpose                             |
-| -------------- | ------------------------------------------------------ | ----------------------------------- |
-| research-agent | `GET /internal/notion/users/:userId/context`           | Get token for Notion export         |
-| research-agent | `GET /internal/notion/users/:userId/pages/:pageId/preview` | Validate page access before export |
+| Service        | Endpoint                                                   | Purpose                             |
+| -------------- | ---------------------------------------------------------- | ----------------------------------- |
+| research-agent | `GET /internal/notion/users/:userId/context`               | Get token for Notion export         |
+| research-agent | `GET /internal/notion/users/:userId/pages/:pageId/preview` | Validate page access before export  |
 
 ### Packages
 
-| Package                    | Purpose                          |
-| -------------------------- | -------------------------------- |
-| `@intexuraos/common-core`  | Result types, Logger interface   |
-| `@intexuraos/common-http`  | Auth, logging, reply helpers     |
-| `@intexuraos/http-contracts` | Core OpenAPI schemas           |
-| `@intexuraos/http-server`  | Health checks, env validation    |
-| `@intexuraos/infra-firestore` | Firestore singleton client    |
-| `@intexuraos/infra-notion` | Notion API client (validateToken, getPageWithPreview) |
-| `@intexuraos/infra-otel`   | Dash0 OpenTelemetry integration  |
-| `@intexuraos/infra-sentry` | Sentry error tracking, logger    |
+| Package                       | Purpose                                               |
+| ----------------------------- | ----------------------------------------------------- |
+| `@intexuraos/common-core`     | Result types, Logger interface                        |
+| `@intexuraos/common-http`     | Auth, logging, reply helpers                          |
+| `@intexuraos/http-contracts`  | Core OpenAPI schemas                                  |
+| `@intexuraos/http-server`     | Health checks, env validation                         |
+| `@intexuraos/infra-firestore` | Firestore singleton client                            |
+| `@intexuraos/infra-notion`    | Notion API client (validateToken, getPageWithPreview) |
+| `@intexuraos/infra-otel`      | Dash0 OpenTelemetry integration                       |
+| `@intexuraos/infra-sentry`    | Sentry error tracking, logger                         |
 
 ## Firestore Collection
 
@@ -312,7 +312,7 @@ sequenceDiagram
 | `INTEXURAOS_AUTH_ISSUER`         | Yes      | JWT issuer                       |
 | `INTEXURAOS_AUTH_AUDIENCE`       | Yes      | JWT audience                     |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth  |
-| `INTEXURAOS_SENTRY_DSN`         | No       | Sentry DSN (optional)            |
+| `INTEXURAOS_SENTRY_DSN`          | No       | Sentry DSN (optional)            |
 | `PORT`                           | No       | HTTP port (default: 8082)        |
 
 ## Gotchas

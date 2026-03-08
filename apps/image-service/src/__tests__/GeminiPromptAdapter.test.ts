@@ -52,12 +52,9 @@ describe('GeminiPromptAdapter', () => {
         prompt: 'A glowing neural network with interconnected nodes on a dark background',
         negativePrompt: 'blurry, text, watermark',
         parameters: {
-          aspectRatio: '16:9',
           framing: 'wide shot',
-          textOnImage: 'none',
           realism: 'cinematic illustration',
           people: 'none',
-          logosTrademarks: 'none',
         },
       };
 
@@ -198,12 +195,9 @@ describe('GeminiPromptAdapter', () => {
         prompt: 'Prompt',
         negativePrompt: 'Negative',
         parameters: {
-          aspectRatio: '16:9',
           framing: 'center',
-          textOnImage: 'none',
           realism: 'photorealistic',
           people: 'none',
-          logosTrademarks: 'none',
         },
       };
 

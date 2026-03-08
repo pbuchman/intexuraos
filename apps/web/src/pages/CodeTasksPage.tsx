@@ -34,17 +34,24 @@ interface StatusStyle {
 }
 
 const ALL_TASK_STATUSES: CodeTaskStatus[] = [
-  'dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled',
+  'queued', 'dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled', 'archived',
+];
+
+// Statuses shown by default (all except archived — INT-711)
+const DEFAULT_VISIBLE_STATUSES: CodeTaskStatus[] = [
+  'queued', 'dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled',
 ];
 
 const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
+  queued: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Queued' },
   dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched' },
   running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running' },
-  designed: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Designed' },
+  planned: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Planned' },
   implemented: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Implemented' },
   failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed' },
   interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted' },
   cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled' },
+  archived: { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-500 dark:text-slate-500', label: 'Archived' },
 };
 
 export function CodeTasksPage(): React.JSX.Element {
@@ -62,7 +69,8 @@ export function CodeTasksPage(): React.JSX.Element {
         // Invalid JSON, use default
       }
     }
-    return [];
+    // Default: show all statuses EXCEPT archived (INT-711)
+    return DEFAULT_VISIBLE_STATUSES;
   });
   const [isFilterExpanded, setIsFilterExpanded] = useState(
     () => localStorage.getItem('code-tasks-filter-expanded') === 'true'
@@ -266,9 +274,9 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
       <div className="min-w-0">
         <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">
           {task.linearIssueId !== undefined ? (
-            (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+            task.linearIssue?.url !== undefined ? (
               <a
-                href={task.linearIssueUrl ?? task.linearIssue?.url}
+                href={task.linearIssue.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e): void => { e.stopPropagation(); }}
@@ -280,7 +288,7 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
               <span className="mr-2 text-blue-600 dark:text-blue-400">{task.linearIssueId}</span>
             )
           ) : null}
-          {task.linearIssueTitle ?? truncatePrompt(task.sanitizedPrompt, 80)}
+          {task.linearIssue?.title ?? truncatePrompt(task.sanitizedPrompt, 80)}
         </h3>
         <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">
           {truncatePrompt(task.sanitizedPrompt)}
@@ -288,9 +296,23 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {task.status === 'planned' && task.implementationTaskId === undefined && (
+          <span className="inline-flex items-center rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-medium text-green-400 dark:bg-red-700 dark:text-green-300">
+            Ready to implement
+          </span>
+        )}
         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}>
           {status.label}
         </span>
+        {task.agentType === 'planning' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+            Planning
+          </span>
+        ) : task.agentType === 'execution' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+            Execution
+          </span>
+        ) : null}
         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize text-slate-700 dark:bg-slate-700 dark:text-slate-300">
           {task.workerType}
         </span>
@@ -305,12 +327,17 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
             {task.linearIssue.assignee !== null ? (
               <span className="text-xs text-green-600 dark:text-green-400">{task.linearIssue.assignee.name}</span>
             ) : null}
+            {task.linearIssue.commentCount > 0 ? (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {String(task.linearIssue.commentCount)} comments
+              </span>
+            ) : null}
           </>
         ) : null}
         {task.linearIssueId !== undefined ? (
-          (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+          task.linearIssue?.url !== undefined ? (
             <a
-              href={task.linearIssueUrl ?? task.linearIssue?.url}
+              href={task.linearIssue.url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e): void => { e.stopPropagation(); }}
@@ -324,6 +351,16 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
             </span>
           )
         ) : null}
+        {task.linearIssue !== undefined && task.linearIssue.labels.length > 0
+          ? task.linearIssue.labels.map((label) => (
+              <span
+                key={label.id}
+                className="inline-flex items-center rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300"
+              >
+                {label.name}
+              </span>
+            ))
+          : null}
         {task.result?.prUrl !== undefined ? (
           <a
             href={task.result.prUrl}
@@ -340,7 +377,7 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
       <div className="mt-3 flex items-center justify-between">
         <div className="flex gap-4 text-sm text-slate-500 dark:text-slate-400">
           <span>Created: {formatDateTime(task.createdAt)}</span>
-          {(task.status === 'designed' || task.status === 'implemented') ? (
+          {(task.status === 'planned' || task.status === 'implemented') ? (
             <span>Completed: {formatDateTime(task.updatedAt)}</span>
           ) : null}
         </div>
@@ -366,7 +403,7 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
           onClick={(e): void => { e.stopPropagation(); }}
         >
           <p className="mb-3 text-sm text-red-800 dark:text-red-400">
-            Delete &quot;{task.linearIssueTitle ?? truncatePrompt(task.sanitizedPrompt, 60)}&quot;?
+            Delete &quot;{task.linearIssue?.title ?? truncatePrompt(task.sanitizedPrompt, 60)}&quot;?
           </p>
           <div className="flex gap-2">
             <Button

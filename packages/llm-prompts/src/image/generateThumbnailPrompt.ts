@@ -10,12 +10,9 @@ import { thumbnailPrompt } from './thumbnailPrompt.js';
 export type RealismStyle = 'photorealistic' | 'cinematic illustration' | 'clean vector';
 
 export interface ThumbnailPromptParameters {
-  aspectRatio: '16:9';
   framing: string;
-  textOnImage: 'none';
   realism: RealismStyle;
   people: string;
-  logosTrademarks: 'none';
 }
 
 export interface ThumbnailPrompt {
@@ -116,12 +113,9 @@ function parseThumbnailPromptResponse(
     prompt: obj['prompt'],
     negativePrompt: obj['negativePrompt'],
     parameters: {
-      aspectRatio: '16:9',
       framing: p['framing'],
-      textOnImage: 'none',
       realism: p['realism'],
       people: p['people'],
-      logosTrademarks: 'none',
     },
   });
 }
@@ -152,3 +146,4 @@ export async function generateThumbnailPrompt(
     usage: generateResult.value.usage,
   });
 }
+// Prompt version: 1.0.0

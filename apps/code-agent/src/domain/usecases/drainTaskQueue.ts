@@ -1,0 +1,227 @@
+/**
+ * Use case: Drain task queue by dispatching oldest queued task.
+ *
+ * Called by Cloud Scheduler via POST /internal/drain-queue.
+ * Uses dedicated dispatch-only path (not processCodeAction) to avoid dedup rejection.
+ *
+ * INT-619: Task queueing when workers are at capacity.
+ */
+
+import { err, ok, type Result } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
+import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
+import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
+import type { LinearAgentClient } from '../ports/linearAgentClient.js';
+import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
+import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import { loadConfig } from '../../config.js';
+import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
+
+// In-memory guard for single-instance environments
+let isDraining = false;
+
+// Exported for testing
+export function _resetDrainGuard(): void {
+  isDraining = false;
+}
+
+export interface DrainTaskQueueResult {
+  action: 'dispatched' | 'expired' | 'still_busy' | 'empty' | 'skipped' | 'failed';
+  taskId?: string;
+  locksToCleanup?: LockCleanupInfo[];
+}
+
+export interface DrainTaskQueueError {
+  code: 'internal_error' | 'concurrent_drain';
+  message: string;
+}
+
+export interface DrainTaskQueueDeps {
+  logger: Logger;
+  codeTaskRepo: CodeTaskRepository;
+  taskDispatcher: TaskDispatcherService;
+  linearAgentClient: LinearAgentClient;
+  whatsappNotifier: WhatsAppNotifier;
+  workerSettingsRepo: WorkerSettingsRepository;
+}
+
+export async function drainTaskQueue(
+  deps: DrainTaskQueueDeps
+): Promise<Result<DrainTaskQueueResult, DrainTaskQueueError>> {
+  const { logger, codeTaskRepo, taskDispatcher, linearAgentClient, whatsappNotifier, workerSettingsRepo } = deps;
+  const config = loadConfig();
+
+  // Fast-path guard for single-instance
+  if (isDraining) {
+    logger.info({ reason: 'concurrent' }, 'Drain already in progress, skipping');
+    return ok({ action: 'skipped' });
+  }
+
+  isDraining = true;
+  try {
+    // Step 1: Find oldest queued task
+    const findResult = await codeTaskRepo.findOldestQueued();
+    if (!findResult.ok) {
+      logger.error({ error: findResult.error }, 'Failed to find oldest queued task');
+      return err({ code: 'internal_error', message: findResult.error.message });
+    }
+
+    const task = findResult.value;
+    if (task === null) {
+      logger.info({ queue: 'empty' }, 'No queued tasks to drain');
+      return ok({ action: 'empty' });
+    }
+
+    logger.info({ taskId: task.id }, 'Processing queued task');
+
+    // Step 2: Check TTL
+    const queuedAt = task.queuedAt?.toDate() ?? task.createdAt.toDate();
+    const ttlMs = config.queue.ttlMinutes * 60 * 1000;
+    const now = Date.now();
+
+    if (now - queuedAt.getTime() > ttlMs) {
+      logger.warn({ taskId: task.id, queuedAt }, 'Queued task expired');
+      await codeTaskRepo.update(task.id, {
+        status: 'failed',
+        error: {
+          code: 'queue_timeout',
+          message: `Task expired in queue after ${String(config.queue.ttlMinutes)} minutes. Workers were still busy.`,
+        },
+      });
+
+      const locksToCleanup = buildLockCleanups(task);
+
+      // Clear parent planning task's implementationTaskId if this was an execution agent task,
+      // so the web UI can re-submit (INT-619 review fix #2)
+      if (task.parentTaskId !== undefined) {
+        const parentResult = await codeTaskRepo.findById(task.parentTaskId);
+        if (parentResult.ok && parentResult.value.implementationTaskId === task.id) {
+          const clearResult = await codeTaskRepo.update(task.parentTaskId, { implementationTaskId: null });
+          if (!clearResult.ok) {
+            logger.warn({ parentTaskId: task.parentTaskId, expiredTaskId: task.id, error: clearResult.error }, 'Failed to clear implementationTaskId on parent task after queue expiry');
+          }
+        }
+      }
+
+      const notifyResult = await whatsappNotifier.notifyTaskQueueExpired(task.userId, task);
+      if (!notifyResult.ok) {
+        logger.warn({ taskId: task.id, error: notifyResult.error }, 'Failed to send queue expired notification');
+      }
+
+      return ok({ action: 'expired', taskId: task.id, locksToCleanup });
+    }
+
+    // Step 3: Fetch user's CURRENT worker settings
+    const settingsResult = await workerSettingsRepo.getSettings(task.userId);
+    if (!settingsResult.ok || settingsResult.value === null) {
+      logger.error({ userId: task.userId }, 'Failed to fetch worker settings for drain');
+      return err({ code: 'internal_error', message: 'Failed to fetch worker settings' });
+    }
+
+    const settings = settingsResult.value;
+    const enabledWorkers = settings.workers.filter((w) => w.enabled);
+
+    if (enabledWorkers.length === 0) {
+      logger.warn({ userId: task.userId }, 'User has no enabled workers during drain');
+      return ok({ action: 'still_busy', taskId: task.id });
+    }
+
+    const workerCredentials: DispatchWorkerCredentials = {
+      workers: enabledWorkers.map((w) => ({
+        name: w.name,
+        url: w.url,
+        cfAccessClientId: w.cfAccessClientId,
+        cfAccessClientSecret: w.cfAccessClientSecret,
+        dispatchSigningSecret: w.dispatchSigningSecret,
+      })),
+    };
+
+    // Step 4: Fetch FRESH Linear issue metadata
+    let linearIssueLabels: string[] = [];
+    let hasChildren = false;
+
+    if (task.linearIssueId !== undefined) {
+      const validateResult = await linearAgentClient.validateIssue({
+        userId: task.userId,
+        identifier: task.linearIssueId,
+      });
+
+      if (validateResult.ok) {
+        linearIssueLabels = validateResult.value.labels;
+        hasChildren = validateResult.value.childCount > 0;
+      } else {
+        logger.warn({ linearIssueId: task.linearIssueId }, 'Failed to refresh Linear labels during drain');
+      }
+    }
+
+    // Step 5: Attempt dispatch
+    const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
+
+    const dispatchResult = await taskDispatcher.dispatch({
+      taskId: task.id,
+      prompt: task.sanitizedPrompt,
+      systemPromptHash: task.systemPromptHash,
+      repository: task.repository,
+      baseBranch: task.baseBranch,
+      workerType: task.workerType,
+      webhookUrl,
+      webhookSecret: task.webhookSecret ?? '',
+      traceId: task.traceId,
+      workerCredentials,
+      linearIssueLabels,
+      hasChildren,
+      agentType: task.agentType ?? 'planning',
+      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+    });
+
+    if (!dispatchResult.ok) {
+      const dispatchError = dispatchResult.error;
+
+      // Only at_capacity means workers are genuinely busy — task stays queued
+      if (dispatchError.code === 'at_capacity') {
+        logger.info({ taskId: task.id, error: dispatchError }, 'Workers still busy, task remains queued');
+        return ok({ action: 'still_busy', taskId: task.id });
+      }
+
+      // Other dispatch failures (network_error, dispatch_failed, etc.) — fail the task
+      logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with non-capacity error');
+      const failUpdateResult = await codeTaskRepo.update(task.id, {
+        status: 'failed',
+        error: {
+          code: dispatchError.code,
+          message: `Drain dispatch failed: ${dispatchError.message}`,
+        },
+      });
+      if (!failUpdateResult.ok) {
+        logger.error({ taskId: task.id, error: failUpdateResult.error }, 'Failed to persist failed status during drain');
+      }
+
+      const locksToCleanup = buildLockCleanups(task);
+
+      return ok({ action: 'failed', taskId: task.id, locksToCleanup });
+    }
+
+    // Step 6: Success - update status to dispatched
+    const cancelNonce = generateCancelNonce();
+    const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
+
+    const updateResult = await codeTaskRepo.update(task.id, {
+      status: 'dispatched',
+      dispatchedAt: new Date(),
+      workerLocation: dispatchResult.value.workerLocation,
+      cancelNonce,
+      cancelNonceExpiresAt,
+    });
+
+    if (updateResult.ok) {
+      await whatsappNotifier.notifyTaskStarted(task.userId, updateResult.value);
+    }
+
+    logger.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Queued task dispatched');
+    return ok({ action: 'dispatched', taskId: task.id });
+
+  } finally {
+    isDraining = false;
+  }
+}

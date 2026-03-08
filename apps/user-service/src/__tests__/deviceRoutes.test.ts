@@ -298,6 +298,7 @@ describe('Device Authorization Flow', () => {
           oauthConnectionRepository: new FakeOAuthConnectionRepository(),
           auth0Client: null, // Not used in device flow (uses direct HTTP calls)
           googleOAuthClient: null,
+          gitHubOAuthClient: null,
           encryptor: null,
           llmValidator: null,
         });

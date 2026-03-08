@@ -29,6 +29,7 @@ import { CredentialMonitor } from './services/isolation/credential-monitor.js';
 import { CredentialRefresher } from './services/isolation/credential-refresher.js';
 import Docker from 'dockerode';
 import { ApiKeyValidator } from './services/api-key-validator.js';
+import { WORKER_TYPES } from './services/isolation/types.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from './services/task-dispatcher.js';
@@ -152,9 +153,101 @@ function validatePortAvailable(port: number): void {
  * Warns (does not exit) so tasks of one type can still run if the other fails.
  */
 /* v8 ignore start -- test-infra: startup validation with network call @preserve */
+async function fetchWithRetry(
+  input: string,
+  init: RequestInit & { signal?: AbortSignal },
+  retries = 3,
+  delayMs = 2000
+): Promise<Response> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(10_000) });
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+    }
+  }
+  throw new Error('fetchWithRetry: unreachable');
+}
+
+async function validateThirdPartyApiKey(
+  workerTypeName: string,
+  apiKey: string,
+  suffix: (key: string) => string,
+  logger: pino.Logger
+): Promise<void> {
+  const config = WORKER_TYPES[workerTypeName as keyof typeof WORKER_TYPES];
+  const keyName = config.apiKeyEnvVar;
+  const keySuffix = suffix(apiKey);
+
+  const url =
+    config.model !== undefined
+      ? `${config.apiBaseUrl}/v1/messages`
+      : `${config.apiBaseUrl}/v1/models`;
+
+  const fetchOptions =
+    config.model !== undefined
+      ? {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: config.model,
+            max_tokens: 1,
+            messages: [{ role: 'user', content: 'ping' }],
+          }),
+        }
+      : {
+          method: 'GET',
+          headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        };
+
+  try {
+    const resp = await fetchWithRetry(url, fetchOptions);
+    if (resp.ok) {
+      logger.info({ apiKey: keySuffix }, `${keyName} validated successfully`);
+    } else {
+      logger.error(
+        { status: resp.status, apiKey: keySuffix },
+        `${keyName} validation failed — ${workerTypeName} tasks will fail`
+      );
+    }
+  } catch (error) {
+    const errorDetail = extractErrorChain(error);
+    logger.warn(
+      { error: errorDetail, url, apiKey: keySuffix },
+      `${keyName} validation request failed (network issue) — key may still be valid`
+    );
+  }
+}
+
+function extractErrorChain(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  while (current !== null && current !== undefined) {
+    if (current instanceof Error) {
+      const code = (current as NodeJS.ErrnoException).code;
+      parts.push(code !== undefined ? `${current.message} [${code}]` : current.message);
+      current = current.cause;
+    } else if (typeof current === 'string') {
+      parts.push(current);
+      break;
+    } else {
+      parts.push(JSON.stringify(current));
+      break;
+    }
+  }
+  return parts.join(' → ');
+}
+
 async function validateWorkerApiKeys(
   credentialMonitor: CredentialMonitor,
   zaiKey: string,
+  minimaxKey: string,
+  dashscopeKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
@@ -178,29 +271,16 @@ async function validateWorkerApiKeys(
     );
   }
 
-  if (zaiKey !== '') {
-    const keySuffix = suffix(zaiKey);
-    try {
-      const resp = await fetch('https://api.z.ai/api/anthropic/v1/models', {
-        method: 'GET',
-        headers: { 'x-api-key': zaiKey, 'anthropic-version': '2023-06-01' },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (resp.ok) {
-        logger.info({ apiKey: keySuffix }, 'ZAI_API_KEY validated successfully');
-      } else {
-        logger.error(
-          { status: resp.status, apiKey: keySuffix },
-          'ZAI_API_KEY validation failed — glm tasks will fail'
-        );
-      }
-    } catch (error) {
-      logger.warn(
-        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
-        'ZAI_API_KEY validation request failed (network issue) — key may still be valid'
-      );
-    }
-  }
+  // Validate all third-party API keys in parallel
+  await Promise.all([
+    zaiKey !== '' ? validateThirdPartyApiKey('glm', zaiKey, suffix, logger) : Promise.resolve(),
+    minimaxKey !== ''
+      ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
+      : Promise.resolve(),
+    dashscopeKey !== ''
+      ? validateThirdPartyApiKey('qwen3.5-plus', dashscopeKey, suffix, logger)
+      : Promise.resolve(),
+  ]);
 }
 /* v8 ignore stop @preserve */
 
@@ -363,6 +443,14 @@ async function bootstrap(): Promise<void> {
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
 
+  let codeVersion = 'unknown';
+  try {
+    codeVersion = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    // git may not be available in all environments
+  }
+  logger.info({ codeVersion, nodeVersion: process.version }, 'Orchestrator code version');
+
   // Ensure repository is cloned and up-to-date
   await ensureRepository(repoUrl, repoPath, logger);
 
@@ -434,6 +522,18 @@ async function bootstrap(): Promise<void> {
   if (keepContainersAlive) {
     logger.info({}, 'Debug mode: containers will be kept alive after task completion');
   }
+  const workerForensicsMode = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_FORENSICS', '0') === '1';
+  const workerForensicsBasePath = getOptionalEnv(
+    'INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH',
+    join(orchestratorDir, 'forensics')
+  );
+  if (workerForensicsMode) {
+    ensureDirectoryExists(workerForensicsBasePath);
+    logger.warn(
+      { workerForensicsBasePath },
+      'Claude worker forensics mode enabled (core dumps, exec stream persistence, crash snapshots)'
+    );
+  }
   const preserveFailedContainers =
     getOptionalEnv('INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS', '1') !== '0';
   const sharedCredsPath = join(orchestratorDir, 'claude-creds');
@@ -446,6 +546,8 @@ async function bootstrap(): Promise<void> {
       keepContainersAlive,
       imageName: workerImage,
       sharedCredsPath,
+      forensicsMode: workerForensicsMode,
+      forensicsBasePath: workerForensicsBasePath,
       ...(gitUserName !== undefined ? { gitUserName } : {}),
       ...(gitUserEmail !== undefined ? { gitUserEmail } : {}),
     },
@@ -499,6 +601,8 @@ async function bootstrap(): Promise<void> {
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_APP_API_KEY'),
+    MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
+    DASHSCOPE_API_KEY: getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY'),
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
@@ -518,7 +622,14 @@ async function bootstrap(): Promise<void> {
   };
 
   // Validate API keys asynchronously (non-blocking, warns on failure)
-  void validateWorkerApiKeys(credentialMonitor, isolationConfig.getSecrets().ZAI_API_KEY, logger);
+  const secrets = isolationConfig.getSecrets();
+  void validateWorkerApiKeys(
+    credentialMonitor,
+    secrets.ZAI_API_KEY,
+    secrets.MINIMAX_API_KEY,
+    secrets.DASHSCOPE_API_KEY,
+    logger
+  );
 
   const completionMaxAttemptsRaw = parseInt(
     getOptionalEnv('INTEXURAOS_COMPLETION_MAX_ATTEMPTS', String(DEFAULT_COMPLETION_MAX_ATTEMPTS)),

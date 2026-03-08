@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/web",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -54,6 +54,7 @@
     "@types/react-dom": "^19.1.5",
     "@vitejs/plugin-react": "^4.5.0",
     "autoprefixer": "^10.4.22",
+    "framer-motion": "^12.34.3",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.8.3",

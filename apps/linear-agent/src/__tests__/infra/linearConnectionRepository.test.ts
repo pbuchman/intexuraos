@@ -15,6 +15,7 @@ import {
   findWebhookSecretByTeamId,
   updateWebhookSecret,
 } from '../../infra/firestore/linearConnectionRepository.js';
+import { FakeLinearConnectionRepository } from '../fakes.js';
 
 describe('linearConnectionRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -507,5 +508,104 @@ describe('linearConnectionRepository', () => {
         expect(conn.value.webhookSecret).toBe('my-secret');
       }
     });
+  });
+});
+
+/**
+ * Tests for LinearConnectionRepository.findUserIdsByTeamId behavior.
+ * Uses the fake implementation to validate the contract.
+ */
+describe('LinearConnectionRepository.findUserIdsByTeamId', () => {
+  let repo: FakeLinearConnectionRepository;
+
+  beforeEach(() => {
+    repo = new FakeLinearConnectionRepository();
+  });
+
+  it('returns all connected userIds for a team', async () => {
+    repo.seedConnection({
+      userId: 'user-1',
+      apiKey: 'key-1',
+      teamId: 'team-A',
+      teamName: 'Team A',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+    repo.seedConnection({
+      userId: 'user-2',
+      apiKey: 'key-2',
+      teamId: 'team-A',
+      teamName: 'Team A',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+
+    const result = await repo.findUserIdsByTeamId('team-A');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(2);
+    expect(result.value).toContain('user-1');
+    expect(result.value).toContain('user-2');
+  });
+
+  it('returns empty array for unknown team', async () => {
+    const result = await repo.findUserIdsByTeamId('nonexistent-team');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([]);
+  });
+
+  it('excludes disconnected users', async () => {
+    repo.seedConnection({
+      userId: 'user-1',
+      apiKey: 'key-1',
+      teamId: 'team-A',
+      teamName: 'Team A',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+    repo.seedConnection({
+      userId: 'user-2',
+      apiKey: 'key-2',
+      teamId: 'team-A',
+      teamName: 'Team A',
+      connected: false,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+
+    const result = await repo.findUserIdsByTeamId('team-A');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual(['user-1']);
+  });
+
+  it('does not return users from different teams', async () => {
+    repo.seedConnection({
+      userId: 'user-1',
+      apiKey: 'key-1',
+      teamId: 'team-A',
+      teamName: 'Team A',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+    repo.seedConnection({
+      userId: 'user-2',
+      apiKey: 'key-2',
+      teamId: 'team-B',
+      teamName: 'Team B',
+      connected: true,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+
+    const result = await repo.findUserIdsByTeamId('team-A');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual(['user-1']);
   });
 });

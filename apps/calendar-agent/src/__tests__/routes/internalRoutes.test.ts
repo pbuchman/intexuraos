@@ -122,6 +122,55 @@ describe('Internal Routes', () => {
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
       expect(body.error.message).toBe('Something unexpected happened');
     });
+
+    it('uses text field for extraction when provided', async () => {
+      const fullPrompt = 'Set up a weekly standup every Monday at 9:15am starting next week';
+      const payloadWithText = {
+        action: {
+          id: 'action-123',
+          userId: 'user-456',
+          title: 'Weekly standup',
+        },
+        text: fullPrompt,
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: payloadWithText,
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Verify the extraction service received the full text, not the short title
+      expect(fakeCalendarActionExtractionService.extractEventCalls).toHaveLength(1);
+      expect(fakeCalendarActionExtractionService.extractEventCalls[0]?.text).toBe(fullPrompt);
+    });
+
+    it('falls back to action.title when text field is not provided', async () => {
+      const payloadWithoutText = {
+        action: {
+          id: 'action-123',
+          userId: 'user-456',
+          title: 'Schedule a meeting tomorrow at 3pm',
+        },
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: payloadWithoutText,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeCalendarActionExtractionService.extractEventCalls).toHaveLength(1);
+      expect(fakeCalendarActionExtractionService.extractEventCalls[0]?.text).toBe('Schedule a meeting tomorrow at 3pm');
+    });
   });
 
   describe('POST /internal/calendar/generate-preview', () => {
@@ -360,6 +409,79 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+  });
+
+  describe('POST /internal/calendar/preview (direct HTTP)', () => {
+    const validPayload = {
+      actionId: 'action-123',
+      userId: 'user-456',
+      text: 'Lunch with Monika tomorrow at 2pm',
+      currentDate: '2025-01-14',
+    };
+
+    it('generates preview successfully with valid input', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/preview',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { preview: { actionId: string; status: string; summary: string } } };
+      expect(body.success).toBe(true);
+      expect(body.data.preview.actionId).toBe('action-123');
+      expect(body.data.preview.status).toBe('ready');
+    });
+
+    it('returns 401 without internal auth token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/preview',
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 400 for invalid body (missing required fields)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/preview',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { actionId: 'action-123' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('handles extraction failure gracefully (returns failed preview)', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = err({
+        code: 'NO_API_KEY',
+        message: 'User has no API key configured',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/preview',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { preview: { status: string } } };
+      expect(body.success).toBe(true);
+      expect(body.data.preview.status).toBe('failed');
     });
   });
 });

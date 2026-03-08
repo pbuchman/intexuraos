@@ -1,4 +1,4 @@
-# data-insights-agent -- Agent Interface
+# data-insights-agent — Agent Interface
 
 > **Machine-readable specification for AI agent integration**
 
@@ -225,7 +225,7 @@ interface PreviewInput {
 
 ```typescript
 interface PreviewOutput {
-  chartData: object[];
+  chartData: object[]; // may be empty array when zero rows match
 }
 ```
 
@@ -321,7 +321,7 @@ interface Visualization {
 
 **When to use:** Manually trigger chart data recomputation against current snapshot
 
-**Note:** Idempotent when already `refreshing` -- returns current state without queuing duplicate computation.
+**Note:** Idempotent when already `refreshing` — returns current state without queuing duplicate computation.
 
 ---
 
@@ -421,4 +421,4 @@ interface Visualization {
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

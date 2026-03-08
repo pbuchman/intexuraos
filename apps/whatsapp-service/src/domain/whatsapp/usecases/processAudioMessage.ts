@@ -53,6 +53,7 @@ export interface ProcessAudioMessageResult {
   messageId: string;
   gcsPath: string;
   mimeType: string;
+  mediaId: string;
 }
 
 /**
@@ -244,6 +245,7 @@ export class ProcessAudioMessageUseCase {
       messageId: saveResult.value.id,
       gcsPath: uploadResult.value.gcsPath,
       mimeType: audioMedia.mimeType,
+      mediaId: audioMedia.id,
     });
   }
 }

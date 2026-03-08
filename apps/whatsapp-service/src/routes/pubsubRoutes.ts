@@ -9,12 +9,11 @@ import type {
   ExtractLinkPreviewsEvent,
   MediaCleanupEvent,
   SendMessageEvent,
-  TranscribeAudioEvent,
+  TranscriptionCompletedEvent,
   WebhookProcessEvent,
 } from '../domain/whatsapp/index.js';
-import { ExtractLinkPreviewsUseCase, TranscribeAudioUseCase } from '../domain/whatsapp/index.js';
+import { ExtractLinkPreviewsUseCase, HandleTranscriptionCompletedUseCase } from '../domain/whatsapp/index.js';
 import { getErrorMessage } from '@intexuraos/common-core';
-import type { Config } from '../config.js';
 import { processWebhookEvent } from './webhookRoutes.js';
 import type { WebhookPayload } from './schemas.js';
 
@@ -37,7 +36,7 @@ function maskPhoneNumber(phone: string): string {
 /**
  * Creates Pub/Sub routes plugin with config.
  */
-export function createPubsubRoutes(config: Config): FastifyPluginCallback {
+export function createPubsubRoutes(): FastifyPluginCallback {
   return (fastify, _opts, done) => {
     fastify.post(
       '/internal/whatsapp/pubsub/send-message',
@@ -217,8 +216,15 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         const { messageSender, outboundMessageRepository } = getServices();
 
         let result;
-        if (eventData.buttons && eventData.buttons.length > 0) {
-          // Send interactive message with buttons
+        if (eventData.ctaUrl !== undefined) {
+          // Send CTA URL message (opens link in browser)
+          result = await messageSender.sendCtaUrlMessage(
+            phoneNumber,
+            eventData.message,
+            eventData.ctaUrl
+          );
+        } else if (eventData.buttons !== undefined && eventData.buttons.length > 0) {
+          // Send interactive message with reply buttons
           result = await messageSender.sendInteractiveMessage(
             phoneNumber,
             eventData.message,
@@ -484,13 +490,13 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
     );
 
     fastify.post(
-      '/internal/whatsapp/pubsub/transcribe-audio',
+      '/internal/whatsapp/pubsub/transcription-completed',
       {
         schema: {
-          operationId: 'processTranscribeAudio',
-          summary: 'Process audio transcription event from PubSub',
+          operationId: 'processTranscriptionCompleted',
+          summary: 'Process transcription completed event from PubSub',
           description:
-            'Internal endpoint for PubSub push. Receives transcription events and runs transcription synchronously.',
+            'Internal endpoint for PubSub push. Receives transcription completed events from srt-service and updates Firestore and sends WhatsApp messages.',
           tags: ['internal'],
           body: {
             type: 'object',
@@ -510,19 +516,28 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
           },
           response: {
             200: {
-              description: 'Transcription completed',
+              description: 'Event acknowledged',
               type: 'object',
               properties: {
                 success: { type: 'boolean' },
               },
               required: ['success'],
             },
+            401: {
+              description: 'Unauthorized',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', const: false },
+                error: { $ref: 'ErrorBody#' },
+              },
+              required: ['success', 'error'],
+            },
           },
         },
       },
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, {
-          message: 'Received request to /internal/whatsapp/pubsub/transcribe-audio',
+          message: 'Received request to /internal/whatsapp/pubsub/transcription-completed',
           bodyPreviewLength: 200,
         });
 
@@ -536,15 +551,14 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          
           const authResult = validateInternalAuth(request);
           /* v8 ignore start -- auth-guard: tests use valid internal auth @preserve */
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
-              'Internal auth failed for pubsub/transcribe-audio endpoint'
+              'Internal auth failed for pubsub/transcription-completed endpoint'
             );
-            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/transcribe-audio endpoint');
+            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/transcription-completed endpoint');
           }
           /* v8 ignore stop @preserve */
         }
@@ -552,13 +566,11 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
 
         const body = request.body as PubSubPushMessage;
 
-        let eventData: TranscribeAudioEvent;
+        let eventData: TranscriptionCompletedEvent;
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-          eventData = JSON.parse(decoded) as TranscribeAudioEvent;
-        /* v8 ignore start -- test-infra: tests send valid base64 messages @preserve */
+          eventData = JSON.parse(decoded) as TranscriptionCompletedEvent;
         } catch {
-        /* v8 ignore stop @preserve */
           request.log.error(
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
@@ -567,56 +579,30 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         }
 
         const parsedType = eventData.type as string;
-        /* v8 ignore start -- test-infra: tests send correct event types @preserve */
-        if (parsedType !== 'whatsapp.audio.transcribe') {
+        if (parsedType !== 'srt.transcription.completed') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
           return await reply.ok({});
         }
-        /* v8 ignore stop @preserve */
 
         request.log.info(
           {
             pubsubMessageId: body.message.messageId,
             messageId: eventData.messageId,
             userId: eventData.userId,
+            status: eventData.status,
           },
-          'Processing transcribe audio event'
+          'Processing transcription completed event'
         );
 
         const services = getServices();
 
-        try {
-          const transcribeUsecase = new TranscribeAudioUseCase({
-            messageRepository: services.messageRepository,
-            mediaStorage: services.mediaStorage,
-            transcriptionService: services.transcriptionService,
-            whatsappCloudApi: services.whatsappCloudApi,
-            eventPublisher: services.eventPublisher,
-          });
+        const usecase = new HandleTranscriptionCompletedUseCase({
+          messageRepository: services.messageRepository,
+          whatsappCloudApi: services.whatsappCloudApi,
+          eventPublisher: services.eventPublisher,
+        });
 
-          await transcribeUsecase.execute(
-            {
-              messageId: eventData.messageId,
-              userId: eventData.userId,
-              gcsPath: eventData.gcsPath,
-              mimeType: eventData.mimeType,
-              userPhoneNumber: eventData.userPhoneNumber,
-              originalWaMessageId: eventData.originalWaMessageId,
-              phoneNumberId: eventData.phoneNumberId,
-            },
-            request.log
-          );
-
-          request.log.info(
-            { messageId: eventData.messageId, userId: eventData.userId },
-            'Transcription completed successfully'
-          );
-        } catch (error) {
-          request.log.error(
-            { messageId: eventData.messageId, error: getErrorMessage(error) },
-            'Transcription failed'
-          );
-        }
+        await usecase.execute(eventData, request.log);
 
         return await reply.ok({});
       }
@@ -695,9 +681,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
           eventData = JSON.parse(decoded) as WebhookProcessEvent;
-        /* v8 ignore start -- test-infra: tests send valid base64 messages @preserve */
         } catch {
-        /* v8 ignore stop @preserve */
           request.log.error(
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
@@ -725,7 +709,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
               log: request.log,
             } as FastifyRequest<{ Body: WebhookPayload }>;
 
-            await processWebhookEvent(mockRequest, { id: eventData.eventId }, config);
+            await processWebhookEvent(mockRequest, { id: eventData.eventId });
 
             request.log.info({ eventId: eventData.eventId }, 'Webhook processing completed');
           } catch (error) {

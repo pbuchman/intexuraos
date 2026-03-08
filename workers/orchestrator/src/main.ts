@@ -7,7 +7,7 @@ import type { GitHubTokenService } from './github/token-service.js';
 import type { WebhookClient } from './services/webhook-client.js';
 import type { HeartbeatManager } from './heartbeat.js';
 import type { CredentialMonitor } from './services/isolation/credential-monitor.js';
-import type { IsolationProvider } from './services/isolation/types.js';
+import type { DiscoveredContainer, IsolationProvider } from './services/isolation/types.js';
 import { registerRoutes } from './routes.js';
 import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
@@ -65,7 +65,13 @@ export async function main(
     logger.info({ port: config.port }, 'Orchestrator HTTP server started');
 
     // Run startup recovery
-    await runStartupRecovery(statePersistence, dispatcher, webhookClient, logger);
+    await runStartupRecovery(
+      statePersistence,
+      dispatcher,
+      webhookClient,
+      logger,
+      isolationProvider
+    );
 
     // Schedule background jobs
     const tokenRefreshInterval = scheduleTokenRefresh(tokenService, logger);
@@ -95,27 +101,115 @@ export async function main(
   }
 }
 
+const ADOPTION_TIMEOUT_MS = 60_000; // 60 seconds
+
 async function runStartupRecovery(
   statePersistence: StatePersistence,
-  _dispatcher: TaskDispatcher,
+  dispatcher: TaskDispatcher,
   webhookClient: WebhookClient,
-  logger: Logger
+  logger: Logger,
+  isolationProvider?: IsolationProvider
 ): Promise<void> {
   logger.info({ message: 'Running startup recovery' });
 
   const state = await statePersistence.load();
-  const interruptedTasks = Object.values(state.tasks).filter((t) => t.status === 'running');
+  const runningTasks = Object.values(state.tasks).filter((t) => t.status === 'running');
 
-  if (interruptedTasks.length === 0) {
+  // Discover containers (if isolation provider available)
+  let containerMap: Map<string, DiscoveredContainer> | null = null;
+
+  if (isolationProvider?.listWorkerContainers !== undefined) {
+    let timeoutHandle: NodeJS.Timeout | undefined = undefined;
+    try {
+      const timeoutPromise = new Promise<null>((resolve) => {
+        timeoutHandle = setTimeout(() => {
+          resolve(null);
+        }, ADOPTION_TIMEOUT_MS);
+      });
+
+      const discoveryResult = await Promise.race([
+        isolationProvider.listWorkerContainers().then((containers) => {
+          const map = new Map<string, DiscoveredContainer>();
+          for (const c of containers) {
+            map.set(c.taskId, c);
+          }
+          return map;
+        }),
+        timeoutPromise,
+      ]);
+
+      clearTimeout(timeoutHandle);
+      containerMap = discoveryResult;
+
+      if (containerMap !== null) {
+        logger.info({ containerCount: containerMap.size }, 'Container discovery completed');
+      } else {
+        logger.warn(
+          { timeout: ADOPTION_TIMEOUT_MS },
+          'Container discovery timed out, falling back to state-only recovery'
+        );
+      }
+    } catch (error) {
+      clearTimeout(timeoutHandle);
+      logger.warn({ error }, 'Container discovery failed, falling back to state-only recovery');
+    }
+  }
+
+  // Handle stateless orphan containers (container exists but NOT in state)
+  if (containerMap !== null && isolationProvider !== undefined) {
+    const taskIdsInState = new Set(Object.keys(state.tasks));
+    for (const [taskId] of containerMap) {
+      if (!taskIdsInState.has(taskId)) {
+        try {
+          await isolationProvider.destroyWorker(taskId);
+          logger.info({ taskId }, 'Removed stateless orphan container');
+        } catch (error) {
+          logger.error({ taskId, error }, 'Failed to remove orphan container');
+        }
+      }
+    }
+  }
+
+  if (runningTasks.length === 0) {
     logger.info({ message: 'No interrupted tasks to recover' });
     return;
   }
 
-  logger.info({ count: interruptedTasks.length }, 'Found interrupted tasks');
+  logger.info({ count: runningTasks.length }, 'Found interrupted tasks');
 
-  // Notify code-agent about interrupted tasks
-  for (const task of interruptedTasks) {
+  // Process each running task
+  for (const task of runningTasks) {
     try {
+      const container = containerMap?.get(task.taskId);
+
+      if (container?.state === 'running') {
+        // Container is running — attempt adoption
+        try {
+          const result = await dispatcher.adoptTask(task);
+          if (result.ok) {
+            logger.info({ taskId: task.taskId }, 'Adopted running container');
+            continue; // Skip interrupted webhook
+          }
+          // Adoption returned error — fall through to interrupted
+          logger.warn(
+            { taskId: task.taskId, error: result.error },
+            'Adoption failed, marking as interrupted'
+          );
+        } catch (error) {
+          logger.error({ taskId: task.taskId, error }, 'Adoption threw, marking as interrupted');
+        }
+      } else if (container !== undefined && isolationProvider !== undefined) {
+        // Non-running states (exited, paused, created, dead, restarting) are treated as terminated.
+        // Container is destroyed and task is marked interrupted.
+        try {
+          await isolationProvider.destroyWorker(task.taskId);
+          logger.info({ taskId: task.taskId }, 'Removed exited container');
+        } catch (error) {
+          logger.error({ taskId: task.taskId, error }, 'Failed to remove exited container');
+        }
+      }
+
+      // Send interrupted webhook (no container, exited container, or failed adoption)
       await webhookClient.send({
         url: task.webhookUrl,
         secret: task.webhookSecret,

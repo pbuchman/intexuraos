@@ -6,6 +6,49 @@ Local worker orchestration service for code task execution.
 
 The orchestrator runs on local machines (Mac or VM) behind Cloudflare Tunnel. It receives task dispatch requests from `code-agent`, spawns Claude Code sessions in isolated Docker containers, and reports results via webhooks.
 
+### Agent-Based Routing (Current)
+
+Task dispatch is now agent-based (not phase-based):
+
+- `pull_request`: PR/comment/review-triggered tasks
+- `planning`: Linear issue tasks without `code-task`
+- `execution`: Linear issue tasks with `code-task`
+
+Prompts preserve `[WORKER-MODE]` and inject exactly one agent marker:
+
+- `[AGENT:PLANNING]`
+- `[AGENT:EXECUTION]`
+- `[AGENT:PULL_REQUEST]`
+
+Completion contracts use these final block names (no legacy fallback):
+
+- `PLANNING_AGENT_FINAL`
+- `EXECUTION_AGENT_FINAL`
+- `PULL_REQUEST_AGENT_FINAL`
+
+Planning Agent outcomes:
+
+- `planned` -> orchestrator webhook `status=completed`
+- `unclear` -> orchestrator webhook `status=failed` with `error.code=PLANNING_AGENT_UNCLEAR`
+
+For all Planning Agent runs, orchestrator flattens verifier metadata into webhook `result` using `planning_*` fields. `code-agent` owns deterministic Linear mutations after receiving the webhook.
+
+Execution Agent notes:
+
+- `implemented` is sent as webhook `status=completed`
+- Execution verification is Gemini semantic validation of Claude responses (latest response first, prior responses fallback)
+- Orchestrator flattens execution verifier metadata into webhook `result` using `execution_*` fields:
+  - `execution_outcome_label`
+  - `execution_superpowers_executing_plans_used`
+  - `execution_superpowers_requesting_code_review_used`
+  - `execution_trivial_task`
+  - `execution_subagents`
+  - `execution_review_iterations`
+  - `execution_linear_issue_url`
+- Ownership split:
+  - Worker owns GitHub execution (code/tests/CI/PR/review loop)
+  - `code-agent` owns deterministic Linear enforcement on successful execution callbacks (executed issue only)
+
 ```
 code-agent (Cloud Run)
     |
@@ -13,7 +56,7 @@ code-agent (Cloud Run)
 orchestrator (local)
     |
     +- TaskDispatcher: manages Claude Code sessions via Docker
-    +- WorktreeManager: creates isolated git worktrees
+    +- WorktreeManager: creates isolated git worktrees (source only, no deps)
     +- GitHubTokenService: manages GitHub App installation tokens
     +- WebhookClient: reports status to code-agent
     +- StatePersistence: survives restarts
@@ -72,7 +115,7 @@ All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.
 
 ### Prerequisites
 
-Node.js 22+, pnpm, Docker, gcloud CLI, cloudflared
+Node.js 22+, Docker, gcloud CLI, cloudflared. pnpm is needed for building, not at runtime.
 
 ### Steps
 
@@ -105,7 +148,7 @@ direnv allow
 # 5. Create directories
 mkdir -p ~/.claude-orchestrator/logs ~/claude-workers/worktrees
 
-# 6. Start orchestrator
+# 6. Start orchestrator (dev mode with hot-reload)
 pnpm --filter orchestrator dev
 
 # 7. Verify
@@ -130,7 +173,7 @@ The orchestrator runs as a systemd template service. The service file lives at `
 
 **Key details:**
 
-- Runs `node dist/index.js` from a worktree (e.g., `~/personal/intexuraos-1/workers/orchestrator/`)
+- Runs `node dist/index.js` from `~/deploy/intexuraos/workers/orchestrator/`
 - Env vars loaded from `~/.claude-orchestrator/env` (43 vars, extracted from Secret Manager)
 - Auto-restarts on failure (`Restart=on-failure`, `RestartSec=10`)
 - Rate-limited to 5 restarts per 5 minutes (`StartLimitBurst=5`, `StartLimitIntervalSec=300`)
@@ -167,7 +210,7 @@ The systemd service runs from a built artifact — it does NOT auto-rebuild on c
 
 ```bash
 # 1. Build new artifact
-cd ~/personal/intexuraos-1
+cd ~/deploy/intexuraos
 pnpm build   # builds shared packages
 pnpm --filter orchestrator build
 
@@ -176,6 +219,8 @@ sudo systemctl restart intexuraos-orchestrator@pbuchman
 
 # 3. Verify
 curl -s http://localhost:8199/health | jq .
+
+# Note: This is automated by the webhook handler on pushes to development.
 ```
 
 #### Switching to Dev Mode (Local Development)
@@ -187,7 +232,7 @@ To run the orchestrator with hot-reload for development:
 sudo systemctl stop intexuraos-orchestrator@pbuchman
 
 # 2. Load env vars
-cd ~/personal/intexuraos-1
+cd ~/deploy/intexuraos   # or any workspace
 set -a && source ~/.claude-orchestrator/env && set +a
 
 # 3. Run with tsx watch (hot-reload on source changes)
@@ -203,8 +248,8 @@ sudo systemctl start intexuraos-orchestrator@pbuchman
 The orchestrator's env file is NOT auto-synced. To update after secrets change in GCP:
 
 ```bash
-# 1. Sync secrets to .envrc in any worktree
-cd ~/personal/intexuraos-1
+# 1. Sync secrets to .envrc in deploy dir
+cd ~/deploy/intexuraos
 ./scripts/sync-secrets.sh
 
 # 2. Re-extract orchestrator vars
@@ -229,13 +274,13 @@ If the orchestrator needs to be set up from zero on a new machine:
 ```bash
 # 1. Create directories
 mkdir -p ~/.claude-orchestrator/secrets ~/.claude-orchestrator/logs
-mkdir -p ~/claude-workers/worktrees ~/claude-workers/pnpm-store
+mkdir -p ~/claude-workers/worktrees
 
 # 2. Clone orchestrator repo
 git clone git@github.com:pbuchman/intexuraos.git ~/.claude-orchestrator/repo
 
 # 3. Build
-cd ~/personal/intexuraos-1
+cd ~/deploy/intexuraos
 pnpm install && pnpm build && pnpm --filter orchestrator build
 
 # 4. Set up Docker worker network
@@ -455,6 +500,102 @@ Check credential status: `curl http://localhost:8199/health | jq .anthropicOAuth
   }
 }
 ```
+
+---
+
+## Container Cleanup Cron
+
+The orchestrator's in-process `cleanupOrphanedContainers()` removes stale containers on startup, but containers can also accumulate between restarts (e.g., orchestrator crash, long-running preserved containers). A cron-based cleanup script provides continuous garbage collection of exited `claude-worker-*` containers older than a configurable retention period.
+
+### Scripts
+
+| File                                                       | Purpose                                                   |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| `workers/scripts/cleanup-containers.sh`                    | Main cleanup script — deletes exited containers past age  |
+| `workers/scripts/test-container-cleanup.sh`                | Integration test suite (T1–T12) using real Docker         |
+| `workers/scripts/cloud.intexuraos.container-cleanup.plist` | macOS LaunchAgent (6-hour interval)                       |
+| `workers/scripts/container-cleanup.service`                | Linux systemd oneshot service                             |
+| `workers/scripts/container-cleanup.timer`                  | Linux systemd timer (6-hour interval)                     |
+| `workers/scripts/provision-cleanup-cron.sh`                | VM provisioning helper (copies script + installs systemd) |
+
+### How It Works
+
+1. Lists all Docker containers matching the `CONTAINER_PREFIX` (default: `claude-worker-`)
+2. Skips **running** containers unconditionally (never killed)
+3. Skips containers younger than `RETENTION_DAYS` (default: 1 day)
+4. Re-checks container state immediately before removal (TOCTOU protection)
+5. Removes eligible containers with `docker rm` (no `-f` flag — running containers fail safely)
+6. Queries the orchestrator `/health` endpoint (best-effort, falls back to age-based cleanup)
+
+### Configuration
+
+All via environment variables (all optional):
+
+| Variable           | Default                 | Description                   |
+| ------------------ | ----------------------- | ----------------------------- |
+| `CONTAINER_PREFIX` | `claude-worker-`        | Docker name prefix to match   |
+| `RETENTION_DAYS`   | `1`                     | Age threshold in days         |
+| `DRY_RUN`          | `false`                 | Set to `true` to preview only |
+| `LOG_FILE`         | (stdout)                | Path to log file              |
+| `ORCHESTRATOR_URL` | `http://localhost:8199` | Base URL of the orchestrator  |
+
+### macOS Setup (LaunchAgent)
+
+```bash
+# 1. Copy the plist
+cp workers/scripts/cloud.intexuraos.container-cleanup.plist \
+   ~/Library/LaunchAgents/cloud.intexuraos.container-cleanup.plist
+
+# 2. Edit the script path (ProgramArguments[1]) to your local path
+
+# 3. Load
+launchctl load ~/Library/LaunchAgents/cloud.intexuraos.container-cleanup.plist
+
+# 4. Verify
+launchctl list | grep intexuraos
+
+# Unload
+launchctl unload ~/Library/LaunchAgents/cloud.intexuraos.container-cleanup.plist
+```
+
+### Linux Setup (systemd)
+
+**Automated provisioning:**
+
+```bash
+sudo ./workers/scripts/provision-cleanup-cron.sh
+```
+
+This copies the cleanup script to `/opt/intexuraos/workers/scripts/`, installs the systemd service and timer, configures logrotate, and enables the timer.
+
+**Manual setup:**
+
+```bash
+sudo cp workers/scripts/cleanup-containers.sh /opt/intexuraos/workers/scripts/
+sudo chmod +x /opt/intexuraos/workers/scripts/cleanup-containers.sh
+sudo cp workers/scripts/container-cleanup.service /etc/systemd/system/
+sudo cp workers/scripts/container-cleanup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now container-cleanup.timer
+
+# Verify
+systemctl list-timers container-cleanup.timer --no-pager
+
+# Manual run
+sudo systemctl start container-cleanup.service
+
+# Logs
+cat /var/log/intexuraos/container-cleanup.log
+```
+
+### Running Tests
+
+```bash
+./workers/scripts/test-container-cleanup.sh         # All tests
+./workers/scripts/test-container-cleanup.sh T5       # Single test
+```
+
+Requires Docker. T1 (no-Docker graceful exit) runs without Docker; T2–T12 are skipped if Docker is unavailable.
 
 ---
 

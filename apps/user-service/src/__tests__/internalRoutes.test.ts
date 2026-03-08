@@ -85,6 +85,7 @@ describe('Internal Routes', () => {
       oauthConnectionRepository: fakeOAuthRepo,
       auth0Client: null,
       googleOAuthClient: fakeGoogleOAuthClient,
+      gitHubOAuthClient: null,
       encryptor: fakeEncryptor,
       llmValidator: null,
     });
@@ -356,6 +357,7 @@ describe('Internal Routes', () => {
         oauthConnectionRepository: fakeOAuthRepo,
         auth0Client: null,
         googleOAuthClient: null,
+        gitHubOAuthClient: null,
         encryptor: fakeEncryptor,
         llmValidator: null,
       });
@@ -713,7 +715,7 @@ describe('Internal Routes', () => {
       expect(body.data.llmPreferences).toBeUndefined();
     });
 
-    it('returns undefined llmPreferences when repository errors', async () => {
+    it('returns undefined llmPreferences and transcriptionPreferences when repository errors', async () => {
       const userId = 'user-error';
       fakeSettingsRepo.setFailNextGet(true);
 
@@ -732,9 +734,264 @@ describe('Internal Routes', () => {
         success: boolean;
         data: {
           llmPreferences?: { defaultModel: string };
+          transcriptionPreferences?: { provider: string };
         };
       };
       expect(body.data.llmPreferences).toBeUndefined();
+      expect(body.data.transcriptionPreferences).toBeUndefined();
+    });
+
+    it('returns transcriptionPreferences when present', async () => {
+      const userId = 'user-with-transcription';
+      fakeSettingsRepo.setSettings({
+        userId,
+        transcriptionPreferences: { provider: 'speechmatics' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          transcriptionPreferences?: { provider: string };
+        };
+      };
+      expect(body.data.transcriptionPreferences?.provider).toBe('speechmatics');
+    });
+
+    it('returns undefined transcriptionPreferences when not set', async () => {
+      const userId = 'user-no-transcription';
+      fakeSettingsRepo.setSettings({
+        userId,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          transcriptionPreferences?: { provider: string };
+        };
+      };
+      expect(body.data.transcriptionPreferences).toBeUndefined();
+    });
+  });
+
+  describe('GET /internal/users/:uid/oauth/github/token', () => {
+    it('returns 401 when no internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/oauth/github/token',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
+    });
+
+    it('returns 401 when internal auth header is invalid', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/oauth/github/token',
+        headers: {
+          'x-internal-auth': 'wrong-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when no GitHub connection exists', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-no-github/oauth/github/token',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns access token and username when connection exists', async () => {
+      const userId = 'user-with-github';
+      fakeOAuthRepo.setConnection(userId, OAuthProviders.GITHUB, {
+        userId,
+        provider: OAuthProviders.GITHUB,
+        email: 'octocat',
+        tokens: {
+          accessToken: 'github-access-token',
+          refreshToken: '',
+          expiresAt: '9999-12-31T00:00:00.000Z',
+          scope: 'repo read:user',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/oauth/github/token`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { accessToken: string; username: string };
+      };
+      expect(body.data.accessToken).toBe('github-access-token');
+      expect(body.data.username).toBe('octocat');
+    });
+
+    it('returns 502 when repository fails', async () => {
+      fakeOAuthRepo.setFailNextGet(true);
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-error/oauth/github/token',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+  });
+
+  describe('GET /internal/users/by-github-username/:username', () => {
+    it('returns 401 when no internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/by-github-username/octocat',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
+    });
+
+    it('returns 401 when internal auth header is invalid', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/by-github-username/octocat',
+        headers: {
+          'x-internal-auth': 'wrong-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when no user has that GitHub username', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/by-github-username/unknown-user',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns userId and username when user is found', async () => {
+      const userId = 'auth0|user-with-github';
+      fakeOAuthRepo.setConnection(userId, OAuthProviders.GITHUB, {
+        userId,
+        provider: OAuthProviders.GITHUB,
+        email: 'octocat',
+        tokens: {
+          accessToken: 'github-access-token',
+          refreshToken: '',
+          expiresAt: '9999-12-31T00:00:00.000Z',
+          scope: 'repo read:user',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/by-github-username/octocat',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { userId: string; username: string };
+      };
+      expect(body.data.userId).toBe(userId);
+      expect(body.data.username).toBe('octocat');
+    });
+
+    it('returns 502 when repository fails', async () => {
+      fakeOAuthRepo.setFailNextFindByProviderEmail(true);
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/by-github-username/octocat',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 });

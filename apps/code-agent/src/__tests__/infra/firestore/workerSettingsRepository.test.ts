@@ -687,4 +687,5 @@ describe('workerSettingsRepository', () => {
       }
     });
   });
+
 });

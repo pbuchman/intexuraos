@@ -23,7 +23,7 @@ import { ok, err } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../../infra/firestore/gitHubPRSummariesRepository.js';
-import { mockWorkerHealthProbe } from '../../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockUserServiceClient } from '../../helpers/mockServices.js';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../../infra/repositories/firestoreLogLineRepository.js';
@@ -199,6 +199,10 @@ describe('GET /code/github-pr-events', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -221,6 +225,10 @@ describe('GET /code/github-pr-events', () => {
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
+      gitHubPRClient: import('../../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     server = await buildServer();

@@ -492,4 +492,76 @@ describe('FirestoreUserSettingsRepository', () => {
       }
     });
   });
+
+  describe('updateTranscriptionPreferences', () => {
+    it('creates new settings document when user does not exist', async () => {
+      const result = await repo.updateTranscriptionPreferences('new-user', 'speechmatics');
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('new-user');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.userId).toBe('new-user');
+        expect(stored.value.transcriptionPreferences?.provider).toBe('speechmatics');
+      }
+    });
+
+    it('updates existing settings document', async () => {
+      await repo.saveSettings(createTestSettings());
+
+      const result = await repo.updateTranscriptionPreferences('user-123', 'speechmatics');
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.transcriptionPreferences?.provider).toBe('speechmatics');
+      }
+    });
+
+    it('returns error when Firestore fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await repo.updateTranscriptionPreferences('user-123', 'speechmatics');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Update failed');
+      }
+    });
+  });
+
+  describe('getSettings with transcriptionPreferences', () => {
+    it('returns transcriptionPreferences when present', async () => {
+      const settings = createTestSettings({
+        transcriptionPreferences: { provider: 'speechmatics' },
+      });
+      await repo.saveSettings(settings);
+
+      const result = await repo.getSettings('user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.transcriptionPreferences?.provider).toBe('speechmatics');
+      }
+    });
+  });
+
+  describe('saveSettings with transcriptionPreferences', () => {
+    it('persists transcriptionPreferences and reads back correctly', async () => {
+      const settings = createTestSettings({
+        transcriptionPreferences: { provider: 'speechmatics' },
+      });
+      await repo.saveSettings(settings);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.transcriptionPreferences?.provider).toBe('speechmatics');
+      }
+    });
+  });
 });

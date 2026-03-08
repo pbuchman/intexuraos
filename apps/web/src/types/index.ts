@@ -280,7 +280,8 @@ export type CommandType =
   | 'link'
   | 'calendar'
   | 'reminder'
-  | 'linear';
+  | 'linear'
+  | 'code';
 
 /**
  * Command status
@@ -828,6 +829,17 @@ export interface GoogleCalendarInitiateResponse {
 }
 
 /**
+ * GitHub connection status from user-service
+ */
+export interface GitHubConnectionStatus {
+  connected: boolean;
+  username?: string;
+  scopes?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
  * Monthly cost breakdown for LLM usage
  */
 export interface MonthlyCost {
@@ -987,6 +999,8 @@ export interface LinearIssue {
   dueDate: string | null;
   url: string;
   labels: LinearLabel[];
+  /** ID of parent issue (null if top-level, set if subtask) */
+  parentId: string | null;
   /** Number of child issues (subtasks) */
   childCount: number;
   /** Child issues (populated when parent issue has children) */
@@ -1090,7 +1104,7 @@ export interface CalendarPreview {
 /**
  * Worker type determines which model Claude uses.
  */
-export type CodeTaskWorkerType = 'opus' | 'auto' | 'glm';
+export type CodeTaskWorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
 
 /**
  * Worker location for routing.
@@ -1101,22 +1115,24 @@ export type CodeTaskWorkerLocation = string;
  * Task status lifecycle.
  */
 export type CodeTaskStatus =
+  | 'queued'
   | 'dispatched'
   | 'running'
-  | 'designed'
+  | 'planned'
   | 'implemented'
   | 'failed'
   | 'interrupted'
-  | 'cancelled';
+  | 'cancelled'
+  | 'archived';
 
 /**
  * Task result on successful completion.
  */
 export interface CodeTaskResult {
   prUrl?: string;
-  branch: string;
-  commits: number;
-  summary: string;
+  branch?: string;
+  commits?: number;
+  summary?: string;
   ciFailed?: boolean;
   partialWork?: boolean;
   rebaseResult?: 'success' | 'conflict' | 'skipped';
@@ -1157,10 +1173,6 @@ export interface CodeTask {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearIssueUrl?: string;
-  linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
-  linearFallback?: boolean;
   linearIssue?: {
     identifier: string;
     title: string;
@@ -1172,10 +1184,10 @@ export interface CodeTask {
     commentCount: number;
     lastCommentAt: string | null;
   };
-  executionPhase?: 'design' | 'execution';
+  agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
   result?: CodeTaskResult;
   error?: CodeTaskError;
 }
@@ -1208,6 +1220,7 @@ export interface SubmitCodeTaskResponse {
 export interface RetryCodeTaskRequest {
   taskId: string;
   additionalContext?: string;
+  workerType?: CodeTaskWorkerType;
 }
 
 /**
@@ -1221,7 +1234,7 @@ export interface RetryCodeTaskResponse {
 }
 
 /**
- * Response from starting Phase 2 implementation of a design task
+ * Response from starting execution-agent implementation of a planning task
  */
 export interface StartImplementationResponse {
   codeTaskId: string;

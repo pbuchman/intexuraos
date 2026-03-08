@@ -54,6 +54,7 @@ describe('todoItemExtractionService', () => {
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
         getOAuthToken: vi.fn(),
+        resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
         };
       case 'no_api_key':
         return {
@@ -63,6 +64,7 @@ describe('todoItemExtractionService', () => {
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
         getOAuthToken: vi.fn(),
+        resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
         };
       case 'api_error':
         return {
@@ -72,6 +74,7 @@ describe('todoItemExtractionService', () => {
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
         getOAuthToken: vi.fn(),
+        resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
         };
       case 'network_error':
         return {
@@ -81,6 +84,7 @@ describe('todoItemExtractionService', () => {
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
         getOAuthToken: vi.fn(),
+        resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
         };
       case 'invalid_model':
         return {
@@ -90,6 +94,7 @@ describe('todoItemExtractionService', () => {
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
         getOAuthToken: vi.fn(),
+        resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
         };
     }
   }

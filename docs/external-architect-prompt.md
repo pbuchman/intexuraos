@@ -166,17 +166,17 @@ File: packages/llm-prompts/src/.../file.ts
 Parser: [exact parser file path]
 Consumer(s): [app(s) that call this prompt]
 
-| Dimension | Score | Evidence |
-|-----------|-------|----------|
-| D1. Parser Alignment | /10 | [quote prompt text vs parser code] |
-| D2. Injection Safety | /10 | |
-| D3. Internal Contradictions | /10 | |
-| D4. Example Quality | /10 | |
-| D5. Section Ordering | /10 | |
-| D6. Downstream Context | /10 | |
-| D7. Version Accuracy | /10 | |
-| D8. Repair Effectiveness | /10 or N/A | |
-| **Average** | /10 | |
+| Dimension                   | Score      | Evidence                           |
+| --------------------------- | ---------- | ---------------------------------- |
+| D1. Parser Alignment        | /10        | [quote prompt text vs parser code] |
+| D2. Injection Safety        | /10        |                                    |
+| D3. Internal Contradictions | /10        |                                    |
+| D4. Example Quality         | /10        |                                    |
+| D5. Section Ordering        | /10        |                                    |
+| D6. Downstream Context      | /10        |                                    |
+| D7. Version Accuracy        | /10        |                                    |
+| D8. Repair Effectiveness    | /10 or N/A |                                    |
+| **Average**                 | /10        |                                    |
 
 Findings:
 - [F-001] [Critical/High/Medium/Low] — [description with quoted evidence]

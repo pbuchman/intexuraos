@@ -1,0 +1,9 @@
+{
+  "name": "sample-data",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@google-cloud/pubsub": "^4.9.0"
+  }
+}

@@ -20,6 +20,7 @@ export interface WhatsAppSendPublisher {
     message: string;
     replyToMessageId?: string;
     buttons?: import('./types.js').WhatsAppInteractiveButton[];
+    ctaUrl?: { displayText: string; url: string };
     correlationId?: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -40,6 +41,7 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
     message: string;
     replyToMessageId?: string;
     buttons?: import('./types.js').WhatsAppInteractiveButton[];
+    ctaUrl?: { displayText: string; url: string };
     correlationId?: string;
   }): Promise<Result<void, PublishError>> {
     const correlationId = params.correlationId ?? crypto.randomUUID();
@@ -59,6 +61,12 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
     if (params.buttons !== undefined) {
       event.buttons = params.buttons;
     }
+
+    /* v8 ignore start -- upstream: ctaUrl passthrough to Pub/Sub event, tested via consuming services @preserve */
+    if (params.ctaUrl !== undefined) {
+      event.ctaUrl = params.ctaUrl;
+    }
+    /* v8 ignore stop @preserve */
 
     return await this.publishToTopic(
       this.topicName,

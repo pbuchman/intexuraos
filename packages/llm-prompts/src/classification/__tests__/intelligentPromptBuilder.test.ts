@@ -222,6 +222,28 @@ describe('intelligentClassifierPrompt', () => {
       expect(prompt).not.toContain('todo 6');
     });
 
+    it('lists todo before calendar in Step 5 priority', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      const step5Start = prompt.indexOf('STEP 5: Category Detection');
+      expect(step5Start).toBeGreaterThan(-1);
+
+      const afterStep5 = prompt.slice(step5Start);
+      const todoPos = afterStep5.indexOf('**todo**');
+      const calendarPos = afterStep5.indexOf('**calendar**');
+
+      expect(todoPos).toBeGreaterThan(-1);
+      expect(calendarPos).toBeGreaterThan(-1);
+      expect(todoPos).toBeLessThan(calendarPos);
+    });
+
+    it('includes calendar vs todo tiebreaker guidance', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('CALENDAR vs TODO TIEBREAKER');
+      expect(prompt).toContain('occupies a time slot');
+    });
+
     it('uses default maxCorrections of 20', () => {
       const corrections: ClassificationCorrection[] = Array.from({ length: 25 }, (_, i) => ({
         text: `correction ${String(i + 1)}`,

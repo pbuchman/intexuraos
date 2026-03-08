@@ -48,6 +48,8 @@ describe('loadConfig', () => {
       expect(config.actionsAgentUrl).toBe('');
       expect(config.webhookVerifySecret).toBe('');
       expect(config.tokenEncryptionKey).toBe('');
+      expect(config.serviceUrl).toBe('');
+      expect(config.userServiceUrl).toBe('');
     });
 
     it('loads all env vars when set', () => {
@@ -58,6 +60,8 @@ describe('loadConfig', () => {
       process.env['INTEXURAOS_ACTIONS_AGENT_URL'] = 'http://actions';
       process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] = 'test-webhook';
       process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'test-encryption-key-32chars!';
+      process.env['INTEXURAOS_SERVICE_URL'] = 'https://code-agent.test.local';
+      process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service';
 
       const config = loadConfig();
       expect(config.gcpProjectId).toBe('test-project');
@@ -68,6 +72,8 @@ describe('loadConfig', () => {
       expect(config.actionsAgentUrl).toBe('http://actions');
       expect(config.webhookVerifySecret).toBe('test-webhook');
       expect(config.tokenEncryptionKey).toBe('test-encryption-key-32chars!');
+      expect(config.serviceUrl).toBe('https://code-agent.test.local');
+      expect(config.userServiceUrl).toBe('http://user-service');
     });
   });
 });

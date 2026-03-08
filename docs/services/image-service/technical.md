@@ -1,4 +1,4 @@
-# Image Service -- Technical Reference
+# Image Service — Technical Reference
 
 ## Overview
 
@@ -99,20 +99,23 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                  | Date       |
-| ---------- | ------------------------------------------------------------ | ---------- |
-| `b3f34d85` | Release v3.1.0                                               | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                               | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability              | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration across all services      | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention         | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback | 2026-02-15 |
-| `d5fbb354` | Fix start:local to use tsx instead of node                   | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local       | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform Zai fallback        | 2026-02-09 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)            | 2026-02-01 |
-| `c3198407` | Fix all 132 response contract violations across codebase     | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps       | 2026-01-30 |
+| Commit     | Description                                                           | Date       |
+| ---------- | --------------------------------------------------------------------- | ---------- |
+| `44ea683a` | Release v3.2.0 (package.json version bump only)                       | 2026-03-07 |
+| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks             | 2026-03-02 |
+| `7fbf7668` | Remove stale fields from test fixtures per code review                | 2026-02-27 |
+| `8fb90669` | Align thumbnail output contract with consumed parser fields (INT-605) | 2026-02-27 |
+| `b3f34d85` | Release v3.1.0                                                        | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                                        | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                       | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration across all services               | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention                  | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback           | 2026-02-15 |
+| `d5fbb354` | Fix start:local to use tsx instead of node                            | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local                | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform Zai fallback                 | 2026-02-09 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                     | 2026-02-01 |
+| `c3198407` | Fix all 132 response contract violations across codebase              | 2026-01-30 |
 
 ## API Endpoints
 
@@ -143,30 +146,27 @@ sequenceDiagram
 | `prompt`       | `string`            | Prompt used for generation                        |
 | `thumbnailUrl` | `string`            | GCS public URL for thumbnail (256px, JPEG)        |
 | `fullSizeUrl`  | `string`            | GCS public URL for full-size image (PNG)          |
-| `model`        | `string`            | Model used (e.g., `gpt-image-1`)                 |
+| `model`        | `string`            | Model used (e.g., `gpt-image-1`)                  |
 | `createdAt`    | `string` (ISO 8601) | Creation timestamp                                |
 | `slug`         | `string?`           | URL-safe identifier derived from title (optional) |
 
 ### ThumbnailPrompt
 
-| Field            | Type                        | Description                                     |
-| ---------------- | --------------------------- | ----------------------------------------------- |
-| `title`          | `string`                    | Short title for the image (max 10 words)        |
-| `visualSummary`  | `string`                    | One sentence describing the visual metaphor     |
-| `prompt`         | `string`                    | Image generation prompt (80-180 words)          |
-| `negativePrompt` | `string`                    | What to avoid (20-80 words)                     |
-| `parameters`     | `ThumbnailPromptParameters` | Generation settings (aspect ratio, style, etc.) |
+| Field            | Type                        | Description                                  |
+| ---------------- | --------------------------- | -------------------------------------------- |
+| `title`          | `string`                    | Short title for the image (max 10 words)     |
+| `visualSummary`  | `string`                    | One sentence describing the visual metaphor  |
+| `prompt`         | `string`                    | Image generation prompt (80–180 words)       |
+| `negativePrompt` | `string`                    | What to avoid (20–80 words)                  |
+| `parameters`     | `ThumbnailPromptParameters` | Generation settings (framing, style, people) |
 
 ### ThumbnailPromptParameters
 
-| Field             | Type           | Values                                                           |
-| ----------------- | -------------- | ---------------------------------------------------------------- |
-| `aspectRatio`     | `string`       | `"16:9"` (fixed)                                                 |
-| `framing`         | `string`       | LLM-generated framing description                                |
-| `textOnImage`     | `string`       | `"none"` (fixed)                                                 |
-| `realism`         | `RealismStyle` | `"photorealistic"`, `"cinematic illustration"`, `"clean vector"` |
-| `people`          | `string`       | LLM-generated people description                                 |
-| `logosTrademarks` | `string`       | `"none"` (fixed)                                                 |
+| Field     | Type           | Values                                                           |
+| --------- | -------------- | ---------------------------------------------------------------- |
+| `framing` | `string`       | LLM-generated framing description                                |
+| `realism` | `RealismStyle` | `"photorealistic"`, `"cinematic illustration"`, `"clean vector"` |
+| `people`  | `string`       | LLM-generated people description                                 |
 
 ## Supported Models
 
@@ -174,24 +174,24 @@ sequenceDiagram
 
 | Model                    | Provider | Description                           |
 | ------------------------ | -------- | ------------------------------------- |
-| `gpt-image-1`           | OpenAI   | GPT Image 1 (image generation model)  |
+| `gpt-image-1`            | OpenAI   | GPT Image 1 (image generation model)  |
 | `gemini-2.5-flash-image` | Google   | Gemini Flash Image (image generation) |
 
 ### Prompt Generation Models
 
 | Model            | Provider | Purpose            |
 | ---------------- | -------- | ------------------ |
-| `gpt-4.1`       | OpenAI   | Prompt enhancement |
+| `gpt-4.1`        | OpenAI   | Prompt enhancement |
 | `gemini-2.5-pro` | Google   | Prompt enhancement |
 
 ### Pricing Models (from index.ts REQUIRED_MODELS)
 
-| Model                    | Purpose                       |
-| ------------------------ | ----------------------------- |
-| `gemini-2.5-flash`      | Pricing context for Gemini    |
-| `gpt-4o-mini`           | Pricing context for OpenAI    |
-| `gpt-image-1`           | Image generation pricing      |
-| `gemini-2.5-flash-image` | Image generation pricing      |
+| Model                    | Purpose                    |
+| ------------------------ | -------------------------- |
+| `gemini-2.5-flash`       | Pricing context for Gemini |
+| `gpt-4o-mini`            | Pricing context for OpenAI |
+| `gpt-image-1`            | Image generation pricing   |
+| `gemini-2.5-flash-image` | Image generation pricing   |
 
 **Note:** The pricing models (`gemini-2.5-flash`, `gpt-4o-mini`) differ from the actual prompt generation models (`gemini-2.5-pro`, `gpt-4.1`). See Gotchas section.
 
@@ -209,10 +209,10 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 ### External Services
 
-| Service           | Purpose                            | Failure Mode    |
-| ----------------- | ---------------------------------- | --------------- |
-| OpenAI API        | GPT Image 1, GPT-4.1              | DOWNSTREAM_ERROR |
-| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro | DOWNSTREAM_ERROR |
+| Service           | Purpose                             | Failure Mode     |
+| ----------------- | ----------------------------------- | ---------------- |
+| OpenAI API        | GPT Image 1, GPT-4.1                | DOWNSTREAM_ERROR |
+| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro  | DOWNSTREAM_ERROR |
 
 ### Infrastructure
 
@@ -223,27 +223,27 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 ## Configuration
 
-| Variable                              | Required | Description                                    |
-| ------------------------------------- | -------- | ---------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                        |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS endpoint for JWT verification             |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer                                     |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience                                   |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User-service base URL                          |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                |
-| `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket name for image storage              |
-| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects                |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service URL (pricing data)        |
-| `INTEXURAOS_SENTRY_DSN`              | No       | Sentry error tracking DSN                      |
-| `INTEXURAOS_ZAI_APP_API_KEY`         | No       | Platform Zai API key for user fallback         |
-| `INTEXURAOS_GEMINI_APP_API_KEY`      | No       | Platform Gemini API key for user fallback      |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`     | No       | Dash0 OTLP endpoint for OpenTelemetry tracing  |
+| Variable                              | Required | Description                                   |
+| ------------------------------------- | -------- | --------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                       |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS endpoint for JWT verification            |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer                                    |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience                                  |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User-service base URL                         |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth               |
+| `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket name for image storage             |
+| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects               |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service URL (pricing data)       |
+| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking DSN                     |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key for user fallback        |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback     |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for OpenTelemetry tracing |
 
 ## Gotchas
 
 **Pricing model mismatch**: The `REQUIRED_MODELS` in `index.ts` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but the prompt adapters actually use `gemini-2.5-pro` and `gpt-4.1` respectively. This means cost tracking may use incorrect per-token rates for prompt generation.
 
-**Slug generation**: The `slug` field is derived from the title using `slugify()` -- max 50 characters, lowercase, normalized unicode, hyphens for spaces. Only used when a title is provided (research cover images).
+**Slug generation**: The `slug` field is derived from the title using `slugify()` — max 50 characters, lowercase, normalized unicode, hyphens for spaces. Only used when a title is provided (research cover images).
 
 **Thumbnail size**: Thumbnails are exactly 256px on the longest edge, maintaining aspect ratio, saved as JPEG at 80% quality. Created using Sharp image processing library.
 
@@ -266,6 +266,8 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 **Rate limit propagation**: Rate limited responses from upstream providers are propagated as `RATE_LIMITED` error code. The prompt generation endpoint returns this directly; the image generation endpoint wraps it in `DOWNSTREAM_ERROR`.
 
 **Delete endpoint resilience**: The DELETE endpoint attempts both GCS deletion and Firestore deletion independently. If either fails, it logs the error but still returns `{ deleted: true }` to the caller.
+
+**Prompt parameters trimmed (INT-605)**: The `ThumbnailPromptParameters` type only contains `framing`, `realism`, and `people`. Previously documented fields `aspectRatio`, `textOnImage`, and `logosTrademarks` were removed from the consumed contract. The LLM prompt may still produce them, but the parser discards any fields not in the validated schema.
 
 ## File Structure
 
@@ -306,6 +308,13 @@ apps/image-service/src/
 ```
 
 ## Migration Notes
+
+### INT-605: Thumbnail Output Contract Alignment (2026-02-27)
+
+- `ThumbnailPromptParameters` trimmed to 3 fields: `framing`, `realism`, `people`
+- Removed `aspectRatio`, `textOnImage`, `logosTrademarks` from the consumed interface
+- Parser (`parseResponse.ts`) only validates the 3 consumed fields
+- Test fixtures updated to remove stale fields in `7fbf7668`
 
 ### Release v3.1.0 (2026-02-22)
 

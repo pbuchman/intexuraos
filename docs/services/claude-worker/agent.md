@@ -1,4 +1,4 @@
-# claude-worker -- Agent Interface
+# claude-worker — Agent Interface
 
 > Machine-readable interface definition for AI agents and the orchestrator interacting with claude-worker containers.
 
@@ -24,6 +24,8 @@ interface WorkerSecrets {
   LINEAR_API_KEY: string;
   SENTRY_AUTH_TOKEN: string;
   ZAI_API_KEY: string;
+  MINIMAX_API_KEY: string;
+  DASHSCOPE_API_KEY: string;
 }
 
 interface WorkerConfig {
@@ -31,7 +33,7 @@ interface WorkerConfig {
   worktreePath: string;
   prompt: string; // User prompt content (written to secrets/user-prompt.txt)
   systemPrompt: string; // System prompt content (written to secrets/system-prompt.txt)
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
@@ -134,9 +136,11 @@ const WORKER_TYPES: Record<
 5. `createWorker()` writes `system-prompt.txt` and `user-prompt.txt` to the per-task secrets directory automatically. The container reads these files — they are not passed via stdin or environment variables.
 6. The `waitForCompletion` method resolves with `-1` on timeout and automatically triggers `destroyWorker` with force kill.
 7. Concurrent workers are limited to `maxConcurrent` (default 4). Exceeding this limit throws an error; the caller must wait for an existing worker to finish.
-8. GitHub token refresh is handled by the orchestrator's `TokenRefresher`, not by the container itself. The token file at `/secrets/github-token` is updated externally; the entrypoint re-reads it at each `run-attempt` invocation.
+8. GitHub token refresh is handled by the orchestrator's `TokenRefresher`, which updates `/secrets/github-token` every 30 minutes via bind mount. Within a single attempt, tokens are refreshed via file reads — the git credential helper reads the file directly on each git operation (`$(cat /secrets/github-token)` in gitconfig), and the `gh` CLI uses a wrapper at `/usr/local/bin/gh` that re-reads the file before each invocation. The `GITHUB_TOKEN` env var is a point-in-time snapshot set at attempt start and may go stale; it is not the authoritative source.
 9. In managed mode (`CLAUDE_MANAGED_MODE=1`), the container does NOT exit after completing an attempt. The orchestrator must call `destroyWorker` explicitly when the task is done.
 10. When `continueSession: true` is passed to `createWorker`, it restores a preserved container (via `preservedWorkers` map) or reconnects to an orphaned container by name (`claude-worker-{taskId}`). This handles orchestrator restarts without losing in-flight containers.
+11. The container syncs environment variables from GCP Secret Manager at startup via `scripts/sync-secrets.sh`. These are loaded into the shell environment via `.envrc` and `direnv`. The orchestrator does not need to pre-sync secrets.
+12. Crash forensics are enabled by setting `CLAUDE_FORENSICS=1`. The forensics directory must be bind-mounted if the orchestrator needs to access artifacts after container destruction.
 
 ---
 
@@ -163,7 +167,7 @@ interface ContainerMounts {
   };
   '/home/claude/pnpm-store': {
     source: string; // Host shared pnpm store (secretsBasePath/../pnpm-store)
-    mode: 'rw'; // Read-write — shared across containers
+    mode: 'rw'; // Read-write -- shared across containers
     type: 'bind'; // Persists across container restarts
   };
   '/home/claude/.claude': {
@@ -202,7 +206,7 @@ interface ContainerMounts {
 **Orchestrator: Start a new coding task in managed mode**
 
 ```typescript
-// 1. Create container, wait for ready, and fire first attempt — all in one call.
+// 1. Create container, wait for ready, and fire first attempt -- all in one call.
 //    createWorker writes prompt content to secrets dir, then calls docker exec run-attempt.
 const handle = await provider.createWorker({
   taskId: 'INT-500-implement-feature',
@@ -222,7 +226,7 @@ const handle = await provider.createWorker({
   onComplete: (exitCode) => console.log('Attempt done:', exitCode),
 });
 
-// 2. Resume if needed — createWorker with continueSession=true re-uses the existing container
+// 2. Resume if needed -- createWorker with continueSession=true re-uses the existing container
 if (shouldResume) {
   await provider.createWorker({
     taskId: 'INT-500-implement-feature',
@@ -256,3 +260,33 @@ if (exitCode === 0) {
   // Task failed with non-zero exit code
 }
 ```
+
+---
+
+## Error Handling
+
+| Exit Code | Meaning                | Recovery Action                                     |
+| --------- | ---------------------- | --------------------------------------------------- |
+| 0         | Success                | Task completed — check for PR                       |
+| 1         | General failure        | Retry with continueSession=true                     |
+| 139       | Segfault (SIGSEGV)     | Check forensics dir; retry with fresh container     |
+| -1        | Timeout (orchestrator) | Container force-killed; retry with different prompt |
+
+---
+
+## Events Published
+
+None. Claude Worker does not publish Pub/Sub events. Communication is via container exit codes and log output.
+
+---
+
+## Dependencies
+
+| Dependency           | Why Needed                 | Failure Behavior                               |
+| -------------------- | -------------------------- | ---------------------------------------------- |
+| Docker Engine        | Container runtime          | Cannot start worker                            |
+| Anthropic API        | Claude CLI model access    | Claude exits with error                        |
+| GitHub (public)      | Push commits, create PRs   | Git operations fail                            |
+| npm registry         | pnpm install               | Dependency install fails (non-fatal for retry) |
+| GCP Secret Manager   | Environment variable sync  | Falls back to existing .envrc                  |
+| Artifact Registry    | Image pull                 | Uses cached local image                        |

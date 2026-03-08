@@ -615,8 +615,66 @@ describe('Webhook async processing', () => {
       // Audio file should be stored in GCS
       const files = ctx.mediaStorage.getAllFiles();
       expect(files.size).toBe(1);
+
+      // AudioStoredEvent should be published
+      const audioStoredEvents = ctx.eventPublisher.getAudioStoredEvents();
+      expect(audioStoredEvents.length).toBe(1);
+      const audioStoredEvent = audioStoredEvents[0];
+      expect(audioStoredEvent?.type).toBe('whatsapp.audio.stored');
+      expect(audioStoredEvent?.userId).toBe(userId);
+      expect(audioStoredEvent?.mediaId).toBe('test-audio-id-12345');
+      expect(audioStoredEvent?.gcsPath).toContain('/test-audio-id-12345.ogg');
+      expect(audioStoredEvent?.mimeType).toBe('audio/ogg');
+      expect(audioStoredEvent?.timestamp).toBeDefined();
     });
 
+
+    it('handles publishAudioStored failure gracefully', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up the fake whatsappCloudApi with audio media
+      ctx.whatsappCloudApi.setMediaUrl('test-audio-id-12345', {
+        url: 'https://example.com/media/test-audio-id-12345',
+        mimeType: 'audio/ogg',
+        fileSize: 5000,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-audio-id-12345',
+        Buffer.from('fake-audio-content')
+      );
+
+      // Simulate Pub/Sub publish failure
+      ctx.eventPublisher.setAudioStoredFailure('Simulated Pub/Sub failure');
+
+      const payload = createAudioWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      // Event should still be marked completed (failure is logged, not thrown)
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      // Pub/Sub failed, so no audio stored events
+      expect(ctx.eventPublisher.getAudioStoredEvents().length).toBe(0);
+    });
     it('handles getMediaUrl failure gracefully for audio', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
@@ -2630,6 +2688,49 @@ describe('Webhook async processing', () => {
         actionId: 'task-456',
         buttonId: 'view-task:task-456',
         buttonTitle: '👁️ View Progress',
+      });
+    });
+
+    it('publishes approval reply event for proceed-implementation button', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-proceed-impl';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'proceed-implementation:task-789:nonce1',
+        buttonTitle: '🚀 Implement',
+        replyToWamid: 'wamid.proceed-impl',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(1);
+      expect(approvalEvents[0]).toMatchObject({
+        type: 'action.approval.reply',
+        replyText: 'proceed-implementation',
+        userId: testUserId,
+        actionId: 'task-789',
+        buttonId: 'proceed-implementation:task-789:nonce1',
+        buttonTitle: '🚀 Implement',
       });
     });
 

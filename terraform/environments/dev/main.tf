@@ -469,8 +469,8 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
-    # Speechmatics API secrets
-    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for whatsapp-service"
+    # Speechmatics API secrets (used by transcription Cloud Function)
+    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for transcription Cloud Function"
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Firebase configuration for web app
@@ -483,15 +483,20 @@ module "secret_manager" {
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"     = "Google OAuth client ID for calendar integration"
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET" = "Google OAuth client secret for calendar integration"
     "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"  = "Google OAuth redirect URI (full callback URL)"
+    # GitHub OAuth secrets for GitHub integration
+    "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID"     = "GitHub OAuth App Client ID"
+    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET" = "GitHub OAuth App Client Secret"
     # Sentry error monitoring
     "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
     # Crawl4AI Cloud API
     "INTEXURAOS_CRAWL4AI_APP_API_KEY" = "Crawl4AI Cloud API key for web-agent"
     # LLM API keys
-    "INTEXURAOS_OPENAI_APP_API_KEY" = "OpenAI API key for chat-agent"
-    "INTEXURAOS_ZAI_APP_API_KEY"    = "Platform ZAI API key for all services"
-    "INTEXURAOS_GEMINI_APP_API_KEY" = "Gemini API key for orchestrator completion verifier"
+    "INTEXURAOS_OPENAI_APP_API_KEY"    = "OpenAI API key for chat-agent"
+    "INTEXURAOS_ZAI_APP_API_KEY"       = "Platform ZAI API key for all services"
+    "INTEXURAOS_MINIMAX_APP_API_KEY"   = "MiniMax API key for orchestrator worker containers"
+    "INTEXURAOS_GEMINI_APP_API_KEY"    = "Gemini API key for orchestrator completion verifier"
+    "INTEXURAOS_DASHSCOPE_APP_API_KEY" = "Dashscope API key for orchestrator qwen3.5-plus worker containers"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to Claude worker containers"
     "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to Claude worker containers"
@@ -551,15 +556,17 @@ module "claude_code_dev" {
 locals {
   # Secrets that ALL services need
   common_service_secrets = {
-    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_SENTRY_DSN          = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-    INTEXURAOS_ZAI_APP_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_ZAI_APP_API_KEY"]
-    INTEXURAOS_GEMINI_APP_API_KEY  = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
-    INTEXURAOS_DASH0_OTLP_ENDPOINT = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
-    INTEXURAOS_DASH0_AUTH_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
+    INTEXURAOS_AUTH_JWKS_URL         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER           = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN   = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_SENTRY_DSN            = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+    INTEXURAOS_ZAI_APP_API_KEY       = module.secret_manager.secret_ids["INTEXURAOS_ZAI_APP_API_KEY"]
+    INTEXURAOS_MINIMAX_APP_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_MINIMAX_APP_API_KEY"]
+    INTEXURAOS_GEMINI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
+    INTEXURAOS_DASHSCOPE_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_DASHSCOPE_APP_API_KEY"]
+    INTEXURAOS_DASH0_OTLP_ENDPOINT   = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
+    INTEXURAOS_DASH0_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
   }
 }
 
@@ -617,28 +624,45 @@ module "pubsub_whatsapp_webhook_process" {
   ]
 }
 
-# Topic for WhatsApp audio transcription (long-running operations up to 15 min)
-module "pubsub_whatsapp_transcription" {
+# Subscription for srt-service transcription completed events (srt-service -> whatsapp-service)
+# Topic is owned by srt-service; whatsapp-service defines the push subscription here.
+module "pubsub_srt_transcription_completed" {
   source = "../../modules/pubsub-push"
 
   project_id     = var.project_id
   project_number = local.project_number
-  topic_name     = "intexuraos-whatsapp-transcription-${var.environment}"
+  topic_name     = "intexuraos-srt-transcription-completed-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcribe-audio"
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
   push_audience              = module.whatsapp_service.service_url
-  ack_deadline_seconds       = 600 # Max allowed by GCP (transcription can take up to 5 min)
+  ack_deadline_seconds       = 120
 
-  publisher_service_accounts = {
-    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
+  publisher_service_accounts = {}
 
   depends_on = [
     google_project_service.apis,
     module.iam,
   ]
+}
+
+# Topic for audio stored events (whatsapp-service → transcription Cloud Function)
+# No push subscription needed — the Cloud Function subscribes via event trigger.
+resource "google_pubsub_topic" "audio_stored" {
+  name    = "intexuraos-audio-stored-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+# Grant whatsapp-service permission to publish to audio-stored topic
+resource "google_pubsub_topic_iam_member" "whatsapp_publishes_audio_stored" {
+  project = var.project_id
+  topic   = google_pubsub_topic.audio_stored.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${module.iam.service_accounts["whatsapp_service"]}"
 }
 
 # Topic for commands ingest (whatsapp -> commands-agent)
@@ -844,6 +868,8 @@ module "user_service" {
     INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"]
     INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET"]
     INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI  = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"]
+    INTEXURAOS_GITHUB_OAUTH_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_OAUTH_CLIENT_ID"]
+    INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
@@ -907,7 +933,6 @@ module "whatsapp_service" {
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
     INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
     INTEXURAOS_WHATSAPP_WABA_ID         = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_WABA_ID"]
-    INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
@@ -916,7 +941,7 @@ module "whatsapp_service" {
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = "intexuraos-whatsapp-media-cleanup-${var.environment}-push"
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC      = module.pubsub_commands_ingest.topic_name
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
-    INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
+    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC         = google_pubsub_topic.audio_stored.name
     INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC       = module.pubsub_approval_reply.topic_name
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC        = "intexuraos-whatsapp-send-${var.environment}"
   })
@@ -927,6 +952,7 @@ module "whatsapp_service" {
     module.secret_manager,
     module.whatsapp_media_bucket,
     module.pubsub_commands_ingest,
+    google_pubsub_topic.audio_stored,
   ]
 }
 
@@ -992,6 +1018,9 @@ module "api_docs_hub" {
     INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL              = "${module.bookmarks_agent.service_url}/openapi.json"
     INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL               = "${module.calendar_agent.service_url}/openapi.json"
     INTEXURAOS_CHAT_AGENT_OPENAPI_URL                   = "${module.chat_agent.service_url}/openapi.json"
+    INTEXURAOS_CODE_AGENT_OPENAPI_URL                   = "${module.code_agent.service_url}/openapi.json"
+    INTEXURAOS_LINEAR_AGENT_OPENAPI_URL                 = "${module.linear_agent.service_url}/openapi.json"
+    INTEXURAOS_WEB_AGENT_OPENAPI_URL                    = "${module.web_agent.service_url}/openapi.json"
   })
 
   depends_on = [
@@ -1417,6 +1446,8 @@ module "code_agent" {
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_QUEUE_MAX_SIZE             = "10"
+    INTEXURAOS_QUEUE_TTL_MINUTES          = "30"
   })
 
   depends_on = [
@@ -1737,6 +1768,49 @@ resource "google_cloud_scheduler_job" "retry_pending_actions" {
     module.actions_agent,
   ]
 }
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Drain Task Queue (INT-619)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_code_agent" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.code_agent.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.code_agent]
+}
+
+resource "google_cloud_scheduler_job" "drain_task_queue" {
+  name        = "intexuraos-drain-task-queue-${var.environment}"
+  description = "Drain queued code tasks when workers become available"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/drain-queue"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Firebase Authentication (Identity Platform)
 # -----------------------------------------------------------------------------
@@ -2089,6 +2163,138 @@ resource "google_cloud_scheduler_job" "log_cleanup" {
 }
 
 # -----------------------------------------------------------------------------
+# Cloud Functions - Transcription Worker
+# -----------------------------------------------------------------------------
+
+resource "google_service_account" "transcription_function" {
+  account_id   = "ixos-transcription-fn-${var.environment}"
+  display_name = "Transcription Cloud Function Service Account"
+  description  = "Service account for transcription Cloud Function (audio-stored -> transcription-completed)"
+
+  depends_on = [google_project_service.apis]
+}
+
+# Grant transcription SA permission to read from whatsapp media bucket
+resource "google_storage_bucket_iam_member" "transcription_media_reader" {
+  bucket = module.whatsapp_media_bucket.bucket_name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to access Speechmatics secret
+resource "google_secret_manager_secret_iam_member" "transcription_speechmatics" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to access internal auth token secret
+resource "google_secret_manager_secret_iam_member" "transcription_internal_auth" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to sign blobs (required for GCS signed URLs)
+resource "google_service_account_iam_member" "transcription_self_token_creator" {
+  service_account_id = google_service_account.transcription_function.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to receive Eventarc events
+resource "google_project_iam_member" "transcription_eventarc" {
+  project = var.project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Grant transcription SA permission to access Sentry DSN secret
+resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# Topic for transcription completed events (transcription Cloud Function -> whatsapp-service)
+module "pubsub_transcription_completed" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-transcription-completed-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
+  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
+  push_audience              = module.whatsapp_service.service_url
+  ack_deadline_seconds       = 60
+
+  publisher_service_accounts = {
+    transcription_function = google_service_account.transcription_function.email
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.whatsapp_service,
+    google_service_account.transcription_function,
+  ]
+}
+
+module "function_transcription" {
+  source = "../../modules/cloud-function"
+
+  project_id    = var.project_id
+  region        = var.region
+  environment   = var.environment
+  function_name = "intexuraos-transcription-${var.environment}"
+  description   = "Transcribe audio files from WhatsApp using Speechmatics API"
+  entry_point   = "transcribeAudio"
+  runtime       = "nodejs22"
+
+  source_bucket   = google_storage_bucket.cloud_functions_source.name
+  source_object   = "transcription/function.zip"
+  service_account = google_service_account.transcription_function.email
+
+  trigger_type = "pubsub"
+  pubsub_topic = google_pubsub_topic.audio_stored.id
+
+  timeout_seconds    = 540 # 9 minutes - max for Gen2 Cloud Functions
+  available_memory   = "512M"
+  max_instance_count = 10
+
+  env_vars = {
+    INTEXURAOS_ENVIRONMENT                          = var.environment
+    INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
+    INTEXURAOS_USER_SERVICE_URL                     = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
+  }
+
+  secrets = {
+    INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    google_storage_bucket_object.function_placeholder,
+    google_service_account.transcription_function,
+    google_pubsub_topic.audio_stored,
+    module.pubsub_transcription_completed,
+    google_secret_manager_secret_iam_member.transcription_speechmatics,
+    google_secret_manager_secret_iam_member.transcription_internal_auth,
+    google_secret_manager_secret_iam_member.transcription_sentry_dsn,
+    google_storage_bucket_iam_member.transcription_media_reader,
+    google_project_iam_member.transcription_eventarc,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
 
@@ -2292,5 +2498,20 @@ output "function_log_cleanup_name" {
 output "pubsub_log_cleanup_topic" {
   description = "Pub/Sub topic for log cleanup trigger"
   value       = google_pubsub_topic.log_cleanup.name
+}
+
+output "function_transcription_name" {
+  description = "Transcription Cloud Function name"
+  value       = module.function_transcription.function_name
+}
+
+output "pubsub_audio_stored_topic" {
+  description = "Pub/Sub topic for audio stored events"
+  value       = google_pubsub_topic.audio_stored.name
+}
+
+output "pubsub_transcription_completed_topic" {
+  description = "Pub/Sub topic for transcription completed events"
+  value       = module.pubsub_transcription_completed.topic_name
 }
 

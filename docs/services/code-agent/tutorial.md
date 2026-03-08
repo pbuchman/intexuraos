@@ -1,4 +1,4 @@
-# Code Agent -- Getting Started Tutorial
+# Code Agent — Getting Started Tutorial
 
 **Time estimate:** 30-45 minutes
 
@@ -46,7 +46,7 @@ Open [http://localhost:8128/docs](http://localhost:8128/docs) in your browser to
 
 ## Part 2: Configure a Worker (10 min)
 
-Before you can submit tasks, you need to configure at least one worker. Workers are user-specific -- each user manages their own worker machines.
+Before you can submit tasks, you need to configure at least one worker. Workers are user-specific — each user manages their own worker machines.
 
 ### Step 1: Add a worker via API
 
@@ -80,7 +80,7 @@ Expected response:
   "data": {
     "testStatus": "success",
     "testMessage": "Connection successful",
-    "lastTestedAt": "2026-02-22T10:30:00.000Z"
+    "lastTestedAt": "2026-03-07T10:30:00.000Z"
   }
 }
 ```
@@ -120,7 +120,7 @@ Expected response:
 }
 ```
 
-Note: If you accidentally include a secret in your prompt (e.g., `DB_PASSWORD=s3cr3t`), Code Agent strips it before the prompt reaches the worker. The sanitized version is stored in the `sanitizedPrompt` field.
+Note: If you accidentally include a secret in your prompt (e.g., `DB_PASSWORD=s3cr3t`), Code Agent strips it before the prompt reaches the worker. If you include system override markers (e.g., `[SYSTEM]`), the submission is rejected with a `validation_error`. Both sanitization layers run automatically.
 
 ### Step 2: Check task status
 
@@ -129,7 +129,7 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-The task progresses through statuses: `dispatched` -> `running` -> `designed` or `implemented` (or `failed`). Tasks never reach a generic `completed` status -- they finish as `designed` (Phase 1) or `implemented` (Phase 2).
+The task progresses through statuses: `dispatched` -> `running` -> `planned` or `implemented` (or `failed`). Tasks never reach a generic `completed` status — they finish as `planned` (planning agent) or `implemented` (execution agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
 
 ### Step 3: List your tasks
 
@@ -145,29 +145,34 @@ curl "http://localhost:8128/code/tasks?status=running&status=dispatched&limit=10
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
+Note: Tasks that have been retried show status `archived` and link to the new task via `retriedFrom`.
+
 ### Step 4: Cancel a running task
 
 ```bash
-curl -X POST http://localhost:8128/code/tasks/<codeTaskId>/cancel \
-  -H "Authorization: Bearer <your-auth0-jwt>"
+curl -X POST http://localhost:8128/code/cancel \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{ "taskId": "<codeTaskId>" }'
 ```
 
 ## Part 4: Advanced Features (10 min)
 
 ### Retry a failed task
 
-After a task fails, wait 5 minutes (the cool-off period), then retry with optional additional context:
+After a task fails, wait for the cool-off period (5 minutes for failed tasks, immediate for cancelled), then retry with optional additional context:
 
 ```bash
-curl -X POST http://localhost:8128/code/tasks/<failedTaskId>/retry \
+curl -X POST http://localhost:8128/code/retry \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <your-auth0-jwt>" \
   -d '{
+    "taskId": "<failedTaskId>",
     "additionalContext": "The test failure was due to a missing mock. Add a mock for the UserService dependency."
   }'
 ```
 
-The retry creates a new task linked to the original via the `retriedFrom` field.
+The retry creates a new task linked to the original via the `retriedFrom` field. The original task is archived (status: `archived`).
 
 ### Submit feedback on a completed task
 
@@ -207,16 +212,32 @@ Expected response when task has ended (task resumed):
 { "success": true, "data": { "action": "resumed" } }
 ```
 
-### Start Phase 2 implementation
+### Start execution agent implementation
 
-After a Phase 1 design task completes (`status: 'designed'`), you can trigger Phase 2 execution:
+After a planning agent task completes (`status: 'planned'`), you can trigger execution agent implementation:
 
 ```bash
-curl -X POST http://localhost:8128/code/tasks/<designedTaskId>/implement \
+curl -X POST http://localhost:8128/code/tasks/<plannedTaskId>/implement \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-Phase 2 tasks reuse the original prompt but run in strict execution mode, and the Linear issue must have the `code-task` label (set by Phase 1).
+Execution agent tasks reuse the original prompt but run in strict execution mode, and the Linear issue must have the `code-task` label (set by the planning agent). The planning task is back-linked to the new execution task via `implementationTaskId`.
+
+### Choose a model
+
+You can specify which AI model to use via the `workerType` parameter:
+
+```bash
+curl -X POST http://localhost:8128/code/submit \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{
+    "prompt": "Fix the login redirect loop",
+    "workerType": "opus"
+  }'
+```
+
+Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `glm`, `qwen3.5-plus`. If the linked Linear issue has a label matching a worker type, that label overrides the request.
 
 ### Query GitHub PR summaries
 
@@ -260,16 +281,17 @@ curl -X POST http://localhost:8128/internal/code/process \
 
 | Symptom                               | Cause                                             | Fix                                                                   |
 | ------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------- |
-| `worker_not_configured` on submit     | No workers configured for user                    | Add a worker via `POST /code/worker-settings/workers`                 |
+| `worker_not_configured` on submit     | No workers configured or enabled for user         | Add a worker via `POST /code/worker-settings/workers` and enable it   |
 | `429` rate limit on submit            | Concurrent, hourly, or cost limit exceeded        | Wait for tasks to complete, or wait for the time window to reset      |
 | `409 CONFLICT` on submit              | Deduplication triggered (same prompt in 5 min)    | Wait 5 minutes or modify the prompt                                   |
+| `validation_error` on submit          | Prompt contains injection patterns                | Remove system override markers or base64 blobs from the prompt        |
 | Worker connectivity test fails        | CF Access credentials wrong or tunnel not running | Verify tunnel is running and credentials match CF dashboard           |
 | Task stuck in `dispatched` for >5 min | Worker did not start processing                   | Check orchestrator logs; task will be marked `interrupted` after 30m  |
 | `UNAUTHORIZED` on webhook             | HMAC signature mismatch                           | Verify `INTEXURAOS_ORCHESTRATOR_SECRET` matches on both sides         |
 | Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server |
-| `too_soon` error on retry             | 5-minute cool-off period not elapsed              | Wait the specified number of minutes before retrying                  |
+| `too_soon` error on retry             | Cool-off period not elapsed                       | Wait the specified number of minutes before retrying                  |
 | GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings |
-| `WORKER_NOT_CONFIGURED` on submit     | User has workers but none are enabled             | Enable at least one worker in Settings                                |
+| Task queued but never dispatched      | Workers remain busy past queue TTL                | Check worker status; task expires after 30 min in queue               |
 
 ## Exercises
 
@@ -313,7 +335,7 @@ curl -X POST http://localhost:8128/code/submit \
   }'
 ```
 
-**Solution verification:** The created task should have `linearIssueId: "INT-500"` and `linearFallback: false`. The Linear issue should transition to "In Progress" when the worker starts.
+**Solution verification:** The created task should have `linearIssueId: "INT-500"` and the `linearIssueLabels` field populated from the issue. The Linear issue should transition to "In Progress" when the worker starts.
 
 ### Exercise 3: Trigger zombie detection
 

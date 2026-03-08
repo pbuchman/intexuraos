@@ -35,6 +35,7 @@ describe('feedNameGenerationService', () => {
       getApiKeys: vi.fn(),
       reportLlmSuccess: vi.fn(),
       getOAuthToken: vi.fn(),
+      resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
     };
   });
 

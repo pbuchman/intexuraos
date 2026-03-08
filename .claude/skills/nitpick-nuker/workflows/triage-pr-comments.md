@@ -159,6 +159,26 @@ gh pr checks "$PR_NUMBER" --json name,state | jq -r '.[] | "\(.name): \(.state)"
 
 ## Step 7: Post Summary
 
+### 7a. Generate Roast Line
+
+Before building the summary JSON, generate a savage one-liner roast about the PR code.
+
+**Rules for the roast:**
+
+- One sentence, max 150 characters
+- Savage and brutally honest, but ultimately funny — think code roast, not personal attack
+- Reference something specific from the PR: a pattern you saw, the number of nitpicks, the quality of the code, or a funny observation from the review
+- Never repeat a previous roast — each run must be unique
+- Escape double quotes for JSON safety
+
+Store the result in `$ROAST_LINE`. Example roasts:
+
+- "I've seen better error handling in a fortune cookie."
+- "This code has more unnecessary comments than a YouTube section."
+- "5 nitpicks in 200 lines — that's a nitpick every 40 lines, which is honestly impressive."
+
+### 7b. Build Summary JSON
+
 ```bash
 # Create summary JSON
 SUMMARY_JSON=$(cat <<EOF
@@ -166,6 +186,7 @@ SUMMARY_JSON=$(cat <<EOF
   "pr_number": "$PR_NUMBER",
   "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "commit_sha": "$(git rev-parse --short HEAD)",
+  "roast_line": "$ROAST_LINE",
   "fixed": $FIXED_ARRAY,
   "skipped": $SKIPPED_ARRAY
 }
@@ -192,6 +213,8 @@ Canonical shape:
 ```md
 ## 😄 Nitpick Nuker Report
 
+> _<savage roast line about the PR code>_
+
 **PR:** #<number> | **Run:** <iso8601> | **Commit:** `<sha>`
 
 ### ✅ Fixed (<count>)
@@ -205,6 +228,10 @@ Canonical shape:
 | Comment     | Author | Reason                                                |
 | ----------- | ------ | ----------------------------------------------------- |
 | [view](...) | @user  | Historical thread; no branch-specific action required |
+
+---
+
+**Status:** All comments addressed — good to merge ✅
 ```
 
 ## Data Structures

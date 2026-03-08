@@ -1,0 +1,62 @@
+[
+  {
+    "id": "link-01",
+    "domain": "LLMs",
+    "sourceType": "whatsapp_text",
+    "text": "Check this out — great overview of where LLMs are heading. Covers inference-time scaling, fine-tuning approaches, and what changed since last year. https://magazine.sebastianraschka.com/p/state-of-llms-2025"
+  },
+  {
+    "id": "link-02",
+    "domain": "LLMs",
+    "sourceType": "pwa-shared",
+    "text": "https://www.technologyreview.com/2026/01/12/1129782/ai-large-language-models-biology-alien-autopsy/"
+  },
+  {
+    "id": "link-03",
+    "domain": "LLMs",
+    "sourceType": "whatsapp_text",
+    "text": "Interesting reading list for anyone getting into LLMs — covers transformers, attention mechanisms, RLHF, and prompt engineering fundamentals. Bookmarking for the team. https://machinelearningmastery.com/a-beginners-reading-list-for-large-language-models-for-2026/"
+  },
+  {
+    "id": "link-04",
+    "domain": "Software Engineering",
+    "sourceType": "whatsapp_text",
+    "text": "Really solid article about software engineering trends in 2026 — AI pair programming, cloud-native by default, and why system design skills matter more than ever now that code generation is cheap. https://dev.to/tyu1996/software-engineering-in-2026-a-view-from-the-server-room-3kag"
+  },
+  {
+    "id": "link-05",
+    "domain": "Software Engineering",
+    "sourceType": "pwa-shared",
+    "text": "https://www.refontelearning.com/blog/software-engineering-in-2026-5-key-trends-shaping-the-future"
+  },
+  {
+    "id": "link-06",
+    "domain": "Software Engineering",
+    "sourceType": "whatsapp_text",
+    "text": "Found this list of architecture books — some classics I've already read but a few new ones I haven't seen before. The one about evolutionary architecture looks promising. https://www.workingsoftware.dev/the-ultimate-list-of-software-architecture-books/"
+  },
+  {
+    "id": "link-07",
+    "domain": "Tech News",
+    "sourceType": "whatsapp_text",
+    "text": "Meta just locked in millions of Nvidia chips for their AI data centers. The scale of investment in AI infrastructure is insane right now. https://techstartups.com/2026/02/20/top-tech-news-today-february-20-2026/"
+  },
+  {
+    "id": "link-08",
+    "domain": "Tech News",
+    "sourceType": "whatsapp_text",
+    "text": "Good roundup of AI and tech news for February — OpenAI's Frontier platform for managing AI agents, Apple's visual intelligence wearables, and the UK AI governance coalition. https://www.vtnetzwelt.com/ai-development/latest-ai-technology-news-roundup-february-2026/"
+  },
+  {
+    "id": "link-09",
+    "domain": "Tech News",
+    "sourceType": "pwa-shared",
+    "text": "https://techstartups.com/2026/02/23/top-tech-news-today-february-23-2026/"
+  },
+  {
+    "id": "link-10",
+    "domain": "Tech News",
+    "sourceType": "whatsapp_text",
+    "text": "Huawei launching new products in Madrid next week despite all the geopolitical pressure. Say what you want about them but their persistence is remarkable. https://techsoften.com/top-tech-news-saturday-february-21-2026/"
+  }
+]

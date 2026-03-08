@@ -74,7 +74,53 @@ describe('RepoManager', () => {
     vi.restoreAllMocks();
   });
 
+  describe('normalizeUrl', () => {
+    it('should return plain HTTPS URL lowercased with no changes', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('https://github.com/x/y')).toBe('https://github.com/x/y');
+    });
+
+    it('should strip .git suffix from HTTPS URL', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('https://github.com/x/y.git')).toBe('https://github.com/x/y');
+    });
+
+    it('should convert SSH git@ URL to HTTPS', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('git@github.com:x/y.git')).toBe('https://github.com/x/y');
+    });
+
+    it('should lowercase mixed-case HTTPS URL', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('HTTPS://GitHub.com/X/Y')).toBe('https://github.com/x/y');
+    });
+
+    it('should strip embedded credentials from authenticated HTTPS URL', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(
+        normalizeUrl('https://x-access-token:ghs_TOKEN@github.com/pbuchman/intexuraos.git')
+      ).toBe('https://github.com/pbuchman/intexuraos');
+    });
+
+    it('should strip credentials from authenticated URL without .git suffix', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('https://x-access-token:ghs_TOKEN@github.com/pbuchman/intexuraos')).toBe(
+        'https://github.com/pbuchman/intexuraos'
+      );
+    });
+  });
+
   describe('urlsMatch', () => {
+    it('should match authenticated URL against clean URL (regression: orchestrator crash on restart)', async () => {
+      const { urlsMatch } = await loadRepoManager();
+      expect(
+        urlsMatch(
+          'https://x-access-token:ghs_TOKEN@github.com/pbuchman/intexuraos.git',
+          'https://github.com/pbuchman/intexuraos.git'
+        )
+      ).toBe(true);
+    });
+
     it('should normalize HTTPS URL with .git suffix', async () => {
       const { urlsMatch } = await loadRepoManager();
 
@@ -377,7 +423,7 @@ describe('RepoManager', () => {
   });
 
   describe('cleanWorktree', () => {
-    it('should run git reset --hard HEAD and git clean -df', async () => {
+    it('should run git reset --hard origin/development and git clean -df', async () => {
       const { cleanWorktree } = await loadRepoManager();
       const repoPath = join(tempDir, 'repo-to-clean');
       mkdirSync(repoPath, { recursive: true });
@@ -394,7 +440,7 @@ describe('RepoManager', () => {
       await cleanWorktree(repoPath, mockLogger);
 
       expect(commands).toEqual([
-        ['reset', '--hard', 'HEAD'],
+        ['reset', '--hard', 'origin/development'],
         ['clean', '-df'],
       ]);
     });
@@ -447,27 +493,25 @@ describe('RepoManager', () => {
       expect(cloneCalled).toBe(true);
     });
 
-    it('should validate, clean, and fetch when path exists with correct repo', async () => {
+    it('should validate, fetch, and clean when path exists with correct repo', async () => {
       const { ensureRepository } = await loadRepoManager();
       const repoPath = join(tempDir, 'existing-repo');
       mkdirSync(join(repoPath, '.git'), { recursive: true });
       writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ name: 'intexuraos' }));
 
-      let resetCalled = false;
-      let cleanCalled = false;
-      let fetchCalled = false;
+      const callOrder: string[] = [];
       mockExecFileAsyncImpl = async (
         file: string,
         args: string[]
       ): Promise<{ stdout: string; stderr: string }> => {
         if (file === 'git' && args[0] === 'reset') {
-          resetCalled = true;
+          callOrder.push('reset');
         }
         if (file === 'git' && args[0] === 'clean') {
-          cleanCalled = true;
+          callOrder.push('clean');
         }
         if (file === 'git' && args[0] === 'fetch') {
-          fetchCalled = true;
+          callOrder.push('fetch');
         }
         if (file === 'git' && args[0] === 'remote') {
           return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
@@ -477,9 +521,7 @@ describe('RepoManager', () => {
 
       await ensureRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger);
 
-      expect(resetCalled).toBe(true);
-      expect(cleanCalled).toBe(true);
-      expect(fetchCalled).toBe(true);
+      expect(callOrder).toEqual(['fetch', 'reset', 'clean']);
     });
 
     it('should throw validation error for invalid repository', async () => {

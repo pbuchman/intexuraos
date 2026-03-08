@@ -1,7 +1,7 @@
-# WhatsApp Service - Technical Debt
+# WhatsApp Service — Technical Debt
 
-**Last Updated:** 2026-02-22
-**Version:** 4.0.0
+**Last Updated:** 2026-03-07
+**Analysis Run:** v3.1.0
 
 ---
 
@@ -10,12 +10,12 @@
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
 | TODO/FIXME Comments | 1     | Low      |
-| Test Coverage Gaps  | 0     | -        |
-| TypeScript Issues   | 0     | -        |
+| Test Coverage Gaps  | 0     | —        |
+| TypeScript Issues   | 0     | —        |
 | SRP Violations      | 1     | Medium   |
-| Code Duplicates     | 0     | -        |
-| Deprecations        | 0     | -        |
-| **Total**           | **2** | -        |
+| Code Duplicates     | 0     | —        |
+| Deprecations        | 0     | —        |
+| **Total**           | **2** | —        |
 
 ---
 
@@ -25,18 +25,17 @@
 
 Features that are planned but not yet implemented:
 
-- **Telegram support** - Add Telegram as an additional messaging channel
-- **SMS support** - Add SMS as fallback messaging channel
-- **Message threading** - Group related messages into conversation threads
-- **Video support** - Handle video messages (currently ignored)
-- **Multi-phone per user** - Allow users to connect multiple WhatsApp numbers
+- **Telegram support** — Add Telegram as an additional messaging channel
+- **SMS support** — Add SMS as fallback messaging channel
+- **Message threading** — Group related messages into conversation threads
+- **Video support** — Handle video messages (currently ignored)
+- **Multi-phone per user** — Allow users to connect multiple WhatsApp numbers
 
 ### Proposed Enhancements
 
 1. Retry mechanism for failed message deliveries
 2. Message read receipts tracking
 3. Approval message expiration notifications
-4. Button nonce validation on the receiving side (removed in v4.0.0 for simplicity; may re-add for security)
 
 ---
 
@@ -48,17 +47,9 @@ Features that are planned but not yet implemented:
 | ------------------------- | ------------------------------------------ | ----------------------------------------------- |
 | `routes/webhookRoutes.ts` | processWebhookEvent accepts FastifyRequest | Coupling between Pub/Sub handler and HTTP layer |
 
-**Details:** The `processWebhookEvent` function is exported for use by the Pub/Sub endpoint but still accepts `FastifyRequest` instead of a plain payload object. This creates unnecessary coupling and makes unit testing harder.
+**Details:** The `processWebhookEvent` function is exported for use by the Pub/Sub endpoint but still accepts `FastifyRequest` instead of a plain payload object. This creates unnecessary coupling and makes unit testing harder. There is also a TODO comment in the code acknowledging this issue.
 
 **Suggested Fix:** Refactor to accept a typed payload object directly, with the route handler extracting the necessary fields from the request.
-
-### Low Priority
-
-| File                          | Issue                       | Impact                              |
-| ----------------------------- | --------------------------- | ----------------------------------- |
-| `routes/webhookRoutes.ts:763` | Stale button format comment | Comment references old nonce format |
-
-**Details:** Comment at line 763 still references old nonce format: `"approve:{actionId}:{nonce}"`. Nonces were removed in v4.0.0 (INT-524).
 
 ---
 
@@ -71,28 +62,32 @@ All endpoints and use cases have test coverage. The service maintains >95% cover
 ### Coverage Areas
 
 - Routes: Fully tested (webhook, message, mapping, pubsub, verification)
-- Use cases: All covered (processAudioMessage, processImageMessage, transcribeAudio)
+- Use cases: All covered (processAudioMessage, processImageMessage, handleTranscriptionCompleted, extractLinkPreviews)
 - Infrastructure: Tested via routes and dedicated infra tests
-- v2.0.0 features: Approval reply handling, OutboundMessage tracking
-- v3.0.0 features: Phone verification, interactive buttons
-- v4.0.0 features: No-nonce buttons, reject intent, read receipts on button click
+- Approval reply handling, OutboundMessage tracking
+- Phone verification, interactive buttons
+- No-nonce buttons, reject intent, read receipts on button click
+- Event-driven transcription via srt-service, CTA URL messages
 
 ### Test Files
 
 Located in `apps/whatsapp-service/src/__tests__/`:
 
-- `webhookAsyncProcessing.test.ts` - Async webhook processing including button responses (v4.0.0)
-- `webhookReceiver.test.ts` - Webhook HMAC signature validation and receipt
-- `webhookVerification.test.ts` - Webhook hub challenge verification
-- `messageRoutes.test.ts` - Message CRUD operations
-- `mappingRoutes.test.ts` - User phone number mapping (with verification gate)
-- `pubsubRoutes.test.ts` - Pub/Sub event handlers (including interactive messages)
-- `verificationRoutes.test.ts` - Phone verification send/confirm/status
-- `shared.test.ts` - Shared utility functions (extractButtonResponse with button_reply fix)
-- `usecases/*.test.ts` - Business logic (processAudio, processImage, transcribeAudio, extractLinkPreviews)
-- `infra/phoneVerificationRepository.test.ts` - Verification repository
-- `infra/sender.test.ts` - WhatsApp sender (including sendInteractiveMessage)
-- `infra/**/*.test.ts` - Other infra implementations
+- `webhookAsyncProcessing.test.ts` — Async webhook processing including button responses
+- `webhookReceiver.test.ts` — Webhook HMAC signature validation and receipt
+- `webhookVerification.test.ts` — Webhook hub challenge verification
+- `messageRoutes.test.ts` — Message CRUD operations
+- `mappingRoutes.test.ts` — User phone number mapping (with verification gate)
+- `pubsubRoutes.test.ts` — Pub/Sub event handlers (including interactive messages, CTA URL, transcription-completed)
+- `verificationRoutes.test.ts` — Phone verification send/confirm/status
+- `shared.test.ts` — Shared utility functions (extractButtonResponse with button_reply fix)
+- `usecases/processAudioMessage.test.ts` — Audio download and GCS storage
+- `usecases/processImageMessage.test.ts` — Image download, thumbnail, GCS storage
+- `usecases/handleTranscriptionCompleted.test.ts` — srt-service event handling (INT-684)
+- `usecases/extractLinkPreviews.test.ts` — Link preview extraction
+- `infra/phoneVerificationRepository.test.ts` — Verification repository
+- `infra/sender.test.ts` — WhatsApp sender (sendTextMessage, sendInteractiveMessage, sendCtaUrlMessage)
+- `infra/**/*.test.ts` — Other infra implementations
 
 ---
 
@@ -100,7 +95,7 @@ Located in `apps/whatsapp-service/src/__tests__/`:
 
 ### None Detected
 
-No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
+No `@ts-ignore`, `@ts-expect-error`, or `any` types found.
 
 ---
 
@@ -108,16 +103,16 @@ No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
 
 ### Medium Priority
 
-| File                      | Lines | Issue                                               | Suggestion                                                                        |
-| ------------------------- | ----- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `routes/webhookRoutes.ts` | ~1160 | Handles webhook validation, routing, and 5 handlers | Extract handleTextMessage, handleButtonMessage to usecases |
+| File                      | Issue                                               | Suggestion                                                 |
+| ------------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
+| `routes/webhookRoutes.ts` | Handles webhook validation, routing, and 5 handlers | Extract handleTextMessage, handleButtonMessage to usecases |
 
 **Details:** `webhookRoutes.ts` contains:
 
 - Webhook validation logic
 - Message type routing (text, image, audio, button/interactive)
 - Text message handling with reply/approval detection
-- Button response handling with intent parsing
+- Button response handling with intent parsing (7 valid intents)
 - Image and audio message handlers (delegating to usecases)
 
 **Suggested Fix:** Extract `handleTextMessage` and `handleButtonMessage` into domain usecases for better testability and separation of concerns.
@@ -136,11 +131,11 @@ Minor duplication exists in test setup code across test files (fakes, mocks), wh
 
 ### None Detected
 
-No deprecated APIs or dependencies in use.
+No deprecated APIs or dependencies in use. Speechmatics direct dependency was removed in INT-684; transcription is now handled by srt-service.
 
 ---
 
-## Race Condition Fixes (v2.0.0)
+## Race Condition Fixes
 
 ### INT-201: Duplicate Actions from Approval Replies
 
@@ -171,26 +166,28 @@ No deprecated APIs or dependencies in use.
 
 ### Historical Issues
 
-| Date       | Issue                                                             | Resolution                                                       |
-| ---------- | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 2026-02-15 | SPEECHMATICS_API_KEY non-standard naming                          | Renamed to SPEECHMATICS_APP_API_KEY convention                   |
-| 2026-02-09 | Interactive button extraction failed with button_reply type       | Accept both "button" and "button_reply" in extractButtonResponse |
-| 2026-02-09 | Nonce requirement created friction without clear security benefit | Remove nonces from button IDs (INT-524)                          |
-| 2026-02-09 | Emoji reactions deprecated for approvals                          | Mark as REACTION_NOT_SUPPORTED, buttons are the only approval UI |
-| 2026-02-06 | button_reply payload structure mismatch                           | Fix payload extraction for WhatsApp button responses             |
-| 2026-01-30 | Response contract violations in Pub/Sub routes                    | Migrate to reply.ok()/reply.fail() contract                      |
-| 2026-01-30 | Loggers missing Sentry integration                                | Migrate to createAppLogger from @intexuraos/infra-sentry         |
-| 2026-01-28 | OPTIONAL_ENV pattern causing startup issues                       | Remove OPTIONAL_ENV, make WHATSAPP_SEND_TOPIC optional           |
-| 2026-01-28 | Env vars not registered in REQUIRED_ENV                           | Add mandatory env var registration enforcement                   |
-| 2026-01-16 | Approval events published without actionId                        | Only publish when actionId extracted                             |
-| 2026-01-14 | Duplicate actions from approval replies                           | Skip command.ingest for known approvals                          |
-| 2026-01-13 | Reactions not triggering approval flow                            | Add reaction handling (later removed in v4.0.0)                  |
-| 2026-01-11 | No reply correlation for approval messages                        | Add OutboundMessage tracking                                     |
+| Date       | Issue                                                             | Resolution                                                                  |
+| ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 2026-03-06 | Speechmatics direct dependency creates tight coupling             | INT-684: Migrated to event-driven transcription via srt-service             |
+| 2026-03-06 | PR notifications lacked actionable links                          | Added CTA URL message support for deep links to PRs and dashboards          |
+| 2026-02-15 | SPEECHMATICS_API_KEY non-standard naming                          | Renamed to SPEECHMATICS_APP_API_KEY convention (later removed entirely)     |
+| 2026-02-09 | Interactive button extraction failed with button_reply type       | Accept both "button" and "button_reply" in extractButtonResponse            |
+| 2026-02-09 | Nonce requirement created friction without clear security benefit | Remove nonces from button IDs (INT-524)                                     |
+| 2026-02-09 | Emoji reactions deprecated for approvals                          | Mark as REACTION_NOT_SUPPORTED, buttons are the only approval UI            |
+| 2026-02-06 | button_reply payload structure mismatch                           | Fix payload extraction for WhatsApp button responses                        |
+| 2026-01-30 | Response contract violations in Pub/Sub routes                    | Migrate to reply.ok()/reply.fail() contract                                 |
+| 2026-01-30 | Loggers missing Sentry integration                                | Migrate to createAppLogger from @intexuraos/infra-sentry                    |
+| 2026-01-28 | OPTIONAL_ENV pattern causing startup issues                       | Remove OPTIONAL_ENV, make WHATSAPP_SEND_TOPIC optional                      |
+| 2026-01-28 | Env vars not registered in REQUIRED_ENV                           | Add mandatory env var registration enforcement                              |
+| 2026-01-16 | Approval events published without actionId                        | Only publish when actionId extracted                                        |
+| 2026-01-14 | Duplicate actions from approval replies                           | Skip command.ingest for known approvals                                     |
+| 2026-01-13 | Reactions not triggering approval flow                            | Add reaction handling (later removed)                                       |
+| 2026-01-11 | No reply correlation for approval messages                        | Add OutboundMessage tracking                                                |
 
 ---
 
 ## Related
 
-- [Features](features.md) - User-facing documentation
-- [Technical](technical.md) - Developer reference
-- [Tutorial](tutorial.md) - Integration guide
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
+- [Tutorial](tutorial.md) — Integration guide

@@ -4,17 +4,18 @@ Decision rules for when to stop iterating.
 
 ## Scoring Scale
 
-| Score | Meaning | Implication |
-|-------|---------|-------------|
-| 9-10 | Exceptional | Ship immediately |
-| 7-8 | Good | Minor issues, likely one more pass |
-| 5-6 | Needs work | Significant gaps, requires revision |
-| 3-4 | Poor | Fundamental problems, full rewrite |
-| 1-2 | Unacceptable | Misses the brief entirely |
+| Score | Meaning      | Implication                         |
+| ----- | ------------ | ----------------------------------- |
+| 9-10  | Exceptional  | Ship immediately                    |
+| 7-8   | Good         | Minor issues, likely one more pass  |
+| 5-6   | Needs work   | Significant gaps, requires revision |
+| 3-4   | Poor         | Fundamental problems, full rewrite  |
+| 1-2   | Unacceptable | Misses the brief entirely           |
 
 ## Critic Verdicts
 
 Each critic returns one of:
+
 - **SHIP** — Ready to publish as-is (may include minor suggestions)
 - **REVISE** — Specific issues must be addressed before shipping
 
@@ -22,12 +23,12 @@ Each critic returns one of:
 
 After collecting all 6 scorecards:
 
-| Condition | Action | Next Phase |
-|-----------|--------|------------|
-| 6/6 SHIP | Done | Phase 6 (Present Final) |
-| Mixed verdicts, avg >= 6.5 | Targeted edits only | Phase 5 (Edit Pass) |
-| 0/6 SHIP or avg < 6.5 | Full rewrite with feedback | Phase 2 (new round) |
-| Round 3 reached (any score) | Polish and present | Phase 6 (Present Final) |
+| Condition                   | Action                     | Next Phase              |
+| --------------------------- | -------------------------- | ----------------------- |
+| 6/6 SHIP                    | Done                       | Phase 6 (Present Final) |
+| Mixed verdicts, avg >= 6.5  | Targeted edits only        | Phase 5 (Edit Pass)     |
+| 0/6 SHIP or avg < 6.5       | Full rewrite with feedback | Phase 2 (new round)     |
+| Round 3 reached (any score) | Polish and present         | Phase 6 (Present Final) |
 
 ## Feedback Consolidation (for R2+)
 
@@ -54,6 +55,7 @@ When feeding critic feedback back to the writer, consolidate and prioritize:
 **Hard limit: 3 rounds.**
 
 Rationale from 24 service rewrites:
+
 - R1 catches 80% of issues (baseline draft)
 - R2 catches 95% (error fixes + gap filling)
 - R3 is polish only — diminishing returns beyond this

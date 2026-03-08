@@ -1,10 +1,10 @@
 import type { OrchestratorStatus } from './state.js';
-import type { OAuthState } from '../services/isolation/types.js';
+import type { OAuthState, WorkerType } from '../services/isolation/types.js';
 
 // POST /tasks request
 export interface CreateTaskRequest {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: WorkerType;
   prompt: string;
   repository?: string;
   baseBranch?: string;
@@ -21,6 +21,12 @@ export interface CreateTaskRequest {
    * Used for tracking retry chains and debugging.
    */
   retriedFrom?: string;
+  /** Agent type determined by code-agent routing analysis. */
+  agentType?: 'planning' | 'execution' | 'pull_request';
+  /** Branch name of planning PR to merge into execution worktree. */
+  planningPrBranch?: string;
+  /** PR URL to close after successful execution. */
+  planningPrUrl?: string;
 }
 
 // GET /health response

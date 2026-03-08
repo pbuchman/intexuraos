@@ -20,7 +20,15 @@
 
 ```typescript
 interface CalendarAgentTools {
-  // Generate preview for calendar action (Pub/Sub)
+  // Generate preview for calendar action synchronously (direct HTTP)
+  generatePreviewDirect(params: {
+    actionId: string;
+    userId: string;
+    text: string;
+    currentDate: string; // YYYY-MM-DD (e.g., "2026-03-07")
+  }): Promise<{ preview: CalendarPreview }>;
+
+  // Generate preview for calendar action (Pub/Sub async)
   generatePreview(params: {
     actionId: string;
     userId: string;
@@ -32,14 +40,16 @@ interface CalendarAgentTools {
   getPreview(actionId: string): Promise<CalendarPreview | null>;
 
   // Process calendar action (with preview support)
-  // HTTP body: { action: { id, userId, title } }
+  // HTTP body: { action: { id, userId, title }, text?: string }
+  // text: full user prompt (preferred); falls back to action.title
   // Returns resourceUrl pointing to Google Calendar event (htmlLink)
   processAction(params: {
     action: {
       id: string;
       userId: string;
-      title: string; // user message text to extract event from
+      title: string; // short classifier-generated title
     };
+    text?: string; // full user prompt text (preferred for extraction)
   }): Promise<ServiceFeedback>;
 
   // List events in date range
@@ -196,12 +206,26 @@ interface ServiceFeedback {
 | **Retry Precondition**    | Failed event retry requires both start and end times to be set              |
 | **Ownership Check**       | Failed event delete/retry checks userId ownership (returns 404 if mismatch) |
 | **htmlLink Priority**     | processAction uses Google Calendar htmlLink; falls back to /#/calendar      |
+| **Full Prompt Preferred** | Always send `text` field with full user prompt to processAction             |
 
 ---
 
 ## Usage Patterns
 
-### Pattern 1: Preview-Based Event Creation (Recommended)
+### Pattern 1: Synchronous Preview + Event Creation (Recommended for Approval Flows)
+
+```
+1. Call POST /internal/calendar/preview with actionId, userId, text, currentDate
+2. Response contains preview data immediately (no polling needed)
+3. If preview.status === 'ready': Display preview to user for approval
+4. If preview.status === 'failed': Show error and reasoning, allow manual edit
+5. On approval: Call POST /internal/calendar/process-action with action + text
+6. processAction uses preview data (skips LLM) and creates event
+7. Response includes resourceUrl (Google Calendar htmlLink)
+8. Preview automatically cleaned up after successful creation
+```
+
+### Pattern 2: Async Preview + Polling (Legacy/Background)
 
 ```
 1. Publish to calendar-preview topic with actionId, userId, text, currentDate
@@ -214,14 +238,14 @@ interface ServiceFeedback {
 8. Preview automatically cleaned up after successful creation
 ```
 
-### Pattern 2: Direct Event Creation
+### Pattern 3: Direct Event Creation
 
 ```
 1. Call POST /calendar/events with full event details
 2. Returns created CalendarEvent with id and htmlLink
 ```
 
-### Pattern 3: Check Availability Then Create
+### Pattern 4: Check Availability Then Create
 
 ```
 1. Call POST /calendar/freebusy with time range and calendar IDs
@@ -229,7 +253,7 @@ interface ServiceFeedback {
 3. Call POST /calendar/events with available time slot
 ```
 
-### Pattern 4: Failed Event Recovery
+### Pattern 5: Failed Event Recovery
 
 ```
 1. Call GET /calendar/failed-events to list extraction failures
@@ -257,11 +281,12 @@ interface ServiceFeedback {
 
 ## Internal Endpoints
 
-| Method | Path                                   | Purpose                         | Caller        |
-| ------ | -------------------------------------- | ------------------------------- | ------------- |
-| POST   | `/internal/calendar/process-action`    | Process calendar action         | actions-agent |
-| POST   | `/internal/calendar/generate-preview`  | Generate preview (Pub/Sub push) | Cloud Pub/Sub |
-| GET    | `/internal/calendar/preview/:actionId` | Get preview by action ID        | actions-agent |
+| Method | Path                                   | Purpose                               | Caller        |
+| ------ | -------------------------------------- | ------------------------------------- | ------------- |
+| POST   | `/internal/calendar/process-action`    | Process calendar action               | actions-agent |
+| POST   | `/internal/calendar/generate-preview`  | Generate preview (Pub/Sub push)       | Cloud Pub/Sub |
+| POST   | `/internal/calendar/preview`           | Generate preview synchronously (HTTP) | actions-agent |
+| GET    | `/internal/calendar/preview/:actionId` | Get preview by action ID              | actions-agent |
 
 ---
 
@@ -281,25 +306,20 @@ interface ServiceFeedback {
 ## Preview Status State Machine
 
 ```
-        +----------+
-        |          |
-  +----->  pending |
-  |     |          |
-  |     +----+-----+
-  |          |
-  |          | LLM extraction
-  |          |
-  |     +----v-----+     +----------+
-  |     |          |     |          |
-  |     |  ready   |---->| deleted  | (after event creation)
-  |     |          |     |          |
-  |     +----------+     +----------+
-  |
-  |     +----------+
-  |     |          |
-  +---->|  failed  | (extraction error)
-        |          |
-        +----------+
+[not created] --> POST /internal/calendar/preview or Pub/Sub
+                      |
+                      v
+                  [pending]
+                      |
+                 LLM extraction
+                   /       \
+                  v         v
+             [ready]    [failed]
+                |
+           processAction
+                |
+                v
+            [deleted]
 ```
 
 ---
@@ -310,11 +330,11 @@ interface ServiceFeedback {
 | ------------------------------- | --------------------------------- | -------------------------- |
 | user-service                    | OAuth tokens, LLM API keys        | Reject request             |
 | Google Calendar                 | Event CRUD, free/busy             | Map error to CalendarError |
-| Gemini 2.5 Flash (primary LLM) | Event extraction from text        | Attempt fallback LLM       |
-| GLM-4.7 via Zai (fallback LLM) | Event extraction when Gemini down | Save to failed events      |
+| Gemini 2.5 Flash (primary LLM)  | Event extraction from text        | Attempt fallback LLM       |
+| GLM-4.7 via Zai (fallback LLM)  | Event extraction when Gemini down | Save to failed events      |
 | Firestore                       | Previews, processed actions       | Return INTERNAL_ERROR      |
 | app-settings-service            | LLM pricing context at startup    | Crash on startup           |
 
 ---
 
-**Last updated:** 2026-02-22 (v3.1.0 - INT-585 htmlLink as resourceUrl, corrected ServiceFeedback type)
+**Last updated:** 2026-03-07 (post v3.1.0 - INT-535 synchronous preview, INT-621 full prompt text, 502 error codes)

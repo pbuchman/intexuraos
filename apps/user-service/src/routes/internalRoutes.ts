@@ -6,7 +6,7 @@
  * POST /internal/users/:uid/llm-keys/:provider/last-used - Update last used timestamp
  * GET /internal/users/:uid/research-settings - Get research settings for a user
  * GET /internal/users/:uid/oauth/google/token - Get valid Google OAuth token for a user
- * GET /internal/users/:uid/settings - Get user LLM preferences (default model)
+ * GET /internal/users/:uid/settings - Get user settings preferences (LLM and transcription)
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -304,9 +304,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     {
       schema: {
         operationId: 'getInternalUserSettings',
-        summary: 'Get user LLM preferences (internal)',
+        summary: 'Get user settings preferences (internal)',
         description:
-          'Internal endpoint for service-to-service communication. Returns user LLM preferences including default model.',
+          'Internal endpoint for service-to-service communication. Returns user settings preferences including LLM and transcription preferences.',
         tags: ['internal'],
         params: {
           type: 'object',
@@ -328,6 +328,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     type: 'object',
                     properties: {
                       defaultModel: { type: 'string' },
+                    },
+                  },
+                  transcriptionPreferences: {
+                    type: 'object',
+                    properties: {
+                      provider: { type: 'string' },
                     },
                   },
                 },
@@ -376,12 +382,208 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Failed to fetch user settings'
         );
         // Return empty preferences on error instead of failing
-        return await reply.ok({ llmPreferences: undefined });
+        return await reply.ok({ llmPreferences: undefined, transcriptionPreferences: undefined });
       }
 
       const settings = result.value;
       return await reply.ok({
         llmPreferences: settings?.llmPreferences,
+        transcriptionPreferences: settings?.transcriptionPreferences,
+      });
+    }
+  );
+
+  // GET /internal/users/:uid/oauth/github/token
+  fastify.get(
+    '/internal/users/:uid/oauth/github/token',
+    {
+      schema: {
+        operationId: 'getInternalGitHubOAuthToken',
+        summary: 'Get GitHub OAuth token (internal)',
+        description:
+          'Internal endpoint for service-to-service communication. Returns the stored GitHub OAuth access token.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            uid: { type: 'string', description: 'User ID' },
+          },
+          required: ['uid'],
+        },
+        response: {
+          200: {
+            description: 'GitHub OAuth access token',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  accessToken: { type: 'string' },
+                  username: { type: 'string' },
+                },
+                required: ['accessToken', 'username'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'No GitHub OAuth connection found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/users/:uid/oauth/github/token',
+        bodyPreviewLength: 200,
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for oauth/github/token endpoint'
+        );
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for oauth/github/token endpoint');
+      }
+
+      const params = request.params as { uid: string };
+      const { oauthConnectionRepository } = getServices();
+
+      const result = await oauthConnectionRepository.getConnection(params.uid, OAuthProviders.GITHUB);
+
+      if (!result.ok) {
+        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
+      }
+
+      const connection = result.value;
+
+      if (connection === null) {
+        return await reply.fail('NOT_FOUND', 'No GitHub OAuth connection found for this user');
+      }
+
+      return await reply.ok({
+        accessToken: connection.tokens.accessToken,
+        username: connection.email,
+      });
+    }
+  );
+
+  // GET /internal/users/by-github-username/:username
+  fastify.get(
+    '/internal/users/by-github-username/:username',
+    {
+      schema: {
+        operationId: 'getInternalUserByGitHubUsername',
+        summary: 'Find user by GitHub username (internal)',
+        description:
+          'Internal endpoint for service-to-service communication. Finds a user by their GitHub username.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            username: { type: 'string', description: 'GitHub username' },
+          },
+          required: ['username'],
+        },
+        response: {
+          200: {
+            description: 'User found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  userId: { type: 'string' },
+                  username: { type: 'string' },
+                },
+                required: ['userId', 'username'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'No user found with this GitHub username',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/users/by-github-username/:username',
+        bodyPreviewLength: 200,
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for users/by-github-username/:username endpoint'
+        );
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for users/by-github-username/:username endpoint');
+      }
+
+      const params = request.params as { username: string };
+      const { oauthConnectionRepository } = getServices();
+
+      const result = await oauthConnectionRepository.findByProviderEmail(
+        OAuthProviders.GITHUB,
+        params.username
+      );
+
+      if (!result.ok) {
+        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
+      }
+
+      const connection = result.value;
+
+      if (connection === null) {
+        return await reply.fail('NOT_FOUND', `No user found with GitHub username: ${params.username}`);
+      }
+
+      return await reply.ok({
+        userId: connection.userId,
+        username: connection.email,
       });
     }
   );

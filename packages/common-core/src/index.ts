@@ -44,3 +44,6 @@ export { ServiceErrorCodes, type ServiceErrorCode } from './serviceErrorCodes.js
 
 // Tracing utilities for distributed tracing
 export * from './tracing/index.js';
+
+// Label utilities for Linear issue labels
+export { normalizeLabel, hasCodeTaskLabel } from './labels.js';
