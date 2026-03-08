@@ -82,7 +82,7 @@ function PipelineStep({ name, state }: PipelineStepProps): React.JSX.Element {
   return (
     <span className="flex items-center gap-1">
       <StepDot state={state} />
-      <span className="whitespace-nowrap text-xs text-slate-400 dark:text-slate-500">
+      <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
         {stepLabel(name, state)}
       </span>
     </span>
@@ -123,7 +123,7 @@ function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Elem
     steps.push(
       <span key="pr" className="flex items-center gap-1">
         <StepDot state="completed" />
-        <span className="whitespace-nowrap text-xs text-slate-400 dark:text-slate-500">
+        <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
           PR #{pipeline.pr.number}
         </span>
       </span>,
@@ -207,7 +207,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   </p>
                 </>
               ) : (
-                <p className="truncate text-sm text-slate-300 dark:text-slate-400">
+                <p className="truncate text-sm text-slate-600 dark:text-slate-400">
                   {summaryOrPrompt(latestTask)}
                 </p>
               )}
@@ -248,7 +248,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e): void => { e.stopPropagation(); }}
-                className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-500/20"
+                className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
               >
                 <ExternalLink className="h-3 w-3" />
                 PR #{pipeline.pr.number}
@@ -259,7 +259,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   e.stopPropagation();
                   onAction(latestTask.id, 'retry');
                 }}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:border-slate-200 hover:text-slate-300 dark:border-slate-600 dark:hover:border-slate-500"
+                className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300"
               >
                 <RotateCcw className="h-3 w-3" />
                 Retry
@@ -304,7 +304,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   {group.linearIssue.identifier}
                 </a>
               ) : (
-                <span className="truncate text-sm text-slate-300 dark:text-slate-400">
+                <span className="truncate text-sm text-slate-600 dark:text-slate-400">
                   {summaryOrPrompt(latestTask)}
                 </span>
               )}
@@ -345,11 +345,11 @@ const IssueGroupRow = memo(function IssueGroupRow({
         {/* Delete confirmation overlay */}
         {showDeleteConfirm ? (
           <div
-            className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-slate-900/80 backdrop-blur-sm"
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur-sm dark:bg-slate-900/80"
             onClick={(e): void => { e.stopPropagation(); }}
           >
-            <div className="flex items-center gap-3 rounded-lg bg-slate-800 px-4 py-3 shadow-lg">
-              <p className="text-sm text-slate-200">
+            <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg dark:bg-slate-800">
+              <p className="text-sm text-slate-700 dark:text-slate-200">
                 {group.tasks.length > 1
                   ? `Delete all ${String(group.tasks.length)} tasks for ${group.linearIssue?.identifier ?? 'this group'}?`
                   : 'Delete task?'}
@@ -359,7 +359,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   e.stopPropagation();
                   setShowDeleteConfirm(false);
                 }}
-                className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
               >
                 Cancel
               </button>
