@@ -133,33 +133,45 @@ function InlineMarkdown({ text, className }: { text: string; className: string }
 
 function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
   const prUrl = task.result?.prUrl;
+  const summary = task.result?.summary;
+  const errorMessage = task.error?.message;
+
+  // Summary is always shown when available
+  const summaryBlock = summary !== undefined
+    ? <InlineMarkdown text={summary} className="text-slate-400" />
+    : null;
+
   if (prUrl !== undefined) {
     return (
-      <a
-        href={prUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline"
-      >
-        <ExternalLink className="h-3 w-3" />
-        {prUrl}
-      </a>
+      <div className="flex flex-col gap-1">
+        {summaryBlock}
+        <a
+          href={prUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline"
+        >
+          <ExternalLink className="h-3 w-3" />
+          {prUrl}
+        </a>
+      </div>
     );
   }
 
-  const errorMessage = task.error?.message;
   if (errorMessage !== undefined) {
     const truncated = errorMessage.length > 100
       ? errorMessage.slice(0, 100) + '...'
       : errorMessage;
     return (
-      <span className="text-xs text-red-400">{truncated}</span>
+      <div className="flex flex-col gap-1">
+        {summaryBlock}
+        <span className="text-xs text-red-400">{truncated}</span>
+      </div>
     );
   }
 
-  const summary = task.result?.summary;
-  if (summary !== undefined) {
-    return <InlineMarkdown text={summary} className="text-slate-400" />;
+  if (summaryBlock !== null) {
+    return summaryBlock;
   }
 
   const prompt = task.sanitizedPrompt;
