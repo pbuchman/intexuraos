@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                                              |
-| -------- | ---------------------------------------------------------------------------------- |
-| **Name** | whatsapp-service                                                                   |
-| **Role** | WhatsApp Integration Service with Approval Workflow Support                        |
-| **Goal** | Receive WhatsApp messages, enable approval via buttons/replies, send notifications |
+| Field    | Value                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| **Name** | whatsapp-service                                                                                 |
+| **Role** | WhatsApp Integration Service with Approval Workflow and Event-Driven Transcription               |
+| **Goal** | Receive WhatsApp messages, enable approval via buttons/replies, send notifications and CTA links |
 
 ---
 
@@ -30,7 +30,8 @@ interface SendMessageEvent {
   userId: string; // IntexuraOS user ID (phone number looked up internally)
   message: string; // Message text to send
   replyToMessageId?: string; // Optional: WhatsApp message ID to reply to
-  buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons (v3.0.0)
+  buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons
+  ctaUrl?: { displayText: string; url: string }; // Optional: CTA URL button (mutually exclusive with buttons)
   correlationId: string; // For tracking; use approval format for approvals
   timestamp: string; // ISO 8601
 }
@@ -44,16 +45,28 @@ interface WhatsAppInteractiveButton {
 }
 ```
 
-**Example:**
+**Example (plain text):**
 
 ```json
-// Publish to whatsapp-message-send topic
 {
   "type": "whatsapp.message.send",
   "userId": "user-abc-123",
   "message": "Your research is ready: https://...",
   "correlationId": "research-complete-res-456",
-  "timestamp": "2026-01-24T10:30:00Z"
+  "timestamp": "2026-03-07T10:30:00Z"
+}
+```
+
+**Example (CTA URL):**
+
+```json
+{
+  "type": "whatsapp.message.send",
+  "userId": "user-abc-123",
+  "message": "PR #42 ready for review",
+  "ctaUrl": { "displayText": "View PR", "url": "https://github.com/org/repo/pull/42" },
+  "correlationId": "pr-ready-pr-42",
+  "timestamp": "2026-03-07T10:30:00Z"
 }
 ```
 
@@ -63,28 +76,16 @@ interface WhatsAppInteractiveButton {
 
 **When to use:** When you need user approval for an action
 
-**Input Schema:**
-
-```typescript
-interface ApprovalMessageEvent {
-  type: 'whatsapp.message.send';
-  userId: string;
-  message: string; // Approval prompt text
-  buttons?: WhatsAppInteractiveButton[]; // Interactive buttons (recommended)
-  correlationId: string; // MUST be: action-{type}-approval-{actionId}
-  timestamp: string;
-}
-```
-
-**Button ID Format (v4.0.0):**
+**Button ID Format:**
 
 ```
-approve:{actionId}    -- Approve
-cancel:{actionId}     -- Cancel/reject
-reject:{actionId}     -- Explicitly reject
-convert:{actionId}    -- Convert to different type
-cancel-task:{taskId}  -- Cancel running task
-view-task:{taskId}    -- View task status
+approve:{actionId}              -- Approve
+cancel:{actionId}               -- Cancel/reject
+reject:{actionId}               -- Explicitly reject
+convert:{actionId}              -- Convert to different type
+cancel-task:{taskId}            -- Cancel running task
+view-task:{taskId}              -- View task status
+proceed-implementation:{taskId} -- Proceed with implementation
 ```
 
 **Example:**
@@ -93,13 +94,13 @@ view-task:{taskId}    -- View task status
 {
   "type": "whatsapp.message.send",
   "userId": "user-abc-123",
-  "message": "👷 Create todo: 'Review quarterly report'?",
+  "message": "Create todo: 'Review quarterly report'?",
   "buttons": [
     { "type": "reply", "reply": { "id": "approve:act-xyz-789", "title": "Approve" } },
     { "type": "reply", "reply": { "id": "cancel:act-xyz-789", "title": "Cancel" } }
   ],
   "correlationId": "action-todo-approval-act-xyz-789",
-  "timestamp": "2026-02-19T10:30:00Z"
+  "timestamp": "2026-03-07T10:30:00Z"
 }
 ```
 
@@ -189,7 +190,7 @@ interface WhatsAppMessage {
   };
   metadata?: {
     senderName?: string;
-    replyToWamid?: string; // If this is a reply
+    phoneNumberId?: string;
   };
 }
 
@@ -204,12 +205,35 @@ interface OutboundMessage {
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
   replyToWamid: string; // Original approval message wamid
-  replyText: string; // "yes"/"no"/"convert"/"cancel-task"/"view-task"
+  replyText: string; // "yes"/"no"/"convert"/"cancel-task"/"view-task"/"proceed-implementation"
   userId: string;
   timestamp: string;
   actionId?: string; // Extracted from buttonId or correlationId
   buttonId?: string; // Button ID if user tapped a button
   buttonTitle?: string; // Button title if user tapped a button
+}
+
+interface AudioStoredEvent {
+  type: 'whatsapp.audio.stored';
+  userId: string;
+  messageId: string;
+  mediaId: string;
+  gcsPath: string;
+  mimeType: string;
+  timestamp: string;
+}
+
+interface TranscriptionCompletedEvent {
+  type: 'srt.transcription.completed';
+  userId: string;
+  messageId: string;
+  jobId: string;
+  status: 'completed' | 'failed';
+  transcript?: string;
+  summary?: string;
+  detectedLanguage?: string;
+  error?: string;
+  timestamp: string;
 }
 ```
 
@@ -227,7 +251,8 @@ interface ApprovalReplyEvent {
 | **Approval Format**     | CorrelationId MUST match `action-{type}-approval-{id}`            |
 | **Button Title Limit**  | Button titles truncated to 20 characters                          |
 | **Phone Verification**  | Phone must be verified before connecting via `/whatsapp/connect`  |
-| **No Emoji Reactions**  | Emoji reactions are ignored; use buttons or text replies (v4.0.0) |
+| **No Emoji Reactions**  | Emoji reactions are ignored; use buttons or text replies          |
+| **CTA vs Buttons**      | `ctaUrl` and `buttons` are mutually exclusive                     |
 
 ---
 
@@ -242,7 +267,16 @@ interface ApprovalReplyEvent {
 4. No response expected
 ```
 
-### Pattern 2: Request Approval with Buttons
+### Pattern 2: Send CTA Link
+
+```
+1. Publish SendMessageEvent with ctaUrl to whatsapp-message-send topic
+2. WhatsApp-service sends CTA URL message with clickable button
+3. User taps button -> link opens in browser
+4. No approval event published
+```
+
+### Pattern 3: Request Approval with Buttons
 
 ```
 1. Publish SendMessageEvent with buttons and correlationId: action-{type}-approval-{actionId}
@@ -254,7 +288,7 @@ interface ApprovalReplyEvent {
 6. Process approval/rejection based on replyText or buttonId
 ```
 
-### Pattern 3: Access Message Media
+### Pattern 4: Access Message Media
 
 ```
 1. GET /whatsapp/messages to list messages
@@ -268,19 +302,20 @@ interface ApprovalReplyEvent {
 
 ## Events Consumed
 
-| Event                   | Topic                 | Purpose                        |
-| ----------------------- | --------------------- | ------------------------------ |
-| `whatsapp.message.send` | whatsapp-message-send | Send outbound WhatsApp message |
+| Event                          | Topic                          | Purpose                            |
+| ------------------------------ | ------------------------------ | ---------------------------------- |
+| `whatsapp.message.send`        | whatsapp-message-send          | Send outbound WhatsApp message     |
+| `srt.transcription.completed`  | srt-transcription-completed    | Receive transcription results      |
 
 ## Events Published
 
-| Event                          | Topic                     | Purpose                           |
-| ------------------------------ | ------------------------- | --------------------------------- |
-| `action.approval.reply`        | action-approval-reply     | User responded to approval        |
-| `command.ingest`               | command-ingest            | Text/voice message for processing |
-| `whatsapp.audio.transcribe`    | whatsapp-audio-transcribe | Audio ready for transcription     |
-| `whatsapp.linkpreview.extract` | whatsapp-linkpreview      | URLs found for preview extraction |
-| `whatsapp.media.cleanup`       | whatsapp-media-cleanup    | Media deletion requested          |
+| Event                          | Topic                      | Purpose                              |
+| ------------------------------ | -------------------------- | ------------------------------------ |
+| `action.approval.reply`        | action-approval-reply      | User responded to approval           |
+| `command.ingest`               | command-ingest             | Text/voice message for processing    |
+| `whatsapp.audio.stored`        | whatsapp-audio-stored      | Audio ready for transcription        |
+| `whatsapp.linkpreview.extract` | whatsapp-linkpreview       | URLs found for preview extraction    |
+| `whatsapp.media.cleanup`       | whatsapp-media-cleanup     | Media deletion requested             |
 
 ---
 
@@ -293,7 +328,7 @@ interface ApprovalReplyEvent {
 | `USER_NOT_MAPPED`     | User has no connected WhatsApp number   | Prompt user to connect WhatsApp       |
 | `VALIDATION_ERROR`    | Invalid request payload                 | Fix request according to schema       |
 | `PRECONDITION_FAILED` | Phone number not verified (v3.0.0)      | Verify phone before connecting        |
-| `CONFLICT`            | Phone already verified                  | No action needed, phone is ready      |
+| `CONFLICT`            | Phone already verified or mapped        | No action needed                      |
 | `RATE_LIMITED`        | Too many verification requests          | Wait for cooldown or rate limit reset |
 | `LOCKED`              | Max verification attempts exceeded      | Request a new verification code       |
 | `GONE`                | Verification code expired               | Request a new verification code       |
@@ -315,12 +350,13 @@ interface ApprovalReplyEvent {
 
 ## Dependencies
 
-| Service      | Why Needed              | Failure Behavior          |
-| ------------ | ----------------------- | ------------------------- |
-| user-service | Validate user ownership | Reject request            |
-| WhatsApp API | Send/receive messages   | Queue for retry           |
-| Speechmatics | Audio transcription     | Mark transcription failed |
-| GCS          | Media storage           | Reject media requests     |
+| Service      | Why Needed                  | Failure Behavior          |
+| ------------ | --------------------------- | ------------------------- |
+| user-service | Validate user ownership     | Reject request            |
+| WhatsApp API | Send/receive messages       | Queue for retry           |
+| srt-service  | Audio transcription         | Mark transcription failed |
+| web-agent    | Link preview extraction     | Mark extraction failed    |
+| GCS          | Media storage               | Reject media requests     |
 
 ---
 
@@ -362,17 +398,18 @@ To enable approval via WhatsApp with interactive buttons:
    });
    ```
 
-### Response Type Mapping (v4.0.0)
+### Response Type Mapping
 
-| Response Type    | `replyText`   | `buttonId`    | `actionId`         |
-| ---------------- | ------------- | ------------- | ------------------ |
-| Button "Approve" | "yes"         | `approve:id`  | from buttonId      |
-| Button "Cancel"  | "no"          | `cancel:id`   | from buttonId      |
-| Button "Reject"  | "no"          | `reject:id`   | from buttonId      |
-| Text reply       | raw text      | undefined     | from correlationId |
-| Emoji reactions  | not supported | not supported | not published      |
+| Response Type              | `replyText`              | `buttonId`                    | `actionId`         |
+| -------------------------- | ------------------------ | ----------------------------- | ------------------ |
+| Button "Approve"           | "yes"                    | `approve:id`                  | from buttonId      |
+| Button "Cancel"            | "no"                     | `cancel:id`                   | from buttonId      |
+| Button "Reject"            | "no"                     | `reject:id`                   | from buttonId      |
+| Button "Proceed"           | "proceed-implementation" | `proceed-implementation:id`   | from buttonId      |
+| Text reply                 | raw text                 | undefined                     | from correlationId |
+| Emoji reactions            | not supported            | not supported                 | not published      |
 
 ---
 
-**Last updated:** 2026-02-22
-**Version:** 4.0.0
+**Last updated:** 2026-03-07
+**Version:** 5.0.0

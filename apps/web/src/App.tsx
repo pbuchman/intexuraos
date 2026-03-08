@@ -28,6 +28,7 @@ import {
   DataInsightsPage,
   DataSourceFormPage,
   DataSourcesListPage,
+  GitHubConnectionPage,
   GoogleCalendarConnectionPage,
   HomePage,
   InboxPage,
@@ -173,6 +174,14 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/settings/github"
+        element={
+          <ProtectedRoute>
+            <GitHubConnectionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/settings/linear"
         element={
           <ProtectedRoute>
@@ -205,7 +214,7 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
-        path="/settings/workers"
+        path="/settings/code"
         element={
           <ProtectedRoute>
             <WorkerSettingsPage />
@@ -446,6 +455,7 @@ function AppRoutes(): React.JSX.Element {
       <Route path="/whatsapp-notes" element={<Navigate to="/notes" replace />} />
       <Route path="/mobile-notifications" element={<Navigate to="/settings/mobile" replace />} />
       <Route path="/mobile-notifications/list" element={<Navigate to="/notifications" replace />} />
+      <Route path="/settings/workers" element={<Navigate to="/settings/code" replace />} />
       {/* 404 fallback */}
       <Route path="*" element={<Navigate to="/inbox" replace />} />
     </Routes>

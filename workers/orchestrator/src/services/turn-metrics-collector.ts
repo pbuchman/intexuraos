@@ -202,35 +202,15 @@ export class TurnMetricsCollector {
 
   async parseSessionJsonl(
     taskId: string,
-    timeWindow?: { startedAt: string; completedAt: string }
+    _timeWindow?: { startedAt: string; completedAt: string }
   ): Promise<{ timeClassification: TimeClassification; tokens: TokenAggregation }> {
     const entries: SessionEntry[] = [];
-    const sharedCredsPath = this.config.sharedCredsPath;
-    const basePath =
-      sharedCredsPath ?? join(this.config.secretsBasePath, `claude-session-${taskId}`);
+    const basePath = join(this.config.secretsBasePath, `claude-session-${taskId}`);
     const pattern = join(basePath, 'projects', '**', '*.jsonl');
 
     try {
       for await (const filePath of glob(pattern)) {
         const content = await readFile(filePath, 'utf-8');
-
-        if (sharedCredsPath !== undefined && timeWindow !== undefined) {
-          const firstNewline = content.indexOf('\n');
-          const firstLine = firstNewline === -1 ? content : content.slice(0, firstNewline);
-          if (firstLine.trim() !== '') {
-            try {
-              const firstEntry = JSON.parse(firstLine) as SessionEntry;
-              if (firstEntry.timestamp !== undefined) {
-                const ts = new Date(firstEntry.timestamp).getTime();
-                const start = new Date(timeWindow.startedAt).getTime();
-                const end = new Date(timeWindow.completedAt).getTime();
-                if (ts < start || ts > end) continue;
-              }
-            } catch {
-              continue;
-            }
-          }
-        }
 
         for (const line of content.split('\n')) {
           if (line.trim() === '') continue;

@@ -42,6 +42,10 @@ Todos move through a natural progression: created, processed by AI, ready to wor
 
 The mechanics stay out of your way. You focus on doing the work. The system tracks where things stand.
 
+### Automatic Status Tracking
+
+Complete all the items in a todo and the todo itself marks as completed — no extra step required. Complete some items and the todo transitions to in-progress. Add a new item to a completed todo and it reopens automatically. The status always reflects reality without you having to manage it.
+
 ## Key Benefits
 
 - **Capture in seconds** — Describe tasks in natural language from WhatsApp or the web dashboard; AI handles the structuring
@@ -49,6 +53,7 @@ The mechanics stay out of your way. You focus on doing the work. The system trac
 - **Flexible filtering** — Narrow your view by priority, status, tags, or archive state to focus on what matters now
 - **Tasks from every channel** — Other agents create todos on your behalf — a research finding, a follow-up from a voice command, a next step from a coding session — so your task list fills even when you are not actively capturing
 - **Native to the platform** — Your tasks live alongside your research, code, and calendar inside IntexuraOS, not in a disconnected third-party app
+- **Smart status** — Todo status automatically reflects item completion state, removing a layer of manual bookkeeping
 
 ## Limitations
 

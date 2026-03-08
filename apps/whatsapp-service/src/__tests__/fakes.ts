@@ -12,6 +12,7 @@ import { err, ok } from '@intexuraos/common-core';
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
   ApprovalReplyEvent,
+  AudioStoredEvent,
   CommandIngestEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
@@ -30,17 +31,10 @@ import type {
   PhoneVerificationRepository,
   PhoneVerificationStatus,
   SendMessageResult,
-  SpeechTranscriptionPort,
   TextMessageSendResult,
   ThumbnailGeneratorPort,
   ThumbnailResult,
-  TranscribeAudioEvent,
-  TranscriptionJobInput,
-  TranscriptionJobPollResult,
-  TranscriptionJobSubmitResult,
-  TranscriptionPortError,
   TranscriptionState,
-  TranscriptionTextResult,
   UploadResult,
   WebhookProcessEvent,
   WebhookProcessingStatus,
@@ -346,6 +340,8 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   private shouldFailGetMessagesByUser = false;
   private shouldThrowOnGetMessage = false;
   private shouldThrowOnUpdateTranscription = false;
+  private shouldFailUpdateTranscription = false;
+  private shouldFailFindById = false;
   private nextCursorToReturn: string | undefined = undefined;
 
   setFailSave(fail: boolean): void {
@@ -370,6 +366,14 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   setThrowOnUpdateTranscription(shouldThrow: boolean): void {
     this.shouldThrowOnUpdateTranscription = shouldThrow;
+  }
+
+  setFailUpdateTranscription(fail: boolean): void {
+    this.shouldFailUpdateTranscription = fail;
+  }
+
+  setFailFindById(fail: boolean): void {
+    this.shouldFailFindById = fail;
   }
 
   /**
@@ -455,6 +459,9 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     userId: string,
     messageId: string
   ): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
+    if (this.shouldFailFindById) {
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated findById failure' }));
+    }
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
       return Promise.resolve(ok(null));
@@ -469,6 +476,9 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   ): Promise<Result<void, WhatsAppError>> {
     if (this.shouldThrowOnUpdateTranscription) {
       return Promise.reject(new Error('Simulated unexpected updateTranscription exception'));
+    }
+    if (this.shouldFailUpdateTranscription) {
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated updateTranscription failure' }));
     }
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
@@ -513,6 +523,8 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     this.shouldFailGetMessagesByUser = false;
     this.shouldThrowOnGetMessage = false;
     this.shouldThrowOnUpdateTranscription = false;
+    this.shouldFailUpdateTranscription = false;
+    this.shouldFailFindById = false;
     this.nextCursorToReturn = undefined;
   }
 }
@@ -635,11 +647,13 @@ export class FakeEventPublisher implements EventPublisherPort {
   private mediaCleanupEvents: MediaCleanupEvent[] = [];
   private commandIngestEvents: CommandIngestEvent[] = [];
   private webhookProcessEvents: WebhookProcessEvent[] = [];
-  private transcribeAudioEvents: TranscribeAudioEvent[] = [];
+  private audioStoredEvents: AudioStoredEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
   private approvalReplyEvents: ApprovalReplyEvent[] = [];
   private approvalReplyFailureMessage: string | null = null;
   private extractLinkPreviewsFailureMessage: string | null = null;
+  private commandIngestFailureMessage: string | null = null;
+  private audioStoredFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
@@ -647,8 +661,17 @@ export class FakeEventPublisher implements EventPublisherPort {
   }
 
   publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.commandIngestFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.commandIngestFailureMessage })
+      );
+    }
     this.commandIngestEvents.push(event);
     return Promise.resolve(ok(undefined));
+  }
+
+  setCommandIngestFailure(message: string): void {
+    this.commandIngestFailureMessage = message;
   }
 
   publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
@@ -656,9 +679,18 @@ export class FakeEventPublisher implements EventPublisherPort {
     return Promise.resolve(ok(undefined));
   }
 
-  publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, WhatsAppError>> {
-    this.transcribeAudioEvents.push(event);
+  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.audioStoredFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.audioStoredFailureMessage })
+      );
+    }
+    this.audioStoredEvents.push(event);
     return Promise.resolve(ok(undefined));
+  }
+
+  setAudioStoredFailure(message: string): void {
+    this.audioStoredFailureMessage = message;
   }
 
   publishExtractLinkPreviews(
@@ -703,8 +735,8 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.webhookProcessEvents];
   }
 
-  getTranscribeAudioEvents(): TranscribeAudioEvent[] {
-    return [...this.transcribeAudioEvents];
+  getAudioStoredEvents(): AudioStoredEvent[] {
+    return [...this.audioStoredEvents];
   }
 
   getExtractLinkPreviewsEvents(): ExtractLinkPreviewsEvent[] {
@@ -719,11 +751,13 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.mediaCleanupEvents = [];
     this.commandIngestEvents = [];
     this.webhookProcessEvents = [];
-    this.transcribeAudioEvents = [];
+    this.audioStoredEvents = [];
     this.extractLinkPreviewsEvents = [];
     this.approvalReplyEvents = [];
     this.approvalReplyFailureMessage = null;
     this.extractLinkPreviewsFailureMessage = null;
+    this.commandIngestFailureMessage = null;
+    this.audioStoredFailureMessage = null;
   }
 }
 
@@ -731,7 +765,7 @@ export class FakeEventPublisher implements EventPublisherPort {
  * Fake message sender for testing.
  */
 export class FakeMessageSender implements WhatsAppMessageSender {
-  private sentMessages: { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[] }[] = [];
+  private sentMessages: { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[]; ctaUrl?: { displayText: string; url: string } }[] = [];
   private shouldFail = false;
   private shouldThrow = false;
   private failError: WhatsAppError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
@@ -778,7 +812,23 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     return Promise.resolve(ok({ wamid }));
   }
 
-  getSentMessages(): { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[] }[] {
+  async sendCtaUrlMessage(
+    phoneNumber: string,
+    message: string,
+    ctaUrl: { displayText: string; url: string }
+  ): Promise<Result<TextMessageSendResult, WhatsAppError>> {
+    if (this.shouldThrow) {
+      throw new Error('Unexpected send error');
+    }
+    if (this.shouldFail) {
+      return Promise.resolve(err(this.failError));
+    }
+    this.sentMessages.push({ phoneNumber, message, ctaUrl });
+    const wamid = `fake-wamid-${String(Date.now())}-${randomUUID().slice(0, 8)}`;
+    return Promise.resolve(ok({ wamid }));
+  }
+
+  getSentMessages(): { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[]; ctaUrl?: { displayText: string; url: string } }[] {
     return [...this.sentMessages];
   }
 
@@ -787,261 +837,6 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     this.shouldFail = false;
     this.shouldThrow = false;
     this.failError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
-  }
-}
-
-/**
- * Fake speech transcription service for testing.
- */
-export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
-  private jobs = new Map<
-    string,
-    {
-      status: 'running' | 'done' | 'rejected';
-      transcript?: string;
-      summary?: string;
-      detectedLanguage?: string;
-      error?: string;
-    }
-  >();
-  private jobCounter = 0;
-  private shouldFail = false;
-  private failMessage = 'Fake transcription error';
-  private failWithoutApiCall = false;
-  private getTranscriptWithoutApiCall = false;
-  private pollFailuresRemaining = 0;
-  private pollFailError: TranscriptionPortError = {
-    code: 'SERVICE_UNAVAILABLE',
-    message: 'Service temporarily unavailable',
-  };
-  private autoComplete = false;
-  private autoCompleteTranscript = 'Auto-completed transcript for testing';
-
-  /**
-   * Configure the fake to auto-complete jobs on creation.
-   * Useful for testing success paths without waiting for polling.
-   */
-  setAutoComplete(enabled: boolean, transcript?: string): void {
-    this.autoComplete = enabled;
-    if (transcript !== undefined) {
-      this.autoCompleteTranscript = transcript;
-    }
-  }
-
-  /**
-   * Configure the fake to fail subsequent calls.
-   * @param fail - Whether to fail
-   * @param message - Optional error message
-   * @param withoutApiCall - If true, error will not include apiCall field
-   */
-  setFailMode(fail: boolean, message?: string, withoutApiCall?: boolean): void {
-    this.shouldFail = fail;
-    if (message !== undefined) {
-      this.failMessage = message;
-    }
-    this.failWithoutApiCall = withoutApiCall === true;
-  }
-
-  /**
-   * Set job completion result (for testing polling).
-   */
-  setJobResult(jobId: string, transcript: string, summary?: string, detectedLanguage?: string): void {
-    const job = this.jobs.get(jobId);
-    if (job !== undefined) {
-      job.status = 'done';
-      job.transcript = transcript;
-      if (summary !== undefined) {
-        job.summary = summary;
-      }
-      if (detectedLanguage !== undefined) {
-        job.detectedLanguage = detectedLanguage;
-      }
-    }
-  }
-
-  /**
-   * Set job failure (for testing error handling).
-   */
-  setJobFailed(jobId: string, error: string): void {
-    const job = this.jobs.get(jobId);
-    if (job !== undefined) {
-      job.status = 'rejected';
-      job.error = error;
-    }
-  }
-
-  /**
-   * Set job as rejected without an error message (for testing error-less rejection).
-   */
-  setJobRejectedWithoutError(jobId: string): void {
-    const job = this.jobs.get(jobId);
-    if (job !== undefined) {
-      job.status = 'rejected';
-      // Intentionally not setting job.error to test the branch
-      // where pollResult.value.error is undefined
-    }
-  }
-
-  /**
-   * Configure the fake to fail the next N pollJob calls with a transient error.
-   * After the specified count, polls will succeed normally.
-   *
-   * @param count - Number of poll failures to simulate before allowing success
-   * @param error - Optional custom error to return on failure (defaults to SERVICE_UNAVAILABLE)
-   */
-  setPollFailures(count: number, error?: TranscriptionPortError): void {
-    this.pollFailuresRemaining = count;
-    if (error !== undefined) {
-      this.pollFailError = error;
-    }
-  }
-
-  /**
-   * Configure getTranscript to return errors without apiCall field.
-   */
-  setGetTranscriptWithoutApiCall(withoutApiCall: boolean): void {
-    this.getTranscriptWithoutApiCall = withoutApiCall;
-  }
-
-  submitJob(
-    input: TranscriptionJobInput
-  ): Promise<Result<TranscriptionJobSubmitResult, TranscriptionPortError>> {
-    if (this.shouldFail) {
-      const error: TranscriptionPortError = {
-        code: 'FAKE_ERROR',
-        message: this.failMessage,
-      };
-      if (!this.failWithoutApiCall) {
-        error.apiCall = {
-          timestamp: new Date().toISOString(),
-          operation: 'submit',
-          success: false,
-          response: { error: this.failMessage },
-        };
-      }
-      return Promise.resolve(err(error));
-    }
-
-    this.jobCounter++;
-    const jobId = `fake-job-${String(this.jobCounter)}`;
-    if (this.autoComplete) {
-      this.jobs.set(jobId, { status: 'done', transcript: this.autoCompleteTranscript });
-    } else {
-      this.jobs.set(jobId, { status: 'running' });
-    }
-
-    return Promise.resolve(
-      ok({
-        jobId,
-        apiCall: {
-          timestamp: new Date().toISOString(),
-          operation: 'submit',
-          success: true,
-          response: { jobId, audioUrl: input.audioUrl },
-        },
-      })
-    );
-  }
-
-  pollJob(jobId: string): Promise<Result<TranscriptionJobPollResult, TranscriptionPortError>> {
-    // Simulate transient failures if configured
-    if (this.pollFailuresRemaining > 0) {
-      this.pollFailuresRemaining--;
-      return Promise.resolve(err(this.pollFailError));
-    }
-
-    const job = this.jobs.get(jobId);
-    if (job === undefined) {
-      return Promise.resolve(
-        err({
-          code: 'NOT_FOUND',
-          message: `Job ${jobId} not found`,
-          apiCall: {
-            timestamp: new Date().toISOString(),
-            operation: 'poll',
-            success: false,
-          },
-        })
-      );
-    }
-
-    const result: TranscriptionJobPollResult = {
-      status: job.status,
-      apiCall: {
-        timestamp: new Date().toISOString(),
-        operation: 'poll',
-        success: true,
-        response: { status: job.status },
-      },
-    };
-
-    if (job.status === 'rejected' && job.error !== undefined) {
-      result.error = { code: 'JOB_REJECTED', message: job.error };
-    }
-
-    return Promise.resolve(ok(result));
-  }
-
-  getTranscript(jobId: string): Promise<Result<TranscriptionTextResult, TranscriptionPortError>> {
-    const job = this.jobs.get(jobId);
-    if (job?.transcript === undefined) {
-      const error: TranscriptionPortError = {
-        code: 'NOT_FOUND',
-        message: `Transcript for job ${jobId} not found`,
-      };
-      if (!this.getTranscriptWithoutApiCall) {
-        error.apiCall = {
-          timestamp: new Date().toISOString(),
-          operation: 'fetch_result',
-          success: false,
-        };
-      }
-      return Promise.resolve(err(error));
-    }
-
-    return Promise.resolve(
-      ok({
-        text: job.transcript,
-        ...(job.summary !== undefined && { summary: job.summary }),
-        ...(job.detectedLanguage !== undefined && { detectedLanguage: job.detectedLanguage }),
-        apiCall: {
-          timestamp: new Date().toISOString(),
-          operation: 'fetch_result',
-          success: true,
-          response: {
-            transcriptLength: job.transcript.length,
-            hasSummary: job.summary !== undefined,
-          },
-        },
-      })
-    );
-  }
-
-  getJobs(): Map<
-    string,
-    {
-      status: 'running' | 'done' | 'rejected';
-      transcript?: string;
-      summary?: string;
-      error?: string;
-    }
-  > {
-    return this.jobs;
-  }
-
-  clear(): void {
-    this.jobs.clear();
-    this.jobCounter = 0;
-    this.shouldFail = false;
-    this.failWithoutApiCall = false;
-    this.getTranscriptWithoutApiCall = false;
-    this.pollFailuresRemaining = 0;
-    this.pollFailError = {
-      code: 'SERVICE_UNAVAILABLE',
-      message: 'Service temporarily unavailable',
-    };
-    this.autoComplete = false;
-    this.autoCompleteTranscript = 'Auto-completed transcript for testing';
   }
 }
 

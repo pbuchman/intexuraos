@@ -37,7 +37,7 @@ export async function syncSingleIssue(
 
   switch (action) {
     case 'remove': {
-      const deleteResult = await issueRepo.deleteById(data.id);
+      const deleteResult = await issueRepo.deleteById(data.id, userId);
       if (!deleteResult.ok) {
         logger.error({ error: deleteResult.error }, 'Failed to delete issue');
         return deleteResult;

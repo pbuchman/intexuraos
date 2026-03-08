@@ -163,6 +163,9 @@ export function registerRoutes(
       /* v8 ignore stop @preserve */
       ...(parsed.slug !== undefined && { slug: parsed.slug }),
       ...(parsed.actionId !== undefined && { actionId: parsed.actionId }),
+      ...(parsed.agentType !== undefined && { agentType: parsed.agentType }),
+      ...(parsed.planningPrBranch !== undefined && { planningPrBranch: parsed.planningPrBranch }),
+      ...(parsed.planningPrUrl !== undefined && { planningPrUrl: parsed.planningPrUrl }),
     };
     /* v8 ignore stop @preserve */
 

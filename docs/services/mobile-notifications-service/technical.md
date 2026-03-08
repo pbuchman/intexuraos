@@ -97,8 +97,8 @@ sequenceDiagram
 
 ### Internal
 
-| Method | Path                                   | Purpose                                 | Auth           |
-| ------ | -------------------------------------- | --------------------------------------- | -------------- |
+| Method | Path                                   | Purpose                                   | Auth           |
+| ------ | -------------------------------------- | ----------------------------------------- | -------------- |
 | POST   | `/internal/mobile-notifications/query` | Query notifications (data-insights-agent) | Internal token |
 
 ### Webhook
@@ -210,11 +210,11 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 
 ## Firestore Collections
 
-| Collection                      | Document Key | Description                                  |
-| ------------------------------- | ------------ | -------------------------------------------- |
-| `mobile_notifications`          | Auto-ID      | Notification documents                       |
+| Collection                       | Document Key | Description                                  |
+| -------------------------------- | ------------ | -------------------------------------------- |
+| `mobile_notifications`           | Auto-ID      | Notification documents                       |
 | `mobile_notification_signatures` | Auto-ID      | Signature-to-user binding documents          |
-| `mobile_notifications_filters`  | userId       | Filter options and saved filters per user    |
+| `mobile_notifications_filters`   | userId       | Filter options and saved filters per user    |
 
 ## Configuration
 
@@ -225,8 +225,8 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 | `INTEXURAOS_AUTH_ISSUER`         | Yes      | JWT issuer                              |
 | `INTEXURAOS_AUTH_AUDIENCE`       | Yes      | JWT audience                            |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth         |
-| `INTEXURAOS_SENTRY_DSN`         | No       | Sentry DSN for error reporting          |
-| `INTEXURAOS_ENVIRONMENT`        | No       | Environment name (default: development) |
+| `INTEXURAOS_SENTRY_DSN`          | No       | Sentry DSN for error reporting          |
+| `INTEXURAOS_ENVIRONMENT`         | No       | Environment name (default: development) |
 
 ## Gotchas
 
@@ -287,14 +287,14 @@ apps/mobile-notifications-service/src/
 
 ## Recent Changes
 
-| Commit     | Change                                                             | Date       |
-| ---------- | ------------------------------------------------------------------ | ---------- |
-| `b3f34d85` | Release v3.1.0 (version bump)                                     | 2026-02-22 |
-| `c8a42105` | Release v3.0.0 (version bump)                                     | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                    | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (distributed tracing)          | 2026-02-16 |
-| `45f001c1` | Switch PM2 ecosystem to `pnpm --filter` with `start:local` scripts | 2026-02-14 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                  | 2026-01-31 |
+| Commit     | Change                                                              | Date       |
+| ---------- | ------------------------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0 (version bump)                                       | 2026-02-22 |
+| `c8a42105` | Release v3.0.0 (version bump)                                       | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                     | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (distributed tracing)           | 2026-02-16 |
+| `45f001c1` | Switch PM2 ecosystem to `pnpm --filter` with `start:local` scripts  | 2026-02-14 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                   | 2026-01-31 |
 | `9723dc24` | Standardize DELETE endpoints to return consistent response contract | 2026-01-30 |
-| `c3198407` | Fix all response contract violations (reply.ok / reply.fail)       | 2026-01-30 |
-| `dfd702f1` | Migrate to createAppLogger() (Sentry-enabled logging)              | 2026-01-30 |
+| `c3198407` | Fix all response contract violations (reply.ok / reply.fail)        | 2026-01-30 |
+| `dfd702f1` | Migrate to createAppLogger() (Sentry-enabled logging)               | 2026-01-30 |

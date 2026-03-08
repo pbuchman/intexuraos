@@ -209,12 +209,12 @@
       "id": "api-docs-hub",
       "name": "API Docs Hub",
       "category": "infrastructure",
-      "summary": "OpenAPI documentation aggregator",
+      "summary": "OpenAPI documentation aggregator for 18 services with live client-side spec fetching",
       "features": [
-        "Single Swagger UI",
-        "Multi-spec support",
-        "Service selector dropdown",
-        "Health check"
+        "Single Swagger UI aggregating 18 service specs",
+        "Multi-spec dropdown with live client-side fetching",
+        "Service selector for instant API discovery",
+        "Health check with config validation"
       ],
       "endpoints": 2,
       "docs": "services/api-docs-hub"
@@ -251,16 +251,18 @@
       "id": "linear-agent",
       "name": "Linear Agent",
       "category": "integrations",
-      "summary": "Linear issue management with 3-column dashboard layout (v2.0.0)",
+      "summary": "Linear issue management with AI extraction, multi-user webhook fan-out, auto-trigger code tasks, and 12 internal endpoints (v3.1.0)",
       "features": [
-        "3-column dashboard: Planning, Work, Closed (v2.0.0)",
-        "Todo and To Test categories (v2.0.0)",
-        "Smart state-to-column mapping (v2.0.0)",
-        "Issue CRUD operations",
-        "AI-powered issue extraction",
-        "Priority and label management"
+        "Multi-user webhook fan-out via Promise.allSettled (INT-623)",
+        "Composite Firestore keys (userId_issueId) preventing cross-user data overwrite",
+        "Auto-trigger code tasks on assignment with dual-prompt selection (code-task label)",
+        "12 internal endpoints for code-agent integration (comments, metadata, display-batch, tree)",
+        "3-column dashboard: Planning, Work, Closed with Firestore-first loading",
+        "AI-powered issue extraction from natural language with priority inference",
+        "HMAC-SHA256 webhook signature validation with timing-safe comparison",
+        "Scheduled full sync for all users via Cloud Scheduler"
       ],
-      "endpoints": 8,
+      "endpoints": 26,
       "docs": "services/linear-agent"
     },
     {
@@ -301,17 +303,17 @@
       "id": "code-agent",
       "name": "Code Agent",
       "category": "ai-research",
-      "summary": "Autonomous code execution with worker dispatch, prompt sanitization, two-phase execution, and GitHub PR lifecycle (v3.1.0)",
+      "summary": "Autonomous code execution with worker dispatch, prompt sanitization, agent-based execution, and GitHub PR lifecycle (v3.1.0)",
       "features": [
         "Submit-and-forget code tasks from web UI or WhatsApp",
         "Prompt sanitization stripping 9 secret categories before dispatch (v3.1.0)",
         "Four-layer deduplication (approval event, action ID, sha256 dedup key, Linear active check)",
-        "Two-phase execution: design (Phase 1) then implementation (Phase 2) (v3.0.0)",
+        "Agent-based execution: planning then implementation (v3.0.0)",
         "GitHub PR comment auto-response with sender whitelist (v3.1.0)",
         "Per-user worker infrastructure with AES-256-GCM encrypted credentials",
         "Retry, feedback, and mid-task messaging with task resume",
         "Turn-level metrics: CPU, memory, tokens, API wait times per worker turn (v3.1.0)",
-        "Rate limiting (3 concurrent, 10/hour, $20/day, $200/month)",
+        "Rate limiting (3 concurrent, 10/hour, $200/month)",
         "Real-time log streaming via chunked HMAC-signed uploads",
         "Zombie task detection (30-minute heartbeat threshold)"
       ],
@@ -322,20 +324,23 @@
       "id": "orchestrator",
       "name": "Orchestrator",
       "category": "workers",
-      "summary": "Local worker orchestration engine dispatching code tasks to Docker containers running Claude Code",
+      "summary": "Local worker orchestration engine dispatching code tasks to Docker containers running Claude Code with multi-model support and container adoption (v3.1.0)",
       "features": [
+        "Multi-model support: 6 worker types across Anthropic, ZAI, MiniMax, and Alibaba Cloud",
         "Docker container isolation with dropped capabilities and memory limits",
         "Git worktree parallelism for concurrent tasks",
+        "Container adoption on restart -- re-attaches to running containers instead of interrupting",
         "HMAC request signing with nonce and timestamp verification",
-        "Real-time log forwarding in 8KB chunks at 3-second intervals",
-        "GitHub App installation token lifecycle with per-container refresh",
-        "Two-phase system prompts (design validation vs strict execution)",
+        "Real-time log forwarding in 64KB chunks at 3-second intervals",
+        "Gemini-based completion verification with agent-specific Zod schemas",
+        "Versioned PromptBuilder system prompts (planning, execution, pull request, PR review overlay)",
+        "Planning PR branch merging into execution worktrees",
         "Crash-safe atomic JSON state persistence with recovery",
-        "Heartbeat monitoring every 10 minutes for zombie detection",
+        "Forensics mode for core dumps, exec stream persistence, and crash snapshots",
         "Sensitive file guard reverting commits touching secrets",
-        "Stale worktree cleanup"
+        "Mid-task messaging and task resume via sendMessage endpoint"
       ],
-      "endpoints": 6,
+      "endpoints": 8,
       "docs": "services/orchestrator"
     },
     {
@@ -351,7 +356,7 @@
         "Network isolation blocking cloud metadata and private IPs",
         "Ephemeral tmpfs home directory",
         "Pre-baked developer toolchain (git, pnpm, ripgrep, gh, terraform, gcloud)",
-        "Multi-model worker types (opus, auto, glm)"
+        "Multi-model worker types (opus, auto, sonnet, minimax, glm, qwen3.5-plus)"
       ],
       "endpoints": 0,
       "docs": "services/claude-worker"
@@ -790,6 +795,6 @@
     "documentedServices": 46,
     "completion": 100,
     "version": "3.0.0",
-    "lastUpdated": "2026-02-22"
+    "lastUpdated": "2026-03-07"
   }
 }

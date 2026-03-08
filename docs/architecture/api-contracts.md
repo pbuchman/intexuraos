@@ -153,12 +153,12 @@ All services implement `GET /health` with consistent response shape.
 
 ### Check Object
 
-| Field | Type | Description |
-| ----------- | ----------- | ---------------- | | |
-| `name` | `string` | Check identifier |
-| `status` | `"ok" \     | "degraded" \     | "down"` | Check status |
-| `latencyMs` | `number` | Check duration |
-| `details` | `unknown \  | null` | Additional info (no secrets) |
+| Field       | Type        | Description      |
+| ----------- | ----------- | ---------------- |  |  |
+| `name`      | `string`    | Check identifier |
+| `status`    | `"ok" \     | "degraded" \     | "down"` | Check status |
+| `latencyMs` | `number`    | Check duration   |
+| `details`   | `unknown \  | null`            | Additional info (no secrets) |
 
 ### Healthcheck Rules
 

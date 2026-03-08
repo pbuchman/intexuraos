@@ -2,8 +2,9 @@
  * Use case: Send a message to an active or completed code task.
  *
  * Running tasks: message is queued on the worker and delivered when the current attempt completes.
- * Terminal tasks (completed/failed/interrupted): task resumes with the message via --continue.
- * Cancelled/dispatched tasks: rejected.
+ * Terminal tasks (completed/failed/interrupted/cancelled): task resumes with the message via --continue.
+ * Dispatched tasks: message is queued locally in Firestore (pendingUserMessages) until orchestrator picks up.
+ * Queued tasks: rejected.
  */
 
 import { Timestamp } from '@google-cloud/firestore';
@@ -66,12 +67,39 @@ export async function sendTaskMessage(
   const task = taskResult.value;
 
   // Step 2: Validate task status
-  if (task.status === 'cancelled' || task.status === 'dispatched') {
+  if (task.status === 'queued') {
     logger.warn({ taskId, status: task.status }, 'Cannot send message to task with this status');
     return err({
       code: 'invalid_status',
       message: `Cannot send message to task with status "${task.status}"`,
     });
+  }
+
+  // Step 2b: For dispatched tasks, queue message locally without contacting the worker
+  if (task.status === 'dispatched') {
+    const sequence = Date.now() * 1000;
+    const storeResult = await logLineRepo.storeBatch(taskId, [
+      { sequence, text: `[user] ${message}`, timestamp: Timestamp.now() },
+    ]);
+    if (!storeResult.ok) {
+      logger.error({ taskId, error: storeResult.error }, 'Failed to store user message log line');
+    }
+
+    const allQueued = [...(task.pendingUserMessages ?? []), message];
+    const queueUpdateResult = await codeTaskRepo.update(taskId, { pendingUserMessages: allQueued });
+    if (!queueUpdateResult.ok) {
+      logger.warn({ taskId, error: queueUpdateResult.error }, 'Failed to update pending user messages');
+    }
+
+    const statusLogResult = await logLineRepo.storeBatch(taskId, [
+      { sequence: sequence + 1, text: '[queued] Message queued — task is awaiting orchestrator pickup', timestamp: Timestamp.now() },
+    ]);
+    if (!statusLogResult.ok) {
+      logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
+    }
+
+    logger.info({ taskId, action: 'queued', status: 'dispatched' }, 'Message queued for dispatched task');
+    return ok({ action: 'queued' });
   }
 
   // Step 3: Write [user] log line to Firestore
@@ -152,15 +180,9 @@ export async function sendTaskMessage(
       logger.warn({ taskId, error: queueUpdateResult.error }, 'Failed to update pending user messages');
     }
 
-    const statusLines = [
+    const statusLogResult = await logLineRepo.storeBatch(taskId, [
       { sequence: sequence + 1, text: '[queued] Message queued \u2014 will be delivered when current work completes', timestamp: Timestamp.now() },
-      ...allQueued.map((m, i) => ({
-        sequence: sequence + 2 + i,
-        text: `[queued] ${m}`,
-        timestamp: Timestamp.now(),
-      })),
-    ];
-    const statusLogResult = await logLineRepo.storeBatch(taskId, statusLines);
+    ]);
     if (!statusLogResult.ok) {
       logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
     }

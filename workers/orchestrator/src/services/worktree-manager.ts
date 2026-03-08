@@ -1,9 +1,9 @@
-import { mkdir, readFile, writeFile, access, constants } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { Logger } from '@intexuraos/common-core';
+import { type Result, ok, err, type Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
 
@@ -22,6 +22,7 @@ export class WorktreeManager {
 
   async createWorktree(taskId: string, baseBranch: string): Promise<string> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
+    this.logger.info({ taskId, baseBranch }, 'Creating worktree');
 
     // Check if worktree already exists
     if (await this.worktreeExists(taskId)) {
@@ -60,11 +61,14 @@ export class WorktreeManager {
         existsSync(this.config.settingsLocalTemplatePath)
       ) {
         await this.copySettingsLocal(worktreePath);
+      } else if (this.config.settingsLocalTemplatePath !== undefined) {
+        this.logger.warn(
+          { templatePath: this.config.settingsLocalTemplatePath },
+          'settings.local.json template path configured but file not found on disk'
+        );
       }
 
-      // Install dependencies with timeout
-      await this.installDependencies(worktreePath);
-
+      this.logger.info({ taskId, worktreePath }, 'Worktree created');
       return worktreePath;
     } catch (error: unknown) {
       /* v8 ignore start -- test-infra: worktree creation failure requires git worktree state manipulation @preserve */
@@ -76,6 +80,7 @@ export class WorktreeManager {
 
   async removeWorktree(taskId: string): Promise<void> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
+    this.logger.info({ taskId, worktreePath }, 'Removing worktree');
 
     if (!existsSync(worktreePath)) {
       throw new Error(`Worktree for task ${taskId} does not exist at ${worktreePath}`);
@@ -92,6 +97,7 @@ export class WorktreeManager {
         throw new Error(`Failed to remove worktree: ${stderr}`);
       }
       /* v8 ignore stop @preserve */
+      this.logger.info({ taskId }, 'Worktree removed');
     } catch (error: unknown) {
       /* v8 ignore start -- test-infra: worktree removal failure requires git worktree state manipulation @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -133,6 +139,25 @@ export class WorktreeManager {
     return existsSync(worktreePath);
   }
 
+  async mergePlanningBranch(
+    worktreePath: string,
+    planningBranch: string
+  ): Promise<Result<void, string>> {
+    try {
+      await execAsync(`git fetch origin "${planningBranch}"`, { cwd: worktreePath });
+      await execAsync(`git merge "origin/${planningBranch}" --no-edit`, { cwd: worktreePath });
+      this.logger.info({ worktreePath, planningBranch }, 'Planning branch merged into worktree');
+      return ok(undefined);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(
+        { worktreePath, planningBranch, error: message },
+        'Failed to merge planning branch'
+      );
+      return err(message);
+    }
+  }
+
   private async copyMcpConfig(worktreePath: string): Promise<void> {
     const targetPath = join(worktreePath, '.mcp.json');
 
@@ -141,14 +166,20 @@ export class WorktreeManager {
       const template = await readFile(this.config.mcpConfigTemplatePath, 'utf-8');
 
       // Validate environment variables
-      const linearKey = process.env['LINEAR_API_KEY'];
-      const sentryToken = process.env['SENTRY_AUTH_TOKEN'];
+      const linearKey = process.env['INTEXURAOS_LINEAR_API_KEY'];
+      const sentryToken = process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
 
       if (linearKey === undefined || linearKey === '') {
-        this.logger.warn({}, 'LINEAR_API_KEY not set - MCP Linear integration will fail');
+        this.logger.warn(
+          {},
+          'INTEXURAOS_LINEAR_API_KEY not set - MCP Linear integration will fail'
+        );
       }
       if (sentryToken === undefined || sentryToken === '') {
-        this.logger.warn({}, 'SENTRY_AUTH_TOKEN not set - MCP Sentry integration will fail');
+        this.logger.warn(
+          {},
+          'INTEXURAOS_SENTRY_AUTH_TOKEN not set - MCP Sentry integration will fail'
+        );
       }
 
       // Substitute environment variables
@@ -189,34 +220,6 @@ export class WorktreeManager {
       const message = error instanceof Error ? error.message : 'Unknown error';
       /* v8 ignore stop @preserve */
       throw new Error(`Failed to copy settings.local.json: ${message}`);
-    }
-  }
-
-  private async installDependencies(worktreePath: string): Promise<void> {
-    const timeoutMs = 5 * 60 * 1000; // 5 minutes
-
-    try {
-      // Check if pnpm-lock.yaml exists
-      const lockPath = join(worktreePath, 'pnpm-lock.yaml');
-      try {
-        await access(lockPath, constants.F_OK);
-      } catch {
-        /* v8 ignore start -- test-infra: requires worktree without pnpm-lock.yaml to test @preserve */
-        // No lock file, skip install
-        return;
-        /* v8 ignore stop @preserve */
-      }
-
-      // Run pnpm install with timeout
-      await execAsync(`pnpm install --frozen-lockfile`, {
-        cwd: worktreePath,
-        timeout: timeoutMs,
-      });
-    } catch (error: unknown) {
-      /* v8 ignore start -- test-infra: pnpm install failure requires corrupted worktree state @preserve */
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      /* v8 ignore stop @preserve */
-      throw new Error(`Failed to install dependencies: ${message}`);
     }
   }
 }

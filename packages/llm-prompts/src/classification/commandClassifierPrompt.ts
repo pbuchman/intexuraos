@@ -31,7 +31,7 @@ export const commandClassifierPrompt: PromptBuilder<
 > = {
   name: 'command-classification',
   description: 'Classifies user messages into command categories (todo, research, note, etc.)',
-  version: '1.2.0',
+  version: '2.0.0',
 
   build(input: CommandClassifierPromptInput, _deps?: CommandClassifierPromptDeps): string {
     return `Classify the message into exactly one category. Follow this decision tree IN ORDER:
@@ -128,11 +128,27 @@ URLs indicate the user is sharing/saving a link, not asking for research or crea
 ## STEP 5: Category Detection (if no URL and no explicit intent)
 Apply in this priority order:
 
-**calendar** — Time-specific event or appointment
-Signals: tomorrow, today, weekday names, time (3pm, 15:00), meeting, appointment, schedule, book
-- "meeting tomorrow at 3" → calendar
-- "dentist next Tuesday 10am" → calendar
-- "call mom tomorrow" → calendar
+**todo** — Action to complete, including actions with deadlines
+An action verb (send, buy, prepare, sign up, finish, complete, order, call, submit, create, write, review) signals a task to do. A deadline or date does NOT make it a calendar event.
+Note: "schedule" and "book" are handled in Step 2 as explicit calendar intent — they do not appear here.
+- "buy groceries" → todo
+- "finish the report" → todo
+- "call mom" → todo (no time specified)
+- "Send contract to Meridian Group by Friday" → todo (action with deadline, not a time-slot event)
+- "Sign up for AWS certification exam — deadline March 10th" → todo (action with deadline)
+- "Prepare quarterly presentation for board meeting next Thursday" → todo (preparing is the action)
+
+**calendar** — Named event that occupies a time slot
+Calendar is ONLY for events you attend or block time for: a meeting, appointment, dinner, flight, exam session, call at a specific time, concert, class. The event must occupy a time slot on your schedule.
+Signals: meeting, appointment, dinner, lunch, flight, concert, class, exam session, call at [time]
+- "Board meeting Thursday at 2pm" → calendar (named event occupying a time slot)
+- "dentist appointment next Tuesday 10am" → calendar (named appointment)
+- "Team standup tomorrow 9:30am" → calendar (named recurring event)
+
+CALENDAR vs TODO TIEBREAKER: When a message contains BOTH an action verb (send, buy, prepare, sign up, order) AND time signals (dates, weekday names, times), prefer **todo** unless the message describes a named event to attend that occupies a time slot. Having a deadline does NOT make something a calendar event.
+- "Mom's birthday March 15th — order gift, coordinate dinner" → todo (actions to complete by a date)
+- "Schedule dentist appointment ASAP" → todo (scheduling is the action, appointment doesn't exist yet)
+- "Dinner with Sarah Friday 7pm at Luigi's" → calendar (named event occupying a time slot)
 
 **reminder** — Request to be reminded about something
 Signals: remind me, przypomnij, don't forget
@@ -155,11 +171,6 @@ Signals: notes, idea, remember that, jot down
 - "meeting notes: discussed Q4 goals" → note
 - "idea for new feature" → note
 
-**todo** — Action to complete (default for actionable requests)
-- "buy groceries" → todo
-- "finish the report" → todo
-- "call mom" → todo (no time specified)
-
 If the message is empty, contains only whitespace, or only punctuation/emoji, return {"type": "note", "confidence": 0.30, "title": "Empty message", "reasoning": "No classifiable content"}.
 
 ## OUTPUT FORMAT
@@ -167,7 +178,7 @@ Return ONLY valid JSON:
 {
   "type": "<category>",
   "confidence": <0.0-1.0>,
-  "title": "<concise title, max 50 chars, SAME LANGUAGE as input>",
+  "title": "<concise title, max 200 chars, SAME LANGUAGE as input>",
   "reasoning": "<brief explanation>"
 }
 

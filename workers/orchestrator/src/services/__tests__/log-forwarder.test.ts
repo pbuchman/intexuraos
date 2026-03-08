@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { LogForwarder } from '../log-forwarder.js';
+import { stripBulkMetadata } from '../log-formatter.js';
 import type { Logger } from '@intexuraos/common-core';
 
 /* eslint-disable @typescript-eslint/no-empty-function */
@@ -172,5 +173,78 @@ describe('LogForwarder', () => {
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
+  });
+
+  describe('bulk metadata stripping', () => {
+    it('strips tool_use_result from appendChunk before reaching fetch', async () => {
+      fetchSpy.mockResolvedValue(okResponse());
+      forwarder.registerTask('task-1', 'secret');
+
+      const bigPayload = JSON.stringify({
+        type: 'tool_result',
+        tool_use_result: { originalFile: 'x'.repeat(60_000), oldString: 'a', newString: 'b' },
+        tool_name: 'Edit',
+        content: 'edited file.ts',
+      });
+      forwarder.appendChunk('task-1', bigPayload + '\n');
+      await forwarder.flush('task-1');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const call = fetchSpy.mock.calls[0];
+      const opts = call?.[1] ?? {};
+      const body = JSON.parse((opts as Record<string, unknown>)['body'] as string) as {
+        chunks: { content: string }[];
+      };
+      const content = body.chunks[0]?.content ?? '';
+      expect(content).not.toContain('tool_use_result');
+      expect(content).toContain('tool_name');
+      expect(content.length).toBeLessThan(5000);
+    });
+  });
+});
+
+describe('stripBulkMetadata', () => {
+  it('removes tool_use_result from a valid JSON line', () => {
+    const line = JSON.stringify({
+      type: 'tool_result',
+      tool_use_result: { originalFile: 'full file content', oldString: 'a', newString: 'b' },
+      tool_name: 'Edit',
+    });
+    const result = stripBulkMetadata(line);
+    const parsed = JSON.parse(result) as Record<string, unknown>;
+    expect(parsed).not.toHaveProperty('tool_use_result');
+    expect(parsed).toHaveProperty('tool_name', 'Edit');
+    expect(parsed).toHaveProperty('type', 'tool_result');
+  });
+
+  it('preserves lines without tool_use_result', () => {
+    const line = JSON.stringify({ type: 'assistant', message: 'hello' });
+    const result = stripBulkMetadata(line);
+    expect(result).toBe(line);
+  });
+
+  it('handles multi-line content with mixed lines', () => {
+    const withMeta = JSON.stringify({ tool_use_result: { originalFile: 'big' }, id: '1' });
+    const without = JSON.stringify({ type: 'text', id: '2' });
+    const input = `${withMeta}\n${without}`;
+    const result = stripBulkMetadata(input);
+    const lines = result.split('\n');
+    const first = JSON.parse(lines[0] ?? '') as Record<string, unknown>;
+    const second = JSON.parse(lines[1] ?? '') as Record<string, unknown>;
+    expect(first).not.toHaveProperty('tool_use_result');
+    expect(first).toHaveProperty('id', '1');
+    expect(second).toHaveProperty('type', 'text');
+  });
+
+  it('passes through partial/invalid JSON unchanged', () => {
+    const partial = '{"tool_use_result": {"orig';
+    const result = stripBulkMetadata(partial);
+    expect(result).toBe(partial);
+  });
+
+  it('returns content unchanged when no tool_use_result present', () => {
+    const content = '{"type":"assistant"}\n{"type":"text"}';
+    const result = stripBulkMetadata(content);
+    expect(result).toBe(content);
   });
 });

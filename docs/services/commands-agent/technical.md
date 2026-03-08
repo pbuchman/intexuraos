@@ -1,4 +1,4 @@
-# Commands Agent - Technical Reference
+# Commands Agent — Technical Reference
 
 ## Overview
 
@@ -52,7 +52,7 @@ graph TB
     ProcessUC -->|action.created| ActionsQueue
 ```
 
-## Classification Prompt Structure (v2.0.0+)
+## Classification Prompt Structure
 
 The classification prompt in `packages/llm-prompts/src/classification/commandClassifierPrompt.ts` uses a 5-step decision tree executed in strict order:
 
@@ -72,8 +72,8 @@ Explicit command phrases override all other signals including URL content.
 
 **Critical: Linear vs Code Disambiguation**
 
-- `linear` -- ONLY when the user EXPLICITLY wants to create/track a Linear issue (must include "linear", "issue", "track", "log", or "report")
-- `code` -- ANY engineering task describing work to do (fix, implement, design, add, refactor, change, update, build, etc.)
+- `linear` — ONLY when the user EXPLICITLY wants to create/track a Linear issue (must include "linear", "issue", "track", "log", or "report")
+- `code` — ANY engineering task describing work to do (fix, implement, design, add, refactor, change, update, build, etc.)
 
 When ambiguous, prefer `code`. Engineering tasks default to code execution. Code actions automatically create a Linear issue, so tracking is never lost.
 
@@ -91,12 +91,12 @@ When ambiguous, prefer `code`. Engineering tasks default to code execution. Code
 **Polish phrases:**
 
 - link: "zapisz link", "dodaj zakladke"
-- todo: "stwórz zadanie", "dodaj zadanie"
+- todo: "stworz zadanie", "dodaj zadanie"
 - research: "zbadaj", "sprawdz", "przeprowadz research"
-- note: "stwórz notatke", "zapisz notatke"
+- note: "stworz notatke", "zapisz notatke"
 - reminder: "przypomnij mi"
 - calendar: "zaplanuj", "dodaj do kalendarza"
-- linear: "zglos blad", "stwórz issue", "dodaj do lineara"
+- linear: "zglos blad", "stworz issue", "dodaj do lineara"
 
 ### Step 3: Code Detection (Engineering Task Fallback)
 
@@ -204,9 +204,9 @@ sequenceDiagram
 | Field           | Type        | Description                                                  |
 | --------------- | ----------- | ------------------------------------------------------------ |
 | `type`          | CommandType | todo, research, note, link, calendar, linear, reminder, code |
-| `confidence`    | number      | 0-1 confidence score                                         |
+| `confidence`    | number      | 0–1 confidence score                                         |
 | `reasoning`     | string      | LLM explanation for classification                           |
-| `promptVersion` | string      | Semver version of the prompt that produced this result        |
+| `promptVersion` | string      | Semver version of the prompt that produced this result       |
 | `classifiedAt`  | string      | ISO 8601 classification timestamp                            |
 
 ### Confidence Semantics
@@ -214,19 +214,19 @@ sequenceDiagram
 | Range     | Meaning                                         |
 | --------- | ----------------------------------------------- |
 | 0.90+     | Clear match (explicit prefix, multiple signals) |
-| 0.70-0.90 | Strong match (single clear signal)              |
-| 0.50-0.70 | Choosing between 2-3 plausible categories       |
+| 0.70–0.90 | Strong match (single clear signal)              |
+| 0.50–0.70 | Choosing between 2–3 plausible categories       |
 | <0.50     | Genuinely uncertain, defaults to `note`         |
 
 ## Status Enums
 
 **CommandStatus:**
 
-- `received` - Initial state, not yet processed
-- `classified` - Successfully classified with action created
-- `pending_classification` - Waiting for API keys
-- `failed` - Classification or action creation failed
-- `archived` - Soft deleted by user
+- `received` — Initial state, not yet processed
+- `classified` — Successfully classified with action created
+- `pending_classification` — Waiting for API keys
+- `failed` — Classification or action creation failed
+- `archived` — Soft deleted by user
 
 ## Pub/Sub Events
 
@@ -246,11 +246,11 @@ sequenceDiagram
 
 ### Internal Services
 
-| Service              | Purpose                                          |
-| -------------------- | ------------------------------------------------ |
-| `user-service`       | Fetch LLM client for classification              |
-| `actions-agent`      | Create actions from classified commands           |
-| `app-settings-service` | Fetch LLM pricing data at startup              |
+| Service                | Purpose                                          |
+| ---------------------- | ------------------------------------------------ |
+| `user-service`         | Fetch LLM client for classification              |
+| `actions-agent`        | Create actions from classified commands          |
+| `app-settings-service` | Fetch LLM pricing data at startup                |
 
 ### Packages
 
@@ -272,13 +272,13 @@ sequenceDiagram
 | Pub/Sub (`command-ingest` topic)  | Command ingestion events              |
 | Pub/Sub (`actions` topic)         | Action creation events                |
 | Cloud Scheduler                   | Retry pending every 5 min             |
-| Dash0 (via OTLP/HTTP)            | Distributed tracing and metrics       |
+| Dash0 (via OTLP/HTTP)             | Distributed tracing and metrics       |
 
 ### External APIs
 
 | Service                                     | Purpose                |
 | ------------------------------------------- | ---------------------- |
-| Gemini 2.5 Flash / GLM-4.7 / GLM-4.7-Flash | Command classification |
+| Gemini 2.5 Flash / GLM-4.7 / GLM-4.7-Flash  | Command classification |
 
 ## Configuration
 
@@ -293,34 +293,36 @@ sequenceDiagram
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL (pricing data fetched at startup)   |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                                   |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                          |
-| `INTEXURAOS_ZAI_APP_API_KEY`         | No       | Platform-level Zai fallback API key for classification            |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform-level Zai fallback API key for classification            |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key (primary fallback)         |
-| `INTEXURAOS_SENTRY_DSN`              | No       | Sentry DSN for error tracking                                     |
-| `INTEXURAOS_ENVIRONMENT`             | No       | Environment name for Sentry (defaults to "development")           |
+| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                     |
+| `INTEXURAOS_ENVIRONMENT`              | No       | Environment name for Sentry (defaults to "development")           |
 
 ## Gotchas
 
-**URL keyword isolation** - The prompt instructs the LLM to ignore keywords inside URLs. This is prompt-level guidance, not code-level URL parsing. LLM compliance is high but not guaranteed.
+**URL keyword isolation** — The prompt instructs the LLM to ignore keywords inside URLs. This is prompt-level guidance, not code-level URL parsing. LLM compliance is high but not guaranteed.
 
-**Explicit intent priority** - Step 2 executes BEFORE Step 4. "research this https://example.com" classifies as `research` (explicit intent), not `link` (URL presence).
+**Explicit intent priority** — Step 2 executes BEFORE Step 4. "research this https://example.com" classifies as `research` (explicit intent), not `link` (URL presence).
 
-**PWA-shared confidence boost** - Links from `pwa-shared` source get +0.1 confidence boost (capped at 1.0) because share sheet usage strongly indicates link-saving intent.
+**PWA-shared confidence boost** — Links from `pwa-shared` source get +0.1 confidence boost (capped at 1.0) because share sheet usage strongly indicates link-saving intent.
 
-**Idempotency key format** - `{sourceType}:{externalId}` must be unique. WhatsApp message IDs can be reused across different phone numbers.
+**Idempotency key format** — `{sourceType}:{externalId}` must be unique. WhatsApp message IDs can be reused across different phone numbers.
 
-**Default classification model** - Gemini 2.5 Flash is the default (switched from GLM-4.7-Flash due to latency). GLM-4.7 and GLM-4.7-Flash remain as supported alternatives.
+**Default classification model** — Gemini 2.5 Flash is the default (switched from GLM-4.7-Flash due to latency). GLM-4.7 and GLM-4.7-Flash remain as supported alternatives.
 
-**Pub/Sub push authentication** - Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls.
+**Pub/Sub push authentication** — Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls.
 
-**Archive vs delete** - Classified commands can only be archived, not deleted. Only received/pending/failed can be deleted.
+**Archive vs delete** — Classified commands can only be archived, not deleted. Only received/pending/failed can be deleted.
 
-**Pricing context at startup** - `initServices()` calls `fetchAllPricing()` from `app-settings-service` before accepting any requests. If app-settings-service is unavailable at startup, the service fails to initialize. The pricing context is passed to `createUserServiceClient` so it can select and cost-track LLM models.
+**Pricing context at startup** — `initServices()` calls `fetchAllPricing()` from `app-settings-service` before accepting any requests. If app-settings-service is unavailable at startup, the service fails to initialize. The pricing context is passed to `createUserServiceClient` so it can select and cost-track LLM models.
 
-**Response contract** - All endpoints use `reply.ok(data)` and `reply.fail(code, message)`. Responses wrap data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
+**Response contract** — All endpoints use `reply.ok(data)` and `reply.fail(code, message)`. Responses wrap data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
 
-**Logging** - All loggers use `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`), which sends errors to Sentry automatically. In development mode, `createLogStream()` provides colorized formatted log output for PM2 readability.
+**Logging** — All loggers use `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`), which sends errors to Sentry automatically. In development mode, `createLogStream()` provides colorized formatted log output for PM2 readability.
 
-**OpenTelemetry** - The Dockerfile uses `--import` flag to preload the `@intexuraos/infra-otel` register module. Tracing data is exported to Dash0 via OTLP/HTTP when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is set. No-op when unset.
+**OpenTelemetry** — The Dockerfile uses `--import` flag to preload the `@intexuraos/infra-otel` register module. Tracing data is exported to Dash0 via OTLP/HTTP when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is set. No-op when unset.
+
+**Title length limit** — The Zod schema for classification responses enforces a 200-character maximum on titles. Previously set to 50 characters, this caused valid classifications to be discarded entirely (falling back to `note` with low confidence) when the LLM generated longer titles.
 
 ## File Structure
 
@@ -369,13 +371,13 @@ packages/llm-prompts/src/
 
 | Commit     | Description                                                     | Date       |
 | ---------- | --------------------------------------------------------------- | ---------- |
-| `b3f34d85` | Release v3.1.0                                                  | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                                  | 2026-02-19 |
+| `cc52e50d` | Increase classification title limit to 200 chars                | 2026-03-07 |
+| `99febe66` | Wire GitHub OAuth integration and update cross-service mocks    | 2026-03-02 |
 | `35abc346` | Persist prompt version with command classification              | 2026-02-19 |
 | `6063175b` | Dev-mode log formatting via createLogStream()                   | 2026-02-16 |
 | `a52a6bbc` | Dash0 OpenTelemetry integration                                 | 2026-02-16 |
 | `e60eafc1` | Standardize API key secrets to APP naming convention            | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback   | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback    | 2026-02-15 |
 | `d5fbb354` | Fix start:local to use tsx instead of node experimental types   | 2026-02-14 |
 | `0f69a74b` | Add default model selector with platform Zai fallback           | 2026-02-08 |
 | `5aa3e1bd` | Enable strict 100% coverage enforcement                         | 2026-02-01 |
@@ -383,4 +385,4 @@ packages/llm-prompts/src/
 | `02728b75` | Add 'code' type to classification schema                        | 2026-01-25 |
 | `1faa1d3b` | Consolidate user service client architecture                    | 2026-01-25 |
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

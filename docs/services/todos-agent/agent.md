@@ -1,4 +1,4 @@
-# todos-agent -- Agent Interface
+# todos-agent — Agent Interface
 
 > Machine-readable interface definition for AI agents interacting with todos-agent.
 
@@ -83,7 +83,7 @@ interface TodosAgentTools {
   // Delete item from todo
   deleteTodoItem(todoId: string, itemId: string): Promise<Todo>;
 
-  // Reorder items
+  // Reorder items (must include ALL item IDs)
   reorderTodoItems(
     todoId: string,
     params: {
@@ -97,7 +97,7 @@ interface TodosAgentTools {
   // Unarchive todo
   unarchiveTodo(id: string): Promise<Todo>;
 
-  // Cancel todo
+  // Cancel todo (not completed ones)
   cancelTodo(id: string): Promise<Todo>;
 }
 ```
@@ -146,16 +146,18 @@ interface Todo {
 
 ## Constraints
 
-| Rule                    | Description                                         |
-| ----------------------- | --------------------------------------------------- |
-| **Archive Restriction** | Can only archive completed or cancelled todos       |
-| **Cancel Restriction**  | Cannot cancel already completed todos               |
-| **Auto Status**         | Completing all items auto-completes the todo        |
-| **Ownership**           | Users can only access their own todos               |
-| **Reorder**             | Item IDs must match existing items exactly           |
-| **Description Limit**   | Descriptions over 10,000 chars truncated for AI     |
-| **Max Items**           | AI extraction capped at 50 items per todo           |
-| **Default Priority**    | New todos default to `medium` priority if not set   |
+| Rule                    | Description                                                           |
+| ----------------------- | --------------------------------------------------------------------- |
+| **Archive Restriction** | Can only archive completed or cancelled todos                         |
+| **Cancel Restriction**  | Cannot cancel already completed todos                                 |
+| **Auto Status**         | Completing all items auto-completes the todo                          |
+| **Reopening**           | Adding an item to a completed todo reverts status to `in_progress`    |
+| **Ownership**           | Users can only access their own todos                                 |
+| **Reorder**             | Item IDs must match existing items exactly (no partial reorders)      |
+| **Description Limit**   | Descriptions over 10,000 chars truncated for AI extraction            |
+| **Max Items**           | AI extraction capped at 50 items per todo                             |
+| **Default Priority**    | New todos default to `medium` priority if not specified               |
+| **Tag Filtering**       | Tag filter uses OR logic — matches todos containing ANY provided tag  |
 
 ---
 
@@ -196,10 +198,10 @@ const archived = await listTodos({ archived: true });
 ### Complete Items Progressively
 
 ```typescript
-// Mark first item complete -- todo auto-transitions to in_progress
+// Mark first item complete — todo auto-transitions to in_progress
 await updateTodoItem(todoId, item1Id, { status: 'completed' });
 
-// Mark remaining items complete -- todo auto-transitions to completed
+// Mark remaining items complete — todo auto-transitions to completed
 await updateTodoItem(todoId, item2Id, { status: 'completed' });
 await updateTodoItem(todoId, item3Id, { status: 'completed' });
 // todo.status is now 'completed', todo.completedAt is set
@@ -227,6 +229,7 @@ const feedback = await createTodoInternal({
   source: 'commands-agent',
   sourceId: 'cmd_456',
 });
+// feedback.status = 'completed'
 // feedback.resourceUrl = '/#/todos/<todoId>'
 ```
 
@@ -234,10 +237,10 @@ const feedback = await createTodoInternal({
 
 ## Internal Endpoints
 
-| Method | Path                                      | Purpose                        |
-| ------ | ----------------------------------------- | ------------------------------ |
-| POST   | `/internal/todos`                         | Create todo from actions-agent |
-| POST   | `/internal/todos/pubsub/todos-processing` | Pub/Sub push handler           |
+| Method | Path                                      | Purpose                                |
+| ------ | ----------------------------------------- | -------------------------------------- |
+| POST   | `/internal/todos`                         | Create todo from other services        |
+| POST   | `/internal/todos/pubsub/todos-processing` | Pub/Sub push handler for AI extraction |
 
 ---
 
@@ -263,13 +266,13 @@ draft -> processing -> pending -> in_progress -> completed -> archived
 
 ## Error Handling
 
-| Error Code | Meaning            | Recovery Action           |
-| ---------- | ------------------ | ------------------------- |
-| 400        | Invalid input      | Fix request payload       |
-| 401        | Unauthorized       | Refresh token             |
-| 403        | Forbidden          | Verify todo ownership     |
-| 404        | Resource not found | Verify todo ID exists     |
-| 500        | Server error       | Retry with backoff        |
+| Error Code | Meaning            | Recovery Action                             |
+| ---------- | ------------------ | ------------------------------------------- |
+| 400        | Invalid input      | Fix request payload (check required fields) |
+| 401        | Unauthorized       | Refresh access token                        |
+| 403        | Forbidden          | Verify todo ownership (user ID match)       |
+| 404        | Resource not found | Verify todo/item ID exists                  |
+| 500        | Server error       | Retry with backoff                          |
 
 ---
 
@@ -286,10 +289,11 @@ Todos created via `/internal/todos` with a `description` trigger automatic AI ex
 
 **Fallback behaviors:**
 
-- No API key: Adds warning item "No API key configured"
-- No items found: Adds "No actionable items found"
-- Extraction fails: Adds "Item extraction failed (code)"
+- No API key: Adds warning item with `NO_API_KEY` error
+- No items found: Adds "No actionable items found in todo description"
+- Extraction fails: Adds "Item extraction failed ({code})" with `high` priority
+- No description: Skips extraction, transitions directly to `pending`
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-07

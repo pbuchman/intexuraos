@@ -481,6 +481,125 @@ return result.value`,
       });
     });
 
+    describe('v8 ignore addition detection', () => {
+      it('soft-blocks Edit adding v8 ignore', () => {
+        const testFile = createTestFile('v8-edit.ts', 'export const x = 1;');
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: 'export const x = 1;',
+              new_string: '/* v8 ignore ts-type -- reason @preserve */\nexport const x = 1;',
+            },
+          },
+        });
+
+        expectSoftBlock(result, {
+          stderrIncludes: 'v8-ignore-added',
+        });
+      });
+
+      it('soft-blocks Write creating file with v8 ignore', () => {
+        const testFile = createTestFile(
+          'v8-write.ts',
+          '/* v8 ignore ts-type -- reason @preserve */\nexport const x = 1;'
+        );
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Write',
+            tool_input: {
+              file_path: testFile,
+              content: '/* v8 ignore ts-type -- reason @preserve */\nexport const x = 1;',
+            },
+          },
+        });
+
+        expectSoftBlock(result, {
+          stderrIncludes: 'v8-ignore-added',
+        });
+      });
+
+      it('allows Edit without v8 ignore', () => {
+        const testFile = createTestFile('v8-normal.ts', 'export const x = 1;');
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: 'export const x = 1;',
+              new_string: 'export const y = 2;',
+            },
+          },
+        });
+
+        expectAllowed(result);
+        expectNoLogEntry(result, { pattern: 'v8-ignore-added' });
+      });
+
+      it('skips test files', () => {
+        const testFile = createTestFile('example.test.ts', 'export const x = 1;');
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: 'export const x = 1;',
+              new_string: '/* v8 ignore ts-type -- reason @preserve */\nexport const x = 1;',
+            },
+          },
+        });
+
+        expectNoLogEntry(result, { pattern: 'v8-ignore-added' });
+      });
+
+      it('skips non-TypeScript files', () => {
+        const testFile = createTestFile('readme.md', '# Test');
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: '# Test',
+              new_string: '/* v8 ignore ts-type -- reason @preserve */\n# Test',
+            },
+          },
+        });
+
+        expectAllowed(result);
+      });
+
+      it('includes educational message in output', () => {
+        const testFile = createTestFile('v8-msg.ts', 'export const x = 1;');
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: 'export const x = 1;',
+              new_string: '/* v8 ignore ts-type -- reason @preserve */\nexport const x = 1;',
+            },
+          },
+        });
+
+        expectSoftBlock(result, {
+          stderrIncludes: 'REQUIRED WORKFLOW',
+        });
+      });
+    });
+
     describe('non-TypeScript files are ignored', () => {
       it('ignores .js files', () => {
         const testFile = createTestFile(

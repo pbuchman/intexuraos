@@ -109,7 +109,7 @@ export function Chat(): React.JSX.Element {
             const successMessage: ChatMessage = {
               id: `msg-${crypto.randomUUID()}`,
               role: 'assistant',
-              content: `✓ Created as ${classificationType} (${String(confidencePercent)}% confident): "${commandText}"\n\n[View in Inbox →]`,
+              content: `✓ Created as ${classificationType} (${String(confidencePercent)}% confident): "${commandText}"\n\n[View in Inbox →](#/inbox)`,
               timestamp: Date.now(),
             };
             const finalMessages = [...messagesWithResponse, successMessage];

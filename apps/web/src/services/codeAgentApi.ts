@@ -127,17 +127,21 @@ export async function sendTaskMessage(
 }
 
 /**
- * Start Phase 2 implementation from a completed Phase 1 design task
+ * Start execution-agent implementation from a completed planning task
  */
 export async function startImplementation(
   accessToken: string,
-  taskId: string
+  taskId: string,
+  workerType?: string
 ): Promise<StartImplementationResponse> {
   return await apiRequest<StartImplementationResponse>(
     config.codeAgentUrl,
     `/code/tasks/${taskId}/implement`,
     accessToken,
-    { method: 'POST' }
+    {
+      method: 'POST',
+      body: workerType !== undefined ? { workerType } : undefined,
+    }
   );
 }
 

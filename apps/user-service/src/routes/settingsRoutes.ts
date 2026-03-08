@@ -6,9 +6,9 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
-import { isFastModel } from '@intexuraos/llm-contract';
+import { isFastModel, getProviderForModel } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
-import { getUserSettings, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
+import { getUserSettings, isTranscriptionProvider, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
 
 /**
  * Map domain error codes to HTTP error codes for GET.
@@ -231,6 +231,22 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { userSettingsRepository } = getServices();
 
+      // Verify the user has an API key configured for the model's provider
+      const provider = getProviderForModel(body.defaultModel);
+      const settingsResult = await userSettingsRepository.getSettings(params.uid);
+
+      if (!settingsResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', settingsResult.error.message);
+      }
+
+      const hasKey = settingsResult.value?.llmApiKeys?.[provider] !== undefined;
+      if (!hasKey) {
+        return await reply.fail(
+          'INVALID_REQUEST',
+          `Cannot set default model to ${body.defaultModel}: no API key configured for provider '${provider}'`
+        );
+      }
+
       const result = await userSettingsRepository.updateLlmPreferences(params.uid, body.defaultModel);
 
       if (!result.ok) {
@@ -238,6 +254,126 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok({ defaultModel: body.defaultModel });
+    }
+  );
+
+  // PATCH /users/:uid/settings/transcription
+  fastify.patch(
+    '/users/:uid/settings/transcription',
+    {
+      schema: {
+        operationId: 'updateTranscriptionPreferences',
+        summary: 'Update transcription provider preference',
+        description: 'Update user transcription provider preference.',
+        tags: ['settings'],
+        params: {
+          type: 'object',
+          properties: {
+            uid: { type: 'string', description: 'User ID' },
+          },
+          required: ['uid'],
+        },
+        body: {
+          type: 'object',
+          required: ['provider'],
+          properties: {
+            provider: {
+              type: 'string',
+              description: 'Transcription provider (e.g. speechmatics)',
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Transcription preferences updated',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  provider: { type: 'string' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /users/:uid/settings/transcription',
+      });
+
+      const user = await requireAuth(request, reply);
+      if (!user) {
+        return;
+      }
+
+      const params = request.params as { uid: string };
+      const body = request.body as { provider: string };
+
+      if (params.uid !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Cannot update other user settings');
+      }
+
+      if (!isTranscriptionProvider(body.provider)) {
+        return await reply.fail('INVALID_REQUEST', `Invalid provider: ${body.provider}`);
+      }
+
+      const { userSettingsRepository } = getServices();
+      const result = await userSettingsRepository.updateTranscriptionPreferences(
+        params.uid,
+        body.provider
+      );
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok({ provider: body.provider });
     }
   );
 

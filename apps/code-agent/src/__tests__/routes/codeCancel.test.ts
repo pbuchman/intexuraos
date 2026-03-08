@@ -49,7 +49,7 @@ import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
-import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 
 describe('POST /code/cancel', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -178,6 +178,10 @@ describe('POST /code/cancel', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -200,6 +204,10 @@ describe('POST /code/cancel', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
+      gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     // Set up worker settings for the test user so cancelOnWorker receives credentials
@@ -361,7 +369,7 @@ describe('POST /code/cancel', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toBe('Task is not running');
+      expect(body.error.message).toBe('Task is not in a cancellable state');
     });
 
     it('returns 409 for already cancelled task', async () => {
@@ -399,7 +407,7 @@ describe('POST /code/cancel', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toBe('Task is not running');
+      expect(body.error.message).toBe('Task is not in a cancellable state');
     });
 
     it('returns 409 for failed task', async () => {
@@ -437,7 +445,7 @@ describe('POST /code/cancel', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toBe('Task is not running');
+      expect(body.error.message).toBe('Task is not in a cancellable state');
     });
   });
 

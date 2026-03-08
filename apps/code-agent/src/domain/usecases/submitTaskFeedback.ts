@@ -16,27 +16,10 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
-import { randomBytes, randomUUID, createHmac } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
-
-/**
- * Generate a deterministic webhook secret for a task.
- * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
- */
-function generateWebhookSecret(sharedSecret: string, taskId: string): string {
-  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
-}
-
-/**
- * Generate a cancel nonce for task cancellation.
- */
-function generateCancelNonce(): string {
-  const buffer = randomBytes(2);
-  return buffer.toString('hex');
-}
-
-const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
+import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 
 /**
  * Request to submit feedback on a task.
@@ -86,6 +69,7 @@ export interface SubmitTaskFeedbackDeps {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
+  serviceUrl: string;
 }
 
 /**
@@ -123,7 +107,7 @@ export async function submitTaskFeedback(
   const originalTask = originalTaskResult.value;
 
   // Step 2: Validate status is completed
-  if (originalTask.status !== 'designed' && originalTask.status !== 'implemented') {
+  if (originalTask.status !== 'planned' && originalTask.status !== 'implemented') {
     logger.warn({ taskId: originalTask.id, status: originalTask.status }, 'Attempted to provide feedback on non-completed task');
     return err({
       code: 'invalid_status',
@@ -208,7 +192,7 @@ ${feedback.trim()}
   const followUpTaskId = `task_${randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, followUpTaskId);
 
-  // Step 7: Fetch fresh labels from Linear to determine executionPhase before create
+  // Step 7: Fetch fresh labels from Linear to determine agentType before create
   let linearIssueLabelsForDispatch: string[] = [];
   let hasChildrenForDispatch = false;
 
@@ -229,7 +213,9 @@ ${feedback.trim()}
     }
   }
 
-  const executionPhase: 'design' | 'execution' = hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'design';
+  const agentType: 'planning' | 'execution' | 'pull_request' = originalTask.agentType === 'pull_request'
+    ? 'pull_request'
+    : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'planning';
 
   // Step 8: Create follow-up task with parentTaskId
   const createInput = {
@@ -250,13 +236,11 @@ ${feedback.trim()}
     followUpReason: 'user_feedback' as const,
     /* v8 ignore start -- ts-type: optional field spread operators create type narrowing branches @preserve */
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
-    ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
-    ...(originalTask.linearFallback !== undefined && { linearFallback: originalTask.linearFallback }),
     ...(originalTask.actionId !== undefined && { actionId: originalTask.actionId }),
     ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
     ...(originalTask.prNumber !== undefined && { prNumber: originalTask.prNumber }),
     /* v8 ignore stop @preserve */
-    executionPhase,
+    agentType,
   };
 
   const createResult = await codeTaskRepo.create(createInput);
@@ -324,8 +308,7 @@ ${feedback.trim()}
   }
 
   // Step 10: Build webhook URL
-  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
-  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
+  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
 
   // Step 11: Dispatch to worker
   const dispatchRequest: {
@@ -335,7 +318,7 @@ ${feedback.trim()}
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;
@@ -343,6 +326,7 @@ ${feedback.trim()}
     parentTaskId?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
+    agentType: 'planning' | 'execution' | 'pull_request';
   } = {
     taskId: followUpTask.id,
     prompt: followUpTask.sanitizedPrompt,
@@ -356,6 +340,7 @@ ${feedback.trim()}
     parentTaskId: originalTask.id,
     linearIssueLabels: linearIssueLabelsForDispatch,
     hasChildren: hasChildrenForDispatch,
+    agentType: followUpTask.agentType ?? 'planning',
   };
 
   // Add optional fields if defined
@@ -421,7 +406,7 @@ ${feedback.trim()}
 
   return ok({
     codeTaskId: followUpTask.id,
-    resourceUrl: `/code/tasks/${followUpTask.id}`,
+    resourceUrl: `/#/code-tasks/${followUpTask.id}`,
     workerLocation: followUpTask.workerLocation,
     followUpFor: originalTask.id,
   });

@@ -12,6 +12,8 @@ import type {
   LlmProvider,
   LlmTestResult,
   SettingsError,
+  TranscriptionPreferences,
+  TranscriptionProvider,
   UserSettings,
   UserSettingsRepository,
 } from '../../domain/settings/index.js';
@@ -38,6 +40,7 @@ interface UserSettingsDoc {
     zai?: LlmTestResult;
   };
   llmPreferences?: LlmPreferences;
+  transcriptionPreferences?: TranscriptionPreferences;
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +74,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       if (data.llmPreferences !== undefined) {
         settings.llmPreferences = data.llmPreferences;
       }
+      if (data.transcriptionPreferences !== undefined) {
+        settings.transcriptionPreferences = data.transcriptionPreferences;
+      }
       return ok(settings);
     } catch (error) {
       return err({
@@ -98,6 +104,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       }
       if (settings.llmPreferences !== undefined) {
         doc.llmPreferences = settings.llmPreferences;
+      }
+      if (settings.transcriptionPreferences !== undefined) {
+        doc.transcriptionPreferences = settings.transcriptionPreferences;
       }
 
       await docRef.set(doc);
@@ -244,6 +253,26 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     }
   }
 
+  // Note: Deletes the entire `llmPreferences` field. This assumes `llmPreferences`
+  // only contains `defaultModel`. If additional preference fields are added in the
+  // future, switch to targeted deletion: `'llmPreferences.defaultModel': FieldValue.delete()`.
+  async clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(userId);
+      await docRef.update({
+        llmPreferences: FieldValue.delete(),
+        updatedAt: new Date().toISOString(),
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to clear LLM preferences: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
   async updateLlmPreferences(
     userId: string,
     defaultModel: LLMModel
@@ -273,6 +302,39 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       return err({
         code: 'INTERNAL_ERROR',
         message: `Failed to update LLM preferences: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
+  async updateTranscriptionPreferences(
+    userId: string,
+    provider: TranscriptionProvider
+  ): Promise<Result<void, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(userId);
+      const doc = await docRef.get();
+
+      if (!doc.exists) {
+        const now = new Date().toISOString();
+        await docRef.set({
+          userId,
+          transcriptionPreferences: { provider },
+          createdAt: now,
+          updatedAt: now,
+        });
+      } else {
+        await docRef.update({
+          'transcriptionPreferences.provider': provider,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      return ok(undefined);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to update transcription preferences: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }

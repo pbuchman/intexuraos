@@ -34,10 +34,10 @@ Benefits:
 
 | Approach                   | Pros                        | Cons                              | IntexuraOS Choice |
 | -------------------------- | --------------------------- | --------------------------------- | ----------------- |
-| **Single-owner**           | Clear boundaries, testable  | Requires HTTP for cross-service   | ✅ **CHOSEN**     |
-| **Shared collections**     | Direct access, faster reads | Tight coupling, hard to version   | ❌ Rejected       |
-| **ACL-based sharing**      | Fine-grained permissions    | Complex rules, hard to reason     | ❌ Rejected       |
-| **Collection-per-service** | Complete isolation          | Data duplication, sync complexity | ❌ Overkill       |
+| **Single-owner**           | Clear boundaries, testable  | Requires HTTP for cross-service   | ✅ **CHOSEN**      |
+| **Shared collections**     | Direct access, faster reads | Tight coupling, hard to version   | ❌ Rejected        |
+| **ACL-based sharing**      | Fine-grained permissions    | Complex rules, hard to reason     | ❌ Rejected        |
+| **Collection-per-service** | Complete isolation          | Data duplication, sync complexity | ❌ Overkill        |
 
 **Decision:** Single-owner with HTTP-based cross-service access strikes the right balance.
 
@@ -66,8 +66,8 @@ Benefits:
 
 | Field         | Type   | Required | Description                              |
 | ------------- | ------ | -------- | ---------------------------------------- |
-| `owner`       | string | ✅       | Service that owns this collection        |
-| `description` | string | ✅       | Human-readable purpose of the collection |
+| `owner`       | string | ✅        | Service that owns this collection        |
+| `description` | string | ✅        | Human-readable purpose of the collection |
 
 **Constraints:**
 

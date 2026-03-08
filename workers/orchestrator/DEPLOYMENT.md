@@ -8,25 +8,27 @@ Consolidated reference for building, deploying, and managing the orchestrator an
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ macOS Host (or Dev Machine)                                  │
+│ home-dev (Linux VM) or macOS Host                           │
 │                                                             │
-│  orchestrator (Node.js process via LaunchAgent)             │
+│  orchestrator (Node.js via systemd or LaunchAgent)          │
 │  ├── Fastify HTTP server on :8199                           │
-│  ├── Cloudflare Tunnel → cc-mac.intexuraos.cloud            │
+│  ├── Cloudflare Tunnel → cc-home.intexuraos.cloud           │
 │  ├── OAuth credential management (Anthropic Max sub)        │
 │  └── Docker SDK (dockerode) → spawns worker containers      │
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │ claude-worker container (Docker)                     │   │
-│  │ Image: gcr.io/intexuraos-dev-pbuchman/claude-worker  │   │
+│  │ Image: europe-central2-docker.pkg.dev/.../claude-    │   │
+│  │        worker:latest                                 │   │
 │  │ Runs: claude --dangerously-skip-permissions --verbose │   │
 │  │ Mounts: /repo (worktree), /secrets (GCP SA, tokens)  │   │
 │  │ Network: claude-worker-net                           │   │
+│  │ Deps: container runs its own pnpm install            │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The orchestrator is **not** containerized — it runs as a native Node.js process. Only the claude-worker runs in Docker.
+The orchestrator is **not** containerized — it runs as a native Node.js process. Only the claude-worker runs in Docker. Dependency installation (`pnpm install`) happens inside the Docker container, not on the host.
 
 ---
 
@@ -52,7 +54,7 @@ pnpm --filter orchestrator dev     # tsx watch mode
 node workers/orchestrator/dist/index.js
 ```
 
-Or via macOS LaunchAgent (see `workers/orchestrator/README.md` for plist template).
+Or via systemd (Linux) or macOS LaunchAgent (see `workers/orchestrator/README.md`).
 
 ### Key Files
 
@@ -216,7 +218,7 @@ pnpm --filter orchestrator test:e2e
 
 | Aspect        | Standard App (`apps/*`)           | Orchestrator (`workers/orchestrator`) |
 | ------------- | --------------------------------- | ------------------------------------- |
-| Deployment    | Cloud Run (Dockerfile)            | Native Node.js (LaunchAgent)          |
+| Deployment    | Cloud Run (Dockerfile)            | Native Node.js (systemd/LaunchAgent)  |
 | Cloud Build   | `cloudbuild.yaml` per service     | None — local build only               |
 | Artifact      | Docker image in Artifact Registry | `dist/index.js` bundle                |
 | Terraform     | Cloud Run service module          | Not managed by Terraform              |

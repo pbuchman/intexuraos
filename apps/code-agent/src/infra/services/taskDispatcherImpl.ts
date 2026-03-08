@@ -15,6 +15,15 @@ import type {
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
 
+/**
+ * Check if an HTTP status code is a retryable infrastructure error.
+ * Includes standard gateway errors (502/503/504) and Cloudflare-specific errors (520-530).
+ */
+function isRetryableInfraStatus(status: number): boolean {
+  return status === 502 || status === 503 || status === 504
+    || (status >= 520 && status <= 530);
+}
+
 /* v8 ignore start -- test-infra: requires worker HTTP endpoint to return specific JSON/text error bodies @preserve */
 /** Extract human-readable error message from a response body (may be JSON `{"error":"..."}` or plain text). */
 function extractErrorMessage(text: string): string {
@@ -39,7 +48,7 @@ interface WorkerTaskRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   webhookUrl: string;
   webhookSecret: string;
   /** Labels from the validated Linear issue */
@@ -48,6 +57,9 @@ interface WorkerTaskRequest {
   hasChildren: boolean;
   linearIssueId?: string;
   traceId?: string;
+  agentType?: 'planning' | 'execution' | 'pull_request';
+  planningPrBranch?: string;
+  planningPrUrl?: string;
 }
 
 /**
@@ -108,6 +120,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     if (request.traceId !== undefined) {
       taskRequest.traceId = request.traceId;
     }
+    if (request.agentType !== undefined) {
+      taskRequest.agentType = request.agentType;
+    }
+    if (request.planningPrBranch !== undefined) {
+      taskRequest.planningPrBranch = request.planningPrBranch;
+    }
+    if (request.planningPrUrl !== undefined) {
+      taskRequest.planningPrUrl = request.planningPrUrl;
+    }
 
     const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();
@@ -150,7 +171,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   }
 
   /**
-   * Attempt to dispatch to a worker, with fallback on 502/503/504.
+   * Attempt to dispatch to a worker, with fallback on 502/503/504 and Cloudflare 520-530.
    * Uses per-request worker credentials for user isolation.
    */
   private async dispatchToWorker(
@@ -159,6 +180,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     timestamp: number,
     workers: WorkerConfigWithCredentials[]
   ): Promise<Result<DispatchResult, DispatchError>> {
+    let sawCapacity503 = false;
+    let sawExplicitRejection = false;
+
     for (const worker of workers) {
       // Generate nonce for replay protection
       const nonce = generateNonce();
@@ -173,6 +197,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           { taskId: taskRequest.taskId, workerLocation: worker.location },
           'Failed to sign dispatch request'
         );
+        sawExplicitRejection = true;
         continue;
       }
 
@@ -203,6 +228,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           { taskId: taskRequest.taskId, workerLocation: worker.location, reason: workerResponse.reason },
           'Worker rejected task'
         );
+        sawExplicitRejection = true;
         continue;
       } catch (error) {
         this.logger.error(
@@ -210,7 +236,14 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           'Failed to dispatch to worker'
         );
 
-        if (error instanceof Error && /50[234]/.test(error.message)) {
+        if (error instanceof Error && error.message.includes('503')) {
+          sawCapacity503 = true;
+          continue;
+        }
+
+        // Same range as isRetryableInfraStatus, minus 503 (handled above for capacity tracking)
+        const cfPattern = /\b(502|504|52[0-9]|530)\b/;
+        if (error instanceof Error && cfPattern.test(error.message)) {
           continue;
         }
 
@@ -219,6 +252,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           message: `Network error: ${getErrorMessage(error)}`,
         });
       }
+    }
+
+    // INT-619/INT-624: Distinguish capacity-related failures from other failures.
+    // Infrastructure errors (502/504/520-530) are neutral — they don't count for or against capacity.
+    if (sawCapacity503 && !sawExplicitRejection) {
+      return err({
+        code: 'at_capacity',
+        message: 'All available workers are busy (returned 503)',
+      });
     }
 
     return err({
@@ -270,7 +312,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         'Worker dispatch request failed'
       );
 
-      if (response.status === 502 || response.status === 503 || response.status === 504) {
+      // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors — retry via worker fallback
+      if (isRetryableInfraStatus(response.status)) {
         const error = new Error(`HTTP ${String(response.status)}`) as Error & { code?: string };
         error.code = String(response.status);
         throw error;
@@ -363,7 +406,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
       /* v8 ignore start -- test-infra: requires worker HTTP endpoint to return error response @preserve */
       if (!response.ok) {
-        if (response.status === 502 || response.status === 503 || response.status === 504) {
+        // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors
+        if (isRetryableInfraStatus(response.status)) {
           return err({
             code: 'worker_unavailable',
             message: `Worker is unreachable (HTTP ${String(response.status)})`,

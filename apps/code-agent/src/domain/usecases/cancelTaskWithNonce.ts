@@ -10,6 +10,7 @@ import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 
 export interface CancelTaskWithNonceRequest {
   taskId: string;
@@ -45,14 +46,14 @@ export interface CancelTaskWithNonceDeps {
  * 2. Validate nonce matches
  * 3. Check nonce not expired
  * 4. Verify user owns the task
- * 5. Check task is cancellable (dispatched or running)
+ * 5. Check task is cancellable (dispatched, running, or queued)
  * 6. Update task status to cancelled, clear nonce
  * 7. Notify worker to stop (best effort)
  */
 export async function cancelTaskWithNonce(
   deps: CancelTaskWithNonceDeps,
   request: CancelTaskWithNonceRequest
-): Promise<Result<{ cancelled: true }, CancelTaskWithNonceError>> {
+): Promise<Result<{ cancelled: true; locksToCleanup: LockCleanupInfo[] }, CancelTaskWithNonceError>> {
   const { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo } = deps;
   const { taskId, nonce, userId } = request;
 
@@ -87,7 +88,7 @@ export async function cancelTaskWithNonce(
   }
 
   // Step 5: Check task is cancellable
-  const cancellableStatuses = ['dispatched', 'running'];
+  const cancellableStatuses = ['dispatched', 'running', 'queued'];
   if (!cancellableStatuses.includes(task.status)) {
     logger.info({ taskId, status: task.status }, 'Task not in cancellable state');
     return err({ code: 'task_not_cancellable', message: `Task is ${task.status}, cannot cancel` });
@@ -104,6 +105,8 @@ export async function cancelTaskWithNonce(
     logger.error({ taskId, error: updateResult.error }, 'Failed to cancel task');
     return err({ code: 'internal_error', message: 'Failed to cancel task' });
   }
+
+  const locksToCleanup = buildLockCleanups(task);
 
   // Step 7: Notify worker to stop (best effort)
   try {
@@ -129,5 +132,5 @@ export async function cancelTaskWithNonce(
   }
 
   logger.info({ taskId }, 'Task cancelled via nonce');
-  return ok({ cancelled: true });
+  return ok({ cancelled: true, locksToCleanup });
 }

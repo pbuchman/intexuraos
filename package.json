@@ -1,6 +1,6 @@
 {
   "name": "intexuraos",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -17,6 +17,7 @@
     "services:stop": "pnpm exec pm2 stop all",
     "services:delete": "pnpm exec pm2 delete all",
     "services:logs": "pnpm exec pm2 logs",
+    "services:logs:compact": "pnpm exec pm2 logs | node scripts/log-viewer.mjs",
     "services:status": "pnpm exec pm2 status",
     "services:monit": "pnpm exec pm2 monit",
     "services:restart": "pnpm exec pm2 restart all",

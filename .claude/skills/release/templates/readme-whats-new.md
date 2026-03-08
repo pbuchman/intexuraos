@@ -117,6 +117,15 @@ Always update the version in the header:
 + ## What's New in v2.1.0
 ```
 
+### Auto-Generation from Priority Map
+
+The "What's New" section is auto-generated from Phase 1 prioritization data:
+
+1. Include all **High-priority** items
+2. Use **user comments** as descriptions where provided
+3. Fall back to **triage summary descriptions** for items without comments
+4. Sort: Features first, then Notable changes, then fixes
+
 ### Accumulation Pattern (MANDATORY for patch/minor releases)
 
 For patch/minor releases within the same major version:

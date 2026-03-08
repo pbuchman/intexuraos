@@ -12,6 +12,7 @@ import type { WebhookClient } from '../services/webhook-client.js';
 import type { HeartbeatManager } from '../heartbeat.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { OrchestratorState } from '../types/state.js';
+import type { IsolationProvider, DiscoveredContainer } from '../services/isolation/types.js';
 
 // Mock Fastify to avoid actual server startup
 vi.mock('fastify', () => ({
@@ -70,6 +71,7 @@ describe('main.ts', () => {
     load: vi.fn<() => Promise<OrchestratorState>>(),
     save: vi.fn<(state: OrchestratorState) => Promise<void>>(),
     saveAtomic: vi.fn<(state: OrchestratorState) => Promise<void>>(),
+    modify: vi.fn<(fn: (s: OrchestratorState) => void | Promise<void>) => Promise<void>>(),
     detectOrphanWorktrees: vi.fn<() => Promise<string[]>>(),
   } as unknown as StatePersistence;
 
@@ -79,7 +81,21 @@ describe('main.ts', () => {
     getTask: vi.fn(),
     getRunningCount: vi.fn(() => 0),
     getCapacity: vi.fn(() => 5),
+    adoptTask: vi.fn(),
   } as unknown as TaskDispatcher;
+
+  const mockListWorkerContainers = vi.fn<() => Promise<DiscoveredContainer[]>>();
+  const mockIsolationProvider: IsolationProvider = {
+    createWorker: vi.fn(),
+    destroyWorker: vi.fn(),
+    isWorkerRunning: vi.fn(),
+    getWorkerLogs: vi.fn(),
+    streamLogs: vi.fn(),
+    waitForCompletion: vi.fn(),
+    getResourceUsage: vi.fn(),
+    listWorkers: vi.fn(),
+    listWorkerContainers: mockListWorkerContainers,
+  } as unknown as IsolationProvider;
 
   const mockTokenService: GitHubTokenService = {
     refreshToken: vi.fn(),
@@ -117,6 +133,9 @@ describe('main.ts', () => {
       value: undefined,
     });
     vi.mocked(mockWebhookClient.retryPending).mockResolvedValue(undefined);
+    vi.mocked(mockDispatcher.adoptTask).mockResolvedValue({ ok: true, value: undefined });
+    mockListWorkerContainers.mockResolvedValue([]);
+    vi.mocked(mockIsolationProvider.destroyWorker).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -429,6 +448,461 @@ describe('main.ts', () => {
       expect(mockWebhookClient.send).toHaveBeenCalledTimes(2);
 
       // mockExit doesn't need restore - it's cleared in beforeEach
+    });
+
+    it('should adopt running container with matching state', async () => {
+      const runningTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'container-1',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': runningTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      mockListWorkerContainers.mockResolvedValue([
+        { containerId: 'container-1', taskId: 'task-1', state: 'running' },
+      ]);
+
+      vi.mocked(mockDispatcher.adoptTask).mockResolvedValue({ ok: true, value: undefined });
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      expect(mockDispatcher.adoptTask).toHaveBeenCalledWith(runningTask);
+      expect(mockWebhookClient.send).not.toHaveBeenCalled();
+    });
+
+    it('should send interrupted webhook for task with no container', async () => {
+      const runningTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'container-1',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': runningTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      // No containers discovered
+      mockListWorkerContainers.mockResolvedValue([]);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'task-1',
+            status: 'interrupted',
+          }),
+        })
+      );
+    });
+
+    it('should remove exited container and send interrupted webhook', async () => {
+      const runningTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'container-1',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': runningTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      mockListWorkerContainers.mockResolvedValue([
+        { containerId: 'container-1', taskId: 'task-1', state: 'exited' },
+      ]);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('task-1');
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'task-1',
+            status: 'interrupted',
+          }),
+        })
+      );
+    });
+
+    it('should remove stateless orphan container', async () => {
+      // No tasks in state
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: {},
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      // But a container exists
+      mockListWorkerContainers.mockResolvedValue([
+        { containerId: 'orphan-container', taskId: 'orphan-task', state: 'running' },
+      ]);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('orphan-task');
+      expect(mockWebhookClient.send).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to state-only when no isolationProvider', async () => {
+      const runningTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'container-1',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': runningTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      const { main } = await import('../main.js');
+
+      // No isolationProvider passed
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger
+        );
+      } catch {
+        // Expected
+      }
+
+      // Should send interrupted webhook (state-only fallback)
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'task-1',
+            status: 'interrupted',
+          }),
+        })
+      );
+    });
+
+    it('should continue processing other tasks when one adoption fails', async () => {
+      const task1 = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook1',
+        webhookSecret: 'secret1',
+        status: 'running' as const,
+        containerId: 'container-1',
+        worktreePath: '/path/to/worktree1',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      const task2 = {
+        taskId: 'task-2',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook2',
+        webhookSecret: 'secret2',
+        status: 'running' as const,
+        containerId: 'container-2',
+        worktreePath: '/path/to/worktree2',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': task1, 'task-2': task2 },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      mockListWorkerContainers.mockResolvedValue([
+        { containerId: 'container-1', taskId: 'task-1', state: 'running' },
+        { containerId: 'container-2', taskId: 'task-2', state: 'running' },
+      ]);
+
+      // First adoption fails, second succeeds
+      vi.mocked(mockDispatcher.adoptTask)
+        .mockRejectedValueOnce(new Error('Adoption failed'))
+        .mockResolvedValueOnce({ ok: true, value: undefined });
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      // First task adoption failed — should fall through to interrupted webhook
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ taskId: 'task-1', status: 'interrupted' }),
+        })
+      );
+
+      // Second task adoption succeeded — should NOT get interrupted webhook
+      expect(mockWebhookClient.send).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ taskId: 'task-2' }),
+        })
+      );
+
+      expect(mockDispatcher.adoptTask).toHaveBeenCalledTimes(2);
+    });
+
+    it('falls through to interrupted webhook when adoptTask returns error result', async () => {
+      const runningTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'container-1',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': runningTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      mockListWorkerContainers.mockResolvedValue([
+        { containerId: 'container-1', taskId: 'task-1', state: 'running' },
+      ]);
+
+      vi.mocked(mockDispatcher.adoptTask).mockResolvedValue({
+        ok: false,
+        error: { type: 'at_capacity', message: 'No capacity' },
+      });
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      expect(mockDispatcher.adoptTask).toHaveBeenCalledWith(runningTask);
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'task-1',
+            status: 'interrupted',
+          }),
+        })
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-1' }),
+        'Adoption failed, marking as interrupted'
+      );
+    });
+
+    it('falls back to state-only recovery when container discovery times out', async () => {
+      const runningTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Test',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'container-1',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': runningTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      // Return a never-resolving promise to simulate a hang
+      mockListWorkerContainers.mockReturnValue(
+        new Promise<DiscoveredContainer[]>(() => {
+          // Never resolves
+        })
+      );
+
+      const { main } = await import('../main.js');
+
+      const mainPromise = main(
+        mockConfig,
+        mockStatePersistence,
+        mockDispatcher,
+        mockTokenService,
+        mockWebhookClient,
+        mockHeartbeatManager,
+        mockLogger,
+        undefined,
+        mockIsolationProvider
+      );
+
+      // Advance past the 60-second timeout
+      await vi.advanceTimersByTimeAsync(60_001);
+
+      try {
+        await mainPromise;
+      } catch {
+        // Expected
+      }
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ timeout: 60_000 }),
+        'Container discovery timed out, falling back to state-only recovery'
+      );
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'task-1',
+            status: 'interrupted',
+          }),
+        })
+      );
     });
   });
 

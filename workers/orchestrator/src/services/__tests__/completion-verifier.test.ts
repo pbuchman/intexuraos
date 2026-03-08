@@ -10,8 +10,19 @@ vi.mock('@intexuraos/llm-factory', () => ({
   createLlmClient: createLlmClientMock,
 }));
 
-const { OrchestratorCompletionVerifier, CompletionVerifierTestUtils } =
-  await import('../completion-verifier.js');
+const {
+  OrchestratorCompletionVerifier,
+  PLANNING_SCHEMA,
+  EXECUTION_SCHEMA,
+  PULL_REQUEST_SCHEMA,
+  RESUME_SUMMARY_SCHEMA,
+  buildPlanningPrompt,
+  buildExecutionPrompt,
+  buildPullRequestPrompt,
+  buildResumeSummaryPrompt,
+  getLast50Lines,
+  getLast20Lines,
+} = await import('../completion-verifier.js');
 
 const loggerInfo = vi.fn();
 const loggerWarn = vi.fn();
@@ -37,605 +48,815 @@ function createVerifier(
   return new OrchestratorCompletionVerifier(logger, { ...defaultConfig, ...overrides });
 }
 
-function assistantLog(text: string): string {
-  return JSON.stringify({
-    type: 'assistant',
-    message: {
-      content: [{ type: 'text', text }],
-    },
+const generateMock = vi.fn();
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  createLlmClientMock.mockReturnValue({ generate: generateMock });
+});
+
+// ---------------------------------------------------------------------------
+// Zod Schemas
+// ---------------------------------------------------------------------------
+
+describe('PLANNING_SCHEMA', () => {
+  it('accepts valid planning data', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      is_complex: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'Planned the task.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
   });
-}
 
-const validPhase1Final = `PHASE1_FINAL:
-- Linear label set: code-task
-- Phase 2 ready: yes
-- Linear issue: https://linear.app/intexuraos/issue/INT-1
-- Summary: Ready`;
+  it('accepts unclear outcome with clarification message', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'unclear',
+      superpowers_writing_plans: 'not used',
+      linear_url: '',
+      is_complex: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'Could not plan.',
+      unclear_clarification: 'Need more info.',
+    });
+    expect(result.success).toBe(true);
+  });
 
-const validPhase2Final = `PHASE2_FINAL:
-- PR: https://github.com/intexuraos/intexuraos/pull/123
-- CI evidence: pnpm run ci:tracked successful
-- Linear issue: https://linear.app/intexuraos/issue/INT-2
-- Summary: Done`;
+  it('accepts planned outcome with pr_url', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-631',
+      is_complex: '1',
+      subtask_urls: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/950',
+      summary: 'Planned and created PR.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+  });
 
-describe('completion-verifier', () => {
-  beforeEach(() => {
-    createLlmClientMock.mockReset();
-    loggerInfo.mockReset();
-    loggerWarn.mockReset();
-    loggerError.mockReset();
-    loggerDebug.mockReset();
-    createLlmClientMock.mockReturnValue({
-      generate: vi.fn().mockResolvedValue({
+  it('accepts complex task with populated subtask_urls', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-631',
+      is_complex: '1',
+      subtask_urls:
+        'https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two',
+      pr_url: '',
+      summary: 'Planned with subtasks.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.subtask_urls).toBe(
+        'https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two'
+      );
+    }
+  });
+
+  it('accepts simple task with empty subtask_urls', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'not used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-640',
+      is_complex: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'Simple task planned.',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.subtask_urls).toBe('');
+    }
+  });
+
+  it('rejects invalid outcome', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'done',
+      superpowers_writing_plans: 'used',
+      linear_url: '',
+      is_complex: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'x',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing fields', () => {
+    const result = PLANNING_SCHEMA.safeParse({ outcome: 'planned' });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('EXECUTION_SCHEMA', () => {
+  it('accepts valid execution data', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      superpowers_executing_plans: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: 'https://github.com/org/repo/pull/1',
+      summary: 'Implemented the feature.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid enum value', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      superpowers_executing_plans: 'maybe',
+      superpowers_requesting_code_review: 'used',
+      gh_pr_url: '',
+      summary: 'x',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('PULL_REQUEST_SCHEMA', () => {
+  it('accepts valid pull request data', () => {
+    const result = PULL_REQUEST_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      comments_replied: 'yes',
+      summary: 'Addressed review comments.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid comments_replied value', () => {
+    const result = PULL_REQUEST_SCHEMA.safeParse({
+      gh_pr_url: '',
+      comments_replied: 'maybe',
+      summary: 'x',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Prompt Builders
+// ---------------------------------------------------------------------------
+
+describe('buildPlanningPrompt', () => {
+  it('includes transcript and planning-specific fields', () => {
+    const prompt = buildPlanningPrompt('line1\nline2');
+    expect(prompt).toContain('Planning Agent');
+    expect(prompt).toContain('outcome');
+    expect(prompt).toContain('superpowers_writing_plans');
+    expect(prompt).toContain('linear_url');
+    expect(prompt).toContain('is_complex');
+    expect(prompt).toContain('subtask_urls');
+    expect(prompt).toContain('pr_url');
+    expect(prompt).toContain('unclear_clarification');
+    expect(prompt).toContain('line1\nline2');
+  });
+
+  it('includes shared preamble instructions', () => {
+    const prompt = buildPlanningPrompt('transcript');
+    expect(prompt).toContain('Analyze the transcript from the END toward the beginning');
+    expect(prompt).toContain('most recent output takes priority');
+    expect(prompt).toContain(
+      'LLM agent delivers its summary in one of the last assistant messages'
+    );
+    expect(prompt).toContain('Sample Linear URL format');
+    expect(prompt).toContain('Sample PR URL format');
+  });
+});
+
+describe('buildExecutionPrompt', () => {
+  it('includes transcript and execution-specific fields', () => {
+    const prompt = buildExecutionPrompt('exec-log');
+    expect(prompt).toContain('Execution Agent');
+    expect(prompt).toContain('superpowers_executing_plans');
+    expect(prompt).toContain('superpowers_requesting_code_review');
+    expect(prompt).toContain('gh_pr_url');
+    expect(prompt).toContain('exec-log');
+  });
+
+  it('includes shared preamble instructions', () => {
+    const prompt = buildExecutionPrompt('transcript');
+    expect(prompt).toContain('Analyze the transcript from the END toward the beginning');
+    expect(prompt).toContain(
+      'LLM agent delivers its summary in one of the last assistant messages'
+    );
+  });
+});
+
+describe('buildPullRequestPrompt', () => {
+  it('includes transcript and pull-request-specific fields', () => {
+    const prompt = buildPullRequestPrompt('pr-log');
+    expect(prompt).toContain('Pull Request Agent');
+    expect(prompt).toContain('gh_pr_url');
+    expect(prompt).toContain('comments_replied');
+    expect(prompt).toContain('pr-log');
+  });
+
+  it('includes shared preamble instructions', () => {
+    const prompt = buildPullRequestPrompt('transcript');
+    expect(prompt).toContain('Analyze the transcript from the END toward the beginning');
+    expect(prompt).toContain(
+      'LLM agent delivers its summary in one of the last assistant messages'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getLast50Lines
+// ---------------------------------------------------------------------------
+
+describe('getLast50Lines', () => {
+  it('returns last 50 lines from raw logs', () => {
+    const lines = Array.from({ length: 100 }, (_, i) => `line-${String(i + 1)}`);
+    const result = getLast50Lines(lines.join('\n'));
+    const resultLines = result.split('\n');
+    expect(resultLines).toHaveLength(50);
+    expect(resultLines[0]).toBe('line-51');
+    expect(resultLines[49]).toBe('line-100');
+  });
+
+  it('returns all lines when fewer than 50', () => {
+    const result = getLast50Lines('a\nb\nc');
+    expect(result).toBe('a\nb\nc');
+  });
+
+  it('returns empty string for empty input', () => {
+    const result = getLast50Lines('');
+    expect(result).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OrchestratorCompletionVerifier — constructor
+// ---------------------------------------------------------------------------
+
+describe('OrchestratorCompletionVerifier', () => {
+  describe('constructor validation', () => {
+    it('throws when model is not gemini-2.5-flash', () => {
+      expect(() => createVerifier({ model: 'gpt-4' })).toThrow(
+        'Completion verifier must use model gemini-2.5-flash'
+      );
+    });
+
+    it('throws when geminiApiKey is empty', () => {
+      expect(() => createVerifier({ geminiApiKey: '' })).toThrow(
+        'INTEXURAOS_GEMINI_APP_API_KEY is required'
+      );
+    });
+
+    it('throws when auditLogPath is empty', () => {
+      expect(() => createVerifier({ auditLogPath: '' })).toThrow(
+        'Completion verifier auditLogPath is required'
+      );
+    });
+  });
+
+  describe('describe', () => {
+    it('returns enabled with gemini provider and model', () => {
+      const verifier = createVerifier();
+      expect(verifier.describe()).toEqual({
+        enabled: true,
+        provider: 'gemini',
+        model: LlmModels.Gemini25Flash,
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // verify — planning agent
+  // ---------------------------------------------------------------------------
+
+  describe('verify — planning agent', () => {
+    const validPlanningResponse = JSON.stringify({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      is_complex: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'The agent planned successfully.',
+      unclear_clarification: '',
+    });
+
+    it('returns passed with agentData on valid response', async () => {
+      generateMock.mockResolvedValueOnce({
         ok: true,
         value: {
-          content:
-            '{"passed":true,"confidence":0.95,"reasons":["ok"],"missingCriteria":[],"resumeInstruction":"done"}',
+          content: validPlanningResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
         },
-      }),
-    });
-  });
-
-  it('extracts the last assistant text from mixed logs', () => {
-    const rawLogs = [
-      'not json',
-      '{"type":"result","is_error":false}',
-      assistantLog('First response'),
-      '{"malformed"',
-      assistantLog('Second response'),
-    ].join('\n');
-
-    expect(CompletionVerifierTestUtils.extractLastAssistantMessage(rawLogs)).toBe(
-      'Second response'
-    );
-  });
-
-  it('extracts last assistant text while skipping blank and malformed assistant chunks', () => {
-    const rawLogs = [
-      '',
-      '   ',
-      '{"type":"assistant","message":{}}',
-      assistantLog('   '),
-      assistantLog('Final response'),
-    ].join('\n');
-
-    expect(CompletionVerifierTestUtils.extractLastAssistantMessage(rawLogs)).toBe('Final response');
-  });
-
-  it('detects malformed phase1 and phase2 contracts', () => {
-    const phase1 = CompletionVerifierTestUtils.verifyPhase1Final('No completion block');
-    expect(phase1.ok).toBe(false);
-    if (phase1.ok) throw new Error('Expected invalid phase1 result');
-    expect(phase1.missing).toContain('PHASE1_FINAL block');
-
-    const phase2 = CompletionVerifierTestUtils.verifyPhase2Final('No phase two block');
-    expect(phase2.ok).toBe(false);
-    if (phase2.ok) throw new Error('Expected invalid phase2 result');
-    expect(phase2.missing).toContain('PHASE2_FINAL block');
-  });
-
-  it('detects inconsistent phase1 label and readiness combinations', () => {
-    const codeTaskMismatch = CompletionVerifierTestUtils.verifyPhase1Final(`PHASE1_FINAL:
-- Linear label set: code-task
-- Phase 2 ready: no
-- Linear issue: https://linear.app/intexuraos/issue/INT-1
-- Summary: mismatch`);
-    expect(codeTaskMismatch.ok).toBe(false);
-    if (codeTaskMismatch.ok) throw new Error('Expected invalid code-task mismatch');
-    expect(codeTaskMismatch.missing).toContain('code-task requires Phase 2 ready: yes');
-
-    const unclearMismatch = CompletionVerifierTestUtils.verifyPhase1Final(`PHASE1_FINAL:
-- Linear label set: unclear
-- Phase 2 ready: yes
-- Linear issue: https://linear.app/intexuraos/issue/INT-1
-- Summary: mismatch`);
-    expect(unclearMismatch.ok).toBe(false);
-    if (unclearMismatch.ok) throw new Error('Expected invalid unclear mismatch');
-    expect(unclearMismatch.missing).toContain('unclear requires Phase 2 ready: no');
-  });
-
-  it('builds phase-specific default resume instructions', () => {
-    const phase1Instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction('phase1', [
-      'missing-criteria',
-    ]);
-    const phase2Instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction('phase2', [
-      'missing-criteria',
-    ]);
-
-    expect(phase1Instruction).toContain('PHASE1_FINAL');
-    expect(phase2Instruction).toContain('PHASE2_FINAL');
-  });
-
-  it('always reports enabled gemini verifier', () => {
-    const verifier = createVerifier();
-    expect(verifier.describe()).toEqual({
-      enabled: true,
-      provider: 'gemini',
-      model: LlmModels.Gemini25Flash,
-    });
-  });
-
-  it('passes valid phase1 contract and uses LLM adjudication', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":true,"confidence":0.91,"reasons":["all good"],"missingCriteria":[],"resumeInstruction":"No action"}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-1',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase1',
-      originalPrompt: 'Prepare issue',
-      rawLogs: assistantLog(validPhase1Final),
-      linearIssueLabels: [],
-    });
-
-    expect(verdict.passed).toBe(true);
-    expect(verdict.usedLlm).toBe(true);
-    expect(generate).toHaveBeenCalledTimes(1);
-    expect(generate.mock.calls[0]?.[0]).toContain('PHASE1_FINAL');
-    expect(loggerInfo).toHaveBeenCalledWith(
-      expect.objectContaining({
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
         taskId: 'task-1',
         attempt: 1,
-        phase: 'phase1',
-        promptChars: expect.any(Number),
-      }),
-      'Gemini completion verifier request'
-    );
-    expect(loggerInfo).toHaveBeenCalledWith(
-      expect.objectContaining({
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: 'some logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.verifierFailure).toBe(false);
+      expect(result.missingFields).toEqual([]);
+      expect(result.agentData).toEqual({
+        agentType: 'planning',
+        outcome: 'planned',
+        superpowers_writing_plans: 'used',
+        linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+        is_complex: '0',
+        subtask_urls: '',
+        pr_url: '',
+        summary: 'The agent planned successfully.',
+        unclear_clarification: '',
+      });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validPlanningResponse,
+      });
+    });
+
+    it('returns passed for unclear outcome', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'unclear',
+            superpowers_writing_plans: 'not used',
+            linear_url: '',
+            is_complex: '0',
+            subtask_urls: '',
+            pr_url: '',
+            summary: 'Could not plan.',
+            unclear_clarification: 'Need info about auth approach.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
         taskId: 'task-1',
         attempt: 1,
-        responseChars: expect.any(Number),
-      }),
-      'Gemini completion verifier response'
-    );
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: 'logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData?.agentType).toBe('planning');
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: expect.any(String),
+      });
+    });
   });
 
-  it('still invokes Gemini when deterministic signals indicate explicit worker errors', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":false,"confidence":0.96,"reasons":["model observed task failure"],"missingCriteria":["Fix runtime errors"],"resumeInstruction":"Resolve errors and continue."}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
+  // ---------------------------------------------------------------------------
+  // verify — execution agent
+  // ---------------------------------------------------------------------------
 
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-error',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase1',
-      originalPrompt: 'Analyze issue',
-      rawLogs: `<tool_use_error>File does not exist</tool_use_error>\n${assistantLog(validPhase1Final)}`,
-      linearIssueLabels: [],
-      claudeError: 'upstream failure',
-      workerExitCode: 17,
+  describe('verify — execution agent', () => {
+    const validExecutionResponse = JSON.stringify({
+      superpowers_executing_plans: 'used',
+      superpowers_requesting_code_review: 'used',
+      gh_pr_url: 'https://github.com/org/repo/pull/901',
+      summary: 'Implemented the feature.',
     });
 
-    expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(true);
-    expect(verdict.reasons.join(' ')).toContain('explicit error');
-    expect(verdict.reasons.join(' ')).toContain('non-zero');
-    expect(generate).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not deterministically fail when tool_use_error is present without other errors', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":true,"confidence":0.90,"reasons":["task completed despite sibling tool error"],"missingCriteria":[],"resumeInstruction":"No action needed"}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-tool-use-error-only',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase1',
-      originalPrompt: 'Analyze issue',
-      rawLogs: `<tool_use_error>Sibling tool call errored</tool_use_error>\n${assistantLog(validPhase1Final)}`,
-      linearIssueLabels: [],
-    });
-
-    expect(verdict.passed).toBe(true);
-    expect(verdict.usedLlm).toBe(true);
-    expect(generate).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not include hasToolUseError signal in Gemini prompt', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":true,"confidence":0.92,"reasons":["contract met despite sibling tool error"],"missingCriteria":[],"resumeInstruction":""}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-tool-error-no-signal',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase1',
-      originalPrompt: 'Analyze issue',
-      rawLogs: `<tool_use_error>Sibling tool call errored</tool_use_error>\n${assistantLog(validPhase1Final)}`,
-      linearIssueLabels: [],
-    });
-
-    expect(verdict.passed).toBe(true);
-    expect(verdict.usedLlm).toBe(true);
-    expect(generate).toHaveBeenCalledTimes(1);
-    expect(generate.mock.calls[0]?.[0]).not.toContain('hasToolUseError');
-  });
-
-  it('still invokes Gemini when assistant final message is missing', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":false,"confidence":0.41,"reasons":["assistant response missing"],"missingCriteria":["Assistant final message"],"resumeInstruction":"Provide a final completion block."}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-no-assistant',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase1',
-      originalPrompt: 'Analyze issue',
-      rawLogs: '{"type":"result","is_error":false}',
-      linearIssueLabels: [],
-    });
-
-    expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(true);
-    expect(verdict.missingCriteria).toContain('Assistant final message');
-    expect(generate).toHaveBeenCalledTimes(1);
-  });
-
-  it('still invokes Gemini when phase1 contract checks fail deterministically', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":false,"confidence":0.88,"reasons":["phase contract mismatch"],"missingCriteria":["code-task requires Phase 2 ready: yes"],"resumeInstruction":"Fix PHASE1_FINAL consistency."}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-phase1-mismatch',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase1',
-      originalPrompt: 'Analyze issue',
-      rawLogs: assistantLog(`PHASE1_FINAL:
-- Linear label set: code-task
-- Phase 2 ready: no
-- Linear issue: https://linear.app/intexuraos/issue/INT-1
-- Summary: mismatch`),
-      linearIssueLabels: [],
-    });
-
-    expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(true);
-    expect(verdict.missingCriteria).toContain('code-task requires Phase 2 ready: yes');
-    expect(generate).toHaveBeenCalledTimes(1);
-  });
-
-  it('fails phase2 when PR URL is missing from task result', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":false,"confidence":0.93,"reasons":["missing PR evidence"],"missingCriteria":["PR URL created from branch"],"resumeInstruction":"Create PR and provide PHASE2_FINAL evidence."}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-    const verifier = createVerifier();
-
-    const verdict = await verifier.verify({
-      taskId: 'task-missing-pr',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase2',
-      originalPrompt: 'Implement and open PR',
-      rawLogs: assistantLog(validPhase2Final),
-      linearIssueLabels: ['code-task'],
-      taskResult: {
-        branch: 'task',
-        commits: 2,
-        ciFailed: false,
-      },
-    });
-
-    expect(verdict.passed).toBe(false);
-    expect(verdict.missingCriteria.join(' ')).toContain('PR URL');
-    expect(generate).toHaveBeenCalledTimes(1);
-  });
-
-  it('still invokes Gemini when phase2 contract checks fail deterministically', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":false,"confidence":0.77,"reasons":["missing CI evidence"],"missingCriteria":["CI evidence line"],"resumeInstruction":"Run ci:tracked and add evidence line."}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-phase2-missing-ci-line',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase2',
-      originalPrompt: 'Implement and open PR',
-      rawLogs: assistantLog(`PHASE2_FINAL:
-- PR: https://github.com/intexuraos/intexuraos/pull/123
-- Linear issue: https://linear.app/intexuraos/issue/INT-2
-- Summary: Done`),
-      linearIssueLabels: ['code-task'],
-      taskResult: {
-        branch: 'task',
-        commits: 2,
-        prUrl: 'https://github.com/intexuraos/intexuraos/pull/123',
-        ciFailed: false,
-      },
-    });
-
-    expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(true);
-    expect(verdict.missingCriteria).toContain('CI evidence line');
-    expect(generate).toHaveBeenCalledTimes(1);
-  });
-
-  it('fails phase2 when GitHub checks are failing', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":false,"confidence":0.9,"reasons":["ci checks failing"],"missingCriteria":["Successful GitHub checks for PR branch"],"resumeInstruction":"Fix CI failures and rerun checks."}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-phase2-ci-failed',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase2',
-      originalPrompt: 'Implement and open PR',
-      rawLogs: assistantLog(validPhase2Final),
-      linearIssueLabels: ['code-task'],
-      taskResult: {
-        branch: 'task',
-        commits: 2,
-        prUrl: 'https://github.com/intexuraos/intexuraos/pull/124',
-        ciFailed: true,
-      },
-    });
-
-    expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(true);
-    expect(verdict.missingCriteria).toContain('Successful GitHub checks for PR branch');
-    expect(generate).toHaveBeenCalledTimes(1);
-  });
-
-  it('fails phase2 when CI status is unknown', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          '{"passed":false,"confidence":0.82,"reasons":["ci state unknown"],"missingCriteria":["Confirmed GitHub checks status"],"resumeInstruction":"Determine CI status and report it explicitly."}',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-    const verifier = createVerifier();
-
-    const verdict = await verifier.verify({
-      taskId: 'task-ci-unknown',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase2',
-      originalPrompt: 'Implement and open PR',
-      rawLogs: assistantLog(validPhase2Final),
-      linearIssueLabels: ['code-task'],
-      taskResult: {
-        branch: 'task',
-        commits: 2,
-        prUrl: 'https://github.com/intexuraos/intexuraos/pull/124',
-      },
-    });
-
-    expect(verdict.passed).toBe(false);
-    expect(verdict.missingCriteria.join(' ')).toContain('GitHub checks status');
-    expect(generate).toHaveBeenCalledTimes(1);
-  });
-
-  it('parses wrapped JSON from LLM output', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        content:
-          'Verifier result:\n{"passed":false,"confidence":0.4,"reasons":["missing"],"missingCriteria":["criterion"],"resumeInstruction":"Do X"}\nthanks',
-      },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-llm-wrap',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase2',
-      originalPrompt: 'Implement and open PR',
-      rawLogs: assistantLog(validPhase2Final),
-      linearIssueLabels: ['code-task'],
-      taskResult: {
-        branch: 'task',
-        commits: 1,
-        prUrl: 'https://github.com/intexuraos/intexuraos/pull/123',
-        ciFailed: false,
-      },
-    });
-
-    expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(true);
-  });
-
-  it('marks verifier failure when Gemini call returns provider error', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: false,
-      error: { code: 'RATE_LIMITED', message: 'rate limited' },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-llm-error',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase1',
-      originalPrompt: 'Prepare issue',
-      rawLogs: assistantLog(validPhase1Final),
-      linearIssueLabels: [],
-    });
-
-    expect(verdict.passed).toBe(false);
-    expect(verdict.reasons.join(' ')).toContain('Gemini verifier unavailable');
-    expect(verdict.verifierFailure).toBe(true);
-    expect(verdict.resumeInstruction).toContain('PHASE1_FINAL');
-    expect(loggerError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskId: 'task-llm-error',
+    it('returns passed with execution agentData', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validExecutionResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-2',
         attempt: 1,
-        errorCode: 'RATE_LIMITED',
-      }),
-      'Gemini completion verifier returned no response'
-    );
+        maxAttempts: 5,
+        agentType: 'execution',
+        rawLogs: 'exec logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData).toEqual({
+        agentType: 'execution',
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: 'https://github.com/org/repo/pull/901',
+        summary: 'Implemented the feature.',
+      });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validExecutionResponse,
+      });
+    });
   });
 
-  it('builds phase2-specific retry instruction when Gemini call fails in phase2', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: false,
-      error: { code: 'UNAVAILABLE', message: 'provider unavailable' },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
+  // ---------------------------------------------------------------------------
+  // verify — pull_request agent
+  // ---------------------------------------------------------------------------
 
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-llm-error-phase2',
-      attempt: 2,
-      maxAttempts: 3,
-      phase: 'phase2',
-      originalPrompt: 'Implement and open PR',
-      rawLogs: assistantLog(validPhase2Final),
-      linearIssueLabels: ['code-task'],
-      taskResult: {
-        branch: 'task',
-        commits: 2,
-        prUrl: 'https://github.com/intexuraos/intexuraos/pull/125',
-        ciFailed: false,
-      },
+  describe('verify — pull_request agent', () => {
+    const validPRResponse = JSON.stringify({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      comments_replied: 'yes',
+      summary: 'Addressed review comments.',
     });
 
-    expect(verdict.passed).toBe(false);
-    expect(verdict.verifierFailure).toBe(true);
-    expect(verdict.resumeInstruction).toContain('PHASE2_FINAL');
-  });
-
-  it('marks verifier failure when Gemini returns invalid JSON', async () => {
-    const generate = vi.fn().mockResolvedValue({
-      ok: true,
-      value: { content: 'this is not json' },
-    });
-    createLlmClientMock.mockReturnValue({ generate });
-
-    const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-llm-invalid-json',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase1',
-      originalPrompt: 'Prepare issue',
-      rawLogs: assistantLog(validPhase1Final),
-      linearIssueLabels: [],
-    });
-
-    expect(verdict.passed).toBe(false);
-    expect(verdict.missingCriteria).toContain('Gemini verifier response');
-    expect(verdict.verifierFailure).toBe(true);
-    expect(loggerError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskId: 'task-llm-invalid-json',
+    it('returns passed with pull_request agentData', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validPRResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-3',
         attempt: 1,
-        response: 'this is not json',
-      }),
-      'Gemini completion verifier response parsing failed'
-    );
+        maxAttempts: 5,
+        agentType: 'pull_request',
+        rawLogs: 'pr logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData).toEqual({
+        agentType: 'pull_request',
+        gh_pr_url: 'https://github.com/org/repo/pull/42',
+        comments_replied: 'yes',
+        summary: 'Addressed review comments.',
+      });
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: validPRResponse,
+      });
+    });
   });
 
-  it('accepts empty resumeInstruction when Gemini returns passed verdict', async () => {
-    const generate = vi.fn().mockResolvedValue({
+  // ---------------------------------------------------------------------------
+  // verify — failure paths
+  // ---------------------------------------------------------------------------
+
+  describe('verify — Gemini failure', () => {
+    it('returns verifierFailure when Gemini returns error', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'API_ERROR', message: 'rate limit' },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-fail',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: 'logs',
+      });
+      expect(result.passed).toBe(false);
+      expect(result.verifierFailure).toBe(true);
+      expect(result.missingFields).toEqual([]);
+      expect(result.agentData).toBeUndefined();
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: '',
+      });
+    });
+  });
+
+  describe('verify — JSON parse failure', () => {
+    it('returns verifierFailure when response is not valid JSON', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'not json at all',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-parse',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'execution',
+        rawLogs: 'logs',
+      });
+      expect(result.passed).toBe(false);
+      expect(result.verifierFailure).toBe(true);
+      expect(result.missingFields).toEqual([]);
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: 'not json at all',
+      });
+    });
+  });
+
+  describe('verify — Zod validation failure', () => {
+    it('returns missingFields when schema validation fails', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({ gh_pr_url: 'https://github.com/org/repo/pull/1' }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-zod',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'pull_request',
+        rawLogs: 'logs',
+      });
+      expect(result.passed).toBe(false);
+      expect(result.verifierFailure).toBe(false);
+      expect(result.missingFields.length).toBeGreaterThan(0);
+      expect(result.missingFields).toContain('comments_replied');
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: JSON.stringify({ gh_pr_url: 'https://github.com/org/repo/pull/1' }),
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // verify — transcript truncation in logger.info
+  // ---------------------------------------------------------------------------
+
+  describe('verify — transcript truncation in log output', () => {
+    const validPlanningResponse = JSON.stringify({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      is_complex: '0',
+      subtask_urls: '',
+      pr_url: '',
+      summary: 'Planned.',
+      unclear_clarification: '',
+    });
+
+    it('truncates transcript to first and last line when >2 non-empty lines', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validPlanningResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      await verifier.verify({
+        taskId: 'task-trunc',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: 'first line\nsecond line\nthird line\nfourth line\nfifth line',
+      });
+      const infoCall = loggerInfo.mock.calls.find(
+        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+      ) as [Record<string, unknown>, string] | undefined;
+      expect(infoCall).toBeDefined();
+      const logged = infoCall?.[0]?.['transcript'] as string;
+      expect(logged).toContain('first line');
+      expect(logged).toContain('fifth line');
+      expect(logged).toContain('3 lines omitted');
+      expect(logged).not.toContain('second line');
+    });
+
+    it('logs full transcript when <=2 non-empty lines', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validPlanningResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      await verifier.verify({
+        taskId: 'task-short',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: 'only one line',
+      });
+      const infoCall = loggerInfo.mock.calls.find(
+        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+      ) as [Record<string, unknown>, string] | undefined;
+      expect(infoCall).toBeDefined();
+      const logged = infoCall?.[0]?.['transcript'] as string;
+      expect(logged).toBe('only one line');
+    });
+
+    it('handles whitespace-only rawLogs with empty fallback', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validPlanningResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      await verifier.verify({
+        taskId: 'task-empty',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: '   \n  \n   ',
+      });
+      const infoCall = loggerInfo.mock.calls.find(
+        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+      ) as [Record<string, unknown>, string] | undefined;
+      expect(infoCall).toBeDefined();
+      const logged = infoCall?.[0]?.['transcript'] as string;
+      expect(logged).toBe('');
+    });
+  });
+
+  describe('verify — JSON wrapped in markdown fences', () => {
+    it('extracts JSON from surrounding text', async () => {
+      const wrappedResponse = `Here is the result:\n${JSON.stringify({
+        outcome: 'planned',
+        superpowers_writing_plans: 'used',
+        linear_url: 'https://linear.app/intexuraos/issue/INT-50',
+        is_complex: '0',
+        subtask_urls: '',
+        pr_url: '',
+        summary: 'Planned.',
+        unclear_clarification: '',
+      })}\nDone.`;
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: wrappedResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-wrapped',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: 'logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData?.agentType).toBe('planning');
+      expect(result.trace).toEqual({
+        transcript: expect.any(String),
+        prompt: expect.any(String),
+        response: wrappedResponse,
+      });
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getLast20Lines
+// ---------------------------------------------------------------------------
+
+describe('getLast20Lines', () => {
+  it('returns last 20 lines from raw logs', () => {
+    const lines = Array.from({ length: 50 }, (_, i) => `line-${String(i + 1)}`);
+    const result = getLast20Lines(lines.join('\n'));
+    const resultLines = result.split('\n');
+    expect(resultLines).toHaveLength(20);
+    expect(resultLines[0]).toBe('line-31');
+    expect(resultLines[19]).toBe('line-50');
+  });
+
+  it('returns all lines when fewer than 20', () => {
+    const result = getLast20Lines('a\nb\nc');
+    expect(result).toBe('a\nb\nc');
+  });
+
+  it('returns empty string for empty input', () => {
+    const result = getLast20Lines('');
+    expect(result).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RESUME_SUMMARY_SCHEMA
+// ---------------------------------------------------------------------------
+
+describe('RESUME_SUMMARY_SCHEMA', () => {
+  it('accepts valid summary', () => {
+    const result = RESUME_SUMMARY_SCHEMA.safeParse({ summary: 'Updated the auth flow.' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing summary field', () => {
+    const result = RESUME_SUMMARY_SCHEMA.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-string summary', () => {
+    const result = RESUME_SUMMARY_SCHEMA.safeParse({ summary: 42 });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildResumeSummaryPrompt
+// ---------------------------------------------------------------------------
+
+describe('buildResumeSummaryPrompt', () => {
+  it('includes the transcript in the prompt', () => {
+    const prompt = buildResumeSummaryPrompt('some log output');
+    expect(prompt).toContain('some log output');
+  });
+
+  it('instructs Gemini to extract a summary field as JSON', () => {
+    const prompt = buildResumeSummaryPrompt('log');
+    expect(prompt).toContain('summary');
+    expect(prompt).toContain('JSON');
+  });
+
+  it('mentions the last assistant messages as the source', () => {
+    const prompt = buildResumeSummaryPrompt('log');
+    expect(prompt).toContain('assistant');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractResumeSummary
+// ---------------------------------------------------------------------------
+
+describe('OrchestratorCompletionVerifier.extractResumeSummary', () => {
+  it('returns summary string on success', async () => {
+    generateMock.mockResolvedValueOnce({
       ok: true,
       value: {
-        content:
-          '{"passed":true,"confidence":0.97,"reasons":["all criteria met"],"missingCriteria":[],"resumeInstruction":""}',
+        content: JSON.stringify({ summary: 'Updated the auth flow and fixed the redirect.' }),
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
       },
     });
-    createLlmClientMock.mockReturnValue({ generate });
-
     const verifier = createVerifier();
-    const verdict = await verifier.verify({
-      taskId: 'task-empty-resume',
-      attempt: 1,
-      maxAttempts: 3,
-      phase: 'phase1',
-      originalPrompt: 'Prepare issue',
-      rawLogs: assistantLog(validPhase1Final),
-      linearIssueLabels: [],
+    const result = await verifier.extractResumeSummary('task-1', 'some raw logs');
+    expect(result).toBe('Updated the auth flow and fixed the redirect.');
+  });
+
+  it('returns undefined when LLM generate fails', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'GENERATION_FAILED', message: 'API error' },
     });
-
-    expect(verdict.passed).toBe(true);
-    expect(verdict.resumeInstruction).toBe('');
-    expect(verdict.verifierFailure).toBe(false);
-    expect(verdict.usedLlm).toBe(true);
+    const verifier = createVerifier();
+    const result = await verifier.extractResumeSummary('task-1', 'some raw logs');
+    expect(result).toBeUndefined();
   });
 
-  it('throws when model is not gemini-2.5-flash', () => {
-    expect(() => createVerifier({ model: 'unsupported-model' })).toThrow(
-      'Completion verifier must use model gemini-2.5-flash'
-    );
+  it('returns undefined when JSON cannot be parsed', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: 'not json at all',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
+      },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.extractResumeSummary('task-1', 'some raw logs');
+    expect(result).toBeUndefined();
   });
 
-  it('throws when gemini verifier key is an empty string', () => {
-    expect(() => createVerifier({ geminiApiKey: '' })).toThrow(
-      'INTEXURAOS_GEMINI_APP_API_KEY is required'
-    );
+  it('returns undefined when Zod validation fails (missing summary field)', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({ wrong_field: 'value' }),
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
+      },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.extractResumeSummary('task-1', 'some raw logs');
+    expect(result).toBeUndefined();
   });
 
-  it('throws when audit log path is an empty string', () => {
-    expect(() => createVerifier({ auditLogPath: '' })).toThrow(
-      'Completion verifier auditLogPath is required'
-    );
+  it('uses last 20 lines of logs as transcript', async () => {
+    const lines = Array.from({ length: 30 }, (_, i) => `line-${String(i + 1)}`);
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({ summary: 'Done.' }),
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
+      },
+    });
+    const verifier = createVerifier();
+    await verifier.extractResumeSummary('task-1', lines.join('\n'));
+
+    const calledPrompt = generateMock.mock.calls[0]?.[0] as string;
+    expect(calledPrompt).toContain('line-11');
+    expect(calledPrompt).toContain('line-30');
+    expect(calledPrompt).not.toContain('line-10');
   });
 });

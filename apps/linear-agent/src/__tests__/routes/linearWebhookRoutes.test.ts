@@ -525,7 +525,7 @@ describe('Linear Webhook Routes', () => {
         expect(response.statusCode).toBe(401);
       });
 
-      it('skips signature validation when issue has empty teamId', async () => {
+      it('rejects comment webhook when issue has empty teamId (cannot validate signature)', async () => {
         issueRepo.seedIssue({
           id: 'issue-uuid-1',
           identifier: 'INT-123',
@@ -558,9 +558,12 @@ describe('Linear Webhook Routes', () => {
           payload: JSON.stringify(payload),
         });
 
+        // Empty teamId now returns "Webhook not configured" instead of bypassing validation
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
         expect(body.success).toBe(true);
+        expect(body.data.message).toBe('Webhook not configured');
+        expect(body.data.action).toBe('ignored');
       });
 
       it('returns 500 when webhook secret lookup fails for comment', async () => {
@@ -650,7 +653,7 @@ describe('Linear Webhook Routes', () => {
         const lastRequest = codeAgentClient.getLastRequest();
         expect(lastRequest).not.toBeNull();
         expect(lastRequest?.linearIssueId).toBe('INT-123');
-        expect(lastRequest?.prompt).toBe('Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.');
+        expect(lastRequest?.prompt).toBe('Analyze the linked Linear issue and all its comments (newest first). Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.');
         expect(lastRequest?.workerType).toBe('auto');
         expect(lastRequest?.userId).toBe(userId);
       });
@@ -710,7 +713,7 @@ describe('Linear Webhook Routes', () => {
         expect(codeAgentClient.getLastRequest()).toBeNull();
       });
 
-      it('does not trigger when issue has Code Task label', async () => {
+      it('triggers even when issue has Code Task label', async () => {
         const payload = createAssignmentPayload({
           data: {
             id: 'issue-uuid-1',
@@ -741,7 +744,7 @@ describe('Linear Webhook Routes', () => {
 
         await new Promise(resolve => { setTimeout(resolve, 50); });
 
-        expect(codeAgentClient.getLastRequest()).toBeNull();
+        expect(codeAgentClient.getLastRequest()).not.toBeNull();
       });
 
       it('does not trigger on create action', async () => {
@@ -808,6 +811,162 @@ describe('Linear Webhook Routes', () => {
 
         const lastRequest = codeAgentClient.getLastRequest();
         expect(lastRequest).not.toBeNull();
+      });
+    });
+
+    describe('Multi-user fan-out', () => {
+      it('syncs issue for all connected users in the team', async () => {
+        // Seed a second connection for the same team
+        connectionRepo.seedConnection({
+          userId: 'user-456',
+          apiKey: 'test-api-key-2',
+          teamId,
+          teamName: 'Engineering',
+          webhookSecret,
+          connected: true,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        });
+
+        const payload = createLinearWebhookPayload();
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(issueRepo.count).toBe(2);
+      });
+
+      it('returns 200 when at least one user sync succeeds (partial failure)', async () => {
+        // Seed a second connection for the same team
+        connectionRepo.seedConnection({
+          userId: 'user-456',
+          apiKey: 'test-api-key-2',
+          teamId,
+          teamName: 'Engineering',
+          webhookSecret,
+          connected: true,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        });
+
+        // Make save fail only for user-456
+        issueRepo.setSaveFailureForUsers(['user-456']);
+
+        const payload = createLinearWebhookPayload();
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+      });
+
+      it('returns 500 when all user syncs fail', async () => {
+        // Seed a second connection for the same team
+        connectionRepo.seedConnection({
+          userId: 'user-456',
+          apiKey: 'test-api-key-2',
+          teamId,
+          teamName: 'Engineering',
+          webhookSecret,
+          connected: true,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        });
+
+        // Make all saves fail
+        issueRepo.setSaveFailure(true, { code: 'INTERNAL_ERROR', message: 'DB down' });
+
+        const payload = createLinearWebhookPayload();
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      });
+
+      it('triggers code task for first user only', async () => {
+        // Seed a second connection for the same team
+        connectionRepo.seedConnection({
+          userId: 'user-456',
+          apiKey: 'test-api-key-2',
+          teamId,
+          teamName: 'Engineering',
+          webhookSecret,
+          connected: true,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        });
+
+        // Send an assignment webhook (update with assigneeId changed from null, unstarted state)
+        const payload = createLinearWebhookPayload({
+          action: 'update',
+          updatedFrom: { assigneeId: null },
+          data: {
+            id: 'issue-uuid-1',
+            identifier: 'INT-123',
+            title: 'Test Issue',
+            description: 'Implement the feature',
+            priority: 2,
+            url: 'https://linear.app/team/issue/INT-123',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-02T00:00:00.000Z',
+            state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
+            assignee: { id: 'user-1', name: 'Test User' },
+            labels: [{ id: 'label-1', name: 'bug' }],
+            team: { id: teamId, key: 'INT' },
+          },
+        });
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+
+        await new Promise(resolve => { setTimeout(resolve, 50); });
+
+        const lastRequest = codeAgentClient.getLastRequest();
+        expect(lastRequest).not.toBeNull();
+        expect(lastRequest?.userId).toBe('user-123');
       });
     });
   });

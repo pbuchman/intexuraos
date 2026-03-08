@@ -49,7 +49,7 @@ import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
-import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 
 describe('POST /code/submit', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -172,6 +172,10 @@ describe('POST /code/submit', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -194,6 +198,10 @@ describe('POST /code/submit', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
+      gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
     });
 
     // Set up worker settings for the test user
@@ -302,11 +310,11 @@ describe('POST /code/submit', () => {
       );
     });
 
-    it('sets executionPhase to execution when issue has code-task label', async () => {
+    it('sets agentType to execution when issue has code-task label', async () => {
       const linearService = getServices().linearIssueService;
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-999',
-        linearIssueTitle: 'Phase 2 ready feature',
+        linearIssueTitle: 'Execution ready feature',
         linearIssueLabels: ['code-task'],
         hasChildren: false,
         linearFallback: false,
@@ -322,12 +330,30 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Build phase 2 feature' },
+        payload: { prompt: 'Build execution feature' },
       });
 
       expect(response.statusCode).toBe(200);
       expect(createSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ executionPhase: 'execution' })
+        expect.objectContaining({
+          agentType: 'execution',
+          linearIssueId: 'INT-999',
+        })
+      );
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueTitle: expect.anything(),
+        })
+      );
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueLabels: expect.anything(),
+        })
+      );
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearFallback: expect.anything(),
+        })
       );
     });
 
@@ -478,33 +504,6 @@ describe('POST /code/submit', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('RATE_LIMITED');
       expect(body.error.message).toContain('concurrent tasks');
-    });
-
-    it('returns 429 when daily cost limit exceeded', async () => {
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-
-      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'daily_cost_limit',
-          message: 'Daily cost limit of $20 reached ($15 spent today)',
-          retryAfter: 'tomorrow',
-        },
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Test prompt' },
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-      expect(body.error.message).toContain('cost limit');
     });
 
     it('returns 429 when monthly cost limit exceeded', async () => {
@@ -871,7 +870,7 @@ describe('POST /code/submit', () => {
     });
 
     it('accepts valid worker types', async () => {
-      const workerTypes = ['opus', 'auto', 'glm'] as const;
+      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] as const;
 
       // Mock successful dispatch for all iterations
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({

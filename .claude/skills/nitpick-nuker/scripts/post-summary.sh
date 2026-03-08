@@ -10,6 +10,7 @@
 #   "pr_number": 123,
 #   "timestamp": "2026-02-05T10:00:00Z",
 #   "commit_sha": "abc1234",
+#   "roast_line": "I've seen better error handling in a fortune cookie.",
 #   "fixed": [
 #     { "id": "...", "author": "...", "url": "...", "details": "..." }
 #   ],
@@ -80,11 +81,18 @@ SUMMARY=$(cat "$SUMMARY_FILE")
 # Extract values
 TIMESTAMP=$(echo "$SUMMARY" | jq -r '.timestamp')
 COMMIT_SHA=$(echo "$SUMMARY" | jq -r '.commit_sha')
+ROAST_LINE=$(echo "$SUMMARY" | jq -r '.roast_line // "I reviewed this code so you dont have to. Youre welcome."')
 FIXED=$(echo "$SUMMARY" | jq '.fixed // []')
 SKIPPED=$(echo "$SUMMARY" | jq '.skipped // []')
 
 FIXED_COUNT=$(echo "$FIXED" | jq 'length')
 SKIPPED_COUNT=$(echo "$SKIPPED" | jq 'length')
+
+if [[ "$SKIPPED_COUNT" -eq 0 ]]; then
+  STATUS_LINE="All comments addressed — good to merge ✅"
+else
+  STATUS_LINE="${SKIPPED_COUNT} comment(s) skipped — review before merging ⚠️"
+fi
 
 # Build fixed rows
 FIXED_ROWS=""
@@ -144,17 +152,24 @@ ${FIXED_ROWS}
 ${SKIPPED_ROWS}
 
 ---
-*😄 reactions added to all processed comments*'
+
+**Status:** ${STATUS_LINE}'
 fi
 
 # Perform substitutions
 COMMENT_BODY="${COMMENT_BODY//\$\{PR_NUMBER\}/$PR_NUMBER}"
 COMMENT_BODY="${COMMENT_BODY//\$\{TIMESTAMP\}/$TIMESTAMP}"
 COMMENT_BODY="${COMMENT_BODY//\$\{COMMIT_SHA\}/$COMMIT_SHA}"
+COMMENT_BODY="${COMMENT_BODY//\$\{ROAST_LINE\}/$ROAST_LINE}"
 COMMENT_BODY="${COMMENT_BODY//\$\{FIXED_COUNT\}/$FIXED_COUNT}"
 COMMENT_BODY="${COMMENT_BODY//\$\{SKIPPED_COUNT\}/$SKIPPED_COUNT}"
 COMMENT_BODY="${COMMENT_BODY//\$\{FIXED_ROWS\}/$FIXED_ROWS}"
 COMMENT_BODY="${COMMENT_BODY//\$\{SKIPPED_ROWS\}/$SKIPPED_ROWS}"
+COMMENT_BODY="${COMMENT_BODY//\$\{STATUS_LINE\}/$STATUS_LINE}"
+
+# Strip blank lines between table separator and data rows.
+# Prettier inserts blank lines after | --- | which breaks GitHub table rendering.
+COMMENT_BODY=$(echo "$COMMENT_BODY" | sed -E '/^\| -+ \|.*\|$/{ N; s/\n$//; }')
 
 # Post comment to PR via file to preserve markdown newlines exactly.
 COMMENT_TMP_FILE="$(mktemp /tmp/nitpick-summary-comment.XXXXXX.md)"

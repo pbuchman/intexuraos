@@ -86,6 +86,10 @@ class FakeUserServiceClient implements UserServiceClient {
     return ok({} as OAuthTokenResult);
   }
 
+  async resolveGitHubUsername(): Promise<Result<{ userId: string } | null, UserServiceError>> {
+    return ok(null);
+  }
+
   setLlmFailure(fail: boolean, error?: UserServiceError): void {
     this.shouldFailLlm = fail;
     if (error) this.llmError = error;

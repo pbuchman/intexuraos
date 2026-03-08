@@ -1,8 +1,8 @@
-# Research Agent -- Technical Reference
+# Research Agent — Technical Reference
 
 ## Overview
 
-Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Runs on Cloud Run with auto-scaling. Current version: v3.1.0.
+Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Runs on Cloud Run with auto-scaling.
 
 ## Architecture
 
@@ -48,20 +48,22 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                          | Date       |
-| ---------- | ---------------------------------------------------- | ---------- |
-| `b3f34d85` | Release v3.1.0 (version bump only)                   | 2026-02-22 |
-| `c8a42105` | Release v3.0.0 (version bump only)                   | 2026-02-19 |
-| `f451d51a` | Audit and improve 27 LLM prompts across all domains  | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability      | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                  | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention  | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback    | 2026-02-15 |
-| `d7c6a061` | Add consistent icons to all WhatsApp messages        | 2026-02-10 |
-| `0f69a74b` | Add default model selector with platform Zai fallback | 2026-02-08 |
-| `308ba74e` | Add v8 ignore for JWT claims type guards             | 2026-02-08 |
-| `f33b6251` | Fix: Read namespaced Auth0 claims for user profile   | 2026-02-08 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)    | 2026-02-01 |
+| Commit     | Description                                             | Date       |
+| ---------- | ------------------------------------------------------- | ---------- |
+| `44ea683a` | Release v3.2.0                                          | 2026-03-07 |
+| `99febe66` | Wire GitHub OAuth integration and update mocks          | 2026-03-02 |
+| `e6399f3b` | Apply code review feedback for semantic checks          | 2026-02-27 |
+| `a1a77b95` | Add semantic checks to input improvement validator      | 2026-02-27 |
+| `8fb90669` | Align thumbnail output contract with consumed fields    | 2026-02-27 |
+| `b3f34d85` | Release v3.1.0 (version bump only)                      | 2026-02-22 |
+| `c8a42105` | Release v3.0.0 (version bump only)                      | 2026-02-19 |
+| `f451d51a` | Audit and improve 27 LLM prompts across all domains     | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability         | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                     | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention    | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback       | 2026-02-15 |
+| `d7c6a061` | Add consistent icons to all WhatsApp messages           | 2026-02-10 |
+| `0f69a74b` | Add default model selector with platform Zai fallback   | 2026-02-08 |
 
 ## Data Flow
 
@@ -199,6 +201,12 @@ const SynthesisContextSchema = z.object({
 });
 ```
 
+### Input Validation
+
+The `InputValidationAdapter` validates and improves user prompts before research begins. It uses Gemini Flash to assess prompt quality on a 0–2 scale (0 = rejected, 1 = weak but improvable, 2 = good) and can generate improved prompts for weak inputs.
+
+Structural checks on improved prompts include response length validation (1–500 characters), markdown code block removal, unwanted prefix detection ("here is", "the improved", etc.), JSON detection, and explanatory text detection. Failed checks trigger the repair pattern: the LLM receives the validation error and attempts a second generation.
+
 ## API Endpoints
 
 ### Public Endpoints
@@ -248,7 +256,7 @@ const SynthesisContextSchema = z.object({
 | `synthesisModel`    | ResearchModel     | Model for synthesis                  |
 | `status`            | ResearchStatus    | Current state                        |
 | `llmResults`        | LlmResult[]       | Results from each model              |
-| `inputContexts`     | InputContext[]     | User-provided context                |
+| `inputContexts`     | InputContext[]    | User-provided context                |
 | `synthesizedResult` | string            | Final synthesized content            |
 | `synthesisError`    | string            | Synthesis failure message            |
 | `partialFailure`    | PartialFailure    | Partial failure metadata             |
@@ -321,7 +329,7 @@ const SynthesisContextSchema = z.object({
 | `mainPageId`       | string                                | Notion main research page ID |
 | `mainPageUrl`      | string                                | Notion main page URL         |
 | `llmReportPageIds` | `{ model: string; pageId: string }[]` | LLM report child page IDs    |
-| `exportedAt`       | string (ISO 8601)                     | Export timestamp              |
+| `exportedAt`       | string (ISO 8601)                     | Export timestamp             |
 
 ### ResearchExportSettings
 
@@ -337,9 +345,9 @@ const SynthesisContextSchema = z.object({
 
 The `extractModelPreferences` use case filters models based on:
 
-1. **API Key Availability** - Only models for which the user has configured API keys
-2. **One Per Provider** - Maximum one model from each provider (first match wins)
-3. **Synthesis Eligibility** - Synthesis model must be in `SYNTHESIS_MODELS` list
+1. **API Key Availability** — Only models for which the user has configured API keys
+2. **One Per Provider** — Maximum one model from each provider (first match wins)
+3. **Synthesis Eligibility** — Synthesis model must be in `SYNTHESIS_MODELS` list
 
 ```typescript
 // Available research models
@@ -382,7 +390,7 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 
 | Service          | Purpose                                                             |
 | ---------------- | ------------------------------------------------------------------- |
-| `user-service`   | API keys, LLM usage, LLM client via `@intexuraos/internal-clients` |
+| `user-service`   | API keys, LLM usage, LLM client via `@intexuraos/internal-clients`  |
 | `image-service`  | Cover image generation                                              |
 | `notion-service` | Notion OAuth tokens and page previews                               |
 
@@ -404,12 +412,12 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 | Provider   | Models                                                                     |
 | ---------- | -------------------------------------------------------------------------- |
 | Anthropic  | `claude-opus-4.5`, `claude-sonnet-4.5`                                     |
-| OpenAI     | `gpt-5.2`, `o4-mini-deep-research`                                        |
+| OpenAI     | `gpt-5.2`, `o4-mini-deep-research`                                         |
 | Google     | `gemini-2.5-pro`, `gemini-2.5-flash` (research); `gemini-2.0-flash` (fast) |
 | Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research`                                |
-| Zai        | `glm-4.7`, `glm-4.7-flash`                                                |
+| Zai        | `glm-4.7`, `glm-4.7-flash`                                                 |
 
-**Fast model** (`gemini-2.0-flash`): Used for title generation and context inference via the platform Gemini key. Not available as a user-selectable research model.
+**Fast model** (`gemini-2.0-flash`): Used for title generation, context inference, and input validation via the platform Gemini key. Not available as a user-selectable research model.
 
 ### Shared Packages
 
@@ -442,19 +450,19 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 | `INTEXURAOS_NOTION_SERVICE_URL`            | Yes      | Notion-service base URL                                   |
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Yes      | Public base URL for images                                |
 | `INTEXURAOS_IMAGE_SERVICE_URL`             | Yes      | Image-service base URL                                    |
-| `INTEXURAOS_SHARE_BASE_URL`               | Yes      | Base URL for shared research                              |
+| `INTEXURAOS_SHARE_BASE_URL`                | Yes      | Base URL for shared research                              |
 | `INTEXURAOS_SHARED_CONTENT_BUCKET`         | Yes      | GCS bucket for shared research                            |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`   | Yes      | WhatsApp send topic                                       |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes      | WhatsApp send topic                                       |
 | `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | Yes      | Research process queue topic                              |
-| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`        | Yes      | LLM call queue topic                                      |
+| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Yes      | LLM call queue topic                                      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`            | No       | Platform Gemini key; enables `gemini-2.0-flash` fallback  |
-| `INTEXURAOS_ZAI_APP_API_KEY`              | No       | Platform Zai key; enables `glm-4.7-flash` fallback        |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`          | No       | Dash0 OTLP endpoint; enables distributed tracing          |
-| `INTEXURAOS_SENTRY_DSN`                   | No       | Sentry DSN for error reporting                             |
+| `INTEXURAOS_ZAI_APP_API_KEY`               | No       | Platform Zai key; enables `glm-4.7-flash` fallback        |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`           | No       | Dash0 OTLP endpoint; enables distributed tracing          |
+| `INTEXURAOS_SENTRY_DSN`                    | No       | Sentry DSN for error reporting                            |
 
 ## Gotchas
 
-**Platform API key fallbacks**: When a user has no API key for their preferred model's provider, `getLlmClient` in `@intexuraos/internal-clients` tries platform keys in order: Gemini (`gemini-2.0-flash`) -> Zai (`glm-4.7-flash`). Both platform keys are optional. If neither is set, the service returns `NO_API_KEY` error.
+**Platform API key fallbacks**: When a user has no API key for their preferred model's provider, `getLlmClient` in `@intexuraos/internal-clients` tries platform keys in order: Gemini (`gemini-2.0-flash`) then Zai (`glm-4.7-flash`). Both platform keys are optional. If neither is set, the service returns `NO_API_KEY` error.
 
 **Idempotent LLM calls**: The `process-llm-call` endpoint checks if an LLM result is already `completed` or `failed` and skips processing if so. This enables safe retry without duplication.
 
@@ -493,6 +501,8 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 **Auth0 namespaced claims**: Auth0 Actions add user claims under `https://intexuraos.cloud/` namespace for API audience tokens. The service tries namespaced keys first, then falls back to bare `name`/`email`.
 
 **Prompt versioning**: All prompts follow semver versioning. The v3.1.0 prompt audit bumped versions for improved prompts with safer fallbacks and XML delimiters.
+
+**Input improvement structural checks**: The `validateImprovedPrompt` method rejects structurally invalid LLM improvements. Responses that are too long, contain markdown fences, unwanted prefixes ("here is", "the improved"), JSON markers, or explanatory text ("explanation:", "reasoning:") trigger the repair pattern automatically.
 
 ## File Structure
 
@@ -540,7 +550,7 @@ apps/research-agent/src/
       PerplexityAdapter.ts          # Perplexity API integration
       GlmAdapter.ts                 # GLM (Zai) API integration
       ContextInferenceAdapter.ts    # Zod-validated context inference
-      InputValidationAdapter.ts     # Zod-validated input validation
+      InputValidationAdapter.ts     # Zod-validated input validation + structural checks
       LlmAdapterFactory.ts          # Factory pattern
     research/
       FirestoreResearchRepository.ts  # Research persistence

@@ -8,7 +8,7 @@ import type { Action } from '../domain/models/action.js';
 import {
   FakeActionRepository,
   FakeWhatsAppSendPublisher,
-  FakeCalendarPreviewPublisher,
+  FakeCalendarServiceClient,
 } from './fakes.js';
 
 import { createMockLogger } from './fakes.js';
@@ -45,12 +45,12 @@ const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreated
 describe('handleCalendarAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
-  let fakeCalendarPreviewPublisher: FakeCalendarPreviewPublisher;
+  let fakeCalendarServiceClient: FakeCalendarServiceClient;
 
   beforeEach(() => {
     fakeActionRepository = new FakeActionRepository();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
-    fakeCalendarPreviewPublisher = new FakeCalendarPreviewPublisher();
+    fakeCalendarServiceClient = new FakeCalendarServiceClient();
   });
 
   it('returns ok when action lookup returns null (idempotent)', async () => {
@@ -62,7 +62,7 @@ describe('handleCalendarAction usecase', () => {
       {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
-        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        calendarServiceClient: fakeCalendarServiceClient,
         webAppUrl: 'https://app.test.com',
         logger: createMockLogger(),
       }
@@ -72,7 +72,7 @@ describe('handleCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by isOk() on line above
     }
   });
 
@@ -85,7 +85,7 @@ describe('handleCalendarAction usecase', () => {
       {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
-        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        calendarServiceClient: fakeCalendarServiceClient,
         webAppUrl: 'https://app.test.com',
         logger: createMockLogger(),
       }
@@ -105,7 +105,7 @@ describe('handleCalendarAction usecase', () => {
       {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
-        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        calendarServiceClient: fakeCalendarServiceClient,
         webAppUrl: 'https://app.test.com',
         logger: createMockLogger(),
       }
@@ -126,7 +126,7 @@ describe('handleCalendarAction usecase', () => {
       {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
-        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        calendarServiceClient: fakeCalendarServiceClient,
         webAppUrl: 'https://app.test.com',
         logger: createMockLogger(),
       }
@@ -147,7 +147,7 @@ describe('handleCalendarAction usecase', () => {
       {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
-        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        calendarServiceClient: fakeCalendarServiceClient,
         webAppUrl: 'https://app.test.com',
         logger: createMockLogger(),
       }
@@ -172,7 +172,7 @@ describe('handleCalendarAction usecase', () => {
       {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
-        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        calendarServiceClient: fakeCalendarServiceClient,
         webAppUrl: 'https://app.test.com',
         logger: createMockLogger(),
       }
@@ -200,7 +200,7 @@ describe('handleCalendarAction usecase', () => {
       {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
-        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        calendarServiceClient: fakeCalendarServiceClient,
         webAppUrl: 'https://app.test.com',
         logger: createMockLogger(),
       }
@@ -228,7 +228,7 @@ describe('handleCalendarAction usecase', () => {
       {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
-        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        calendarServiceClient: fakeCalendarServiceClient,
         webAppUrl: 'https://app.test.com',
         logger: createMockLogger(),
       }
@@ -263,7 +263,7 @@ describe('handleLinearAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by isOk() on line above
     }
   });
 

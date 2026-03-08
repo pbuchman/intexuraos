@@ -1,10 +1,10 @@
-# Actions Agent - Tutorial
+# Actions Agent — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** IntexuraOS development environment running, Auth0 access token
 > **You will learn:** How to list, approve, execute, and manage actions through the actions-agent API
 
-This tutorial walks you through the actions-agent service, from basic listing to advanced action management including WhatsApp approval workflows, code action dispatching, and duplicate resolution.
+This tutorial walks you through the actions-agent service, from basic listing to advanced action management including WhatsApp approval workflows, code action dispatching, calendar previews, and duplicate resolution.
 
 ---
 
@@ -16,7 +16,7 @@ This tutorial walks you through the actions-agent service, from basic listing to
 
 ---
 
-## Part 1: Hello World - List Your Actions (5 minutes)
+## Part 1: Hello World — List Your Actions (5 minutes)
 
 The simplest interaction is listing actions for the authenticated user.
 
@@ -123,6 +123,31 @@ Bot: "Approved! Processing your research: 'Research machine learning trends'"
 Bot: "Your research is ready! View it here: [link]"
 ```
 
+### Calendar Actions with Rich Previews
+
+Calendar approval messages include a rich preview of the event details:
+
+```
+You: "Schedule team standup tomorrow at 9am for 30 minutes in Room A"
+Bot: "Calendar Event
+
+     *Team Standup*
+     Mon, Mar 10 . 9:00 AM - 9:30 AM
+     30 minutes
+     Room A
+
+     Review: https://app.intexuraos.com/#/inbox?action=def456"
+     [Approve] [Reject]
+You: *tap Approve*
+Bot: "Calendar Event Created
+
+     *Team Standup*
+     Mon, Mar 10 . 9:00 AM - 9:30 AM
+     30 minutes
+     Room A"
+     [View in Calendar]   <-- tappable link to Google Calendar
+```
+
 ### If Buttons Expire
 
 WhatsApp interactive buttons can expire. If you send a text reply instead of tapping a button, the system automatically re-sends fresh buttons:
@@ -133,7 +158,7 @@ Bot: "Please use the buttons to approve or reject. If buttons expired, here they
      [Approve] [Reject]
 ```
 
-> **Note:** As of v4.0.0, text-based approval (typing "yes"/"no") is no longer supported. The system always re-sends buttons if no button was tapped. No LLM API key is required.
+> **Note:** Text-based approval (typing "yes"/"no") is not supported. The system always re-sends buttons if no button was tapped. No LLM API key is required.
 
 ### Auto-Execution
 
@@ -256,7 +281,7 @@ When processing Pub/Sub events, if the URL action type does not match the event:
 
 ---
 
-## Part 5: Real-World Scenario - Duplicate Link Resolution (5 minutes)
+## Part 5: Real-World Scenario — Duplicate Link Resolution (5 minutes)
 
 When creating a bookmark action, if the URL already exists, the action fails with an `existingBookmarkId` in the payload. Here is how to handle it:
 
@@ -317,6 +342,7 @@ curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
       "end": "2026-01-25T09:30:00Z",
       "location": "Conference Room A",
       "isAllDay": false,
+      "duration": "30 minutes",
       "reasoning": "Parsed 'Team standup tomorrow at 9am' with 30-minute default duration",
       "generatedAt": "2026-01-24T10:00:00Z"
     }
@@ -324,9 +350,11 @@ curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
 }
 ```
 
+> **Note:** Calendar previews are generated synchronously when the approval message is sent. The preview is included directly in the WhatsApp approval message, so you may not need to fetch it via API unless displaying it in a different UI.
+
 ---
 
-## Part 7: Code Actions (v3.0.0)
+## Part 7: Code Actions
 
 Code actions dispatch tasks to code-agent (Claude Code). They use interactive WhatsApp buttons with three options.
 
@@ -339,6 +367,18 @@ Code actions dispatch tasks to code-agent (Claude Code). They use interactive Wh
    - **Convert to Issue** (reject this action but create a Linear issue instead)
 3. Tap **Approve** to dispatch to code-agent
 4. Receive confirmation and later a completion message with PR/branch details
+
+### Two-Phase Code Tasks (INT-628)
+
+Code tasks can operate in two phases: design and implementation. After the design phase completes, you receive a WhatsApp message with a **Proceed to Implementation** button:
+
+```
+Bot: "Design phase complete for your task. Ready to start implementation?"
+     [Proceed to Implementation] [Cancel Task] [View Task]
+You: *tap Proceed to Implementation*
+Bot: "Starting implementation for your task!
+      You'll receive another message when it's complete."
+```
 
 ### Cancelling a Running Code Task
 
@@ -368,13 +408,14 @@ Error codes returned when cancellation fails:
 | Type correction not working     | Action stays same type after PATCH      | Ensure action is in `pending` or `awaiting_approval` status  |
 | Batch returns wrong actions     | Actions from other users                | Security check filters by userId; verify correct IDs         |
 | WhatsApp notifications not sent | Action completes silently               | Check `whatsapp-send` topic configuration                    |
-| WhatsApp approval not working   | Text reply ignored, buttons re-sent     | Expected behavior in v4.0.0 -- tap a button instead          |
+| WhatsApp approval not working   | Text reply ignored, buttons re-sent     | Expected behavior — tap a button instead                     |
 | Race condition errors           | Duplicate notifications                 | System handles this automatically with `updateStatusIf`      |
-| Calendar preview returns null   | No preview available                    | Wait for calendar-agent to generate preview                  |
+| Calendar preview returns null   | No preview available                    | Preview may have failed; check calendar-agent logs           |
 | Code task worker unavailable    | Action marked as failed                 | code-agent has no available workers; retry later             |
 | Duplicate code task             | Already exists message                  | Task was already created (idempotent via approvalEventId)    |
 | Interactive buttons not showing | Plain text message instead of buttons   | WhatsApp client may not support interactive messages         |
 | Action deleted, approval fails  | WhatsApp message: "no longer available" | Action was deleted or expired; this is handled gracefully    |
+| Proceed implementation fails    | Error message about status/labels       | Task must be in designed status with required Linear labels  |
 
 ---
 
@@ -439,5 +480,5 @@ Result: Only one approval is processed, no duplicate notifications
 ## Next Steps
 
 1. Explore the [Technical Reference](technical.md) for full API details and domain model documentation
-2. Read about the [approval flow architecture](technical.md#handleapprovalreply-v200-redesigned-in-v400) for deeper understanding
+2. Read about the [approval flow architecture](technical.md#handleapprovalreply) for deeper understanding
 3. Check the [Agent Interface](agent.md) for machine-readable integration specs

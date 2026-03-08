@@ -805,4 +805,173 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       }
     });
   });
+
+  describe('findReviewComments()', () => {
+    it('should return comments matching the review ID', async () => {
+      const matchingEvent = {
+        githubEventId: 555,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request_review_comment',
+        action: 'created',
+        senderLogin: 'reviewer',
+        senderId: 333,
+        senderType: 'User',
+        title: null,
+        body: 'Fix this line',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date('2024-01-02T00:00:00Z'),
+        processedAt: new Date('2024-01-02T00:05:00Z'),
+        payload: {
+          comment: {
+            id: 100,
+            pull_request_review_id: 9999,
+            path: 'src/index.ts',
+            line: 42,
+            body: 'Fix this line',
+            user: { login: 'reviewer' },
+          },
+        },
+      };
+
+      const doc = createMockDocSnapshot('doc1', matchingEvent);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findReviewComments('intexuraos/test-repo', 42, 9999);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.body).toBe('Fix this line');
+        expect(mockQuery.where).toHaveBeenCalledWith('eventType', '==', 'pull_request_review_comment');
+        expect(mockQuery.orderBy).toHaveBeenCalledWith('createdAt', 'asc');
+        expect(mockQuery.limit).toHaveBeenCalledWith(50);
+      }
+    });
+
+    it('should filter out comments from different reviews', async () => {
+      const matchingEvent = {
+        githubEventId: 555,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request_review_comment',
+        action: 'created',
+        senderLogin: 'reviewer',
+        senderId: 333,
+        senderType: 'User',
+        title: null,
+        body: 'Matching comment',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date('2024-01-02T00:00:00Z'),
+        processedAt: new Date('2024-01-02T00:05:00Z'),
+        payload: {
+          comment: { id: 100, pull_request_review_id: 9999, path: 'a.ts', line: 1, body: 'Matching', user: { login: 'reviewer' } },
+        },
+      };
+
+      const nonMatchingEvent = {
+        ...matchingEvent,
+        githubEventId: 556,
+        body: 'Different review comment',
+        payload: {
+          comment: { id: 101, pull_request_review_id: 8888, path: 'b.ts', line: 5, body: 'Different', user: { login: 'other' } },
+        },
+      };
+
+      const doc1 = createMockDocSnapshot('doc1', matchingEvent);
+      const doc2 = createMockDocSnapshot('doc2', nonMatchingEvent);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc1, doc2])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findReviewComments('intexuraos/test-repo', 42, 9999);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.body).toBe('Matching comment');
+      }
+    });
+
+    it('should return empty array when no comments match', async () => {
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findReviewComments('intexuraos/test-repo', 42, 9999);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+    });
+
+    it('should handle Firestore errors', async () => {
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockRejectedValue(new Error('Query failed')),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findReviewComments('intexuraos/test-repo', 42, 9999);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+        expect(mockLogger.error).toHaveBeenCalled();
+      }
+    });
+  });
 });

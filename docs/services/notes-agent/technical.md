@@ -106,8 +106,8 @@ sequenceDiagram
 
 ### Internal Endpoints
 
-| Method | Path              | Description                       | Auth            | Request Body                                                | Response          |
-| ------ | ----------------- | --------------------------------- | --------------- | ----------------------------------------------------------- | ----------------- |
+| Method | Path              | Description                       | Auth            | Request Body                                                  | Response          |
+| ------ | ----------------- | --------------------------------- | --------------- | ------------------------------------------------------------- | ----------------- |
 | POST   | `/internal/notes` | Create note from internal service | X-Internal-Auth | `{ userId, title, content, tags, source, sourceId, status? }` | ServiceFeedback   |
 
 **Internal response shape:** `ServiceFeedback` -- `{ status: 'completed' | 'failed', message, resourceUrl?, errorCode? }` -- not a raw Note object.
@@ -124,24 +124,24 @@ sequenceDiagram
 
 ### Note
 
-| Field       | Type                  | Description                                   |
-| ----------- | --------------------- | --------------------------------------------- |
-| `id`        | `string`              | Auto-generated Firestore document ID          |
-| `userId`    | `string`              | Owner user ID (from JWT `sub` or request body)|
-| `title`     | `string`              | Note title (required, min length 1)           |
-| `content`   | `string`              | Note content (can be empty string)            |
-| `tags`      | `string[]`            | User-defined tags for organization            |
-| `status`    | `'draft' \| 'active'` | Draft or active (defaults to `'active'`)      |
-| `source`    | `string`              | Source system (e.g. "whatsapp", "web", "test")|
-| `sourceId`  | `string`              | ID in the source system                       |
-| `createdAt` | `Date`                | Creation timestamp                            |
-| `updatedAt` | `Date`                | Last update timestamp                         |
+| Field       | Type                  | Description                                    |
+| ----------- | --------------------- | ---------------------------------------------- |
+| `id`        | `string`              | Auto-generated Firestore document ID           |
+| `userId`    | `string`              | Owner user ID (from JWT `sub` or request body) |
+| `title`     | `string`              | Note title (required, min length 1)            |
+| `content`   | `string`              | Note content (can be empty string)             |
+| `tags`      | `string[]`            | User-defined tags for organization             |
+| `status`    | `'draft' \            | 'active'`                                      | Draft or active (defaults to `'active'`) |
+| `source`    | `string`              | Source system (e.g. "whatsapp", "web", "test") |
+| `sourceId`  | `string`              | ID in the source system                        |
+| `createdAt` | `Date`                | Creation timestamp                             |
+| `updatedAt` | `Date`                | Last update timestamp                          |
 
 ### NoteStatus Values
 
-| Status   | Meaning                                    |
-| -------- | ------------------------------------------ |
-| `active` | Default status for all notes               |
+| Status   | Meaning                                           |
+| -------- | ------------------------------------------------- |
+| `active` | Default status for all notes                      |
 | `draft`  | In-progress note (set via internal endpoint only) |
 
 ### CreateNoteInput
@@ -152,29 +152,29 @@ sequenceDiagram
 | `title`    | `string`              | Yes                  |
 | `content`  | `string`              | Yes                  |
 | `tags`     | `string[]`            | Yes                  |
-| `status`   | `'draft' \| 'active'` | No (default: active) |
+| `status`   | `'draft' \            | 'active'`            | No (default: active) |
 | `source`   | `string`              | Yes                  |
 | `sourceId` | `string`              | Yes                  |
 
 ### UpdateNoteInput
 
-| Field     | Type     | Required |
-| --------- | -------- | -------- |
-| `title`   | `string` | No       |
-| `content` | `string` | No       |
-| `tags`    | `string[]` | No     |
+| Field     | Type       | Required |
+| --------- | ---------- | -------- |
+| `title`   | `string`   | No       |
+| `content` | `string`   | No       |
+| `tags`    | `string[]` | No       |
 
 **Note:** `status`, `source`, `sourceId`, and `userId` cannot be updated via the PATCH endpoint.
 
 ### Error Codes
 
-| Code            | Source         | HTTP | Meaning                                    |
-| --------------- | -------------- | ---- | ------------------------------------------ |
-| `NOT_FOUND`     | Repository     | 404  | Note does not exist                        |
-| `STORAGE_ERROR` | Repository     | 500  | Firestore operation failed                 |
-| `FORBIDDEN`     | Use case       | 403  | Requesting user does not own the note      |
-| `UNAUTHORIZED`  | Auth plugin    | 401  | Missing or invalid JWT / internal auth     |
-| `INTERNAL_ERROR`| Route handler  | 500  | Catch-all for unexpected repository errors |
+| Code             | Source         | HTTP | Meaning                                    |
+| ---------------- | -------------- | ---- | ------------------------------------------ |
+| `NOT_FOUND`      | Repository     | 404  | Note does not exist                        |
+| `STORAGE_ERROR`  | Repository     | 500  | Firestore operation failed                 |
+| `FORBIDDEN`      | Use case       | 403  | Requesting user does not own the note      |
+| `UNAUTHORIZED`   | Auth plugin    | 401  | Missing or invalid JWT / internal auth     |
+| `INTERNAL_ERROR` | Route handler  | 500  | Catch-all for unexpected repository errors |
 
 ## Dependencies
 
@@ -194,29 +194,29 @@ sequenceDiagram
 
 ### Package Dependencies
 
-| Package                    | Purpose                                     |
-| -------------------------- | ------------------------------------------- |
-| `@intexuraos/common-core`  | Result types, error message extraction      |
-| `@intexuraos/common-http`  | Auth plugin, request logging, reply helpers |
-| `@intexuraos/http-contracts` | Core OpenAPI schema registration          |
-| `@intexuraos/http-server`  | Health checks, env validation               |
-| `@intexuraos/infra-firestore` | Firestore singleton client               |
-| `@intexuraos/infra-sentry` | Sentry init, log stream, error handler      |
-| `@intexuraos/infra-otel`   | OpenTelemetry instrumentation               |
+| Package                       | Purpose                                     |
+| ----------------------------- | ------------------------------------------- |
+| `@intexuraos/common-core`     | Result types, error message extraction      |
+| `@intexuraos/common-http`     | Auth plugin, request logging, reply helpers |
+| `@intexuraos/http-contracts`  | Core OpenAPI schema registration            |
+| `@intexuraos/http-server`     | Health checks, env validation               |
+| `@intexuraos/infra-firestore` | Firestore singleton client                  |
+| `@intexuraos/infra-sentry`    | Sentry init, log stream, error handler      |
+| `@intexuraos/infra-otel`      | OpenTelemetry instrumentation               |
 
 ## Configuration
 
-| Variable                         | Required | Description                     |
-| -------------------------------- | -------- | ------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | GCP project for Firestore       |
-| `INTEXURAOS_AUTH_JWKS_URL`       | Yes      | JWKS endpoint for JWT auth      |
-| `INTEXURAOS_AUTH_ISSUER`         | Yes      | JWT issuer                      |
-| `INTEXURAOS_AUTH_AUDIENCE`       | Yes      | JWT audience                    |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Token for internal service auth |
-| `INTEXURAOS_SENTRY_DSN`         | Yes      | Sentry error reporting DSN      |
+| Variable                         | Required | Description                             |
+| -------------------------------- | -------- | --------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | GCP project for Firestore               |
+| `INTEXURAOS_AUTH_JWKS_URL`       | Yes      | JWKS endpoint for JWT auth              |
+| `INTEXURAOS_AUTH_ISSUER`         | Yes      | JWT issuer                              |
+| `INTEXURAOS_AUTH_AUDIENCE`       | Yes      | JWT audience                            |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Token for internal service auth         |
+| `INTEXURAOS_SENTRY_DSN`          | Yes      | Sentry error reporting DSN              |
 | `INTEXURAOS_ENVIRONMENT`         | No       | Environment name (default: development) |
-| `PORT`                           | No       | Server port (default: 8080)     |
-| `LOG_LEVEL`                      | No       | Pino log level (default: info)  |
+| `PORT`                           | No       | Server port (default: 8080)             |
+| `LOG_LEVEL`                      | No       | Pino log level (default: info)          |
 
 ## Gotchas
 

@@ -1,6 +1,6 @@
-# Image Service -- Tutorial
+# Image Service — Tutorial
 
-> **Time:** 15-20 minutes
+> **Time:** 15–20 minutes
 > **Prerequisites:** Node.js 22+, IntexuraOS development environment
 > **You will learn:** How to generate AI images and optimized prompts using image-service internal endpoints
 
@@ -24,7 +24,7 @@ Before starting, ensure you have:
 
 - [ ] IntexuraOS development environment running (services accessible via localhost)
 - [ ] Internal auth token (`INTEXURAOS_INTERNAL_AUTH_TOKEN`)
-- [ ] A valid user ID (API keys optional -- platform fallback keys used if user has none configured)
+- [ ] A valid user ID (API keys optional — platform fallback keys used if user has none configured)
 
 ---
 
@@ -56,12 +56,9 @@ curl -X POST http://localhost:8120/internal/images/prompts/generate \
     "prompt": "A professional visualization of artificial intelligence research, featuring glowing neural network nodes with luminous blue connections against a dark gradient background, abstract data streams and geometric layers suggesting complexity and intelligence, minimalist scientific illustration with deep blue and purple tones, 16:9 wide format",
     "negativePrompt": "blurry, low quality, text on image, watermark, photorealistic people, corporate clipart, busy background, logos",
     "parameters": {
-      "aspectRatio": "16:9",
       "framing": "centered composition with radial depth",
-      "textOnImage": "none",
       "realism": "cinematic illustration",
-      "people": "no people",
-      "logosTrademarks": "none"
+      "people": "no people"
     }
   }
 }
@@ -69,7 +66,7 @@ curl -X POST http://localhost:8120/internal/images/prompts/generate \
 
 ### What Just Happened?
 
-The service sent your text to the Gemini 2.5 Pro LLM, which analyzed the content and generated a structured prompt optimized for image generation. The response includes not just the prompt, but also a title, visual summary, negative prompt (what to avoid), and rendering parameters. Use the `data.prompt` field when calling the image generation endpoint.
+The service sent your text to the Gemini 2.5 Pro LLM, which analyzed the content and generated a structured prompt optimized for image generation. The response includes a title, visual summary, the generation prompt itself, a negative prompt (what to avoid), and rendering parameters covering framing, realism style, and people directives. Use the `data.prompt` field when calling the image generation endpoint.
 
 **Checkpoint:** You should see a `success: true` response with all five fields populated in `data`.
 
@@ -205,7 +202,7 @@ HTTP status: 401
 
 ---
 
-## Part 4: Real-World Scenario -- Research Cover Image (10 minutes)
+## Part 4: Real-World Scenario — Research Cover Image (10 minutes)
 
 Complete end-to-end flow for generating and managing a research cover image.
 
@@ -268,14 +265,14 @@ Both the GCS objects (full-size PNG and thumbnail JPEG) and the Firestore metada
 
 ## Troubleshooting
 
-| Problem                  | Symptom                           | Solution                                              |
-| ------------------------ | --------------------------------- | ----------------------------------------------------- |
-| API key not found        | 400 INVALID_REQUEST               | User must add API key or configure platform fallback  |
-| GCS upload fails         | 500 INTERNAL_ERROR                | Check GCS bucket permissions and INTEXURAOS_IMAGE_BUCKET |
-| Image generation timeout | 502 DOWNSTREAM_ERROR              | Provider is slow; retry with backoff                  |
-| Auth failure             | 401 UNAUTHORIZED                  | Check X-Internal-Auth header value                    |
-| Prompt parse error       | 502 DOWNSTREAM_ERROR (PARSE_ERROR) | LLM returned malformed JSON; retry or switch model    |
-| User-service unreachable | 502 DOWNSTREAM_ERROR              | Check user-service health and INTEXURAOS_USER_SERVICE_URL |
+| Problem                  | Symptom                            | Solution                                                  |
+| ------------------------ | ---------------------------------- | --------------------------------------------------------- |
+| API key not found        | 400 INVALID_REQUEST                | User must add API key or configure platform fallback      |
+| GCS upload fails         | 500 INTERNAL_ERROR                 | Check GCS bucket permissions and INTEXURAOS_IMAGE_BUCKET  |
+| Image generation timeout | 502 DOWNSTREAM_ERROR               | Provider is slow; retry with backoff                      |
+| Auth failure             | 401 UNAUTHORIZED                   | Check X-Internal-Auth header value                        |
+| Prompt parse error       | 502 DOWNSTREAM_ERROR (PARSE_ERROR) | LLM returned malformed JSON; retry or switch model        |
+| User-service unreachable | 502 DOWNSTREAM_ERROR               | Check user-service health and INTEXURAOS_USER_SERVICE_URL |
 
 ---
 
@@ -294,7 +291,7 @@ Now that you understand the basics:
 Test your understanding:
 
 1. **Easy:** Generate a prompt from a short text and examine the structured response fields
-2. **Medium:** Generate a prompt, then use the returned `data.prompt` to create an image with both OpenAI and Google models -- compare the results
+2. **Medium:** Generate a prompt, then use the returned `data.prompt` to create an image with both OpenAI and Google models — compare the results
 3. **Hard:** Build a retry workflow that handles rate limiting (429) with exponential backoff and falls back to an alternative provider when the primary provider is unavailable
 
 <details>
@@ -313,7 +310,7 @@ curl -X POST http://localhost:8120/internal/images/prompts/generate \
   }'
 ```
 
-Examine the response: `title` (max 10 words), `visualSummary` (1 sentence), `prompt` (80-180 words), `negativePrompt` (20-80 words), and `parameters` with fixed values for `aspectRatio` ("16:9"), `textOnImage` ("none"), and `logosTrademarks` ("none").
+Examine the response: `title` (max 10 words), `visualSummary` (1 sentence), `prompt` (80–180 words), `negativePrompt` (20–80 words), and `parameters` with `framing` (LLM-generated), `realism` (one of three styles), and `people` (LLM-generated directive).
 
 ### Exercise 2: Compare Providers
 

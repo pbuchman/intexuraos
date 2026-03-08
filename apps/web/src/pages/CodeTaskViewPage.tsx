@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
+  Archive,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -12,15 +13,32 @@ import {
   RotateCcw,
   Send,
   StopCircle,
+  Trash2,
   WifiOff,
   XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
+import { MarkdownContent } from '@/components/MarkdownContent';
 import { PREventsGroup } from '@/components/PREventsGroup';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import type { LogLine, MessageStatus } from '@/hooks';
 import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus, WorkerStatusTag } from '@/types';
+
+// --- Worker type config ---
+
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+
+const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'];
+
+const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
+  auto: 'Auto',
+  opus: 'Opus',
+  sonnet: 'Sonnet',
+  minimax: 'Minimax',
+  glm: 'GLM',
+  'qwen3.5-plus': 'Qwen 3.5 Plus',
+};
 
 // --- Status badge config ---
 
@@ -32,21 +50,15 @@ interface StatusConfig {
 }
 
 const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
+  queued: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Queued', icon: Clock },
   dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched', icon: Clock },
   running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running', icon: Loader2 },
-  designed: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Designed', icon: CheckCircle2 },
+  planned: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Planned', icon: CheckCircle2 },
   implemented: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Implemented', icon: CheckCircle2 },
   failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed', icon: XCircle },
   interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted', icon: AlertCircle },
   cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled', icon: XCircle },
-};
-
-// --- Badge style lookup maps ---
-
-const ISSUE_TYPE_STYLES: Record<string, string> = {
-  feature: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
-  bug: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
-  refactor: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+  archived: { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-500 dark:text-slate-500', label: 'Archived', icon: Archive },
 };
 
 const LINEAR_STATE_STYLES: Record<string, string> = {
@@ -55,7 +67,6 @@ const LINEAR_STATE_STYLES: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
 };
 
-const DEFAULT_BADGE_STYLE = 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
 const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
 
 const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
@@ -114,27 +125,59 @@ export function CodeTaskViewPage(): React.JSX.Element {
     cancelling, cancelError, retrying, retryError,
     sending, sendError, messageStatus,
     implementing, implementError, startImplementation,
+    deleting, deleteError, deleteTask, clearDeleteError,
     cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
 
+  // Worker type selection state
+  const [selectedWorkerType, setSelectedWorkerType] = useState<WorkerType>('auto');
+  const [showRetryDropdown, setShowRetryDropdown] = useState(false);
+  const [showImplementDropdown, setShowImplementDropdown] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Set default worker type from task when it loads
+  useEffect(() => {
+    if (task?.workerType !== undefined) {
+      setSelectedWorkerType(task.workerType);
+    }
+  }, [task?.workerType]);
+
   const handleRetry = useCallback(async () => {
+    setShowRetryDropdown(false);
     try {
-      const newId = await retryTask();
+      const newId = await retryTask(selectedWorkerType);
       void navigate(`/code-tasks/${newId}`);
     } catch {
       // retryTask already sets retryError state
     }
-  }, [retryTask, navigate]);
+  }, [retryTask, navigate, selectedWorkerType]);
 
   const handleImplement = useCallback(async () => {
+    setShowImplementDropdown(false);
     try {
-      const newId = await startImplementation();
+      const newId = await startImplementation(selectedWorkerType);
       void navigate(`/code-tasks/${newId}`);
     } catch {
       // startImplementation already sets implementError state
     }
-  }, [startImplementation, navigate]);
+  }, [startImplementation, navigate, selectedWorkerType]);
+
+  const handleDelete = useCallback(async (): Promise<void> => {
+    try {
+      await deleteTask();
+      void navigate('/code-tasks');
+    } catch {
+      // deleteTask already sets deleteError state
+    }
+  }, [deleteTask, navigate]);
+
+  // Reset delete confirmation state when the task is no longer in a retryable status
+  useEffect(() => {
+    if (task !== null && task.status !== 'failed' && task.status !== 'cancelled' && task.status !== 'interrupted') {
+      setShowDeleteConfirm(false);
+    }
+  }, [task?.status]);
 
   if (loading) {
     return (
@@ -156,14 +199,14 @@ export function CodeTaskViewPage(): React.JSX.Element {
     );
   }
 
-  const isActive = task.status === 'running' || task.status === 'dispatched';
+  const isActive = task.status === 'running' || task.status === 'dispatched' || task.status === 'queued';
   const isRetryable = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
   const taskWorkerStatus = workersStatus !== null
     ? workersStatus.workers.find((w) => w.name === task.workerLocation)
     : undefined;
   const isTaskWorkerOnline = taskWorkerStatus === undefined || taskWorkerStatus.healthy;
   const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
-  const isImplementable = task.status === 'designed' &&
+  const isImplementable = task.status === 'planned' &&
     task.implementationTaskId === undefined &&
     task.linearIssueId !== undefined;
 
@@ -173,16 +216,18 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
       <MemoActiveProgress task={task} />
 
-      {task.parentTaskId !== undefined && task.followUpReason === 'phase2_implement' ? (
+      {task.parentTaskId !== undefined && task.followUpReason === 'execution_implement' ? (
         <DesignTaskBanner
           parentTaskId={task.parentTaskId}
         />
       ) : null}
-      {task.executionPhase === 'design' && task.implementationTaskId !== undefined ? (
+      {task.agentType === 'planning' && task.implementationTaskId !== undefined ? (
         <ImplementationLinkBanner implementationTaskId={task.implementationTaskId} />
       ) : null}
 
       <MemoTaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
+
+      {task.result?.summary !== undefined && task.result.summary !== '' ? <MemoRunSummary summary={task.result.summary} /> : null}
 
       {task.result !== undefined ? <MemoTaskResult task={task} /> : null}
       {task.error !== undefined ? <MemoTaskError task={task} /> : null}
@@ -205,7 +250,14 @@ export function CodeTaskViewPage(): React.JSX.Element {
         implementing={implementing}
         implementError={implementError}
         {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
-        onImplement={handleImplement}
+        selectedWorkerType={selectedWorkerType}
+        originalWorkerType={task.workerType as WorkerType}
+        showDropdown={showImplementDropdown}
+        onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
+        onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowImplementDropdown(false); }}
+        onImplement={(): void => { void handleImplement(); }}
+        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
       />
 
       <MemoTaskActions
@@ -216,7 +268,21 @@ export function CodeTaskViewPage(): React.JSX.Element {
         isRetryable={isRetryable}
         retrying={retrying}
         retryError={retryError}
-        onRetry={handleRetry}
+        selectedWorkerType={selectedWorkerType}
+        originalWorkerType={task.workerType as WorkerType}
+        showDropdown={showRetryDropdown}
+        onToggleDropdown={(): void => { setShowRetryDropdown(!showRetryDropdown); }}
+        onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowRetryDropdown(false); }}
+        onRetry={(): void => { void handleRetry(); }}
+        deleting={deleting}
+        deleteError={deleteError}
+        showDeleteConfirm={showDeleteConfirm}
+        onShowDeleteConfirm={(): void => { setShowDeleteConfirm(true); }}
+        onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); clearDeleteError(); }}
+        onConfirmDelete={(): void => { void handleDelete(); }}
+        {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
+        {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
+        linksInNextSteps={isImplementable || task.implementationTaskId !== undefined}
       />
     </Layout>
   );
@@ -232,14 +298,14 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
     <div className="mb-6">
       <div className="min-h-[2.5rem] mt-1 flex flex-wrap items-center gap-2">
         {task.linearIssueId !== undefined ? (
-          (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+          task.linearIssue?.url !== undefined ? (
             <a
-              href={task.linearIssueUrl ?? task.linearIssue?.url}
+              href={task.linearIssue.url}
               target="_blank"
               rel="noopener noreferrer"
               className="text-lg font-medium text-blue-600 hover:underline dark:text-blue-400"
             >
-              {task.linearIssue?.identifier ?? task.linearIssueId}
+              {task.linearIssue.identifier}
             </a>
           ) : (
             <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
@@ -248,7 +314,7 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
           )
         ) : null}
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          {task.linearIssue?.title ?? task.linearIssueTitle ?? 'Code Task'}
+          {task.linearIssue?.title ?? 'Code Task'}
         </h2>
         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}>
           <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
@@ -261,11 +327,11 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
         {!isActiveStatus(task.status) ? (
           <span>Updated: {formatRelative(task.updatedAt)}</span>
         ) : null}
-        {task.executionPhase === 'design' ? (
+        {task.agentType === 'planning' ? (
           <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
-            Design
+            Planning
           </span>
-        ) : task.executionPhase === 'execution' ? (
+        ) : task.agentType === 'execution' ? (
           <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
             Execution
           </span>
@@ -276,20 +342,22 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
           {task.workerLocation}
         </span>
-
-        {task.linearIssueType !== undefined ? (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            ISSUE_TYPE_STYLES[task.linearIssueType] ?? DEFAULT_BADGE_STYLE
-          }`}>
-            {task.linearIssueType}
-          </span>
-        ) : null}
         {task.linearIssue?.state !== undefined ? (
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
             LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE
           }`}>
             {task.linearIssue.state.name}
           </span>
+        ) : null}
+        {task.linearIssue?.labels !== undefined && task.linearIssue.labels.length > 0 ? (
+          task.linearIssue.labels.map((label) => (
+            <span
+              key={label.id}
+              className="inline-flex items-center rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300"
+            >
+              {label.name}
+            </span>
+          ))
         ) : null}
         {task.linearIssue?.assignee !== undefined && task.linearIssue.assignee !== null ? (
           <span className="text-xs text-green-600 dark:text-green-400">
@@ -330,12 +398,43 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
 const MemoTaskHeader = memo(TaskHeader);
 
 function isActiveStatus(status: CodeTaskStatus): boolean {
-  return status === 'dispatched' || status === 'running';
+  return status === 'queued' || status === 'dispatched' || status === 'running';
+}
+
+function GitHubButton({ href }: { href: string }): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-600"
+    >
+      GitHub
+    </a>
+  );
+}
+
+function LinearButton({ href }: { href: string }): React.JSX.Element {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 rounded-lg border border-violet-600 bg-violet-700 px-4 py-2 text-sm font-semibold text-violet-200 transition-colors hover:bg-violet-600"
+    >
+      Linear
+    </a>
+  );
 }
 
 function TaskActions({
   isActive, cancelling, cancelError, onCancel,
-  isRetryable, retrying, retryError, onRetry,
+  isRetryable, retrying, retryError,
+  selectedWorkerType, originalWorkerType, showDropdown, onToggleDropdown, onSelectWorkerType,
+  onRetry,
+  deleting, deleteError, showDeleteConfirm,
+  onShowDeleteConfirm, onCancelDeleteConfirm, onConfirmDelete,
+  prUrl, linearIssueUrl, linksInNextSteps,
 }: {
   isActive: boolean;
   cancelling: boolean;
@@ -344,39 +443,140 @@ function TaskActions({
   isRetryable: boolean;
   retrying: boolean;
   retryError: string | null;
-  onRetry: () => Promise<void>;
+  selectedWorkerType: WorkerType;
+  originalWorkerType: WorkerType;
+  showDropdown: boolean;
+  onToggleDropdown: () => void;
+  onSelectWorkerType: (type: WorkerType) => void;
+  onRetry: () => void;
+  deleting: boolean;
+  deleteError: string | null;
+  showDeleteConfirm: boolean;
+  onShowDeleteConfirm: () => void;
+  onCancelDeleteConfirm: () => void;
+  onConfirmDelete: () => void;
+  prUrl?: string;
+  linearIssueUrl?: string;
+  linksInNextSteps: boolean;
 }): React.JSX.Element | null {
-  if (!isActive && !isRetryable && cancelError === null && retryError === null) return null;
+  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null && (linksInNextSteps || (prUrl === undefined && linearIssueUrl === undefined))) return null;
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3">
+    <div className="mt-4 flex flex-wrap items-stretch gap-3">
       {isActive ? (
-        <Button
-          variant="danger"
-          onClick={(): void => { void onCancel(); }}
-          disabled={cancelling}
-          isLoading={cancelling}
-        >
-          <StopCircle className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Cancel Task</span>
-        </Button>
+        <>
+          <Button
+            variant="danger"
+            onClick={(): void => { void onCancel(); }}
+            disabled={cancelling}
+            isLoading={cancelling}
+          >
+            <StopCircle className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Cancel Task</span>
+          </Button>
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+        </>
       ) : null}
       {isRetryable ? (
-        <Button
-          onClick={(): void => { void onRetry(); }}
-          disabled={retrying}
-          isLoading={retrying}
-          loadingText="Retrying..."
-        >
-          <RotateCcw className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Retry Task</span>
-        </Button>
+        showDeleteConfirm ? (
+          <div className="ml-auto flex items-center gap-3">
+            <p className="text-sm text-red-400">Delete this task permanently?</p>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={onConfirmDelete}
+              disabled={deleting}
+              isLoading={deleting}
+              loadingText="Deleting..."
+            >
+              Delete
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onCancelDeleteConfirm}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="relative flex">
+              <button
+                type="button"
+                onClick={onRetry}
+                disabled={retrying || deleting}
+                className="flex items-center gap-2 rounded-l-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+              >
+                {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                <span className="hidden sm:inline">Retry Task</span>
+                <span className="hidden sm:inline font-normal text-blue-200">{'· '}{WORKER_TYPE_LABELS[selectedWorkerType]}</span>
+              </button>
+              <div className="w-px bg-blue-400/30" />
+              <button
+                type="button"
+                onClick={onToggleDropdown}
+                disabled={retrying || deleting}
+                className="flex items-center rounded-r-lg bg-blue-600 px-2.5 py-2 text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+              >
+                <ChevronDown className={`h-4 w-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showDropdown ? (
+                <div className="absolute bottom-full left-0 z-10 mb-2 w-48 rounded-lg border border-gray-700 bg-gray-800 py-1.5 shadow-xl">
+                  <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Model</div>
+                  {WORKER_TYPES.map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={(): void => { onSelectWorkerType(type); }}
+                      className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-700 ${
+                        selectedWorkerType === type ? 'text-blue-400' : 'text-gray-300'
+                      }`}
+                    >
+                      <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${
+                        selectedWorkerType === type ? 'border-blue-400' : 'border-gray-500'
+                      }`}>
+                        {selectedWorkerType === type ? <div className="h-1.5 w-1.5 rounded-full bg-blue-400" /> : null}
+                      </div>
+                      <span className="flex-1">{WORKER_TYPE_LABELS[type]}</span>
+                      {type === originalWorkerType ? (
+                        <span className="rounded bg-blue-900/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-blue-400">original</span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+            <button
+              type="button"
+              onClick={onShowDeleteConfirm}
+              disabled={deleting || retrying}
+              className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-red-900/20 hover:text-red-400 disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Delete</span>
+            </button>
+          </>
+        )
+      ) : null}
+      {!isActive && !isRetryable && !linksInNextSteps ? (
+        <>
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+        </>
       ) : null}
       {cancelError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{cancelError}</p>
       ) : null}
       {retryError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{retryError}</p>
+      ) : null}
+      {deleteError !== null ? (
+        <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>
       ) : null}
     </div>
   );
@@ -415,7 +615,7 @@ const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTa
         <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
         <div className="flex-1">
           <p className="font-medium text-blue-900 dark:text-blue-200">
-            {task.status === 'dispatched' ? 'Task queued...' : 'Working on your task...'}
+            {task.status === 'queued' ? 'Waiting for available worker...' : task.status === 'dispatched' ? 'Task dispatched...' : 'Working on your task...'}
           </p>
           <ElapsedTimer createdAt={task.createdAt} />
         </div>
@@ -427,12 +627,12 @@ const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTa
 function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
-      {'This task implements the IntexuraOS Two-Phase Code Task Execution Flow. '}
+      {'This task implements the IntexuraOS Agent-Based Code Task Execution Flow. '}
       <a
         href={`/#/code-tasks/${parentTaskId}`}
         className="font-medium underline hover:no-underline"
       >
-        {'DESIGN'}
+        {'PLANNING'}
       </a>
     </div>
   );
@@ -441,7 +641,7 @@ function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX
 function ImplementationLinkBanner({ implementationTaskId }: { implementationTaskId: string }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-      {'This task is the design phase of the IntexuraOS Two-Phase Code Task Execution Flow. '}
+      {'This task is the planning step of the IntexuraOS Agent-Based Code Task Execution Flow. '}
       <a
         href={`/#/code-tasks/${implementationTaskId}`}
         className="font-medium underline hover:no-underline"
@@ -457,7 +657,14 @@ interface NextStepsProps {
   implementing: boolean;
   implementError: string | null;
   implementationTaskId?: string;
-  onImplement: () => Promise<void>;
+  selectedWorkerType: WorkerType;
+  originalWorkerType: WorkerType;
+  showDropdown: boolean;
+  onToggleDropdown: () => void;
+  onSelectWorkerType: (type: WorkerType) => void;
+  onImplement: () => void;
+  prUrl?: string;
+  linearIssueUrl?: string;
 }
 
 function NextSteps({
@@ -465,30 +672,82 @@ function NextSteps({
   implementing,
   implementError,
   implementationTaskId,
+  selectedWorkerType,
+  originalWorkerType,
+  showDropdown,
+  onToggleDropdown,
+  onSelectWorkerType,
   onImplement,
+  prUrl,
+  linearIssueUrl,
 }: NextStepsProps): React.JSX.Element | null {
   if (!isImplementable && implementationTaskId === undefined && implementError === null) return null;
 
   return (
     <div className="mt-4">
       {implementationTaskId !== undefined ? (
-        <a
-          href={`/#/code-tasks/${implementationTaskId}`}
-          className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
-        >
-          <Play className="h-4 w-4" />
-          View Implementation
-        </a>
+        <div className="flex items-center gap-3">
+          <a
+            href={`/#/code-tasks/${implementationTaskId}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+          >
+            <Play className="h-4 w-4" />
+            View Implementation
+          </a>
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+        </div>
       ) : isImplementable ? (
-        <Button
-          onClick={(): void => { void onImplement(); }}
-          disabled={implementing}
-          isLoading={implementing}
-          loadingText="Starting Implementation..."
-        >
-          <Play className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Start Implementation</span>
-        </Button>
+        <div className="relative flex items-center gap-3">
+          <div className="relative flex">
+            <button
+              type="button"
+              onClick={onImplement}
+              disabled={implementing}
+              className="flex items-center gap-2 rounded-l-lg border border-emerald-600/30 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+            >
+              {implementing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              <span className="hidden sm:inline">Implement</span>
+              <span className="hidden sm:inline font-normal text-emerald-400/70">{'· '}{WORKER_TYPE_LABELS[selectedWorkerType]}</span>
+            </button>
+            <div className="w-px bg-emerald-500/20" />
+            <button
+              type="button"
+              onClick={onToggleDropdown}
+              disabled={implementing}
+              className="flex items-center rounded-r-lg border border-l-0 border-emerald-600/30 bg-emerald-500/10 px-2.5 py-2 text-emerald-400 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showDropdown ? (
+              <div className="absolute bottom-full left-0 z-10 mb-2 w-48 rounded-lg border border-gray-700 bg-gray-800 py-1.5 shadow-xl">
+                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Model</div>
+                {WORKER_TYPES.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={(): void => { onSelectWorkerType(type); }}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-700 ${
+                      selectedWorkerType === type ? 'text-emerald-400' : 'text-gray-300'
+                    }`}
+                  >
+                    <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${
+                      selectedWorkerType === type ? 'border-emerald-400' : 'border-gray-500'
+                    }`}>
+                      {selectedWorkerType === type ? <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> : null}
+                    </div>
+                    <span className="flex-1">{WORKER_TYPE_LABELS[type]}</span>
+                    {type === originalWorkerType ? (
+                      <span className="rounded bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-400">plan</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+        </div>
       ) : null}
       {implementError !== null ? (
         <div className="mt-3 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
@@ -525,17 +784,17 @@ function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedProm
           {copied ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
-      <blockquote className="border-l-4 rounded border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
-        <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{prompt}</p>
-      </blockquote>
+      <div className="rounded border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+        <MarkdownContent content={prompt} />
+      </div>
       {sanitizedPrompt !== prompt ? (
         <details className="mt-3">
           <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
             Show sanitized prompt
           </summary>
-          <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
-            <p className="whitespace-pre-wrap">{sanitizedPrompt}</p>
-          </blockquote>
+          <div className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
+            <MarkdownContent content={sanitizedPrompt} />
+          </div>
         </details>
       ) : null}
     </Card>
@@ -543,6 +802,38 @@ function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedProm
 }
 
 const MemoTaskPrompt = memo(TaskPrompt);
+
+function RunSummary({ summary }: { summary: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback((): void => {
+    void navigator.clipboard.writeText(summary).then(() => {
+      setCopied(true);
+      setTimeout(() => { setCopied(false); }, 2000);
+    }).catch(() => { /* clipboard unavailable */ });
+  }, [summary]);
+
+  return (
+    <Card className="mb-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Run Summary</h3>
+        <button
+          type="button"
+          onClick={copy}
+          className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+          title={copied ? 'Copied!' : 'Copy'}
+        >
+          {copied ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        </button>
+      </div>
+      <div className="rounded border-l-4 border-emerald-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+        <MarkdownContent content={summary} />
+      </div>
+    </Card>
+  );
+}
+
+const MemoRunSummary = memo(RunSummary);
 
 function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
   const result = task.result;
@@ -552,15 +843,26 @@ function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
     ? parseInt(/\/pull\/(\d+)/.exec(result.prUrl)?.[1] ?? '', 10)
     : undefined;
 
-  if (prNumber === undefined || isNaN(prNumber)) return null;
+  const hasSummary = result.summary !== undefined && result.summary !== '';
+  const hasValidPr = prNumber !== undefined && !isNaN(prNumber);
+
+  if (!hasSummary && !hasValidPr) return null;
 
   return (
-    <div className="mb-6">
-      <PREventsGroup
-        pullRequestNumber={prNumber}
-        title={result.summary}
-        repository={task.repository}
-      />
+    <div className="mb-6 space-y-4">
+      {hasSummary ? (
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">Summary</h3>
+          <MarkdownContent content={result.summary ?? ''} />
+        </Card>
+      ) : null}
+      {hasValidPr ? (
+        <PREventsGroup
+          pullRequestNumber={prNumber}
+          title={result.summary ?? null}
+          repository={task.repository}
+        />
+      ) : null}
     </div>
   );
 }
@@ -630,6 +932,9 @@ interface LogStreamProps {
   workerName: string;
 }
 
+/** Delay (ms) before clearing the auto-scroll guard flag after a programmatic scrollIntoView. */
+const SMOOTH_SCROLL_GUARD_MS = 500;
+
 function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage, sending, sendError, messageStatus, workerOnline, workerName }: LogStreamProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -639,6 +944,8 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   const [blockOverrides, setBlockOverrides] = useState<Set<number>>(() => new Set());
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
+  const isAutoScrollingRef = useRef(false);
+  const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Tool block collapsing
   const bodyLineMap = useMemo(() => {
@@ -691,9 +998,13 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   // Auto-scroll when new logs arrive and follow mode is on
   useEffect(() => {
     if (logs.length > prevLogCountRef.current && followRef.current) {
+      isAutoScrollingRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = setTimeout(() => { isAutoScrollingRef.current = false; }, SMOOTH_SCROLL_GUARD_MS);
     }
     prevLogCountRef.current = logs.length;
+    return (): void => { clearTimeout(autoScrollTimerRef.current); };
   }, [logs.length]);
 
   // Detect manual scroll-up to disable follow
@@ -702,6 +1013,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     if (el === null) return;
 
     const onScroll = (): void => {
+      if (isAutoScrollingRef.current) return;
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
       if (atBottom && !followRef.current) {
         followRef.current = true;
@@ -721,7 +1033,10 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     followRef.current = next;
     setFollowLogs(next);
     if (next) {
+      isAutoScrollingRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = setTimeout(() => { isAutoScrollingRef.current = false; }, SMOOTH_SCROLL_GUARD_MS);
     }
   };
 
@@ -849,17 +1164,14 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
         <div ref={bottomRef} />
       </div>
 
-      {/* Message input (hidden for cancelled tasks) */}
-      {taskStatus !== 'cancelled' ? (
-        <MessageInput
-          onSendMessage={onSendMessage}
-          sending={sending}
-          sendError={sendError}
-          messageStatus={messageStatus}
-          workerOnline={workerOnline}
-          workerName={workerName}
-        />
-      ) : null}
+      <MessageInput
+        onSendMessage={onSendMessage}
+        sending={sending}
+        sendError={sendError}
+        messageStatus={messageStatus}
+        workerOnline={workerOnline}
+        workerName={workerName}
+      />
     </div>
   );
 }

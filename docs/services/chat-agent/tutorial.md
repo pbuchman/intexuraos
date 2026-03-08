@@ -1,4 +1,4 @@
-# Chat Agent -- Getting Started
+# Chat Agent — Getting Started
 
 **Time estimate:** 20 minutes
 **Prerequisites:** Running IntexuraOS locally (`pnpm dev`), valid JWT token or guest session ID
@@ -6,7 +6,7 @@
 
 ---
 
-## Part 1: Hello World -- Send Your First Message
+## Part 1: Hello World — Send Your First Message
 
 The simplest interaction: send a message as a guest user and get a response.
 
@@ -200,7 +200,7 @@ curl -s http://localhost:8129/chat \
   }' | jq
 ```
 
-The response uses the user's configured LLM model -- defaulting to Gemini 2.5 Flash for new users, with GLM-4.7 and GLM-4.7-Flash available as alternatives.
+The response uses the user's configured LLM model — defaulting to Gemini 2.5 Flash for new users, with GLM-4.7 and GLM-4.7-Flash available as alternatives.
 
 ### Step 3: Follow-up question with history
 
@@ -228,11 +228,11 @@ The assistant uses conversation history to understand "one" refers to a bookmark
 | --------------------------------------- | --------------------------------------- | ------------------------------------------------------ |
 | 401 on every request                    | Missing both JWT and `x-guest-session`  | Add `Authorization` header or `x-guest-session` header |
 | 502 DOWNSTREAM_ERROR                    | user-service unreachable or LLM failure | Check user-service is running; verify LLM API keys     |
-| Empty sources array                     | No indexed docs match the query         | Ensure `doc_embeddings` collection has data             |
+| Empty sources array                     | No indexed docs match the query         | Ensure `doc_embeddings` collection has data            |
 | Service fails to start                  | `app-settings-service` unreachable      | Start app-settings-service first                       |
 | `INTEXURAOS_OPENAI_APP_API_KEY` missing | `.envrc` not sourced                    | Run `direnv allow` or source `.envrc` manually         |
 | suggestedAction always null             | LLM not outputting action annotations   | Check system prompt is correctly loaded                |
-| Rate limit hit immediately              | Instance restarted (in-memory limiter)  | Expected behavior; limiter resets on restart            |
+| Rate limit hit immediately              | Instance restarted (in-memory limiter)  | Expected behavior; limiter resets on restart           |
 
 ---
 

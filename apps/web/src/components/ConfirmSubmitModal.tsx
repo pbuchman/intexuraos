@@ -36,8 +36,10 @@ export function ConfirmSubmitModal({
     }
   };
 
-  const workerTypeLabel =
-    workerType === 'auto' ? 'Auto' : workerType === 'opus' ? 'Opus' : 'GLM';
+  const WORKER_TYPE_LABELS: Record<string, string> = {
+    auto: 'Auto', opus: 'Opus', sonnet: 'Sonnet', minimax: 'MiniMax', glm: 'GLM', 'qwen3.5-plus': 'Qwen 3.5 Plus',
+  };
+  const workerTypeLabel = WORKER_TYPE_LABELS[workerType] ?? workerType;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

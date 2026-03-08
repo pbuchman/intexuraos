@@ -336,12 +336,12 @@ WhatsApp message delivered to user
 
 ## Dependencies
 
-| Service            | Why Needed                  | Failure Behavior                          |
-| ------------------ | --------------------------- | ----------------------------------------- |
-| web-agent          | OG metadata + AI summaries  | Enrichment fails; bookmark remains pending|
-| Firestore          | Bookmark persistence        | All operations fail                       |
-| Pub/Sub            | Async enrichment pipeline   | Enrichment delayed; retried automatically |
-| whatsapp-service   | Summary delivery            | Fire-and-forget; summary still saved      |
+| Service            | Why Needed                  | Failure Behavior                           |
+| ------------------ | --------------------------- | ------------------------------------------ |
+| web-agent          | OG metadata + AI summaries  | Enrichment fails; bookmark remains pending |
+| Firestore          | Bookmark persistence        | All operations fail                        |
+| Pub/Sub            | Async enrichment pipeline   | Enrichment delayed; retried automatically  |
+| whatsapp-service   | Summary delivery            | Fire-and-forget; summary still saved       |
 
 ---
 

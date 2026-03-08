@@ -141,22 +141,22 @@ async function handleLinearWebhook(
   if (isIssueData(data)) {
     // === ISSUE EVENT ===
 
-    // Look up user connection by team ID
+    // Look up ALL user connections by team ID (fan-out to all team users)
     const teamId = data.team.id;
-    const connectionResult = await services.connectionRepository.findUserIdByTeamId(teamId);
+    const connectionResult = await services.connectionRepository.findUserIdsByTeamId(teamId);
     if (!connectionResult.ok) {
-      request.log.error({ error: connectionResult.error, teamId }, 'Failed to lookup connection');
+      request.log.error({ error: connectionResult.error, teamId }, 'Failed to lookup connections');
       reply.status(500);
       return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
     }
 
-    const userId = connectionResult.value;
-    if (userId === null) {
-      request.log.warn({ teamId }, 'No connected user found for team');
+    const userIds = connectionResult.value;
+    if (userIds.length === 0) {
+      request.log.warn({ teamId }, 'No connected users found for team');
       return await reply.ok({ message: 'Team not connected' });
     }
 
-    // Validate webhook secret
+    // Validate webhook secret (any user's secret works — they share the same Linear webhook)
     const secretResult = await services.connectionRepository.findWebhookSecretByTeamId(teamId);
     if (!secretResult.ok) {
       request.log.error({ error: secretResult.error, teamId }, 'Failed to lookup webhook secret');
@@ -178,7 +178,7 @@ async function handleLinearWebhook(
       return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
     }
 
-    // Process Issue webhook (now trusted)
+    // Build event once (shared across all users)
     const { updatedFrom } = request.body;
     const event: LinearWebhookEvent = {
       action: action as 'create' | 'update' | 'remove',
@@ -202,35 +202,64 @@ async function handleLinearWebhook(
       webhookId,
     };
 
-    const syncResult = await syncSingleIssue(event, userId, {
-      issueRepo: services.issueRepository,
-      logger: request.log as unknown as Logger,
-    });
+    // Fan out sync to ALL connected users concurrently
+    const syncResults = await Promise.allSettled(
+      userIds.map((uid) =>
+        syncSingleIssue(event, uid, {
+          issueRepo: services.issueRepository,
+          logger: request.log as unknown as Logger,
+        })
+      )
+    );
 
-    if (!syncResult.ok) {
-      request.log.error({ error: syncResult.error, issueId: data.id, userId }, 'Failed to sync issue from webhook');
-      reply.status(500);
-      return await reply.fail('INTERNAL_ERROR', 'Failed to sync issue');
+    // Log per-user results, find first success for response
+    let firstSuccessAction: string | null = null;
+    let firstSuccessIssueId: string | null = null;
+    for (let i = 0; i < syncResults.length; i++) {
+      const result = syncResults[i];
+      const uid = userIds[i];
+      if (result === undefined || uid === undefined) continue;
+
+      if (result.status === 'fulfilled' && result.value.ok) {
+        request.log.info(
+          { action: result.value.value.action, issueId: data.id, identifier: data.identifier, userId: uid }, // @allow-result-access -- guarded by result.value.ok
+          'Issue synced from webhook'
+        );
+        if (firstSuccessAction === null) {
+          firstSuccessAction = result.value.value.action; // @allow-result-access -- guarded by result.value.ok
+          firstSuccessIssueId = result.value.value.issueId; // @allow-result-access -- guarded by result.value.ok
+        }
+      } else {
+        const error = result.status === 'rejected' ? String(result.reason) : (result.value.ok ? '' : result.value.error);
+        request.log.error({ error, issueId: data.id, userId: uid }, 'Failed to sync issue from webhook for user');
+      }
     }
 
-    request.log.info({ action: syncResult.value.action, issueId: data.id, identifier: data.identifier, userId }, 'Issue synced from webhook');
+    if (firstSuccessAction === null) {
+      reply.status(500);
+      return await reply.fail('INTERNAL_ERROR', 'Failed to sync issue for all users');
+    }
 
+    // Trigger code task only for the first user (avoid duplicate tasks)
     if (shouldTriggerCodeTask(event)) {
-      void triggerCodeTaskFromAssignment(event, userId, {
-        codeAgentClient: services.codeAgentClient,
-        logger: request.log as unknown as Logger,
-      });
+      const firstUserId = userIds[0];
+      if (firstUserId !== undefined) {
+        void triggerCodeTaskFromAssignment(event, firstUserId, {
+          codeAgentClient: services.codeAgentClient,
+          logger: request.log as unknown as Logger,
+        });
+      }
     }
 
     return await reply.ok({
       message: 'Webhook processed',
-      action: syncResult.value.action,
-      issueId: syncResult.value.issueId,
+      action: firstSuccessAction,
+      issueId: firstSuccessIssueId,
     });
   } else if (isCommentData(data)) {
     // === COMMENT EVENT ===
 
-    // Look up issue to get userId
+    // Look up issue to get teamId for signature validation
     const issueResult = await services.issueRepository.findById(data.issueId);
     if (!issueResult.ok) {
       request.log.error({ error: issueResult.error, issueId: data.issueId }, 'Failed to lookup issue for comment');
@@ -244,32 +273,48 @@ async function handleLinearWebhook(
       return await reply.ok({ message: 'Issue not found' });
     }
 
-    const userId = issue.userId;
+    // Validate webhook signature using teamId from the issue
+    if (issue.teamId === '') {
+      // Issues synced before teamId was added have empty string — cannot validate signature
+      request.log.warn({ issueId: data.issueId, commentId: data.id }, 'Comment webhook skipped: issue has no teamId for signature validation');
+      return await reply.ok({ message: 'Webhook not configured', action: 'ignored' });
+    }
 
-    if (issue.teamId !== '') {
-      const secretResult = await services.connectionRepository.findWebhookSecretByTeamId(issue.teamId);
-      if (!secretResult.ok) {
-        request.log.error({ error: secretResult.error, teamId: issue.teamId }, 'Failed to lookup webhook secret for comment');
-        reply.status(500);
-        return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
-      }
+    const secretResult = await services.connectionRepository.findWebhookSecretByTeamId(issue.teamId);
+    if (!secretResult.ok) {
+      request.log.error({ error: secretResult.error, teamId: issue.teamId }, 'Failed to lookup webhook secret for comment');
+      reply.status(500);
+      return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
+    }
 
-      if (secretResult.value === null) {
-        request.log.warn({ teamId: issue.teamId }, 'Webhook secret not configured for comment');
-        return await reply.ok({ message: 'Webhook not configured', action: 'ignored' });
-      }
+    if (secretResult.value === null) {
+      request.log.warn({ teamId: issue.teamId }, 'Webhook secret not configured for comment');
+      return await reply.ok({ message: 'Webhook not configured', action: 'ignored' });
+    }
 
-      const { webhookSecret } = secretResult.value;
-      const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
-      if (!signatureResult.ok) {
-        request.log.warn({ error: signatureResult.error }, 'Comment webhook signature validation failed');
-        reply.status(401);
-        return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
+    const { webhookSecret } = secretResult.value;
+    const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
+    if (!signatureResult.ok) {
+      request.log.warn({ error: signatureResult.error }, 'Comment webhook signature validation failed');
+      reply.status(401);
+      return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
+    }
+
+    // Find all users who have this issue synced
+    const userIdsResult = await services.issueRepository.findUserIdsByIssueId(data.issueId);
+    let commentUserId: string;
+    if (userIdsResult.ok && userIdsResult.value.length > 0) {
+      commentUserId = userIdsResult.value[0] ?? issue.userId; // noUncheckedIndexedAccess
+    } else {
+      if (!userIdsResult.ok) {
+        request.log.warn({ error: userIdsResult.error, issueId: data.issueId }, 'Failed to find users by issue ID, falling back to issue.userId');
       }
+      commentUserId = issue.userId;
     }
 
     // Process Comment webhook
-    const event: LinearCommentWebhookEvent = {
+    // Comments are stored by Linear UUID (not user-scoped), so syncing once is sufficient
+    const commentEvent: LinearCommentWebhookEvent = {
       action: action as 'create' | 'update' | 'remove',
       type,
       data: {
@@ -285,18 +330,18 @@ async function handleLinearWebhook(
       webhookId,
     };
 
-    const syncResult = await syncCommentFromWebhook(event, userId, {
+    const syncResult = await syncCommentFromWebhook(commentEvent, commentUserId, {
       commentRepo: services.commentRepository,
       logger: request.log as unknown as Logger,
     });
 
     if (!syncResult.ok) {
-      request.log.error({ error: syncResult.error, commentId: data.id, userId }, 'Failed to sync comment from webhook');
+      request.log.error({ error: syncResult.error, commentId: data.id, userId: commentUserId }, 'Failed to sync comment from webhook');
       reply.status(500);
       return await reply.fail('INTERNAL_ERROR', 'Failed to sync comment');
     }
 
-    request.log.info({ action: syncResult.value.action, commentId: data.id, issueId: data.issueId, userId }, 'Comment synced from webhook');
+    request.log.info({ action: syncResult.value.action, commentId: data.id, issueId: data.issueId, userId: commentUserId }, 'Comment synced from webhook');
 
     return await reply.ok({
       message: 'Webhook processed',

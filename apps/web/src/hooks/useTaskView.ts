@@ -16,9 +16,10 @@ import {
   retryCodeTask as retryCodeTaskApi,
   sendTaskMessage as sendTaskMessageApi,
   startImplementation as startImplementationApi,
+  deleteCodeTask as deleteCodeTaskApi,
 } from '@/services/codeAgentApi';
 import { ApiError } from '@/services/apiClient';
-import type { CodeTask, CodeTaskStatus } from '@/types';
+import type { CodeTask, CodeTaskStatus, CodeTaskWorkerType, RetryCodeTaskRequest } from '@/types';
 import {
   getFirestoreClient,
   authenticateFirebase,
@@ -48,13 +49,17 @@ export interface TaskViewState {
   messageStatus: MessageStatus;
   implementing: boolean;
   implementError: string | null;
+  deleting: boolean;
+  deleteError: string | null;
   cancelTask: () => Promise<void>;
-  retryTask: (additionalContext?: string) => Promise<string>;
+  retryTask: (workerType?: string, additionalContext?: string) => Promise<string>;
   sendMessage: (message: string) => Promise<void>;
-  startImplementation: () => Promise<string>;
+  startImplementation: (workerType?: string) => Promise<string>;
+  deleteTask: () => Promise<void>;
+  clearDeleteError: () => void;
 }
 
-const ACTIVE_STATUSES: CodeTaskStatus[] = ['dispatched', 'running'];
+const ACTIVE_STATUSES: CodeTaskStatus[] = ['dispatched', 'running', 'queued'];
 
 /**
  * Single hook for the Code Task View page.
@@ -79,6 +84,8 @@ export function useTaskView(taskId: string): TaskViewState {
   const [messageStatus, setMessageStatus] = useState<MessageStatus>('idle');
   const [implementing, setImplementing] = useState(false);
   const [implementError, setImplementError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [listenerHealthy, setListenerHealthy] = useState(false);
 
   const isMountedRef = useRef(true);
@@ -310,15 +317,19 @@ export function useTaskView(taskId: string): TaskViewState {
     }
   }, [task, fetchTask]);
 
-  const retryTask = useCallback(async (additionalContext?: string): Promise<string> => {
+  const retryTask = useCallback(async (workerType?: string, additionalContext?: string): Promise<string> => {
     if (task === null) throw new Error('No task to retry');
     setRetrying(true);
     setRetryError(null);
     try {
       const token = await getAccessTokenRef.current();
-      const request: { taskId: string; additionalContext?: string } = { taskId: task.id };
-      if (additionalContext !== undefined && additionalContext.trim().length > 0) {
-        request.additionalContext = additionalContext.trim();
+      const request: RetryCodeTaskRequest = { taskId: task.id };
+      const trimmedContext = additionalContext?.trim();
+      if (trimmedContext !== undefined && trimmedContext.length > 0) {
+        request.additionalContext = trimmedContext;
+      }
+      if (workerType !== undefined) {
+        request.workerType = workerType as CodeTaskWorkerType;
       }
       const result = await retryCodeTaskApi(token, request);
       return result.codeTaskId;
@@ -371,13 +382,13 @@ export function useTaskView(taskId: string): TaskViewState {
     }
   }, [task]);
 
-  const startImplementation = useCallback(async (): Promise<string> => {
+  const startImplementation = useCallback(async (workerType?: string): Promise<string> => {
     if (task === null) throw new Error('No task to implement');
     setImplementing(true);
     setImplementError(null);
     try {
       const token = await getAccessTokenRef.current();
-      const result = await startImplementationApi(token, task.id);
+      const result = await startImplementationApi(token, task.id, workerType);
       return result.codeTaskId;
     } catch (err) {
       if (isMountedRef.current) {
@@ -398,6 +409,29 @@ export function useTaskView(taskId: string): TaskViewState {
     }
   }, [task]);
 
+  const deleteTask = useCallback(async (): Promise<void> => {
+    if (task === null) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const token = await getAccessTokenRef.current();
+      await deleteCodeTaskApi(token, task.id);
+    } catch (err) {
+      if (isMountedRef.current) {
+        setDeleteError(getErrorMessage(err, 'Failed to delete task'));
+      }
+      throw err;
+    } finally {
+      if (isMountedRef.current) {
+        setDeleting(false);
+      }
+    }
+  }, [task]);
+
+  const clearDeleteError = useCallback((): void => {
+    setDeleteError(null);
+  }, []);
+
   return {
     task,
     logs,
@@ -413,9 +447,13 @@ export function useTaskView(taskId: string): TaskViewState {
     messageStatus,
     implementing,
     implementError,
+    deleting,
+    deleteError,
     cancelTask,
     retryTask,
     sendMessage,
     startImplementation,
+    deleteTask,
+    clearDeleteError,
   };
 }

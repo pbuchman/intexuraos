@@ -32,8 +32,8 @@
 
 ### Low Priority
 
-| File                                 | Issue          | Impact                                             |
-| ------------------------------------ | -------------- | -------------------------------------------------- |
+| File                                 | Issue          | Impact                                              |
+| ------------------------------------ | -------------- | --------------------------------------------------- |
 | `src/routes/webhookRoutes.ts`        | Webhook stub   | Accepts any JSON, logs it, performs no side effects |
 
 **Detail:** The `POST /notion-webhooks` endpoint accepts any JSON payload via `z.record(z.unknown())`, logs it for debugging, and returns `{ received: true }`. This is intentionally a stub awaiting future webhook processing implementation. It has no security impact since it produces no side effects, but represents an incomplete feature.
@@ -123,13 +123,13 @@ Achieved strict 100% branch coverage with proper v8 ignore annotations for TypeS
 
 ## Resolved Issues
 
-| Date       | Issue                              | Resolution                           |
-| ---------- | ---------------------------------- | ------------------------------------ |
-| 2026-02-16 | No distributed tracing             | Added Dash0 OTel integration         |
-| 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests    |
-| 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger          |
-| 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()  |
-| 2026-01-29 | No page access validation          | Added page preview internal endpoint |
+| Date       | Issue                              | Resolution                            |
+| ---------- | ---------------------------------- | ------------------------------------- |
+| 2026-02-16 | No distributed tracing             | Added Dash0 OTel integration          |
+| 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests     |
+| 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger           |
+| 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()   |
+| 2026-01-29 | No page access validation          | Added page preview internal endpoint  |
 | 2026-01-26 | Unused promptVaultPageId parameter | Removed from connect schema (INT-319) |
 
 ---

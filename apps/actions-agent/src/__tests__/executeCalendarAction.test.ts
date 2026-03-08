@@ -71,8 +71,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
-      expect(result.value.resourceUrl).toBe('/#/calendar');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.resourceUrl).toBe('/#/calendar'); // @allow-result-access -- guarded by isOk() check above
     }
   });
 
@@ -114,8 +114,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
-      expect(result.value.resourceUrl).toBe('https://calendar.google.com/calendar/event?eid=fake123');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.resourceUrl).toBe('https://calendar.google.com/calendar/event?eid=fake123'); // @allow-result-access -- guarded by isOk() check above
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -144,8 +144,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('failed');
-      expect(result.value.message).toBe('Invalid date format');
+      expect(result.value.status).toBe('failed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.message).toBe('Invalid date format'); // @allow-result-access -- guarded by isOk() check above
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -173,8 +173,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('failed');
-      expect(result.value.message).toBe('Unknown error');
+      expect(result.value.status).toBe('failed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.message).toBe('Unknown error'); // @allow-result-access -- guarded by isOk() check above
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -199,8 +199,8 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('failed');
-      expect(result.value.message).toBe('Calendar service unavailable');
+      expect(result.value.status).toBe('failed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.message).toBe('Calendar service unavailable'); // @allow-result-access -- guarded by isOk() check above
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -223,7 +223,7 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
     }
   });
 
@@ -245,7 +245,9 @@ describe('executeCalendarAction usecase', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('Calendar event created');
-    expect(messages[0]?.message).toContain('https://calendar.google.com/calendar/event?eid=fake123');
+    // URL is now passed as a CTA button, not embedded in message text
+    expect(messages[0]?.ctaUrl?.url).toBe('https://calendar.google.com/calendar/event?eid=fake123');
+    expect(messages[0]?.ctaUrl?.displayText).toBe('📅 View in Calendar');
     // Absolute URL should NOT be prepended with webAppUrl
     expect(messages[0]?.message).not.toContain('https://app.test.com/https://');
   });
@@ -271,7 +273,8 @@ describe('executeCalendarAction usecase', () => {
 
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.message).toContain('https://app.test.com/#/calendar');
+    // Relative URL is resolved against webAppUrl and passed as CTA button
+    expect(messages[0]?.ctaUrl?.url).toBe('https://app.test.com/#/calendar');
   });
 
   it('succeeds even when WhatsApp notification fails (best-effort)', async () => {
@@ -294,7 +297,7 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
     }
   });
 
@@ -362,9 +365,9 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
-      expect(result.value.message).toBe('Previously created calendar event');
-      expect(result.value.resourceUrl).toBe('/#/calendar');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.message).toBe('Previously created calendar event'); // @allow-result-access -- guarded by isOk() check above
+      expect(result.value.resourceUrl).toBe('/#/calendar'); // @allow-result-access -- guarded by isOk() check above
     }
   });
 
@@ -384,7 +387,203 @@ describe('executeCalendarAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
+      expect(result.value.status).toBe('completed'); // @allow-result-access -- guarded by isOk() check above
     }
+  });
+
+  it('passes full prompt text from payload.prompt to calendar service', async () => {
+    const fullPrompt = 'Set up a weekly standup every Monday at 9:15am starting next week';
+    const action = createAction({
+      status: 'awaiting_approval',
+      title: 'Weekly standup',
+      payload: { prompt: fullPrompt },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const processedActions = fakeCalendarClient.getProcessedActions();
+    expect(processedActions).toHaveLength(1);
+    expect(processedActions[0]?.text).toBe(fullPrompt);
+    // Should NOT pass the short title as text
+    expect(processedActions[0]?.text).not.toBe('Weekly standup');
+  });
+
+  it('falls back to title when payload.prompt is not present', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      title: 'Meeting with John',
+      payload: {},
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const processedActions = fakeCalendarClient.getProcessedActions();
+    expect(processedActions).toHaveLength(1);
+    expect(processedActions[0]?.text).toBe('Meeting with John');
+  });
+
+  it('sends rich WhatsApp completion message when preview data is available', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+
+    fakeCalendarClient.setPreview('action-123', {
+      actionId: 'action-123',
+      userId: 'user-456',
+      status: 'ready',
+      summary: 'Meeting with John',
+      start: '2025-01-15T15:00:00',
+      end: '2025-01-15T16:00:00',
+      duration: '1 hour',
+      location: 'Office',
+      isAllDay: false,
+      generatedAt: '2025-01-15T10:00:00Z',
+    });
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.message).toContain('\u2705 Calendar Event Created');
+    expect(messages[0]?.message).toContain('*Meeting with John*');
+    expect(messages[0]?.message).toContain('1 hour');
+    expect(messages[0]?.message).toContain('Office');
+    // URL is now passed as a CTA button, not embedded in message text
+    expect(messages[0]?.ctaUrl?.url).toBe('https://calendar.google.com/calendar/event?eid=fake123');
+    expect(messages[0]?.ctaUrl?.displayText).toBe('📅 View in Calendar');
+  });
+
+  it('sends basic completion message when getPreview returns error (graceful fallback)', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+
+    fakeCalendarClient.setFailGetPreview(true, new Error('Preview service unavailable'));
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    // Falls back to basic message format when preview fetch errors
+    expect(messages[0]?.message).toContain('Calendar event created');
+    // URL is now passed as a CTA button even in the fallback path
+    expect(messages[0]?.ctaUrl?.url).toBe('https://calendar.google.com/calendar/event?eid=fake123');
+  });
+
+  it('sends basic completion message when no preview is cached (graceful fallback)', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+
+    // No preview set — getPreview returns null by default
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    // Falls back to basic message format
+    expect(messages[0]?.message).toContain('Calendar event created');
+    // URL is now passed as a CTA button even in the fallback path
+    expect(messages[0]?.ctaUrl?.url).toBe('https://calendar.google.com/calendar/event?eid=fake123');
+  });
+
+  it('fetches preview before processAction so it is captured before calendar-agent deletes it', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+
+    fakeCalendarClient.setPreview('action-123', {
+      actionId: 'action-123',
+      userId: 'user-456',
+      status: 'ready',
+      summary: 'Dinner with Monica',
+      start: '2025-01-15T19:00:00',
+      end: '2025-01-15T21:00:00',
+      duration: '2 hours',
+      location: null,
+      isAllDay: false,
+      generatedAt: '2025-01-15T10:00:00Z',
+    });
+
+    // Simulate real calendar-agent behaviour: it deletes the preview after creating the event
+    fakeCalendarClient.setClearPreviewOnProcess(true);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    // Rich message should be generated because preview was fetched BEFORE processAction deleted it
+    expect(messages[0]?.message).toContain('\u2705 Calendar Event Created');
+    expect(messages[0]?.message).toContain('*Dinner with Monica*');
+    expect(messages[0]?.ctaUrl?.url).toBe('https://calendar.google.com/calendar/event?eid=fake123');
+  });
+
+  it('falls back to title when payload.prompt is not a string', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      title: 'Team sync',
+      payload: { prompt: 42 },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const processedActions = fakeCalendarClient.getProcessedActions();
+    expect(processedActions).toHaveLength(1);
+    expect(processedActions[0]?.text).toBe('Team sync');
   });
 });

@@ -109,6 +109,24 @@ function createMockDocker(): MockDockerResult {
   };
 }
 
+// Mock os.userInfo() to prevent crashing in Docker environments without /etc/passwd.
+// Use process.getuid/getgid so UIDs match what tests assert via process.getuid?.() ?? 1000.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  const uid = process.getuid?.() ?? 1000;
+  const gid = process.getgid?.() ?? 1000;
+  return {
+    ...actual,
+    userInfo: vi.fn().mockReturnValue({
+      uid,
+      gid,
+      username: 'testuser',
+      homedir: `/home/testuser`,
+      shell: '/bin/bash',
+    }),
+  };
+});
+
 // Mock fs at module level
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -116,7 +134,16 @@ vi.mock('node:fs', async (importOriginal) => {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
     statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
-    readFileSync: vi.fn().mockReturnValue(''),
+    readFileSync: vi.fn().mockImplementation((filePath: unknown) => {
+      if (
+        typeof filePath === 'string' &&
+        filePath.includes('claude-worker-forensics-seccomp.json')
+      ) {
+        return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
+      }
+      return '';
+    }),
+    appendFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     promises: {
       ...actual.promises,
@@ -149,6 +176,8 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     LINEAR_API_KEY: 'test-linear-key',
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     ZAI_API_KEY: 'test-zai-key',
+    MINIMAX_API_KEY: 'test-minimax-key',
+    DASHSCOPE_API_KEY: 'test-dashscope-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
   githubAppKeyPath: '/test/github-key.pem',
@@ -322,6 +351,38 @@ describe('DockerProvider', () => {
       );
       const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
       expect(tmpfs['/repo/node_modules']).toContain(`uid=${String(process.getuid?.() ?? 1000)}`);
+    });
+
+    it('enables crash forensics settings when forensicsMode is configured', async () => {
+      const forensicsProvider = new TestableDockerProvider(
+        {
+          forensicsMode: true,
+          forensicsBasePath: '/tmp/worker-forensics',
+        },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await forensicsProvider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      const capAdd = createCall?.HostConfig?.CapAdd as string[];
+      const securityOpt = createCall?.HostConfig?.SecurityOpt as string[];
+      const ulimits = createCall?.HostConfig?.Ulimits as {
+        Name: string;
+        Soft: number;
+        Hard: number;
+      }[];
+
+      expect(envArr).toContain('CLAUDE_FORENSICS=1');
+      expect(envArr).toContain('CLAUDE_FORENSICS_DIR=/var/crash');
+      expect(binds).toContain('/tmp/worker-forensics/test-task-123:/var/crash:rw');
+      expect(capAdd).toContain('SYS_PTRACE');
+      expect(securityOpt.some((opt: string) => opt.startsWith('seccomp='))).toBe(true);
+      expect(securityOpt).not.toContain('seccomp=unconfined');
+      expect(ulimits).toContainEqual({ Name: 'core', Soft: -1, Hard: -1 });
     });
 
     it('sets CLAUDE_WORKER_MODE env var', async () => {
@@ -955,6 +1016,82 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-zai-key');
     });
 
+    it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for sonnet worker', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBeUndefined();
+    });
+
+    it('sets ANTHROPIC_API_KEY env var for minimax worker even with sharedCredsPath configured', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-minimax-key');
+    });
+
+    it('sets ANTHROPIC_BASE_URL for minimax worker even with sharedCredsPath configured', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
+      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic');
+    });
+
+    it('sets ANTHROPIC_MODEL for sonnet worker', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=sonnet');
+    });
+
+    it('sets ANTHROPIC_MODEL for minimax worker', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.5');
+    });
+
+    it('uses per-task session path with credential file overlay for sonnet workers', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
+      expect(binds).toContainEqual(
+        '/shared/claude-creds/.credentials.json:/home/claude/.claude/.credentials.json:rw'
+      );
+      expect(binds).not.toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
+    });
+
+    it('mounts per-task session for minimax workers even with sharedCredsPath', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
+    });
+
     it('does not set ANTHROPIC_BASE_URL env var when sharedCredsPath is configured for auto worker', async () => {
       const config = createTestConfig({ workerType: 'auto' });
       await sharedCredsProvider.createWorker(config);
@@ -985,14 +1122,19 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-anthropic-key');
     });
 
-    it('mounts shared creds dir for auto workers instead of per-task session', async () => {
+    it('uses per-task session path with credential file overlay for auto workers', async () => {
       const config = createTestConfig({ workerType: 'auto' });
       await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const binds = createCall?.HostConfig?.Binds as string[];
-      expect(binds).toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
-      expect(binds.join(',')).not.toContain('claude-session');
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
+      expect(binds).toContainEqual(
+        '/shared/claude-creds/.credentials.json:/home/claude/.claude/.credentials.json:rw'
+      );
+      expect(binds).not.toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
     });
 
     it('mounts per-task session for glm workers even with sharedCredsPath', async () => {
@@ -1234,6 +1376,91 @@ describe('DockerProvider', () => {
 
       await expect(provider.cleanupOrphanedContainers()).resolves.not.toThrow();
       expect(mockLogger.warn).toHaveBeenCalled();
+    });
+  });
+
+  describe('listWorkerContainers', () => {
+    it('returns discovered containers with taskId extracted from name', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        { Id: 'container-1', Names: ['/claude-worker-task-abc'], State: 'running' },
+        { Id: 'container-2', Names: ['/claude-worker-task-def'], State: 'exited' },
+      ]);
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toEqual([
+        { containerId: 'container-1', taskId: 'task-abc', state: 'running' },
+        { containerId: 'container-2', taskId: 'task-def', state: 'exited' },
+      ]);
+      expect(mocks.mockDocker.listContainers).toHaveBeenCalledWith({
+        all: true,
+        filters: { name: ['claude-worker-'] },
+      });
+    });
+
+    it('returns empty array when no containers exist', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toEqual([]);
+    });
+
+    it('returns empty array and logs warning when Docker is unreachable', async () => {
+      mocks.mockDocker.listContainers.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toEqual([]);
+      expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it('handles container names with complex taskIds', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'container-uuid',
+          Names: ['/claude-worker-550e8400-e29b-41d4-a716-446655440000'],
+          State: 'running',
+        },
+      ]);
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toEqual([
+        {
+          containerId: 'container-uuid',
+          taskId: '550e8400-e29b-41d4-a716-446655440000',
+          state: 'running',
+        },
+      ]);
+    });
+
+    it('skips containers with empty Names array', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValue([
+        {
+          Id: 'container-good',
+          Names: ['/claude-worker-task_abc'],
+          State: 'running',
+          Created: Math.floor(Date.now() / 1000),
+        },
+        {
+          Id: 'container-bad',
+          Names: [],
+          State: 'running',
+          Created: Math.floor(Date.now() / 1000),
+        },
+      ]);
+
+      const result = await provider.listWorkerContainers();
+
+      expect(result).toHaveLength(1);
+      const firstResult = result[0];
+      expect(firstResult).toBeDefined();
+      expect(firstResult?.taskId).toBe('task_abc');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { containerId: 'container-bad' },
+        expect.stringContaining('no recognizable name')
+      );
     });
   });
 });

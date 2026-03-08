@@ -13,31 +13,13 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
-import { randomBytes, randomUUID, createHmac } from 'node:crypto';
-import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { randomUUID } from 'node:crypto';
+import { hasCodeTaskLabel, getWorkerTypeFromLabels } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
-
-/**
- * Generate a deterministic webhook secret for a task.
- * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
- */
-function generateWebhookSecret(sharedSecret: string, taskId: string): string {
-  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
-}
-
-/**
- * Generate a cancel nonce for task cancellation (INT-379).
- * Format: 4 hex characters (2 bytes)
- */
-function generateCancelNonce(): string {
-  const buffer = randomBytes(2);
-  return buffer.toString('hex');
-}
-
-/**
- * Cancel nonce TTL in milliseconds (15 minutes).
- */
-const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
+import { sanitizePromptForInjection } from '../../domain/utils/promptInjectionSanitizer.js';
+import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { loadConfig } from '../../config.js';
+import { backLinkPlanningTask } from './backLinkPlanningTask.js';
 
 /**
  * Request to process a code action.
@@ -47,7 +29,7 @@ export interface ProcessCodeActionRequest {
   approvalEventId: string;
   userId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
@@ -75,6 +57,9 @@ export type ProcessCodeActionErrorCode =
   | 'active_task_exists'
   | 'worker_unavailable'
   | 'worker_not_configured'
+  | 'queue_full'          // Queue at max capacity (INT-619)
+  | 'queue_timeout'       // Task expired in queue (INT-619)
+  | 'validation_error'    // Prompt failed injection sanitization (INT-413)
   | 'internal_error';
 
 /**
@@ -95,6 +80,7 @@ export interface ProcessCodeActionDeps {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
+  serviceUrl: string;
 }
 
 /**
@@ -154,8 +140,16 @@ export async function processCodeAction(
     })),
   };
 
-  // Step 2: Sanitize prompt early so the raw prompt never leaks to external services
-  const sanitizedPromptText = sanitizePrompt(prompt);
+  // Step 2: Sanitize prompt — secret redaction first, then injection prevention
+  const secretRedacted = sanitizePrompt(prompt);
+  const injectionResult = sanitizePromptForInjection(secretRedacted);
+  if (!injectionResult.ok) {
+    return err({
+      code: 'validation_error',
+      message: injectionResult.error.message,
+    });
+  }
+  const sanitizedPromptText = injectionResult.value;
 
   // Step 3: Ensure Linear issue exists and get labels/childCount
   const issueResult = await linearIssueService.ensureIssueExists({
@@ -180,9 +174,11 @@ export async function processCodeAction(
     linearIssueTitle,
     linearIssueLabels,
     hasChildren,
-    linearFallback,
-    linearIssueUrl,
   } = issueResult;
+
+  // Derive worker type from labels (single match only, otherwise fall back to request's workerType)
+  const labelWorkerType = getWorkerTypeFromLabels(linearIssueLabels);
+  const effectiveWorkerType = labelWorkerType ?? workerType;
 
   logger.info(
     {
@@ -190,6 +186,8 @@ export async function processCodeAction(
       linearIssueTitle,
       linearIssueLabels,
       hasChildren,
+      labelWorkerType,
+      effectiveWorkerType,
     },
     'Linear issue processed'
   );
@@ -205,7 +203,7 @@ export async function processCodeAction(
     prompt: string;
     sanitizedPrompt: string;
     systemPromptHash: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
     workerLocation: string;
     repository: string;
     baseBranch: string;
@@ -214,17 +212,14 @@ export async function processCodeAction(
     approvalEventId: string;
     webhookSecret: string;
     linearIssueId?: string;
-    linearIssueTitle?: string;
-    linearIssueUrl?: string;
-    linearFallback?: boolean;
-    executionPhase: 'design' | 'execution';
+    agentType: 'planning' | 'execution';
   } = {
     id: taskId,
     userId,
     prompt,
     sanitizedPrompt: sanitizedPromptText,
     systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system prompt
-    workerType,
+    workerType: effectiveWorkerType,
     /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown', // Use first worker as default
     /* v8 ignore stop @preserve */
@@ -234,18 +229,13 @@ export async function processCodeAction(
     actionId,
     approvalEventId,
     webhookSecret,
-    executionPhase: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'design',
+    agentType: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning',
   };
 
   // Only include linear issue fields if we have them
   /* v8 ignore start -- ts-type: type narrowing branch for optional linear issue fields, requires complex setup @preserve */
   if (finalLinearIssueId !== undefined) {
     createInput.linearIssueId = finalLinearIssueId;
-    createInput.linearIssueTitle = linearIssueTitle;
-    createInput.linearFallback = linearFallback;
-    if (linearIssueUrl !== undefined) {
-      createInput.linearIssueUrl = linearIssueUrl;
-    }
   }
   /* v8 ignore stop @preserve */
 
@@ -279,9 +269,11 @@ export async function processCodeAction(
 
   const task = createResult.value;
 
-  // Step 6: Build webhook URL for callback (use SERVICE_URL for local/E2E environments)
-  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
-  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
+  // Step 5b: Back-link planning task to this execution task (INT-725, best-effort)
+  await backLinkPlanningTask(codeTaskRepo, logger, task);
+
+  // Step 6: Build webhook URL for callback
+  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
 
   // Step 7: Dispatch to worker with per-user credentials
   const dispatchRequest: {
@@ -293,11 +285,12 @@ export async function processCodeAction(
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;
     workerCredentials: DispatchWorkerCredentials;
+    agentType: 'planning' | 'execution';
   } = {
     taskId: task.id,
     linearIssueLabels,
@@ -310,6 +303,7 @@ export async function processCodeAction(
     webhookUrl,
     webhookSecret,
     workerCredentials,
+    agentType: task.agentType === 'execution' ? 'execution' : 'planning',
   };
 
   // Only include linearIssueId if it exists
@@ -322,9 +316,63 @@ export async function processCodeAction(
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
 
+  const config = loadConfig();
+
   if (!dispatchResult.ok) {
-    // Update task with error and mark as failed
     const dispatchError = dispatchResult.error;
+
+    // INT-619: Queue task when all workers are at capacity
+    if (dispatchError.code === 'at_capacity') {
+      const queueCountResult = await codeTaskRepo.countQueued();
+      /* v8 ignore start -- test-infra: Firestore countQueued failure fallback to fail-closed @preserve */
+      if (!queueCountResult.ok) {
+        logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
+      }
+      /* v8 ignore stop @preserve */
+      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize;
+
+      if (queueCount >= config.queue.maxSize) {
+        await codeTaskRepo.update(task.id, {
+          status: 'failed',
+          error: {
+            code: 'queue_full',
+            message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
+          },
+        });
+        return err({
+          code: 'queue_full',
+          message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
+        });
+      }
+
+      const queuedAt = new Date();
+      const queueUpdateResult = await codeTaskRepo.update(task.id, {
+        status: 'queued',
+        queuedAt,
+      });
+
+      if (!queueUpdateResult.ok) {
+        logger.error({ taskId: task.id, error: queueUpdateResult.error }, 'Failed to persist queued status');
+        return err({
+          code: 'internal_error',
+          message: 'Failed to queue task',
+        });
+      }
+
+      const queuePosition = queueCount + 1;
+      const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
+      await whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
+
+      logger.info({ taskId: task.id, queuePosition }, 'Task queued due to worker capacity');
+
+      return ok({
+        codeTaskId: task.id,
+        resourceUrl: `/#/code-tasks/${task.id}`,
+        workerLocation: 'queued' as WorkerLocation,
+      });
+    }
+
+    // Other dispatch errors - fail as before
     await codeTaskRepo.update(task.id, {
       status: 'failed',
       error: {
@@ -344,9 +392,9 @@ export async function processCodeAction(
   // Step 8: Record metrics for task submission
   const source = request.source ?? 'web';
   try {
-    await deps.metricsClient.incrementTasksSubmitted(workerType, source);
+    await deps.metricsClient.incrementTasksSubmitted(effectiveWorkerType, source);
   } catch (error: unknown) {
-    logger.error({ error, taskId: task.id, workerType, source }, 'Failed to record task submission metric');
+    logger.error({ error, taskId: task.id, workerType: effectiveWorkerType, source }, 'Failed to record task submission metric');
   }
 
   // Step 9: Generate cancel nonce and send task started notification (INT-379)

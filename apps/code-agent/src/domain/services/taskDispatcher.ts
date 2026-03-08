@@ -36,7 +36,7 @@ export interface DispatchRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
   webhookUrl: string;
   webhookSecret: string;
   traceId?: string;
@@ -45,6 +45,12 @@ export interface DispatchRequest {
   workerHealthStatuses?: Record<string, { healthy: boolean }>;
   /** For retried tasks: points to the original task ID that this task is retrying. */
   retriedFrom?: string;
+  /** Agent type for orchestrator agent-based routing. */
+  agentType?: 'planning' | 'execution' | 'pull_request';
+  /** Branch name of planning PR to merge into execution worktree. */
+  planningPrBranch?: string;
+  /** PR URL to close after successful execution. */
+  planningPrUrl?: string;
 }
 
 /**
@@ -62,6 +68,7 @@ export interface DispatchError {
   code:
     | 'worker_unavailable'
     | 'worker_busy'
+    | 'at_capacity'       // All workers returned 503 (INT-619)
     | 'dispatch_failed'
     | 'network_error'
     | 'invalid_response';

@@ -28,6 +28,8 @@ export interface ValidatedIssue {
   labels: LinearLabel[];
   /** Number of child issues */
   childCount: number;
+  /** Parent issue UUID (null for top-level issues) */
+  parentId: string | null;
 }
 
 export interface ValidateIssueError {
@@ -104,5 +106,6 @@ export async function validateIssue(
     url: issue.url,
     labels: issue.labels,
     childCount: issue.childCount,
+    parentId: issue.parentId ?? null,
   });
 }

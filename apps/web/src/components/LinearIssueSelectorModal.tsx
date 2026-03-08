@@ -176,6 +176,7 @@ export function LinearIssueSelectorModal({
                   <div className="space-y-1">
                     {group.issues.map((issue) => {
                       const isSelected = pendingSelection?.identifier === issue.identifier;
+                      const isSubtask = issue.parentId !== null;
                       return (
                         <button
                           key={issue.identifier}
@@ -187,7 +188,7 @@ export function LinearIssueSelectorModal({
                             isSelected
                               ? 'bg-blue-50 ring-1 ring-blue-300 dark:bg-blue-900/30 dark:ring-blue-700'
                               : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                          }`}
+                          } ${isSubtask ? 'ml-4 pl-2' : ''}`}
                         >
                           <div className="flex items-center gap-1">
                             <span
@@ -201,6 +202,11 @@ export function LinearIssueSelectorModal({
                           <span className="flex-1 truncate text-slate-700 dark:text-slate-200">
                             {issue.title}
                           </span>
+                          {isSubtask && (
+                            <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+                              subtask
+                            </span>
+                          )}
                           {isSelected && (
                             <Check className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
                           )}

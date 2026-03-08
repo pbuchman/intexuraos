@@ -8,7 +8,6 @@ export type {
   ExtractLinkPreviewsEvent,
   MediaCleanupEvent,
   SendMessageEvent,
-  TranscribeAudioEvent,
   TranscriptionCompletedEvent,
   WebhookProcessEvent,
   WhatsAppEvent,

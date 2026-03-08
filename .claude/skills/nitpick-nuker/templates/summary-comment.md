@@ -1,5 +1,7 @@
 ## 😄 Nitpick Nuker Report
 
+> _${ROAST_LINE}_
+
 **PR:** #${PR_NUMBER} | **Run:** ${TIMESTAMP} | **Commit:** `${COMMIT_SHA}`
 
 ### ✅ Fixed (${FIXED_COUNT})
@@ -18,4 +20,4 @@ ${SKIPPED_ROWS}
 
 ---
 
-_😄 reactions added to all processed comments_
+**Status:** ${STATUS_LINE}
