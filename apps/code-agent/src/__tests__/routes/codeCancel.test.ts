@@ -84,6 +84,7 @@ describe('POST /code/cancel', () => {
 
     taskDispatcher = createTaskDispatcherService({
       logger,
+      workerHealthProbe: mockWorkerHealthProbe,
     });
 
     const whatsappNotifier = createWhatsAppNotifier({

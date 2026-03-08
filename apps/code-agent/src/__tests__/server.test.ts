@@ -96,7 +96,7 @@ describe('server configuration', () => {
       firestore: fakeFirestore,
       logger,
       codeTaskRepo,
-      taskDispatcher: createTaskDispatcherService({ logger }),
+      taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
       workerSettingsRepo,
       whatsappNotifier: createWhatsAppNotifier({
         whatsappPublisher: {

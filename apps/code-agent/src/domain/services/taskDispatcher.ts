@@ -6,6 +6,7 @@
 
 import type { Result, Logger } from '@intexuraos/common-core';
 import type { WorkerLocation } from '../models/worker.js';
+import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
 
 /**
  * Per-request worker credentials for dispatch.
@@ -83,6 +84,7 @@ export interface DispatchError {
  */
 export interface TaskDispatcherDeps {
   logger: Logger;
+  workerHealthProbe: WorkerHealthProbe;
 }
 
 /**

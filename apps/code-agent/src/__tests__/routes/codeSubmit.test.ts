@@ -83,6 +83,7 @@ describe('POST /code/submit', () => {
 
     taskDispatcher = createTaskDispatcherService({
       logger,
+      workerHealthProbe: mockWorkerHealthProbe,
     });
 
     const whatsappNotifier = createWhatsAppNotifier({
