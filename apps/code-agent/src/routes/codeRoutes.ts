@@ -1347,15 +1347,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
         }
 
-        // Check if worker is healthy (if health data available)
-        const healthStatuses = settings?.workerHealthStatuses;
-        if (healthStatuses !== undefined) {
-          const workerHealth = healthStatuses[body.workerLocation];
-          if (workerHealth !== undefined && !workerHealth.state.healthy) {
-            request.log.warn({ userId, workerLocation: body.workerLocation, healthState: workerHealth.state }, 'Requested worker is unhealthy');
-            return await reply.fail('WORKER_UNHEALTHY', `Worker '${body.workerLocation}' is currently unhealthy`);
-          }
-        }
+        // Health is checked live via WorkerHealthProbe at dispatch time (capacity-aware dispatch, INT-741).
+        // No cached health check needed here — the dispatcher probes all workers and excludes unhealthy ones.
       }
 
       // If workerLocation specified, put that worker first in the list
