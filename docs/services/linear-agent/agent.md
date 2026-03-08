@@ -91,6 +91,7 @@ interface ValidatedIssue {
   url: string;
   labels: string[]; // Label names only (color stripped for simplicity)
   childCount: number;
+  parentId: string | null; // Parent issue UUID (null if top-level)
 }
 ```
 
@@ -115,7 +116,7 @@ interface ValidatedIssue {
 
 **Endpoint:** `POST /internal/linear/issues/generate-title`
 
-**When to use:** When you need to generate a concise issue title from a task description using LLM. Returns an error if LLM fails after 2 attempts -- handle the error case explicitly.
+**When to use:** When you need to generate a concise issue title from a task description using LLM. Returns an error if LLM fails after 2 attempts — handle the error case explicitly.
 
 **Auth:** `X-Internal-Auth` header
 
@@ -268,7 +269,7 @@ interface AddCommentOutput {
 
 **Endpoint:** `PATCH /internal/linear/issues/:issueId/metadata`
 
-**When to use:** When a code agent needs to update an issue's assignee or labels. Labels are resolved by name against the team's label set -- you do not need label IDs.
+**When to use:** When a code agent needs to update an issue's assignee or labels. Labels are resolved by name against the team's label set — you do not need label IDs.
 
 **Auth:** `X-Internal-Auth` header + `X-User-Id` header
 
@@ -370,7 +371,7 @@ interface IssueDisplayResponse {
 
 **Endpoint:** `GET /internal/linear/issues/:identifier`
 
-**When to use:** When a code agent needs the full issue detail including description, comment count, and last comment timestamp. Reads from local Firestore sync -- does not call Linear API.
+**When to use:** When a code agent needs the full issue detail including description, comment count, and last comment timestamp. Reads from local Firestore sync — does not call Linear API.
 
 **Auth:** `X-Internal-Auth` header + `X-User-Id` header
 
@@ -420,7 +421,7 @@ interface InternalIssueOutput {
 
 **Endpoint:** `GET /internal/issues/:issueId/tree`
 
-**When to use:** When a code agent needs to see an issue and all its recursive descendants (subtasks, sub-subtasks). Reads from local Firestore sync -- does not call Linear API. Useful for understanding work breakdown before creating additional subtasks.
+**When to use:** When a code agent needs to see an issue and all its recursive descendants (subtasks, sub-subtasks). Reads from local Firestore sync — does not call Linear API. Useful for understanding work breakdown before creating additional subtasks.
 
 **Auth:** `X-Internal-Auth` header + `X-User-Id` header
 
@@ -520,7 +521,7 @@ interface SyncAllStats {
 
 **Endpoint:** `GET /linear/issues`
 
-**When to use:** When displaying user's Linear issues grouped by workflow stage. Reads from local Firestore cache -- fast and does not call Linear API.
+**When to use:** When displaying user's Linear issues grouped by workflow stage. Reads from local Firestore cache — fast and does not call Linear API.
 
 **Query Parameters:**
 
@@ -663,17 +664,17 @@ interface ConnectionOutput {
 
 **Endpoints:**
 
-- `GET /linear/failed-issues` -- Review issues that failed AI extraction
-- `POST /linear/failed-issues/:id/retry` -- Re-attempt creating issue (uses real team ID)
-- `DELETE /linear/failed-issues/:id` -- Dismiss a failed extraction (204 No Content)
+- `GET /linear/failed-issues` — Review issues that failed AI extraction
+- `POST /linear/failed-issues/:id/retry` — Re-attempt creating issue (uses real team ID)
+- `DELETE /linear/failed-issues/:id` — Dismiss a failed extraction (204 No Content)
 
 ### Webhook Configuration
 
 **Endpoints:**
 
-- `GET /linear/webhook-config` -- Get webhook URL and secret status
-- `POST /linear/webhook-config` -- Set webhook signing secret (`{"secret": "..."}`)
-- `DELETE /linear/webhook-config` -- Remove webhook signing secret
+- `GET /linear/webhook-config` — Get webhook URL and secret status
+- `POST /linear/webhook-config` — Set webhook signing secret (`{"secret": "..."}`)
+- `DELETE /linear/webhook-config` — Remove webhook signing secret
 
 ---
 
@@ -690,7 +691,7 @@ interface ConnectionOutput {
 | **Webhook Secret**           | Webhook events require HMAC-SHA256 signature validation per connection           |
 | **Issue Identifier Format**  | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)                 |
 | **Title Length**             | Generated titles are max 80 characters                                           |
-| **Title Error on Failure**   | `generateIssueTitle` returns err() after 2 failed attempts -- no fallback        |
+| **Title Error on Failure**   | `generateIssueTitle` returns err() after 2 failed attempts — no fallback         |
 | **Dashboard from Firestore** | `GET /linear/issues` reads local cache; sync first if data looks stale           |
 | **Labels in POST /issues**   | `labels` field accepted but not forwarded to Linear API yet                      |
 | **sync-all Auth**            | Accepts OIDC (Cloud Scheduler) or X-Internal-Auth                                |
@@ -698,7 +699,7 @@ interface ConnectionOutput {
 | **Auto-Trigger Fire-Forget** | Code task trigger does not block webhook response; errors logged only            |
 | **Metadata Ownership**       | `PATCH /metadata` returns 404 (not 403) if issue belongs to another user         |
 | **Display Batch Omission**   | `POST /display-batch` silently omits identifiers not found in user's sync        |
-| **Tree from Local Sync**     | `GET /tree` uses Firestore data only -- no Linear API calls                      |
+| **Tree from Local Sync**     | `GET /tree` uses Firestore data only — no Linear API calls                       |
 
 ---
 

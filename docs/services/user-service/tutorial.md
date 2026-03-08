@@ -1,6 +1,6 @@
-# User Service - Tutorial
+# User Service — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** Node.js 20+, IntexuraOS dev environment, Auth0 tenant
 > **You'll learn:** How to authenticate, manage LLM API keys, set default models, connect Google and GitHub OAuth, and configure transcription preferences
 
@@ -31,7 +31,7 @@ Before starting, ensure you have:
 
 ---
 
-## Part 1: Hello World - Get Auth Config (2 minutes)
+## Part 1: Hello World — Get Auth Config (2 minutes)
 
 The simplest endpoint returns non-secret Auth0 configuration for troubleshooting.
 
@@ -186,7 +186,7 @@ The service validates the key by making a test call to OpenAI before storing it.
 }
 ```
 
-**Validation failure (rate limit - v2.0.0 fix):**
+**Validation failure (rate limit):**
 
 ```json
 {
@@ -632,7 +632,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 
 **Solution:** Add an API key for the model's provider before setting the default model.
 
-### Error: Rate limit (v2.0.0)
+### Error: Rate limit
 
 ```json
 {
@@ -644,7 +644,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 }
 ```
 
-**Solution:** Wait and retry. This is NOT an invalid key -- the parser correctly identifies rate limits.
+**Solution:** Wait and retry. This is NOT an invalid key — the parser correctly identifies rate limits.
 
 ### Error: Encryption not configured
 
@@ -692,18 +692,18 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 
 ## Troubleshooting
 
-| Issue                   | Symptom                         | Solution                                                  |
-| ----------------------- | ------------------------------- | --------------------------------------------------------- |
-| Device code expires     | Polling never succeeds          | Device codes expire in 15 minutes; user must restart flow |
-| Encryption key errors   | Keys fail to save               | Verify 64-character hex string for encryption key         |
-| Auth0 errors            | 401 Unauthorized                | Verify Auth0 client ID/secret are correct                 |
-| OAuth not configured    | Google/GitHub OAuth returns 503 | Set OAuth client ID and secret env vars                   |
-| Token refresh fails     | Access token expired            | User may have revoked access; re-authentication required  |
-| Rate limit shown as key | "Invalid API key" for 429 error | Update to v2.0.0 -- rate limits now correctly identified  |
-| Test costs money        | Charges on provider account     | Test endpoint makes real API calls; use sparingly         |
-| Pricing fetch fails     | Service fails to start          | Ensure app-settings-service is running and accessible     |
-| Default model rejected  | 400 INVALID_REQUEST             | Model must pass `isFastModel()` AND have API key set      |
-| GitHub token not found  | 404 NOT_FOUND                   | User must connect GitHub account first                    |
+| Issue                   | Symptom                         | Solution                                                         |
+| ----------------------- | ------------------------------- | ---------------------------------------------------------------- |
+| Device code expires     | Polling never succeeds          | Device codes expire in 15 minutes; user must restart flow        |
+| Encryption key errors   | Keys fail to save               | Verify 64-character hex string for encryption key                |
+| Auth0 errors            | 401 Unauthorized                | Verify Auth0 client ID/secret are correct                        |
+| OAuth not configured    | Google/GitHub OAuth returns 503 | Set OAuth client ID and secret env vars                          |
+| Token refresh fails     | Access token expired            | User may have revoked access; re-authentication required         |
+| Rate limit misdiagnosed | "Invalid API key" for 429 error | Rate limits are correctly identified — ensure service is current |
+| Test costs money        | Charges on provider account     | Test endpoint makes real API calls; use sparingly                |
+| Pricing fetch fails     | Service fails to start          | Ensure app-settings-service is running and accessible            |
+| Default model rejected  | 400 INVALID_REQUEST             | Model must pass `isFastModel()` AND have API key set             |
+| GitHub token not found  | 404 NOT_FOUND                   | User must connect GitHub account first                           |
 
 ---
 
@@ -743,13 +743,13 @@ Now that you understand the basics:
 <details>
 <summary>Solutions</summary>
 
-### Exercise 1: Easy - Get Auth Config
+### Exercise 1: Easy — Get Auth Config
 
 ```bash
 curl https://user-service.intexuraos.com/auth/config
 ```
 
-### Exercise 2: Medium - Add and Test Key
+### Exercise 2: Medium — Add and Test Key
 
 ```bash
 # Add key
@@ -763,7 +763,7 @@ curl -X POST https://user-service.intexuraos.com/users/$UID/settings/llm-keys/op
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Exercise 3: Hard - CLI Device Code Flow
+### Exercise 3: Hard — CLI Device Code Flow
 
 ```typescript
 async function deviceLogin(): Promise<string> {
@@ -798,7 +798,7 @@ async function deviceLogin(): Promise<string> {
 }
 ```
 
-### Exercise 4: Hard - Find User by GitHub Username
+### Exercise 4: Hard — Find User by GitHub Username
 
 ```bash
 # Connect GitHub first (via OAuth flow in browser)

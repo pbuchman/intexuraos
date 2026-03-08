@@ -181,7 +181,7 @@ interface BatchGetActionsResponse {
 
 **Endpoint:** `GET /actions/:actionId/preview`
 
-**When to use:** Retrieve a generated preview for a calendar action before approving it. As of v4.1.0, previews are generated synchronously when the approval message is sent, so this endpoint is primarily for UI display.
+**When to use:** Retrieve a generated preview for a calendar action before approving it. Previews are generated synchronously when the approval message is sent, so this endpoint is primarily for UI display.
 
 **Input Schema:**
 
@@ -294,7 +294,7 @@ interface ApprovalReplyEvent {
   userId: string;
   timestamp: string;
   actionId?: string;
-  // Button ID formats (v4.0.0, extended v4.1.0):
+  // Button ID formats:
   //   approve:{actionId}                    - approve the action
   //   reject:{actionId}                     - reject the action
   //   cancel:{actionId}                     - cancel (same as reject)
@@ -423,7 +423,7 @@ commands-agent -> action.created -> actions-agent
                         auto-execute OR action.awaiting_approval
 ```
 
-### Approval Reply Flow (v4.0.0 -- buttons only, v4.1.0 -- proceed-implementation)
+### Approval Reply Flow
 
 ```
 User taps WhatsApp button
@@ -470,7 +470,7 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 | `INTERNAL_ERROR`   | 500  | Processing failure         | Retry with backoff            |
 | `DOWNSTREAM_ERROR` | 502  | Calendar/other service err | Wait and retry                |
 
-### Cancel-task Error Codes (v4.0.0)
+### Cancel-task Error Codes
 
 | Error Code             | HTTP | User Message                                     |
 | ---------------------- | ---- | ------------------------------------------------ |
@@ -480,7 +480,7 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 | `NOT_OWNER`            | 403  | You are not the owner of this task.              |
 | `TASK_NOT_CANCELLABLE` | 400  | Task cannot be cancelled (may have completed).   |
 
-### Proceed-implementation Error Codes (v4.1.0, INT-628)
+### Proceed-implementation Error Codes (INT-628)
 
 | Error Code              | User Message                                                   |
 | ----------------------- | -------------------------------------------------------------- |

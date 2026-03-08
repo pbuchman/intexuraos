@@ -1,6 +1,6 @@
 # Linear Agent Tutorial
 
-> **Time:** 40-50 minutes
+> **Time:** 40–50 minutes
 > **Prerequisites:** Node.js 22+, Linear account with API key, IntexuraOS running locally
 > **You'll learn:** How to connect Linear, create issues via AI, view issues with parent-child support, read comments, configure webhooks, sync issues, use the internal API, and observe auto-triggered code tasks
 
@@ -137,7 +137,7 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
 | Field                       | Extracted Value                                        |
 | --------------------------- | ------------------------------------------------------ |
 | **Title**                   | Fix unresponsive login button on iOS                   |
-| **Priority**                | 2 (High) -- from "high priority"                       |
+| **Priority**                | 2 (High) — from "high priority"                        |
 | **Functional Requirements** | Login button must respond to tap events on iOS devices |
 | **Technical Details**       | Investigate touch event handling in iOS build          |
 
@@ -219,7 +219,7 @@ curl http://localhost:3000/linear/issues \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
-Note how parent issues have their `children` array populated -- sub-issues are nested under their parent.
+Note how parent issues have their `children` array populated — sub-issues are nested under their parent.
 
 ### Step 3.3: Get Issue Detail
 
@@ -268,7 +268,7 @@ curl -X POST http://localhost:3000/linear/webhook-config \
 
 ### Step 4.4: Verify Webhook is Active
 
-Create or update an issue in Linear. The webhook fans out to ALL connected users for that team -- each user's local Firestore store gets updated.
+Create or update an issue in Linear. The webhook fans out to ALL connected users for that team — each user's local Firestore store gets updated.
 
 **Checkpoint:** After configuring the webhook, changes in Linear should appear in the local issue repository for all connected team members automatically.
 
@@ -384,8 +384,8 @@ The auto-trigger fires when all of these conditions are met:
 
 The prompt depends on the issue's labels:
 
-- **With `code-task` label:** EXECUTION_PROMPT -- implement requirements, write code, run CI, create PR
-- **Without `code-task` label:** ASSIGNMENT_PROMPT -- analyze issue, enrich description, add acceptance criteria
+- **With `code-task` label:** EXECUTION_PROMPT — implement requirements, write code, run CI, create PR
+- **Without `code-task` label:** ASSIGNMENT_PROMPT — analyze issue, enrich description, add acceptance criteria
 
 ### Test the Auto-Trigger
 

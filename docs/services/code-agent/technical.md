@@ -1,4 +1,4 @@
-# Code Agent -- Technical Reference
+# Code Agent — Technical Reference
 
 ## Overview
 
@@ -6,7 +6,7 @@ The code-agent service orchestrates autonomous code execution tasks. It accepts 
 
 - **Framework:** Fastify 5 on Node.js 22+
 - **Port:** 8128 (local), 8080 (Cloud Run)
-- **Package:** `@intexuraos/code-agent` v3.2.0
+- **Package:** `@intexuraos/code-agent`
 - **Deploy:** Cloud Run (scale 0-1)
 
 ## Architecture
@@ -147,19 +147,19 @@ sequenceDiagram
 
 | Commit     | Description                                                             | Date         |
 | ---------- | ----------------------------------------------------------------------- | ------------ |
-| `55b959e6` | Add deep link ctaUrl to WhatsApp notifications                          | 4 hours ago  |
-| `bd247a3d` | Treat Cloudflare 520-530 errors as retryable infrastructure errors      | 6 hours ago  |
-| `a41ca812` | Replace PR URL text with WhatsApp CTA URL buttons                       | 17 hours ago |
-| `d2f8af51` | Rename failed task button from View Progress to Check Logs              | 18 hours ago |
-| `783dfbe7` | Extract backLinkPlanningTask helper to eliminate duplication            | 18 hours ago |
-| `ae79f3da` | Back-link planning tasks when execution tasks are created (INT-725)     | 18 hours ago |
-| `e5986ed4` | Add View Progress button to failed task notifications                   | 18 hours ago |
-| `84005b20` | Hydrate code task Linear data live                                      | 2 days ago   |
-| `b16a3c50` | Add linearIssueLabels to CodeTask model and CreateTaskInput             | 3 days ago   |
-| `171633b4` | Add prompt injection sanitization to code-agent (INT-413)               | 3 days ago   |
-| `a9c36c8c` | Add 'archived' status for retried tasks (INT-711)                       | 3 days ago   |
-| `d24a89e9` | Delete PR task lock when task reaches terminal state                    | 3 days ago   |
-| `a985c501` | Persist linearIssueLabels in processCodeAction task creation            | 3 days ago   |
+| `55b959e6` | Add deep link ctaUrl to WhatsApp notifications                          | 2026-03-07   |
+| `bd247a3d` | Treat Cloudflare 520–530 errors as retryable infrastructure errors      | 2026-03-07   |
+| `a41ca812` | Replace PR URL text with WhatsApp CTA URL buttons                       | 2026-03-06   |
+| `d2f8af51` | Rename failed task button from View Progress to Check Logs              | 2026-03-06   |
+| `783dfbe7` | Extract backLinkPlanningTask helper to eliminate duplication            | 2026-03-06   |
+| `ae79f3da` | Back-link planning tasks when execution tasks are created (INT-725)     | 2026-03-06   |
+| `e5986ed4` | Add View Progress button to failed task notifications                   | 2026-03-06   |
+| `84005b20` | Hydrate code task Linear data live                                      | 2026-03-05   |
+| `b16a3c50` | Add linearIssueLabels to CodeTask model and CreateTaskInput             | 2026-03-04   |
+| `171633b4` | Add prompt injection sanitization to code-agent (INT-413)               | 2026-03-04   |
+| `a9c36c8c` | Add 'archived' status for retried tasks (INT-711)                       | 2026-03-04   |
+| `d24a89e9` | Delete PR task lock when task reaches terminal state                    | 2026-03-04   |
+| `a985c501` | Persist linearIssueLabels in processCodeAction task creation            | 2026-03-04   |
 
 ## API Endpoints
 
@@ -170,6 +170,7 @@ sequenceDiagram
 | POST   | `/code/submit`                             | Submit code task from web UI       | Auth0 |
 | GET    | `/code/tasks`                              | List user's tasks (paginated)      | Auth0 |
 | GET    | `/code/tasks/:taskId`                      | Get task details                   | Auth0 |
+| DELETE | `/code/tasks/:taskId`                      | Delete a code task                 | Auth0 |
 | POST   | `/code/cancel`                             | Cancel a running task              | Auth0 |
 | POST   | `/code/retry`                              | Retry a failed/cancelled task      | Auth0 |
 | POST   | `/code/tasks/:taskId/feedback`             | Submit feedback on completed task  | Auth0 |
@@ -376,7 +377,7 @@ Normalized GitHub webhook events for PR timeline display.
 
 ### GitHubPRSummary (collection: `github-pr-summaries`)
 
-One document per unique PR, upserted on every webhook event. Used for the 30-day PR list view -- O(PRs) instead of O(events).
+One document per unique PR, upserted on every webhook event. Used for the 30-day PR list view — O(PRs) instead of O(events).
 
 ```typescript
 interface GitHubPRSummary {
@@ -499,7 +500,6 @@ Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 | Max concurrent tasks | 3       |
 | Max tasks per hour   | 10      |
 | Max prompt length    | 10,000  |
-| Daily cost cap       | $20     |
 | Monthly cost cap     | $200    |
 | Estimated cost/task  | $1.17   |
 | Zombie threshold     | 30 min  |
@@ -523,11 +523,14 @@ Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 10. **Bot review edit triage.** When a whitelisted bot edits its comment, the dispatch message instructs the agent to check whether the review is still in progress (spinner, short body, unchecked items) before acting.
 11. **Turn metrics use orchestrator HMAC, not per-task HMAC.** The `/internal/turn-metrics` endpoint validates signatures against `INTEXURAOS_ORCHESTRATOR_SECRET`, not the per-task webhook secret.
 12. **Retried tasks archive the original.** When a task is retried (INT-711), the original task's status changes to `archived`, keeping the task list focused on active work. The new task links back via `retriedFrom`.
-13. **Cloudflare 520-530 errors are retryable.** The task dispatcher treats Cloudflare tunnel errors (520-530 range) as infrastructure failures and falls back to the next worker, rather than failing the task immediately.
+13. **Cloudflare 520–530 errors are retryable.** The task dispatcher treats Cloudflare tunnel errors (520–530 range) as infrastructure failures and falls back to the next worker, rather than failing the task immediately.
 14. **PR task locks guard concurrent dispatch.** When a GitHub PR comment triggers task creation, a Firestore transaction-based lock (`pr_task_locks` collection) prevents duplicate tasks from concurrent webhook deliveries. Locks are cleaned up when tasks reach terminal status.
 15. **createTaskForPR resolves GitHub usernames.** The `UserLookupService` chains `user-service` GitHub OAuth resolution with `code_worker_settings` GitHub username fallback to map a GitHub login to an IntexuraOS userId.
 16. **Linear issue labels drive worker type.** If a Linear issue has a label matching a supported worker type (e.g., `opus`, `sonnet`), that overrides the user-requested worker type for the task.
 17. **SkipPrefixRule filters @claude/@codex/@ignore.** Comments starting with these prefixes are silently ignored by the webhook rules engine, preventing unwanted task dispatch from bot mentions or explicit ignore markers.
+18. **Gemini-extracted task summaries.** When a task completes, the orchestrator's `CompletionVerifier` uses `gemini-2.5-flash` to extract a 3–5 sentence narrative summary from the agent's output. If the agent's own summary is missing or too brief, Gemini writes one from the logs. The summary is injected into `TaskResult.summary` (now optional alongside `branch` and `commits`).
+19. **PR title auto-update with Linear ID.** When `createTaskForPR` creates a new Linear issue from a PR comment, it prepends `[INT-XXX]` to the GitHub PR title using the commenter's GitHub OAuth token. This is best-effort — failures are logged but do not block task creation.
+20. **Mandatory Linear comments reading.** All agent types (planning, execution, pull request) read the full Linear issue and all its comments (newest-first) as their mandatory first action before doing any work. This ensures clarifications added after an "unclear" flag are incorporated on re-execution.
 
 ## File Structure
 
@@ -634,7 +637,7 @@ apps/code-agent/src/
     webhookValidation.ts           # Webhook HMAC validation
   routes/
     index.ts                       # Route registration
-    codeRoutes.ts                  # Main code task routes (internal + public, ~3900 lines)
+    codeRoutes.ts                  # Main code task routes (internal + public)
     webhookRoutes.ts               # Task completion + log + turn-metrics webhooks
     workerSettingsRoutes.ts        # Worker settings CRUD routes
     code/

@@ -1,7 +1,7 @@
-# Commands Agent - Technical Debt
+# Commands Agent — Technical Debt
 
 **Last Updated:** 2026-03-07
-**Analysis Run:** Service documentation generation (v3.1.0+ context)
+**Analysis Run:** Service documentation generation (v3.1.0 context)
 
 ---
 
@@ -10,10 +10,10 @@
 | Category       | Count | Severity |
 | -------------- | ----- | -------- |
 | Code Smells    | 2     | Low      |
-| Test Coverage  | 0     | -        |
-| Type Issues    | 0     | -        |
-| TODO/FIXME     | 0     | -        |
-| SRP Violations | 0     | -        |
+| Test Coverage  | 0     | —        |
+| Type Issues    | 0     | —        |
+| TODO/FIXME     | 0     | —        |
+| SRP Violations | 0     | —        |
 | **Total**      | **2** | Low      |
 
 ---
@@ -22,17 +22,17 @@
 
 Based on code analysis and git history:
 
-1. **Reminder handler implementation** - CommandType includes `reminder` but actions-agent handler not yet implemented
+1. **Reminder handler implementation** — CommandType includes `reminder` but actions-agent handler not yet implemented
 
-2. **Additional language support** - Currently English and Polish; German and Spanish phrases could be added to Step 1 and Step 2 of classification prompt
+2. **Additional language support** — Currently English and Polish; German and Spanish phrases could be added to Step 1 and Step 2 of classification prompt
 
-3. **Confidence threshold tuning** - Low confidence commands default to `note`; could offer user confirmation flow for ambiguous inputs
+3. **Confidence threshold tuning** — Low confidence commands default to `note`; could offer user confirmation flow for ambiguous inputs
 
-4. **Structured output mode** - Consider using Gemini function calling or OpenAI JSON mode instead of regex JSON extraction
+4. **Structured output mode** — Consider using Gemini function calling or OpenAI JSON mode instead of regex JSON extraction
 
-5. **Circuit breaker for actions-agent** - Commands fail with `failed` status when actions-agent is unavailable; circuit breaker pattern would improve resilience
+5. **Circuit breaker for actions-agent** — Commands fail with `failed` status when actions-agent is unavailable; circuit breaker pattern would improve resilience
 
-6. **Graceful degradation for startup pricing** - `initServices()` hard-fails when app-settings-service is unreachable; cached or default pricing would improve boot resilience
+6. **Graceful degradation for startup pricing** — `initServices()` hard-fails when app-settings-service is unreachable; cached or default pricing would improve boot resilience
 
 ---
 
@@ -44,7 +44,7 @@ Based on code analysis and git history:
 
 **Issue:** `parseClassifyResponse()` uses regex `/\{[\s\S]*}/` to extract JSON from LLM response. If LLM returns multiple JSON objects or malformed text, extraction may fail unpredictably.
 
-**Impact:** Low - LLMs reliably return single JSON block; Zod validation catches malformed responses; fallback to `note` handles edge cases gracefully.
+**Impact:** Low — LLMs reliably return single JSON block; Zod validation catches malformed responses; fallback to `note` handles edge cases gracefully.
 
 **Recommendation:** Use structured output mode when available (Gemini function calling, OpenAI JSON mode).
 
@@ -84,9 +84,9 @@ No test coverage gaps identified. Core paths tested:
 - No `any` types detected in source code
 - No `@ts-ignore` or `@ts-expect-error` usage
 - Strict mode compliance: Pass
-- Zod schema validation: Implemented (v2.1.0)
-- Response contract compliance: `reply.ok()`/`reply.fail()` (v2.2.0)
-- Sentry-enabled logging: `createAppLogger()` (v2.2.0)
+- Zod schema validation: Implemented
+- Response contract compliance: `reply.ok()`/`reply.fail()`
+- Sentry-enabled logging: `createAppLogger()`
 
 ---
 
@@ -134,7 +134,7 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ### URL keyword misclassification
 
-**Resolved in:** INT-177 (v2.0.0)
+**Resolved in:** INT-177
 
 **Previous issue:** URLs like "https://research-world.com" would trigger `research` classification due to keyword matching.
 
@@ -142,7 +142,7 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ### Multilingual support limited to English
 
-**Resolved in:** INT-177 (v2.0.0)
+**Resolved in:** INT-177
 
 **Previous issue:** Non-English speakers had to use English command phrases.
 
@@ -150,7 +150,7 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ### LLM response validation without type safety
 
-**Resolved in:** INT-218 (v2.1.0)
+**Resolved in:** INT-218
 
 **Previous issue:** LLM responses were parsed as JSON without schema validation, risking runtime errors.
 
@@ -158,7 +158,7 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ### User service client implementation duplication
 
-**Resolved in:** INT-269 (v2.1.0)
+**Resolved in:** INT-269
 
 **Previous issue:** Each service implemented its own HTTP client for user-service.
 
@@ -166,7 +166,7 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ### Local user service client adapter layer
 
-**Resolved in:** INT-301 (v2.2.0)
+**Resolved in:** INT-301
 
 **Previous issue:** commands-agent maintained a local adapter (`domain/ports/userServiceClient.ts`) and re-export barrel (`infra/user/index.ts`) that wrapped the shared `@intexuraos/internal-clients` package with a domain-specific `UserApiKeys` type.
 
@@ -174,7 +174,7 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ### Raw response format inconsistency
 
-**Resolved in:** INT-340 (v2.2.0)
+**Resolved in:** INT-340
 
 **Previous issue:** Internal routes returned raw objects (e.g., `{ error: 'Unauthorized' }`, `{ success: true, commandId: '...' }`) instead of using the standardized response contract.
 
@@ -182,7 +182,7 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ### Direct pino() logger usage
 
-**Resolved in:** INT-340 (v2.2.0)
+**Resolved in:** INT-340
 
 **Previous issue:** `services.ts` created loggers with `pino()` directly, which skipped Sentry error reporting integration.
 
@@ -200,8 +200,8 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)
 
 ---

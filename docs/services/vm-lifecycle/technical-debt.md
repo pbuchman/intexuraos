@@ -1,4 +1,4 @@
-# VM Lifecycle Worker -- Technical Debt
+# VM Lifecycle Worker — Technical Debt
 
 **Last Updated:** 2026-03-07
 **Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
@@ -10,20 +10,20 @@
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
 | Code Smells | 2     | Low      |
-| Test Gaps   | 0     | -        |
-| Type Issues | 0     | -        |
-| TODOs       | 0     | -        |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
 | **Total**   | **2** | Low      |
 
 ---
 
 ## Future Plans
 
-- **Weekend override** -- Allow starting the VM on weekends via an API flag or manual scheduler trigger without requiring Terraform changes
-- **Startup notifications** -- Send a Slack or WhatsApp message when the VM starts or stops, providing visibility into schedule execution
-- **Cost reporting** -- Track and report VM uptime hours and estimated compute costs per billing period
-- **Multi-VM support** -- Accept VM instance parameters via the request body to manage multiple instances from the same functions
-- **Status endpoint** -- Add a read-only function that reports current VM state without starting or stopping
+- **Weekend override** — Allow starting the VM on weekends via an API flag or manual scheduler trigger without requiring Terraform changes
+- **Startup notifications** — Send a Slack or WhatsApp message when the VM starts or stops, providing visibility into schedule execution
+- **Cost reporting** — Track and report VM uptime hours and estimated compute costs per billing period
+- **Multi-VM support** — Accept VM instance parameters via the request body to manage multiple instances from the same functions
+- **Status endpoint** — Add a read-only function that reports current VM state without starting or stopping
 
 ---
 
@@ -69,7 +69,7 @@ None found in source files.
 
 ## SRP Violations
 
-None. The largest source file is `start-vm.ts` at 143 lines, well within limits.
+None. All source files are well within size limits.
 
 ---
 
@@ -87,6 +87,6 @@ None. The largest source file is `start-vm.ts` at 143 lines, well within limits.
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

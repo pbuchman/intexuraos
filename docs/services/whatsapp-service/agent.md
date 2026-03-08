@@ -251,7 +251,7 @@ interface TranscriptionCompletedEvent {
 | **Approval Format**     | CorrelationId MUST match `action-{type}-approval-{id}`            |
 | **Button Title Limit**  | Button titles truncated to 20 characters                          |
 | **Phone Verification**  | Phone must be verified before connecting via `/whatsapp/connect`  |
-| **No Emoji Reactions**  | Emoji reactions are ignored; use buttons or text replies (v4.0.0) |
+| **No Emoji Reactions**  | Emoji reactions are ignored; use buttons or text replies          |
 | **CTA vs Buttons**      | `ctaUrl` and `buttons` are mutually exclusive                     |
 
 ---

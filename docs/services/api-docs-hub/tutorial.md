@@ -1,4 +1,4 @@
-# API Docs Hub -- Tutorial
+# API Docs Hub — Tutorial
 
 > **Time:** 10 minutes
 > **Prerequisites:** Running IntexuraOS services (local or dev environment)
@@ -155,14 +155,14 @@ curl http://localhost:8080/health | jq .
 
 ## Troubleshooting
 
-| Issue                 | Cause                          | Solution                                                   |
-| --------------------- | ------------------------------ | ---------------------------------------------------------- |
-| Spec not loading      | Target service is down         | Check target service status and network accessibility      |
-| CORS error            | Service blocks browser origin  | Configure CORS headers on the target service               |
-| Health returns "down" | Missing env vars at startup    | Ensure all 18 `*_OPENAPI_URL` vars are set                 |
-| Startup crash         | Any required env var missing   | Run `direnv allow` and verify with `env \                  | grep OPENAPI` |
-| Blank Swagger UI      | All services unreachable       | Verify at least one service URL is reachable from browser  |
-| Port conflict         | Port 8080 already in use       | Set `PORT=8081` or stop the conflicting process            |
+| Issue                 | Cause                          | Solution                                                  |
+| --------------------- | ------------------------------ | --------------------------------------------------------- |
+| Spec not loading      | Target service is down         | Check target service status and network accessibility     |
+| CORS error            | Service blocks browser origin  | Configure CORS headers on the target service              |
+| Health returns "down" | Missing env vars at startup    | Ensure all 18 `*_OPENAPI_URL` vars are set                |
+| Startup crash         | Any required env var missing   | Run `direnv allow` and verify with `env                   | grep OPENAPI` |
+| Blank Swagger UI      | All services unreachable       | Verify at least one service URL is reachable from browser |
+| Port conflict         | Port 8080 already in use       | Set `PORT=8081` or stop the conflicting process           |
 
 ---
 

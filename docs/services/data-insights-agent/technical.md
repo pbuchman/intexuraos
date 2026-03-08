@@ -1,4 +1,4 @@
-# Data Insights Agent -- Technical Reference
+# Data Insights Agent — Technical Reference
 
 ## Overview
 
@@ -86,10 +86,11 @@ sequenceDiagram
 
 | Commit     | Description                                                           | Date       |
 | ---------- | --------------------------------------------------------------------- | ---------- |
+| `44ea683a` | Release v3.2.0                                                        | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration and update cross-service mocks          | 2026-03-02 |
 | `3608e1d6` | INT-595: Align TransformedDataSchema with prompt empty-array contract | 2026-02-23 |
 | `b3f34d85` | Release v3.1.0                                                        | 2026-02-22 |
-| `f1e27f57` | Remove scheduled snapshot refresh (saves ~6.5M tokens/day)            | 2026-02-20 |
+| `f1e27f57` | Remove scheduled snapshot refresh (saves ~6.5M tokens/day)            | 2026-02-21 |
 | `c8a42105` | Release v3.0.0                                                        | 2026-02-19 |
 | `f00798da` | Add saved visualizations feature (full CRUD + auto-refresh)           | 2026-02-17 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability                       | 2026-02-16 |
@@ -132,6 +133,13 @@ sequenceDiagram
 | ------ | ---------------------------------- | -------------------------- | ----------------- |
 | POST   | `/internal/visualizations/compute` | Compute visualization data | Internal services |
 
+### System Endpoints
+
+| Method | Path            | Purpose               | Auth |
+| ------ | --------------- | --------------------- | ---- |
+| GET    | `/health`       | Health check          | None |
+| GET    | `/openapi.json` | OpenAPI specification | None |
+
 ## Domain Model
 
 ### DataSource
@@ -147,17 +155,17 @@ sequenceDiagram
 
 ### CompositeFeed
 
-| Field                 | Type                           | Description                    |
-| --------------------- | ------------------------------ | ------------------------------ |
-| `id`                  | `string`                       | Unique identifier              |
-| `userId`              | `string`                       | Owner user ID                  |
-| `name`                | `string`                       | AI-generated feed name         |
-| `purpose`             | `string`                       | User-provided purpose (max 1K) |
-| `staticSourceIds`     | `string[]`                     | Data source IDs (max 5)        |
-| `notificationFilters` | `NotificationFilterConfig[]`   | Notification filter configs    |
-| `dataInsights`        | `DataInsight[] \               | null`                          | AI analysis results |
-| `createdAt`           | `Date`                         | Creation timestamp             |
-| `updatedAt`           | `Date`                         | Last update timestamp          |
+| Field                 | Type                         | Description                    |
+| --------------------- | ---------------------------- | ------------------------------ |
+| `id`                  | `string`                     | Unique identifier              |
+| `userId`              | `string`                     | Owner user ID                  |
+| `name`                | `string`                     | AI-generated feed name         |
+| `purpose`             | `string`                     | User-provided purpose (max 1K) |
+| `staticSourceIds`     | `string[]`                   | Data source IDs (max 5)        |
+| `notificationFilters` | `NotificationFilterConfig[]` | Notification filter configs    |
+| `dataInsights`        | `DataInsight[] \             | null`                          | AI analysis results |
+| `createdAt`           | `Date`                       | Creation timestamp             |
+| `updatedAt`           | `Date`                       | Last update timestamp          |
 
 ### NotificationFilterConfig
 
@@ -177,7 +185,7 @@ sequenceDiagram
 | `title`              | `string`      | Insight title                  |
 | `description`        | `string`      | Insight description            |
 | `trackableMetric`    | `string`      | Measurable metric to track     |
-| `suggestedChartType` | `ChartTypeId` | Recommended chart type (C1-C6) |
+| `suggestedChartType` | `ChartTypeId` | Recommended chart type (C1–C6) |
 | `generatedAt`        | `string`      | ISO timestamp                  |
 
 **Chart Type Values:**
@@ -205,23 +213,23 @@ sequenceDiagram
 
 ### Visualization
 
-| Field                   | Type                                         | Description                     |
-| ----------------------- | -------------------------------------------- | ------------------------------- |
-| `id`                    | `string`                                     | Unique identifier               |
-| `userId`                | `string`                                     | Owner user ID                   |
-| `feedId`                | `string`                                     | Associated composite feed ID    |
-| `feedName`              | `string`                                     | Feed name at creation time      |
-| `insightId`             | `string`                                     | Associated insight ID           |
-| `insightTitle`          | `string`                                     | Insight title at creation time  |
-| `trackableMetric`       | `string`                                     | Metric being tracked            |
-| `chartConfig`           | `object`                                     | Vega-Lite spec (without data)   |
-| `transformInstructions` | `string`                                     | LLM data transform instructions |
-| `chartData`             | `unknown[] \                                 | null`                           | Computed chart data |
-| `status`                | `pending \                                   | ready \                         | refreshing \ | error` | Computation lifecycle status |
-| `lastError`             | `string?`                                    | Last error message if any       |
-| `lastRefreshedAt`       | `Date?`                                      | Timestamp of last data refresh  |
-| `createdAt`             | `Date`                                       | Creation timestamp              |
-| `updatedAt`             | `Date`                                       | Last update timestamp           |
+| Field                   | Type                                              | Description                     |
+| ----------------------- | ------------------------------------------------- | ------------------------------- |
+| `id`                    | `string`                                          | Unique identifier               |
+| `userId`                | `string`                                          | Owner user ID                   |
+| `feedId`                | `string`                                          | Associated composite feed ID    |
+| `feedName`              | `string`                                          | Feed name at creation time      |
+| `insightId`             | `string`                                          | Associated insight ID           |
+| `insightTitle`          | `string`                                          | Insight title at creation time  |
+| `trackableMetric`       | `string`                                          | Metric being tracked            |
+| `chartConfig`           | `object`                                          | Vega-Lite spec (without data)   |
+| `transformInstructions` | `string`                                          | LLM data transform instructions |
+| `chartData`             | `unknown[] \                                      | null`                           | Computed chart data |
+| `status`                | `'pending' \                                      | 'ready' \                       | 'refreshing' \ | 'error'` | Computation lifecycle status |
+| `lastError`             | `string?`                                         | Last error message if any       |
+| `lastRefreshedAt`       | `Date?`                                           | Timestamp of last data refresh  |
+| `createdAt`             | `Date`                                            | Creation timestamp              |
+| `updatedAt`             | `Date`                                            | Last update timestamp           |
 
 **Status Lifecycle:** `pending` -> `ready` (or `error`). Manual refreshes use `refreshing` as intermediate state.
 
@@ -277,8 +285,8 @@ sequenceDiagram
 - **LLM repair pattern**: Analysis auto-retries with repair prompt on parse failure (INT-79)
 - **Empty insights**: Returns success with empty array and `noInsightsReason` instead of error (INT-77)
 - **Empty transform results**: Data transform accepts empty arrays (`[]`) as valid output when zero rows match the transformation criteria (INT-595)
-- **Chart type IDs**: Use compact format (C1-C6) not full names in storage
-- **Snapshot refresh**: Snapshots refresh on feed creation and update only (scheduled refresh was removed in v3.1.0 to save ~6.5M tokens/day)
+- **Chart type IDs**: Use compact format (C1–C6) not full names in storage
+- **Snapshot refresh**: Snapshots refresh on feed creation and update only (scheduled refresh was removed to save ~6.5M tokens/day)
 - **Snapshot ?refresh=true**: The `GET /composite-feeds/:id/snapshot` endpoint accepts a `refresh=true` query param to force on-demand refresh
 - **Visualization async compute**: `POST /visualizations` returns 201 immediately with `status: pending`; poll `GET /visualizations/:id` until `status: ready` or `error`
 - **Visualization limit**: Max 10 per feed; creation returns 400 `INVALID_REQUEST` when exceeded
@@ -310,7 +318,7 @@ apps/data-insights-agent/src/
 │   │   └── usecases/        # refreshSnapshot, getDataInsightSnapshot
 │   ├── dataInsights/        # AI analysis capabilities
 │   │   ├── types.ts         # DataInsight, ChartTypeDefinition, MAX_INSIGHTS_PER_FEED
-│   │   ├── chartTypes.ts    # CHART_TYPES array (C1-C6 with Vega-Lite schemas)
+│   │   ├── chartTypes.ts    # CHART_TYPES array (C1–C6 with Vega-Lite schemas)
 │   │   ├── ports.ts         # DataAnalysisService, ChartDefinitionService, DataTransformService
 │   │   ├── utils.ts         # buildCompositeFeedSchema helper
 │   │   └── usecases/        # analyzeData, generateChartDefinition, transformDataForPreview
@@ -334,14 +342,14 @@ apps/data-insights-agent/src/
 │   └── http/                # External service clients
 │       └── mobileNotificationsClient.ts
 ├── routes/
-│   ├── dataSourceRoutes.ts        # CRUD + generate-title (340 lines)
-│   ├── compositeFeedRoutes.ts     # CRUD + schema/data/snapshot (583 lines)
-│   ├── dataInsightsRoutes.ts      # analyze + chart-definition + preview (271 lines)
-│   ├── visualizationRoutes.ts     # CRUD + refresh (320 lines)
-│   └── internalRoutes.ts          # compute visualization (78 lines)
+│   ├── dataSourceRoutes.ts        # CRUD + generate-title
+│   ├── compositeFeedRoutes.ts     # CRUD + schema/data/snapshot
+│   ├── dataInsightsRoutes.ts      # analyze + chart-definition + preview
+│   ├── visualizationRoutes.ts     # CRUD + refresh
+│   └── internalRoutes.ts          # compute visualization
 ├── services.ts              # DI container (10 services)
 ├── config.ts                # Environment configuration (Zod validated)
-├── server.ts                # Fastify app builder (v0.0.4)
+├── server.ts                # Fastify app builder
 └── index.ts                 # Entry point (pricing fetch, service wiring)
 ```
 

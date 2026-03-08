@@ -1,4 +1,4 @@
-# vm-lifecycle -- Agent Interface
+# vm-lifecycle — Agent Interface
 
 > Machine-readable specification for AI agent integration with vm-lifecycle.
 
@@ -20,13 +20,13 @@
 
 **Endpoint:** `POST /` (Cloud Function: `startVm`)
 
-**When to use:** When you need to bring up the GCE VM and confirm the application is ready to accept work. Use before sending tasks to the orchestrator. Safe to call if the VM is already running -- returns immediately if healthy.
+**When to use:** When you need to bring up the GCE VM and confirm the application is ready to accept work. Use before sending tasks to the orchestrator. Safe to call if the VM is already running — returns immediately if healthy.
 
 **Input Schema:**
 
 ```typescript
 interface StartVmInput {
-  // No body required -- configuration is fully environment-driven
+  // No body required — configuration is fully environment-driven
 }
 ```
 
@@ -46,21 +46,21 @@ interface StartVmResult {
 // Request: POST / (no body)
 // Header: X-Internal-Auth: Bearer <token>
 
-// Response 200 -- started fresh
+// Response 200 — started fresh
 {
   "success": true,
   "message": "VM started and healthy",
   "startupDurationMs": 45000
 }
 
-// Response 200 -- already running
+// Response 200 — already running
 {
   "success": true,
   "message": "VM already running and healthy",
   "startupDurationMs": 2000
 }
 
-// Response 503 -- health check timed out
+// Response 503 — health check timed out
 {
   "success": false,
   "message": "VM started but health check timed out after 3 minutes",
@@ -78,7 +78,7 @@ interface StartVmResult {
 
 ```typescript
 interface StopVmInput {
-  // No body required -- configuration is fully environment-driven
+  // No body required — configuration is fully environment-driven
 }
 ```
 
@@ -98,20 +98,20 @@ interface StopVmResult {
 // Request: POST / (no body)
 // Header: X-Internal-Auth: Bearer <token>
 
-// Response 200 -- shutdown initiated
+// Response 200 — shutdown initiated
 {
   "success": true,
   "message": "VM shutdown initiated",
   "runningTasksAtShutdown": 2
 }
 
-// Response 200 -- already stopped
+// Response 200 — already stopped
 {
   "success": true,
   "message": "VM already in TERMINATED state"
 }
 
-// Response 503 -- Compute API failure
+// Response 503 — Compute API failure
 {
   "success": false,
   "message": "Failed to stop VM: <error details>"
@@ -124,10 +124,10 @@ interface StopVmResult {
 
 **Do NOT:**
 
-- Call without `X-Internal-Auth: Bearer <token>` header -- returns 401
-- Use GET or any non-POST method -- returns 405
-- Expect synchronous completion of the VM stop -- the function issues the stop command but does not wait for `TERMINATED` state
-- Rely on sub-120-second execution -- health polling can take up to 3 minutes (exceeds function timeout)
+- Call without `X-Internal-Auth: Bearer <token>` header — returns 401
+- Use GET or any non-POST method — returns 405
+- Expect synchronous completion of the VM stop — the function issues the stop command but does not wait for `TERMINATED` state
+- Rely on sub-120-second execution — health polling can take up to 3 minutes (exceeds function timeout)
 
 **Requires:**
 
@@ -200,7 +200,7 @@ gcloud compute instances describe cc-vm \
 
 | Variable                         | Required | Default                                         | Description               |
 | -------------------------------- | -------- | ----------------------------------------------- | ------------------------- |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | -                                               | Bearer token for auth     |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | —                                               | Bearer token for auth     |
 | `INTEXURAOS_GCP_PROJECT_ID`      | No       | `intexuraos`                                    | GCP project ID            |
 | `INTEXURAOS_VM_ZONE`             | No       | `europe-central2-a`                             | GCE zone                  |
 | `INTEXURAOS_VM_INSTANCE_NAME`    | No       | `cc-vm`                                         | VM instance name          |

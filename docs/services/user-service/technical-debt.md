@@ -235,7 +235,7 @@ Release version bump only. No functional changes to user-service code.
 | INT-408 | Undeclared env vars used without REQUIRED_ENV entry | Added 3 missing env vars to REQUIRED_ENV                         |
 | INT-427 | 100% coverage enforcement required v8 ignore annots | Added categorized v8 ignore annotations across route/domain code |
 
-### v2.0.0 - 2026-01-24
+### 2026-01-24
 
 | Issue   | Description                                       | Resolution                                  |
 | ------- | ------------------------------------------------- | ------------------------------------------- |
@@ -246,6 +246,6 @@ Release version bump only. No functional changes to user-service code.
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

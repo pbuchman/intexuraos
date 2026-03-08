@@ -1,16 +1,8 @@
-# Actions Agent - Technical Reference
+# Actions Agent — Technical Reference
 
 ## Overview
 
-Actions-agent is the central action lifecycle management service for IntexuraOS. It receives classified commands from
-commands-agent, maintains action state in Firestore, routes actions to appropriate handlers via Pub/Sub, and tracks
-execution status. In v2.0.0, it gained WhatsApp approval handling with atomic status transitions to prevent race
-conditions. In v2.1.0, it migrated to the centralized `@intexuraos/internal-clients/user-service` package. In v3.0.0,
-it added the `code` action type for dispatching Claude Code tasks via code-agent. In v3.1.0, calendar actions gained
-auto-execute support and Google Calendar event linking. In v4.0.0 (INT-524), the LLM classification layer was removed
-entirely -- all approval intents are now resolved deterministically via WhatsApp interactive buttons. In v4.1.0, calendar
-approval messages gained synchronous rich previews, calendar completion messages gained CTA buttons, and the
-proceed-implementation button (INT-628) enabled two-phase code task control from WhatsApp.
+Actions-agent is the central action lifecycle management service for IntexuraOS. It receives classified commands from commands-agent, maintains action state in Firestore, routes actions to appropriate handlers via Pub/Sub, and tracks execution status. It supports confidence-based auto-execution, WhatsApp interactive button approval, calendar previews, code task dispatch, and type correction tracking.
 
 ## Architecture
 
@@ -98,7 +90,7 @@ sequenceDiagram
     User->>WA: Tap "Approve" button
 ```
 
-### Approval Reply Flow (v2.0.0, buttons-only in v4.0.0)
+### Approval Reply Flow (button-based)
 
 ```mermaid
 sequenceDiagram
@@ -118,7 +110,7 @@ sequenceDiagram
     AA->>Target: Execute action directly (or publish action.created)
 ```
 
-### Calendar Action Flow (v4.1.0: synchronous preview)
+### Calendar Action Flow (synchronous preview)
 
 ```mermaid
 sequenceDiagram
@@ -160,8 +152,8 @@ sequenceDiagram
 | POST   | `/internal/actions/:actionType`        | Process action from Pub/Sub (type-specific)      | Pub/Sub OIDC            |
 | POST   | `/internal/actions/process`            | Process action from Pub/Sub (unified)            | Pub/Sub OIDC            |
 | POST   | `/internal/actions/retry-pending`      | Retry actions stuck in pending (Cloud Scheduler) | OIDC or Internal        |
-| POST   | `/internal/actions/approval-reply`     | Handle WhatsApp button taps (v2.0.0)             | Pub/Sub OIDC            |
-| PATCH  | `/internal/actions/:actionId/status`   | Update action resource status (v3.0.0)           | Internal header         |
+| POST   | `/internal/actions/approval-reply`     | Handle WhatsApp button taps                      | Pub/Sub OIDC            |
+| PATCH  | `/internal/actions/:actionId/status`   | Update action resource status                    | Internal header         |
 
 ## Domain Models
 
@@ -173,7 +165,7 @@ sequenceDiagram
 | `userId`          | string                  | User who owns the action                |
 | `commandId`       | string                  | Original command ID from commands-agent |
 | `type`            | ActionType              | Classification result                   |
-| `confidence`      | number (0-1)            | Classification confidence score         |
+| `confidence`      | number (0–1)            | Classification confidence score         |
 | `title`           | string                  | Action title/description                |
 | `status`          | ActionStatus            | Current lifecycle state                 |
 | `payload`         | Record<string, unknown> | Action-specific data                    |
@@ -219,20 +211,20 @@ sequenceDiagram
 | `actionType`  | ActionType        | Action type for logging               |
 | `actionTitle` | string            | Action title for logging              |
 
-### ApprovalReplyEvent (v2.0.0, button-based in v4.0.0)
+### ApprovalReplyEvent (button-based)
 
-| Field          | Type              | Description                                                                                                                                                        |
-| -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `type`         | string            | Always `action.approval.reply`                                                                                                                                     |
-| `replyToWamid` | string            | Original approval message wamid                                                                                                                                    |
-| `replyText`    | string            | User's reply text (may be empty for button taps)                                                                                                                   |
-| `userId`       | string            | User ID                                                                                                                                                            |
-| `timestamp`    | string (ISO 8601) | Reply timestamp                                                                                                                                                    |
-| `actionId`     | string (optional) | Action ID extracted from correlation ID                                                                                                                            |
-| `buttonId`     | string (optional) | Button ID (see Button ID Formats below)                                                                                                                            |
-| `buttonTitle`  | string (optional) | User-visible text of the clicked button                                                                                                                            |
+| Field          | Type              | Description                                       |
+| -------------- | ----------------- | ------------------------------------------------- |
+| `type`         | string            | Always `action.approval.reply`                    |
+| `replyToWamid` | string            | Original approval message wamid                   |
+| `replyText`    | string            | User's reply text (may be empty for button taps)  |
+| `userId`       | string            | User ID                                           |
+| `timestamp`    | string (ISO 8601) | Reply timestamp                                   |
+| `actionId`     | string (optional) | Action ID extracted from correlation ID           |
+| `buttonId`     | string (optional) | Button ID (see Button ID Formats below)           |
+| `buttonTitle`  | string (optional) | User-visible text of the clicked button           |
 
-### Button ID Formats (v4.0.0, extended in v4.1.0)
+### Button ID Formats
 
 | Format                                  | Purpose                                      |
 | --------------------------------------- | -------------------------------------------- |
@@ -252,7 +244,7 @@ sequenceDiagram
 | `reject`  | User rejected the action         |
 | `unclear` | Button re-sent (no LLM fallback) |
 
-### ResourceStatus (v3.0.0)
+### ResourceStatus
 
 | Value         | Description                              |
 | ------------- | ---------------------------------------- |
@@ -263,7 +255,7 @@ sequenceDiagram
 | `cancelled`   | Code task cancelled by user              |
 | `interrupted` | Code task interrupted (e.g., VM stopped) |
 
-### CodeActionPayload (v3.0.0, updated v4.1.0)
+### CodeActionPayload
 
 | Field              | Type              | Description                                                     |
 | ------------------ | ----------------- | --------------------------------------------------------------- |
@@ -290,22 +282,21 @@ sequenceDiagram
 
 ## Key Use Cases
 
-### handleApprovalReply (v2.0.0, redesigned in v4.0.0, extended in v4.1.0)
+### handleApprovalReply
 
-Processes WhatsApp button taps for action approval. In v4.0.0, LLM classification was removed entirely.
-In v4.1.0, the `proceed-implementation` button was added for two-phase code task control.
+Processes WhatsApp button taps for action approval. All approval intents are resolved deterministically via WhatsApp interactive buttons — no LLM classification. The `proceed-implementation` button enables two-phase code task control from WhatsApp.
 
 **Flow:**
 
 1. Receive `action.approval.reply` event from whatsapp-service
-2. If `buttonId` starts with `cancel-task:` -- handle code task cancellation (no action lookup needed)
-3. If `buttonId` starts with `view-task:` -- send task URL to user (no action lookup needed)
-4. If `buttonId` starts with `proceed-implementation:` -- submit task to phase 2 via code-agent (INT-628)
+2. If `buttonId` starts with `cancel-task:` — handle code task cancellation (no action lookup needed)
+3. If `buttonId` starts with `view-task:` — send task URL to user (no action lookup needed)
+4. If `buttonId` starts with `proceed-implementation:` — submit task to phase 2 via code-agent (INT-628)
 5. Look up action by `actionId` (from correlationId) or `replyToWamid` (from approval_messages)
-6. If action not found (deleted/expired) -- return 200 with WhatsApp notification (prevents Pub/Sub retry)
+6. If action not found (deleted/expired) — return 200 with WhatsApp notification (prevents Pub/Sub retry)
 7. Verify user ownership and action is not in terminal state
-8. If `buttonId` present -- dispatch to `handleButtonResponse` for deterministic intent resolution
-9. If text reply (no button) -- re-send approval buttons via WhatsApp
+8. If `buttonId` present — dispatch to `handleButtonResponse` for deterministic intent resolution
+9. If text reply (no button) — re-send approval buttons via WhatsApp
 
 **Race Condition Prevention:**
 
@@ -322,10 +313,9 @@ if (updateResult.outcome === 'status_mismatch') {
 }
 ```
 
-### handleCalendarAction (v3.1.0: auto-execute, v4.1.0: synchronous preview)
+### handleCalendarAction
 
-Processes calendar action creation requests. Generates a synchronous preview via HTTP call to calendar-agent
-and includes it in the WhatsApp approval message.
+Processes calendar action creation requests. Generates a synchronous preview via HTTP call to calendar-agent and includes it in the WhatsApp approval message.
 
 **Flow:**
 
@@ -336,7 +326,7 @@ and includes it in the WhatsApp approval message.
 5. Format rich approval message with event details via `formatCalendarApprovalMessage`
 6. Send WhatsApp approval notification with interactive buttons
 
-### executeCalendarAction (v3.1.0: Google Calendar linking, v4.1.0: rich completion messages)
+### executeCalendarAction
 
 Executes calendar actions by delegating to calendar-agent.
 
@@ -350,7 +340,7 @@ Executes calendar actions by delegating to calendar-agent.
 6. Format rich completion message via `formatCalendarCompletionMessage` (event title, date, time, duration, location)
 7. Send WhatsApp notification with CTA button ("View in Calendar" linking to the event URL)
 
-### buildApprovalButtons (v4.0.0)
+### buildApprovalButtons
 
 Creates WhatsApp interactive buttons for any action type.
 
@@ -370,11 +360,11 @@ buildApprovalButtons({
 
 ### shouldAutoExecute
 
-Determines whether an action should be auto-executed based on classification confidence. The threshold is 90% (`>= 0.9`). This function is type-agnostic -- any action type can auto-execute. However, auto-execution only occurs when the handler injects an `executeAction` dependency. As of v3.1.0, all types except `linear` and `reminder` support auto-execution.
+Determines whether an action should be auto-executed based on classification confidence. The threshold is 90% (`>= 0.9`). This function is type-agnostic — any action type can auto-execute. However, auto-execution only occurs when the handler injects an `executeAction` dependency. All types except `linear` and `reminder` support auto-execution.
 
-### handleCodeAction (v3.0.0, simplified in v4.0.0)
+### handleCodeAction
 
-Processes code action creation requests. Sends WhatsApp message with interactive buttons (no nonces).
+Processes code action creation requests. Sends WhatsApp message with interactive buttons (Approve, Reject, Convert to Issue).
 
 **Flow:**
 
@@ -382,7 +372,7 @@ Processes code action creation requests. Sends WhatsApp message with interactive
 2. If auto-execute: call `executeCodeAction` directly
 3. Otherwise: send WhatsApp message with Approve / Reject / Convert to Issue buttons
 
-### executeCodeAction (v3.0.0)
+### executeCodeAction
 
 Executes code actions by dispatching to code-agent.
 
@@ -450,7 +440,7 @@ Allows users to correct AI classification. Validates the action is in a mutable 
 | `bookmarks-agent`      | Execute link actions, force-refresh duplicate bookmarks                                       |
 | `calendar-agent`       | Execute calendar actions, generate previews, fetch previews                                   |
 | `linear-agent`         | Execute Linear issue creation actions                                                         |
-| `code-agent`           | Execute code tasks, cancel tasks, submit to phase 2 implementation (v4.1.0)                   |
+| `code-agent`           | Execute code tasks, cancel tasks, submit to phase 2 implementation                            |
 | `user-service`         | Fetch user API keys for LLM (via `@intexuraos/internal-clients/user-service`)                 |
 | `app-settings-service` | Fetch LLM pricing configuration at startup                                                    |
 
@@ -481,7 +471,7 @@ Allows users to correct AI classification. Validates the action is in a mutable 
 | `INTEXURAOS_BOOKMARKS_AGENT_URL`         | Yes      | Bookmarks-agent base URL                                  |
 | `INTEXURAOS_CALENDAR_AGENT_URL`          | Yes      | Calendar-agent base URL                                   |
 | `INTEXURAOS_LINEAR_AGENT_URL`            | Yes      | Linear-agent base URL                                     |
-| `INTEXURAOS_CODE_AGENT_URL`              | Yes      | Code-agent base URL (v3.0.0)                              |
+| `INTEXURAOS_CODE_AGENT_URL`              | Yes      | Code-agent base URL                                       |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL`    | Yes      | App settings service URL (for LLM pricing)                |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`         | Yes      | Shared secret for service-to-service calls                |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`        | Yes      | Unified actions queue topic name                          |
@@ -492,74 +482,47 @@ Allows users to correct AI classification. Validates the action is in a mutable 
 
 ## Gotchas
 
-**Unified queue routing**: The `/internal/actions/process` endpoint receives all action types and dynamically selects
-handlers. Unknown types are ignored (action stays pending) rather than failing.
+**Unified queue routing**: The `/internal/actions/process` endpoint receives all action types and dynamically selects handlers. Unknown types are ignored (action stays pending) rather than failing.
 
-**Pub/Sub authentication**: Pub/Sub push requests use OIDC tokens validated by Cloud Run. Direct service calls use
-`X-Internal-Auth` header. Both paths are supported.
+**Pub/Sub authentication**: Pub/Sub push requests use OIDC tokens validated by Cloud Run. Direct service calls use `X-Internal-Auth` header. Both paths are supported.
 
-**Action type correction**: When user changes action type, the old type is logged to `actions_transitions` for ML
-training data.
+**Action type correction**: When user changes action type, the old type is logged to `actions_transitions` for ML training data.
 
-**Duplicate link handling**: Link actions may fail with `existingBookmarkId` in payload. Use
-`/actions/:id/resolve-duplicate` to skip or refresh the existing bookmark.
+**Duplicate link handling**: Link actions may fail with `existingBookmarkId` in payload. Use `/actions/:id/resolve-duplicate` to skip or refresh the existing bookmark.
 
 **Batch endpoint limit**: Maximum 50 action IDs per batch request to prevent abuse.
 
-**Reminder actions**: The reminder type is defined in the enum but has no handler. Actions of this type remain
-in pending status indefinitely.
+**Reminder actions**: The reminder type is defined in the enum but has no handler. Actions of this type remain in pending status indefinitely.
 
-**Auto-execution threshold**: All action types with confidence >= 90% are auto-executed immediately via `shouldAutoExecute()`. The function is purely confidence-based -- no type filtering. Linear still always requires approval because its handler does not inject an `executeAction` dependency into the idempotent wrapper.
+**Auto-execution threshold**: All action types with confidence >= 90% are auto-executed immediately via `shouldAutoExecute()`. The function is purely confidence-based — no type filtering. Linear still always requires approval because its handler does not inject an `executeAction` dependency into the idempotent wrapper.
 
-**Calendar preview generation (v4.1.0)**: Calendar approval messages now include a synchronous preview generated via
-HTTP call to calendar-agent (`generatePreview`). The current date and day of week are passed to support relative date
-parsing (e.g., "next Thursday"). If preview generation fails, the handler falls back to a basic approval message.
+**Calendar preview generation**: Calendar approval messages include a synchronous preview generated via HTTP call to calendar-agent (`generatePreview`). The current date and day of week are passed to support relative date parsing (e.g., "next Thursday"). If preview generation fails, the handler falls back to a basic approval message.
 
-**Calendar resource URLs (v3.1.0)**: Calendar actions may return either a relative app URL (`/#/calendar/...`) or an
-absolute Google Calendar URL (`https://calendar.google.com/...`). The `executeCalendarAction` use case detects absolute
-URLs and avoids prepending `webAppUrl`.
+**Calendar resource URLs**: Calendar actions may return either a relative app URL (`/#/calendar/...`) or an absolute Google Calendar URL (`https://calendar.google.com/...`). The `executeCalendarAction` use case detects absolute URLs and avoids prepending `webAppUrl`.
 
-**Calendar completion messages (v4.1.0)**: Calendar completions use `formatCalendarCompletionMessage` to generate rich
-WhatsApp messages with event title, date/time, duration, and location. The Google Calendar URL is sent as a CTA button
-(`ctaUrl`) rather than embedded in the message text.
+**Calendar completion messages**: Calendar completions use `formatCalendarCompletionMessage` to generate rich WhatsApp messages with event title, date/time, duration, and location. The Google Calendar URL is sent as a CTA button (`ctaUrl`) rather than embedded in the message text.
 
-**Calendar preview fetch ordering (v4.1.0)**: The `executeCalendarAction` use case fetches the preview BEFORE calling
-`processAction`. This is necessary because calendar-agent deletes the preview from Firestore after creating the event.
+**Calendar preview fetch ordering**: The `executeCalendarAction` use case fetches the preview BEFORE calling `processAction`. This is necessary because calendar-agent deletes the preview from Firestore after creating the event.
 
-**Approval reply idempotency (v2.0.0)**: The `updateStatusIf` method uses Firestore transactions to atomically check
-and update status. If the status doesn't match expectations, the operation is a no-op, preventing race conditions
-when multiple Pub/Sub messages arrive concurrently.
+**Approval reply idempotency**: The `updateStatusIf` method uses Firestore transactions to atomically check and update status. If the status does not match expectations, the operation is a no-op, preventing race conditions when multiple Pub/Sub messages arrive concurrently.
 
-**Text replies re-send buttons (v4.0.0)**: When a user sends a text reply to an approval message (no buttonId),
-the system re-sends fresh interactive buttons. There is no LLM fallback -- approval is button-only.
+**Text replies re-send buttons**: When a user sends a text reply to an approval message (no buttonId), the system re-sends fresh interactive buttons. There is no LLM fallback — approval is button-only.
 
-**Deleted action handling (v4.0.0)**: When an action is not found during approval reply processing, the endpoint
-returns 200 OK (not 500) so Pub/Sub stops retrying. A WhatsApp message informs the user the action is no longer
-available. Any orphaned approval_messages are cleaned up.
+**Deleted action handling**: When an action is not found during approval reply processing, the endpoint returns 200 OK (not 500) so Pub/Sub stops retrying. A WhatsApp message informs the user the action is no longer available. Any orphaned approval_messages are cleaned up.
 
-**Cancel-task button nonce**: The `cancel-task:{taskId}:{nonce}` button format retains nonce validation, but this
-is for code task cancellation security (cancelling a running task is irreversible), not approval.
+**Cancel-task button nonce**: The `cancel-task:{taskId}:{nonce}` button format retains nonce validation, but this is for code task cancellation security (cancelling a running task is irreversible), not approval.
 
-**Proceed-implementation button (INT-628)**: The `proceed-implementation:{taskId}` button submits a task to phase 2
-implementation via `codeAgentClient.submitToPhase2`. Error codes include `TASK_NOT_FOUND`, `INVALID_STATUS`,
-`NO_LINEAR_ISSUE`, `LABEL_NOT_READY`, `ALREADY_IMPLEMENTED`, `ACTIVE_TASK_EXISTS`, `WORKER_NOT_CONFIGURED`,
-and `NETWORK_ERROR`.
+**Proceed-implementation button (INT-628)**: The `proceed-implementation:{taskId}` button submits a task to phase 2 implementation via `codeAgentClient.submitToPhase2`. Error codes include `TASK_NOT_FOUND`, `INVALID_STATUS`, `NO_LINEAR_ISSUE`, `LABEL_NOT_READY`, `ALREADY_IMPLEMENTED`, `ACTIVE_TASK_EXISTS`, `WORKER_NOT_CONFIGURED`, and `NETWORK_ERROR`.
 
-**Worker types (v4.1.0)**: Code action payload `workerType` now supports five values: `opus`, `auto`, `sonnet`,
-`minimax`, and `glm`. Previously only `opus`, `auto`, and `glm` were supported.
+**Worker types**: Code action payload `workerType` supports five values: `opus`, `auto`, `sonnet`, `minimax`, and `glm`.
 
-**Create action endpoint no longer publishes events (v3.0.0)**: The `POST /internal/actions` endpoint only creates
-the action record. Event publishing is the caller's responsibility (commands-agent) to prevent duplicate events.
+**Create action endpoint no longer publishes events**: The `POST /internal/actions` endpoint only creates the action record. Event publishing is the caller's responsibility (commands-agent) to prevent duplicate events.
 
-**Resource status updates (v3.0.0)**: The `PATCH /internal/actions/:actionId/status` endpoint allows code-agent to
-report task progress (`dispatched`, `running`, `completed`, `failed`, `cancelled`). This updates the `resource_status`
-field on the action, independent of the action's own `status` field.
+**Resource status updates**: The `PATCH /internal/actions/:actionId/status` endpoint allows code-agent to report task progress (`dispatched`, `running`, `completed`, `failed`, `cancelled`). This updates the `resource_status` field on the action, independent of the action's own `status` field.
 
-**Response contract enforcement**: All routes use `reply.ok()` / `reply.fail()` exclusively. Raw `reply.send()` is
-forbidden unless annotated with `@allow-raw-send`.
+**Response contract enforcement**: All routes use `reply.ok()` / `reply.fail()` exclusively. Raw `reply.send()` is forbidden unless annotated with `@allow-raw-send`.
 
-**OpenAPI description mismatch**: The `server.ts` OpenAPI info still references "Research Agent" in the description
-field, leftover from the rename from research-agent to actions-agent.
+**OpenAPI description mismatch**: The `server.ts` OpenAPI info still references "Research Agent" in the description field, leftover from the rename from research-agent to actions-agent.
 
 ## File Structure
 
@@ -578,15 +541,15 @@ apps/actions-agent/src/
       approvalMessageRepository.ts   # Approval message storage
       actionEventPublisher.ts        # Event publishing port
       notificationSender.ts  # WhatsApp notifications
-      codeAgentClient.ts     # Code-agent HTTP client port (v3.0.0, submitToPhase2 in v4.1.0)
+      codeAgentClient.ts     # Code-agent HTTP client port (submitToPhase2)
       calendarServiceClient.ts  # Calendar-agent client (processAction, getPreview, generatePreview)
       *ServiceClient.ts      # HTTP clients for other services
     usecases/
-      handleApprovalReply.ts     # WhatsApp button tap handling (v4.0.0: buttons-only, v4.1.0: proceed-implementation)
+      handleApprovalReply.ts     # WhatsApp button tap handling (buttons-only, proceed-implementation)
       handleCodeAction.ts        # Code action handler with interactive buttons
-      handleCalendarAction.ts    # Calendar action handler with synchronous preview (v4.1.0)
+      handleCalendarAction.ts    # Calendar action handler with synchronous preview
       executeCodeAction.ts       # Code action execution via code-agent
-      executeCalendarAction.ts   # Calendar action execution with rich completion messages (v4.1.0)
+      executeCalendarAction.ts   # Calendar action execution with rich completion messages
       handle*Action.ts           # Pub/Sub handlers (async, all use buildApprovalButtons)
       execute*Action.ts          # Direct execution (sync)
       createIdempotentActionHandler.ts  # Idempotency wrapper
@@ -595,10 +558,10 @@ apps/actions-agent/src/
       retryPendingActions.ts     # Scheduled retry (1-hour threshold)
       actionHandlerRegistry.ts   # Handler routing
     utils/
-      approvalButtons.ts                  # buildApprovalButtons() - unified button factory (v4.0.0)
-      formatCalendarApprovalMessage.ts    # Rich calendar approval message formatting (v4.1.0)
-      formatCalendarCompletionMessage.ts  # Rich calendar completion message with CTA button (v4.1.0)
-      calendarMessageFormatting.ts        # Shared date/time formatting utilities (v4.1.0)
+      approvalButtons.ts                  # buildApprovalButtons() -- unified button factory
+      formatCalendarApprovalMessage.ts    # Rich calendar approval message formatting
+      formatCalendarCompletionMessage.ts  # Rich calendar completion message with CTA button
+      calendarMessageFormatting.ts        # Shared date/time formatting utilities
   infra/
     action/
       commandsAgentClient.ts         # Commands-agent client
@@ -611,8 +574,8 @@ apps/actions-agent/src/
       actionEventPublisher.ts
       config.ts                      # Actions queue topic config
     http/
-      codeAgentHttpClient.ts   # Code-agent HTTP client (v3.0.0, submitToPhase2 in v4.1.0)
-      calendarServiceHttpClient.ts  # Calendar-agent HTTP client (generatePreview in v4.1.0)
+      codeAgentHttpClient.ts   # Code-agent HTTP client (submitToPhase2)
+      calendarServiceHttpClient.ts  # Calendar-agent HTTP client (generatePreview)
       *ServiceHttpClient.ts    # HTTP clients for other services
     notification/
       whatsappNotificationSender.ts

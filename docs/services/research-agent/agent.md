@@ -1,4 +1,4 @@
-# research-agent -- Agent Interface
+# research-agent — Agent Interface
 
 > Machine-readable interface definition for AI agents interacting with research-agent.
 
@@ -108,7 +108,7 @@ interface ResearchAgentTools {
 
   // Validate input quality before research
   // Returns quality 0 (rejected), 1 (weak, improvement available), 2 (good)
-  // Semantic checks reject multi-option responses and language drift
+  // Structural checks reject malformed improvements (prefixes, JSON, length)
   validateInput(params: {
     prompt: string;
     includeImprovement?: boolean;
@@ -478,8 +478,7 @@ if (research.status === 'awaiting_confirmation') {
 | Error                        | Cause                                      | Resolution                         |
 | ---------------------------- | ------------------------------------------ | ---------------------------------- |
 | Quality 0 (rejected)         | Prompt too vague or inappropriate          | Rewrite with more specificity      |
-| Multi-option improvement     | LLM returned list instead of single prompt | System retries automatically       |
-| Language drift               | LLM switched languages in improvement      | System retries automatically       |
+| Malformed improvement        | LLM returned invalid format (prefix, JSON) | System retries automatically       |
 
 ### Model Selection Errors
 

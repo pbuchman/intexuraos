@@ -1,4 +1,4 @@
-# Transcription Worker -- Technical Debt
+# Transcription Worker — Technical Debt
 
 **Last Updated:** 2026-03-07
 **Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
@@ -64,7 +64,7 @@ No TODO, FIXME, or HACK comments found in the codebase.
 
 ## SRP Violations
 
-No files exceed 300 lines of business logic. The largest file (`adapter.ts` at 382 lines) includes substantial JSDoc comments, type definitions, and three method implementations, which is appropriate for a single adapter class.
+No files exceed 300 lines of business logic. The largest file (`adapter.ts`) includes substantial JSDoc comments, type definitions, and three method implementations, which is appropriate for a single adapter class.
 
 ---
 
@@ -78,12 +78,12 @@ No significant code duplication identified. Error handling follows a consistent 
 
 | File         | Category      | Lines   | Reason                                                        |
 | ------------ | ------------- | ------- | ------------------------------------------------------------- |
-| `adapter.ts` | `ts-type`     | 52-71   | `extractErrorMessage` type narrowing for unknown error shapes |
-| `adapter.ts` | `ts-type`     | 76-120  | `extractErrorContext` type narrowing with optional properties |
-| `adapter.ts` | `upstream`    | 310-322 | Metadata language fallback for Speechmatics API response      |
-| `adapter.ts` | `upstream`    | 325-334 | Non-array results guard for malformed API response            |
-| `index.ts`   | `module-init` | 71-79   | Config, storage, publisher initialized at cold start          |
-| `logger.ts`  | `module-init` | 25-33   | Logger initialized at module load                             |
+| `adapter.ts` | `ts-type`     | 52–71   | `extractErrorMessage` type narrowing for unknown error shapes |
+| `adapter.ts` | `ts-type`     | 76–120  | `extractErrorContext` type narrowing with optional properties |
+| `adapter.ts` | `upstream`    | 310–322 | Metadata language fallback for Speechmatics API response      |
+| `adapter.ts` | `upstream`    | 325–334 | Non-array results guard for malformed API response            |
+| `index.ts`   | `module-init` | 71–79   | Config, storage, publisher initialized at cold start          |
+| `logger.ts`  | `module-init` | 25–33   | Logger initialized at module load                             |
 
 All annotations use valid categories from the project's coverage exemption rules.
 
@@ -97,6 +97,6 @@ No previously identified issues (this is the first documentation run for this se
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

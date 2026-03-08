@@ -1,6 +1,6 @@
-# Data Insights Agent -- Tutorial
+# Data Insights Agent — Tutorial
 
-> **Time:** 30-40 minutes
+> **Time:** 30–40 minutes
 > **Prerequisites:** Node.js 22+, Auth0 access token, configured LLM API key
 > **You'll learn:** Create data sources, build composite feeds, analyze data with AI, generate charts, and save persistent visualizations
 
@@ -66,7 +66,7 @@ curl -X POST http://localhost:8119/data-sources \
 
 ### What Just Happened?
 
-Your data was stored in Firestore and assigned a unique ID. Save the `id` from the response -- you need it to create composite feeds.
+Your data was stored in Firestore and assigned a unique ID. Save the `id` from the response — you need it to create composite feeds.
 
 **Limits:** Content is capped at 60,000 characters, title at 200 characters.
 
@@ -137,7 +137,7 @@ curl -X POST http://localhost:8119/composite-feeds \
     "name": "Sales & Inventory Tracker",
     "purpose": "Track monthly sales performance and inventory alerts",
     "staticSourceIds": ["ds-abc123"],
-    "notificationFilters": [...],
+    "notificationFilters": [],
     "createdAt": "2026-02-22T10:05:00Z"
   }
 }
@@ -364,13 +364,13 @@ curl -X POST http://localhost:8119/visualizations/viz-001/refresh \
 | Problem                     | Solution                                                     |
 | --------------------------- | ------------------------------------------------------------ |
 | "MISCONFIGURED"             | Configure your LLM API key in user-service settings first    |
-| 409 Conflict                | Data source is used by a composite feed -- remove it first   |
-| "No insights generated"     | Your data may not have enough patterns -- add more data      |
+| 409 Conflict                | Data source is used by a composite feed — remove it first    |
+| "No insights generated"     | Your data may not have enough patterns — add more data       |
 | "Snapshot not found"        | Request `GET /snapshot?refresh=true` to force generation     |
 | "UNAUTHORIZED"              | Verify your Auth0 token is valid and not expired             |
-| "INTERNAL_ERROR"            | Server-side error -- check logs and retry with backoff       |
-| Visualization stays pending | LLM transform may have failed -- check `lastError` field     |
-| Visualization limit error   | Max 10 visualizations per feed -- delete unused ones first   |
+| "INTERNAL_ERROR"            | Server-side error — check logs and retry with backoff        |
+| Visualization stays pending | LLM transform may have failed — check `lastError` field      |
+| Visualization limit error   | Max 10 visualizations per feed — delete unused ones first    |
 | Empty chartData array       | Valid result when data has zero matching rows for the metric |
 
 **Note:** All error responses follow the standard response contract: `{ "success": false, "error": { "code": "...", "message": "..." } }`.
@@ -381,10 +381,10 @@ curl -X POST http://localhost:8119/visualizations/viz-001/refresh \
 
 Now that you understand the basics:
 
-1. **Add more data sources** -- Combine CSV exports with live notifications
-2. **Explore chart types** -- Try different visualizations for your insights
-3. **Use the preview endpoint** -- `POST /composite-feeds/:id/preview` for one-time chart data without saving
-4. **List your visualizations** -- `GET /visualizations` to see all saved charts
+1. **Add more data sources** — Combine CSV exports with live notifications
+2. **Explore chart types** — Try different visualizations for your insights
+3. **Use the preview endpoint** — `POST /composite-feeds/:id/preview` for one-time chart data without saving
+4. **List your visualizations** — `GET /visualizations` to see all saved charts
 5. **Read the [Technical Reference](technical.md)** for full API details
 
 ---

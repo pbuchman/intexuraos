@@ -1,7 +1,7 @@
-# Calendar Agent - Technical Debt
+# Calendar Agent — Technical Debt
 
 **Last Updated:** 2026-03-07
-**Analysis Run:** v3.1.0+ (INT-535 synchronous preview, INT-621 full prompt text)
+**Analysis Run:** post v3.1.0 (INT-535 synchronous preview, INT-621 full prompt text)
 
 ---
 
@@ -52,7 +52,7 @@ Added `POST /internal/calendar/preview` endpoint for synchronous preview generat
 
 ---
 
-## Recent Improvements (v2.4.0)
+## Recent Improvements (v3.0.0 era)
 
 ### Gemini 2.5 Flash as Default LLM
 
@@ -83,7 +83,7 @@ Added Dash0 OpenTelemetry instrumentation for distributed tracing across service
 
 ---
 
-## Recent Improvements (v2.3.0)
+## Recent Improvements (v2.1.0 era)
 
 ### INT-311: Failed Event Delete/Retry
 
@@ -91,8 +91,8 @@ Added Dash0 OpenTelemetry instrumentation for distributed tracing across service
 
 Added two new public endpoints for managing failed event extractions:
 
-- `DELETE /calendar/failed-events/:id` -- permanently remove a failed event from the review queue
-- `POST /calendar/failed-events/:id/retry` -- retry creating a calendar event using stored extraction data
+- `DELETE /calendar/failed-events/:id` — permanently remove a failed event from the review queue
+- `POST /calendar/failed-events/:id/retry` — retry creating a calendar event using stored extraction data
 
 Both endpoints enforce user ownership (returns 404 if the event belongs to a different user). Retry requires both start and end times to be present (returns 422 if missing).
 
@@ -158,13 +158,13 @@ Migrated from custom validation to `CalendarEventSchema` from `@intexuraos/llm-p
 
 Based on code analysis and feature gaps:
 
-1. **Recurring events support** - Currently not exposed (Google defaults singleEvents=true)
-2. **Event colors** - Color customization for visual organization
-3. **Reminders** - Event reminder notifications
-4. **Attachments** - File attachment support
-5. **Conference data** - Google Meet conference creation
-6. **Batch operations** - Multiple event operations in single request
-7. **Preview TTL** - Automatic cleanup of old previews (currently only cleaned after event creation)
+1. **Recurring events support** — Currently not exposed (Google defaults singleEvents=true)
+2. **Event colors** — Color customization for visual organization
+3. **Reminders** — Event reminder notifications
+4. **Attachments** — File attachment support
+5. **Conference data** — Google Meet conference creation
+6. **Batch operations** — Multiple event operations in single request
+7. **Preview TTL** — Automatic cleanup of old previews (currently only cleaned after event creation)
 
 ---
 
@@ -174,7 +174,7 @@ Based on code analysis and feature gaps:
 
 | File                                       | Issue                        | Impact                              |
 | ------------------------------------------ | ---------------------------- | ----------------------------------- |
-| `src/infra/google/googleCalendarClient.ts` | Redundant filterUndefined fn | Low - function is correct, readable |
+| `src/infra/google/googleCalendarClient.ts` | Redundant filterUndefined fn | Low — function is correct, readable |
 
 **Details:**
 
@@ -184,7 +184,7 @@ The `filterUndefined()` function manually removes undefined properties. Could us
 Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 ```
 
-**Impact:** Low - function is correct and readable.
+**Impact:** Low — function is correct and readable.
 
 **Recommendation:** Keep for clarity, but consider extracting to common package if used elsewhere.
 
@@ -196,18 +196,18 @@ No test coverage gaps identified. Strict 100% branch coverage enforced with v8 i
 
 **Coverage areas:**
 
-- generateCalendarPreview use case - fully tested
-- CalendarPreviewRepository - all CRUD operations tested
-- processCalendarAction - preview integration tested, htmlLink resource URL tested, fallback to /#/calendar tested
-- Duration calculation - edge cases covered
-- All-day detection - comprehensive tests
-- LLM extraction repair mechanism - JSON syntax errors, Zod validation errors, max attempts
-- Failed event delete - ownership check, 204 response, error handling
-- Failed event retry - ownership check, missing start/end, create+delete flow, non-blocking delete failure
-- mapUserServiceError - all error code mappings tested
-- GoogleCalendarClient.listEvents - auto singleEvents, orderBy, maxResults, q parameter passing
-- Direct HTTP preview generation - success, auth rejection, validation, extraction failure
-- Full prompt text passthrough - text field used when provided, title fallback when absent
+- generateCalendarPreview use case — fully tested
+- CalendarPreviewRepository — all CRUD operations tested
+- processCalendarAction — preview integration tested, htmlLink resource URL tested, fallback to /#/calendar tested
+- Duration calculation — edge cases covered
+- All-day detection — comprehensive tests
+- LLM extraction repair mechanism — JSON syntax errors, Zod validation errors, max attempts
+- Failed event delete — ownership check, 204 response, error handling
+- Failed event retry — ownership check, missing start/end, create+delete flow, non-blocking delete failure
+- mapUserServiceError — all error code mappings tested
+- GoogleCalendarClient.listEvents — auto singleEvents, orderBy, maxResults, q parameter passing
+- Direct HTTP preview generation — success, auth rejection, validation, extraction failure
+- Full prompt text passthrough — text field used when provided, title fallback when absent
 
 ---
 
@@ -257,6 +257,6 @@ No deprecated API usage detected.
 
 ## Related
 
-- [Features](features.md) - User-facing documentation
-- [Technical](technical.md) - Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

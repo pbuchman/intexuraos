@@ -1,6 +1,6 @@
-# Commands Agent - Tutorial
+# Commands Agent — Tutorial
 
-> **Time:** 15-30 minutes
+> **Time:** 15–30 minutes
 > **Prerequisites:** Auth0 access token, Google or Zai API key configured in user-service, `curl` or HTTP client
 > **You'll learn:** How to classify commands, handle URL isolation, use Polish phrases, and manage command lifecycle
 

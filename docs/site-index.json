@@ -209,7 +209,7 @@
       "id": "api-docs-hub",
       "name": "API Docs Hub",
       "category": "infrastructure",
-      "summary": "OpenAPI documentation aggregator for 18 services with live client-side spec fetching (v3.1.0)",
+      "summary": "OpenAPI documentation aggregator for 18 services with live client-side spec fetching",
       "features": [
         "Single Swagger UI aggregating 18 service specs",
         "Multi-spec dropdown with live client-side fetching",
@@ -313,7 +313,7 @@
         "Per-user worker infrastructure with AES-256-GCM encrypted credentials",
         "Retry, feedback, and mid-task messaging with task resume",
         "Turn-level metrics: CPU, memory, tokens, API wait times per worker turn (v3.1.0)",
-        "Rate limiting (3 concurrent, 10/hour, $20/day, $200/month)",
+        "Rate limiting (3 concurrent, 10/hour, $200/month)",
         "Real-time log streaming via chunked HMAC-signed uploads",
         "Zombie task detection (30-minute heartbeat threshold)"
       ],

@@ -1,4 +1,4 @@
-# Transcription Worker -- Agent Interface
+# Transcription Worker — Agent Interface
 
 > **Machine-readable specification for AI agent integration**
 
@@ -95,10 +95,10 @@ interface TranscriptionCompletedEvent {
 
 **Do NOT:**
 
-- Call this worker directly -- it is triggered only via Pub/Sub
-- Expect real-time responses -- processing takes seconds to minutes
-- Assume transcript will always be present -- check `status` field first
-- Rely on `mediaId` for file identification -- use `gcsPath`
+- Call this worker directly — it is triggered only via Pub/Sub
+- Expect real-time responses — processing takes seconds to minutes
+- Assume transcript will always be present — check `status` field first
+- Rely on `mediaId` for file identification — use `gcsPath`
 
 **Requires:**
 

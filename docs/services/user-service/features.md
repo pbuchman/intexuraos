@@ -39,7 +39,7 @@ You can also re-test stored keys at any time. Test results — pass or fail, wit
 
 ### Error Messages You Can Act On
 
-When a provider returns an error, the raw response is often opaque — a cryptic error code with an organization ID and token math that means nothing to a human. The service parses errors from each provider individually and translates them into plain language. A rate limit message becomes "tokens: 85,000/90,000 used, need 10,000 more." A billing error becomes "Insufficient credits -- add funds at the provider console." Critically, the parser checks for rate limits before checking for key errors, which prevents a common misdiagnosis where a temporary rate limit looks like a broken key.
+When a provider returns an error, the raw response is often opaque — a cryptic error code with an organization ID and token math that means nothing to a human. The service parses errors from each provider individually and translates them into plain language. A rate limit message becomes "tokens: 85,000/90,000 used, need 10,000 more." A billing error becomes "Insufficient credits — add funds at the provider console." Critically, the parser checks for rate limits before checking for key errors, which prevents a common misdiagnosis where a temporary rate limit looks like a broken key.
 
 ### Authentication Everywhere
 

@@ -1,8 +1,8 @@
-# Research Agent -- Technical Reference
+# Research Agent — Technical Reference
 
 ## Overview
 
-Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Runs on Cloud Run with auto-scaling. Current version: v3.1.0.
+Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Runs on Cloud Run with auto-scaling.
 
 ## Architecture
 
@@ -50,6 +50,7 @@ graph TB
 
 | Commit     | Description                                             | Date       |
 | ---------- | ------------------------------------------------------- | ---------- |
+| `44ea683a` | Release v3.2.0                                          | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration and update mocks          | 2026-03-02 |
 | `e6399f3b` | Apply code review feedback for semantic checks          | 2026-02-27 |
 | `a1a77b95` | Add semantic checks to input improvement validator      | 2026-02-27 |
@@ -200,14 +201,11 @@ const SynthesisContextSchema = z.object({
 });
 ```
 
-### Input Validation (Semantic Checks)
+### Input Validation
 
-The `InputValidationAdapter` validates and improves user prompts before research begins. Beyond structural checks (empty, too long, JSON-formatted, unwanted prefixes), it performs semantic validation on improved prompts:
+The `InputValidationAdapter` validates and improves user prompts before research begins. It uses Gemini Flash to assess prompt quality on a 0–2 scale (0 = rejected, 1 = weak but improvable, 2 = good) and can generate improved prompts for weak inputs.
 
-- **Multi-option detection** -- Rejects responses containing numbered lists, "Option N:" labels, " OR " separators, or bullet-point lists with 2+ items. The improvement contract requires exactly one improved prompt.
-- **Language drift detection** -- Compares Unicode script ratios between original and improved prompts. If the original is >30% non-Latin characters (Cyrillic, CJK, Arabic, etc.) but the improvement is <10% non-Latin, the improvement is rejected as a language switch.
-
-Both checks trigger the repair pattern: the LLM receives the validation error and attempts a second generation.
+Structural checks on improved prompts include response length validation (1–500 characters), markdown code block removal, unwanted prefix detection ("here is", "the improved", etc.), JSON detection, and explanatory text detection. Failed checks trigger the repair pattern: the LLM receives the validation error and attempts a second generation.
 
 ## API Endpoints
 
@@ -347,9 +345,9 @@ Both checks trigger the repair pattern: the LLM receives the validation error an
 
 The `extractModelPreferences` use case filters models based on:
 
-1. **API Key Availability** - Only models for which the user has configured API keys
-2. **One Per Provider** - Maximum one model from each provider (first match wins)
-3. **Synthesis Eligibility** - Synthesis model must be in `SYNTHESIS_MODELS` list
+1. **API Key Availability** — Only models for which the user has configured API keys
+2. **One Per Provider** — Maximum one model from each provider (first match wins)
+3. **Synthesis Eligibility** — Synthesis model must be in `SYNTHESIS_MODELS` list
 
 ```typescript
 // Available research models
@@ -464,7 +462,7 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 
 ## Gotchas
 
-**Platform API key fallbacks**: When a user has no API key for their preferred model's provider, `getLlmClient` in `@intexuraos/internal-clients` tries platform keys in order: Gemini (`gemini-2.0-flash`) -> Zai (`glm-4.7-flash`). Both platform keys are optional. If neither is set, the service returns `NO_API_KEY` error.
+**Platform API key fallbacks**: When a user has no API key for their preferred model's provider, `getLlmClient` in `@intexuraos/internal-clients` tries platform keys in order: Gemini (`gemini-2.0-flash`) then Zai (`glm-4.7-flash`). Both platform keys are optional. If neither is set, the service returns `NO_API_KEY` error.
 
 **Idempotent LLM calls**: The `process-llm-call` endpoint checks if an LLM result is already `completed` or `failed` and skips processing if so. This enables safe retry without duplication.
 
@@ -504,7 +502,7 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 
 **Prompt versioning**: All prompts follow semver versioning. The v3.1.0 prompt audit bumped versions for improved prompts with safer fallbacks and XML delimiters.
 
-**Input improvement semantic checks**: The `validateImprovedPrompt` method rejects structurally valid but semantically invalid LLM improvements. Multi-option responses (numbered lists, bullet points, "Option N:" labels) and language drift (non-Latin original prompt improved to Latin-only output) trigger the repair pattern automatically.
+**Input improvement structural checks**: The `validateImprovedPrompt` method rejects structurally invalid LLM improvements. Responses that are too long, contain markdown fences, unwanted prefixes ("here is", "the improved"), JSON markers, or explanatory text ("explanation:", "reasoning:") trigger the repair pattern automatically.
 
 ## File Structure
 
@@ -552,7 +550,7 @@ apps/research-agent/src/
       PerplexityAdapter.ts          # Perplexity API integration
       GlmAdapter.ts                 # GLM (Zai) API integration
       ContextInferenceAdapter.ts    # Zod-validated context inference
-      InputValidationAdapter.ts     # Zod-validated input validation + semantic checks
+      InputValidationAdapter.ts     # Zod-validated input validation + structural checks
       LlmAdapterFactory.ts          # Factory pattern
     research/
       FirestoreResearchRepository.ts  # Research persistence

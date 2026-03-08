@@ -1,3 +1,119 @@
+## 2026-03-07 — todos-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/todos-agent/features.md` — Typographic refresh (ASCII double-dashes to em-dashes throughout)
+- `docs/services/todos-agent/technical.md` — Added v3.2.0 release commit to Recent Changes, typographic refresh
+- `docs/services/todos-agent/tutorial.md` — Typographic refresh (em-dashes, en-dash in time range)
+- `docs/services/todos-agent/technical-debt.md` — Added v3.2.0 release to Recent Improvements and Resolved Issues, typographic refresh
+- `docs/services/todos-agent/agent.md` — Typographic refresh (em-dashes in constraints table)
+- `docs/documentation-runs.md` — This entry
+
+**Inferred Insights:**
+
+- Why: Most task management tools demand productivity to maintain — you end up managing your task manager instead of managing your work. Todos-agent eliminates capture friction by letting users describe tasks in natural language, with AI decomposing descriptions into structured, prioritized items automatically.
+- Killer feature: AI-powered item extraction — describe work in plain language and the LLM parses it into discrete actionable items with priorities and due dates, validated by Zod schemas, with graceful fallbacks when extraction fails.
+- Future plans: Todo templates, recurring todos, task dependencies, bulk operations, full-text search, collaboration features, reminders, and subtask nesting.
+- Limitations: No recurring tasks, no task dependencies, no reminders, no collaboration, one level of depth (items cannot contain sub-items).
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- Code duplicates: 1 (parseDate function in two route files)
+
+**Changes Since Last Run (2026-03-07):**
+
+- Release v3.2.0 commit added to Recent Changes table
+- Typographic consistency: All ASCII double-dashes (`--`) replaced with em-dashes (`—`) across all five files
+- No functional code changes to todos-agent since previous documentation run
+
+---
+
+## 2026-03-07 — transcription (typographic refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/transcription/features.md` — Replaced ASCII double-dashes with em-dashes throughout
+- `docs/services/transcription/technical.md` — Replaced ASCII double-dashes with em-dashes; added v3.2.0 release commit to Recent Changes table
+- `docs/services/transcription/tutorial.md` — Replaced ASCII double-dashes with em-dashes throughout
+- `docs/services/transcription/technical-debt.md` — Replaced ASCII double-dashes with em-dashes; replaced hyphens with en-dashes in line ranges
+- `docs/services/transcription/agent.md` — Replaced ASCII double-dashes with em-dashes throughout
+- `docs/services/index.md` — Fixed transcription description em-dash
+- `docs/documentation-runs.md` — This entry
+
+**Inferred Insights:**
+
+- Why: Audio content from WhatsApp voice notes is opaque and unsearchable. The transcription worker converts audio files to structured text so downstream services can extract tasks, generate summaries, and enable full-text search.
+- Killer feature: 7-step orchestration pipeline with guaranteed event delivery (always publishes TranscriptionCompletedEvent regardless of success or failure), 100+ custom vocabulary terms for domain-specific accuracy, and automatic language detection with AI-generated summaries.
+- Future plans: Add alternative transcription providers (Google Speech-to-Text, OpenAI Whisper), streaming transcription support, per-user vocabulary customization.
+- Limitations: WhatsApp-only trigger, Speechmatics-only provider, batch processing with polling (no streaming), ~5 minute max polling window.
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (v8 ignore blocks for error extraction utilities in adapter.ts)
+- Test gaps: 0 (6 test files covering all modules)
+- Type issues: 0
+- TODOs: 0
+
+**Changes Since Last Run (2026-03-07 initial -> 2026-03-07 refresh):**
+
+- Typographic consistency: Replaced all ASCII double-dashes (`--`) with em-dashes (`—`) in prose text across all 5 documentation files
+- En-dash ranges: Replaced hyphens with en-dashes (`–`) in line number ranges in technical-debt.md
+- Recent changes: Added v3.2.0 release commit (`44ea683a`) to technical.md
+
+---
+
+## 2026-03-07 — api-docs-hub (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/api-docs-hub/features.md` — Replaced all ASCII double-dashes with em-dashes for typographic consistency
+- `docs/services/api-docs-hub/technical.md` — Updated package version from 3.1.0 to 3.2.0, added v3.2.0 release commit to Recent Changes, replaced all ASCII double-dashes with em-dashes, removed specific line counts from File Structure section
+- `docs/services/api-docs-hub/tutorial.md` — Replaced all ASCII double-dashes with em-dashes, fixed troubleshooting table pipe escaping
+- `docs/services/api-docs-hub/technical-debt.md` — Replaced all ASCII double-dashes with em-dashes, added v3.2.0 package version bump to Resolved Issues
+- `docs/services/api-docs-hub/agent.md` — Updated package version from 3.1.0 to 3.2.0, replaced all ASCII double-dashes with em-dashes
+- `docs/site-index.json` — Removed version reference from api-docs-hub summary (no valid tag for 3.2.0 yet)
+
+**Inferred Insights:**
+
+- Why: API documentation scattered across 18 microservices; developers need a single entry point to discover and test all endpoints
+- Killer feature: Multi-spec Swagger UI aggregation with live client-side spec fetching — documentation always reflects the currently deployed API
+- Future plans: Dynamic config reload, spec caching, authentication helper, API version selector, cross-spec search, ecosystem.config.cjs integration
+- Limitations: Service must be running for spec to load, no version history, no built-in auth, static configuration requires redeployment
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (raw reply.send() in health endpoint — intentional)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes Since Last Run (2026-03-07 previous -> 2026-03-07 current):**
+
+- Package version bumped from 3.1.0 to 3.2.0 (release commit 44ea683a)
+- No source code changes — only version bump in package.json
+- Typographic consistency: all ASCII double-dashes replaced with em-dashes across all 5 doc files
+
+---
+
 ## 2026-03-07 -- orchestrator (targeted refresh)
 
 **Action:** Updated

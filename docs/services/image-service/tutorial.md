@@ -1,6 +1,6 @@
-# Image Service -- Tutorial
+# Image Service — Tutorial
 
-> **Time:** 15-20 minutes
+> **Time:** 15–20 minutes
 > **Prerequisites:** Node.js 22+, IntexuraOS development environment
 > **You will learn:** How to generate AI images and optimized prompts using image-service internal endpoints
 
@@ -24,7 +24,7 @@ Before starting, ensure you have:
 
 - [ ] IntexuraOS development environment running (services accessible via localhost)
 - [ ] Internal auth token (`INTEXURAOS_INTERNAL_AUTH_TOKEN`)
-- [ ] A valid user ID (API keys optional -- platform fallback keys used if user has none configured)
+- [ ] A valid user ID (API keys optional — platform fallback keys used if user has none configured)
 
 ---
 
@@ -202,7 +202,7 @@ HTTP status: 401
 
 ---
 
-## Part 4: Real-World Scenario -- Research Cover Image (10 minutes)
+## Part 4: Real-World Scenario — Research Cover Image (10 minutes)
 
 Complete end-to-end flow for generating and managing a research cover image.
 
@@ -291,7 +291,7 @@ Now that you understand the basics:
 Test your understanding:
 
 1. **Easy:** Generate a prompt from a short text and examine the structured response fields
-2. **Medium:** Generate a prompt, then use the returned `data.prompt` to create an image with both OpenAI and Google models -- compare the results
+2. **Medium:** Generate a prompt, then use the returned `data.prompt` to create an image with both OpenAI and Google models — compare the results
 3. **Hard:** Build a retry workflow that handles rate limiting (429) with exponential backoff and falls back to an alternative provider when the primary provider is unavailable
 
 <details>
@@ -310,7 +310,7 @@ curl -X POST http://localhost:8120/internal/images/prompts/generate \
   }'
 ```
 
-Examine the response: `title` (max 10 words), `visualSummary` (1 sentence), `prompt` (80-180 words), `negativePrompt` (20-80 words), and `parameters` with `framing` (LLM-generated), `realism` (one of three styles), and `people` (LLM-generated directive).
+Examine the response: `title` (max 10 words), `visualSummary` (1 sentence), `prompt` (80–180 words), `negativePrompt` (20–80 words), and `parameters` with `framing` (LLM-generated), `realism` (one of three styles), and `people` (LLM-generated directive).
 
 ### Exercise 2: Compare Providers
 

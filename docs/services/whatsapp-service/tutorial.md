@@ -1,6 +1,6 @@
-# WhatsApp Service - Tutorial
+# WhatsApp Service — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** GCP project access, WhatsApp Business API setup, IntexuraOS development environment
 > **You'll learn:** How to integrate with whatsapp-service for message sending, approval workflows, and reply correlation
 
@@ -129,7 +129,7 @@ await topic.publishMessage({
 4. Message sent via WhatsApp Cloud API (text, interactive, or CTA based on payload)
 5. OutboundMessage saved with wamid and correlationId
 
-**Checkpoint:** User receives message on WhatsApp within 2-5 seconds.
+**Checkpoint:** User receives message on WhatsApp within 2–5 seconds.
 
 ---
 
@@ -217,7 +217,7 @@ function classifyIntent(text: string): 'approve' | 'reject' | 'ambiguous' {
 }
 ```
 
-**Checkpoint:** Full approval flow working - send approval, receive reply, process action.
+**Checkpoint:** Full approval flow working — send approval, receive reply, process action.
 
 ---
 
@@ -236,7 +236,7 @@ Buttons and text replies both produce the same `ApprovalReplyEvent`:
 | Text reply "yes"           | "yes"                    | undefined                     | from correlationId |
 | Text reply "no"            | "no"                     | undefined                     | from correlationId |
 
-**Note:** Emoji reactions are not supported as of v4.0.0. They are ignored with status `REACTION_NOT_SUPPORTED`.
+**Note:** Emoji reactions are not supported. They are ignored with status `REACTION_NOT_SUPPORTED`.
 
 ### Step 4.2: No Code Changes Needed!
 
@@ -311,7 +311,7 @@ Audio messages follow an event-driven flow:
 5. `srt.transcription.completed` event is received
 6. whatsapp-service updates message, sends transcript to user, and publishes `command.ingest`
 
-You do not need to handle any of this -- subscribe to `command.ingest` events with `sourceType: 'whatsapp_voice'` to receive the final text.
+You do not need to handle any of this — subscribe to `command.ingest` events with `sourceType: 'whatsapp_voice'` to receive the final text.
 
 ---
 
@@ -324,7 +324,7 @@ You do not need to handle any of this -- subscribe to `command.ingest` events wi
 | "No approval event received" | Verify buttonId format or correlationId format                        |
 | "actionId is undefined"      | User replied to non-approval message, check correlationId in DB       |
 | "Duplicate actions created"  | Ensure not publishing both approval reply AND command.ingest handlers |
-| "Reaction not processed"     | Emoji reactions removed in v4.0.0; only buttons and text replies work |
+| "Reaction not processed"     | Emoji reactions removed; only buttons and text replies work           |
 | "Button title truncated"     | WhatsApp limits button titles to 20 characters                        |
 | "CTA button not showing"     | Ensure `buttons` and `ctaUrl` are not both provided                   |
 
@@ -342,7 +342,7 @@ Now that you understand the basics:
 
 ## Quick Reference
 
-### Button ID Format for Approvals (v4.0.0)
+### Button ID Format for Approvals
 
 ```
 approve:{actionId}              -- Approve
@@ -381,6 +381,6 @@ Examples:
 ```
 Button tap   -> replyText from intent, buttonId present
 Text reply   -> raw replyText, no buttonId
-Emoji reacts -> NOT supported (v4.0.0)
+Emoji reacts -> NOT supported
 CTA URL      -> One-way notification, no response expected
 ```

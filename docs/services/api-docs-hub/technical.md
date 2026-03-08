@@ -1,10 +1,10 @@
-# API Docs Hub -- Technical Reference
+# API Docs Hub — Technical Reference
 
 ## Overview
 
-API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 18 IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration -- it exists solely to serve a configured Swagger UI.
+API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 18 IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration — it exists solely to serve a configured Swagger UI.
 
-**Versions:** Package `3.1.0` / OpenAPI spec `0.0.5`
+**Versions:** Package `3.2.0` / OpenAPI spec `0.0.5`
 
 ## Architecture
 
@@ -42,6 +42,7 @@ sequenceDiagram
 
 | Commit     | Description                                               | Date       |
 | ---------- | --------------------------------------------------------- | ---------- |
+| `44ea683a` | Release v3.2.0 — package version bump                     | 2026-03-07 |
 | `ed9cdc25` | Add code-agent, linear-agent, web-agent to docs hub       | 2026-02-22 |
 | `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                            | 2026-02-19 |
@@ -49,7 +50,7 @@ sequenceDiagram
 | `a52a6bbc` | Dash0 OpenTelemetry integration                           | 2026-02-16 |
 | `d5fbb354` | Fix start:local to use tsx instead of experimental flags  | 2026-02-14 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local    | 2026-02-14 |
-| `40d83a23` | Implement Intex Chat MVP -- added Chat Agent spec         | 2026-02-01 |
+| `40d83a23` | Implement Intex Chat MVP — added Chat Agent spec          | 2026-02-01 |
 | `7c5e9153` | Remove PromptVault feature, keep Notion connector         | 2026-01-26 |
 
 ## API Endpoints
@@ -59,7 +60,7 @@ sequenceDiagram
 | Method | Path      | Purpose                                         | Auth |
 | ------ | --------- | ----------------------------------------------- | ---- |
 | GET    | `/docs`   | Swagger UI with multi-spec dropdown             | None |
-| GET    | `/health` | Health check -- validates config source count   | None |
+| GET    | `/health` | Health check — validates config source count    | None |
 
 There are no internal endpoints. This service does not expose any `/internal/*` routes.
 
@@ -181,13 +182,13 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 
 ## Gotchas
 
-- **Client-side spec fetching** -- Swagger UI fetches specs in the browser, not on the server. Services must be accessible from the browser's network and must allow CORS from the hub's origin.
-- **Config validation scope** -- The health check only validates that env vars were present at startup. It does not verify that the service URLs are reachable or returning valid OpenAPI specs.
-- **Empty sources = "down"** -- If `openApiSources` array is empty (which cannot happen in practice due to fail-fast), the health check returns status `"down"`.
-- **Static config** -- OpenAPI source URLs are loaded once at startup. Adding or removing a service requires redeployment.
-- **Health endpoint uses raw reply.send()** -- The `/health` endpoint bypasses the `reply.ok()` / `reply.fail()` response contract. This is intentional for infrastructure monitoring stability.
-- **Not in ecosystem.config.cjs** -- This service is not listed in `ecosystem.config.cjs` for local PM2 development. It must be run manually via `pnpm --filter api-docs-hub start:local`.
-- **Max scale 1** -- Terraform limits this service to a single Cloud Run instance, which is appropriate for a documentation-only service.
+- **Client-side spec fetching** — Swagger UI fetches specs in the browser, not on the server. Services must be accessible from the browser's network and must allow CORS from the hub's origin.
+- **Config validation scope** — The health check only validates that env vars were present at startup. It does not verify that the service URLs are reachable or returning valid OpenAPI specs.
+- **Empty sources = "down"** — If `openApiSources` array is empty (which cannot happen in practice due to fail-fast), the health check returns status `"down"`.
+- **Static config** — OpenAPI source URLs are loaded once at startup. Adding or removing a service requires redeployment.
+- **Health endpoint uses raw reply.send()** — The `/health` endpoint bypasses the `reply.ok()` / `reply.fail()` response contract. This is intentional for infrastructure monitoring stability.
+- **Not in ecosystem.config.cjs** — This service is not listed in `ecosystem.config.cjs` for local PM2 development. It must be run manually via `pnpm --filter api-docs-hub start:local`.
+- **Max scale 1** — Terraform limits this service to a single Cloud Run instance, which is appropriate for a documentation-only service.
 
 ## Terraform Configuration
 
@@ -215,9 +216,9 @@ The Terraform module uses `depends_on` for all 18 upstream services to ensure th
 
 ```
 apps/api-docs-hub/src/
-  config.ts         # OpenApiSource[] config + env var validation (121 lines)
-  server.ts         # Fastify server, Swagger UI registration, health endpoint (93 lines)
-  index.ts          # Entry point: Sentry init, loadConfig(), listen (29 lines)
+  config.ts         # OpenApiSource[] config + env var validation
+  server.ts         # Fastify server, Swagger UI registration, health endpoint
+  index.ts          # Entry point: Sentry init, loadConfig(), listen
 ```
 
-Total: 243 lines of source code across 3 files. This is one of the simplest services in the monorepo.
+This is one of the simplest services in the monorepo — three source files with no domain logic.

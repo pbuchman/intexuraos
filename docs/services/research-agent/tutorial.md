@@ -8,7 +8,7 @@ This tutorial will help you get started with the research-agent service, from cr
 - Auth0 access token for API requests
 - At least one LLM provider API key configured (Claude, OpenAI, Google, Perplexity, or Zai)
 
-**Note (v2.3.0):** If `INTEXURAOS_GEMINI_APP_API_KEY` or `INTEXURAOS_ZAI_APP_API_KEY` are configured on the server, users without their own API keys automatically get `gemini-2.0-flash` or `glm-4.7-flash` as fallback models.
+**Note:** If `INTEXURAOS_GEMINI_APP_API_KEY` or `INTEXURAOS_ZAI_APP_API_KEY` are configured on the server, users without their own API keys automatically get `gemini-2.0-flash` or `glm-4.7-flash` as fallback models.
 
 ## Part 1: Hello World - Create Research
 
@@ -150,7 +150,7 @@ curl -X POST https://research-agent.intexuraos.com/research/validate-input \
 
 Quality values: `0` = rejected (too low quality), `1` = weak but valid (improvement suggested), `2` = good (ready to use).
 
-The improvement system preserves your original language. A Polish prompt returns a Polish improvement. If the LLM accidentally switches languages or returns multiple alternatives, the system detects this and retries automatically.
+The improvement system preserves your original language. A Polish prompt returns a Polish improvement. If the LLM returns a malformed improvement (unwanted prefixes, JSON markers, or explanatory text), the system detects this and retries automatically.
 
 ### Force-improve a prompt
 
@@ -576,8 +576,7 @@ The export creates:
 | Notion export fails          | Error on export-notion endpoint   | Verify Notion token is valid; check NOTION_NOT_CONNECTED or RATE_LIMITED error |
 | Already exported             | `ALREADY_EXPORTED` error          | Each research can only be exported once; delete the Notion page manually       |
 | Invalid page ID              | Validation fails                  | Page ID must be 32 hex characters or UUID format                               |
-| Improvement language changed | Improved prompt in wrong language | Semantic checks detect language drift; system retries automatically            |
-| Multiple options returned    | Improvement has numbered list     | Multi-option detection rejects; system retries for single prompt               |
+| Malformed improvement        | Improvement has unwanted format   | Structural checks detect and reject; system retries automatically              |
 
 ## Exercises
 

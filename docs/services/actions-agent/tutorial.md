@@ -1,6 +1,6 @@
-# Actions Agent - Tutorial
+# Actions Agent — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** IntexuraOS development environment running, Auth0 access token
 > **You will learn:** How to list, approve, execute, and manage actions through the actions-agent API
 
@@ -16,7 +16,7 @@ This tutorial walks you through the actions-agent service, from basic listing to
 
 ---
 
-## Part 1: Hello World - List Your Actions (5 minutes)
+## Part 1: Hello World — List Your Actions (5 minutes)
 
 The simplest interaction is listing actions for the authenticated user.
 
@@ -158,7 +158,7 @@ Bot: "Please use the buttons to approve or reject. If buttons expired, here they
      [Approve] [Reject]
 ```
 
-> **Note:** As of v4.0.0, text-based approval (typing "yes"/"no") is no longer supported. The system always re-sends buttons if no button was tapped. No LLM API key is required.
+> **Note:** Text-based approval (typing "yes"/"no") is not supported. The system always re-sends buttons if no button was tapped. No LLM API key is required.
 
 ### Auto-Execution
 
@@ -281,7 +281,7 @@ When processing Pub/Sub events, if the URL action type does not match the event:
 
 ---
 
-## Part 5: Real-World Scenario - Duplicate Link Resolution (5 minutes)
+## Part 5: Real-World Scenario — Duplicate Link Resolution (5 minutes)
 
 When creating a bookmark action, if the URL already exists, the action fails with an `existingBookmarkId` in the payload. Here is how to handle it:
 
@@ -350,11 +350,11 @@ curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
 }
 ```
 
-> **Note:** As of v4.1.0, calendar previews are generated synchronously when the approval message is sent. The preview is included directly in the WhatsApp approval message, so you may not need to fetch it via API unless displaying it in a different UI.
+> **Note:** Calendar previews are generated synchronously when the approval message is sent. The preview is included directly in the WhatsApp approval message, so you may not need to fetch it via API unless displaying it in a different UI.
 
 ---
 
-## Part 7: Code Actions (v3.0.0)
+## Part 7: Code Actions
 
 Code actions dispatch tasks to code-agent (Claude Code). They use interactive WhatsApp buttons with three options.
 
@@ -408,7 +408,7 @@ Error codes returned when cancellation fails:
 | Type correction not working     | Action stays same type after PATCH      | Ensure action is in `pending` or `awaiting_approval` status  |
 | Batch returns wrong actions     | Actions from other users                | Security check filters by userId; verify correct IDs         |
 | WhatsApp notifications not sent | Action completes silently               | Check `whatsapp-send` topic configuration                    |
-| WhatsApp approval not working   | Text reply ignored, buttons re-sent     | Expected behavior in v4.0.0 -- tap a button instead          |
+| WhatsApp approval not working   | Text reply ignored, buttons re-sent     | Expected behavior — tap a button instead                     |
 | Race condition errors           | Duplicate notifications                 | System handles this automatically with `updateStatusIf`      |
 | Calendar preview returns null   | No preview available                    | Preview may have failed; check calendar-agent logs           |
 | Code task worker unavailable    | Action marked as failed                 | code-agent has no available workers; retry later             |
@@ -480,5 +480,5 @@ Result: Only one approval is processed, no duplicate notifications
 ## Next Steps
 
 1. Explore the [Technical Reference](technical.md) for full API details and domain model documentation
-2. Read about the [approval flow architecture](technical.md#handleapprovalreply-v200-redesigned-in-v400-extended-in-v410) for deeper understanding
+2. Read about the [approval flow architecture](technical.md#handleapprovalreply) for deeper understanding
 3. Check the [Agent Interface](agent.md) for machine-readable integration specs

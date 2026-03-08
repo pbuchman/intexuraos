@@ -1,4 +1,4 @@
-# Chat Agent -- Technical Reference
+# Chat Agent — Technical Reference
 
 ## Overview
 
@@ -86,6 +86,7 @@ sequenceDiagram
 
 | Hash       | Description                                               | Date       |
 | ---------- | --------------------------------------------------------- | ---------- |
+| `44ea683a` | Release v3.2.0                                            | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration, update cross-service mocks | 2026-03-02 |
 | `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                            | 2026-02-19 |
@@ -207,10 +208,10 @@ sequenceDiagram
 
 ### ConversationHistory
 
-| Field     | Type                       | Description    |
-| --------- | -------------------------- | -------------- |
-| `role`    | `'user' \                  | 'assistant'`   | Message sender |
-| `content` | `string`                   | Message text   |
+| Field     | Type                         | Description    |
+| --------- | ---------------------------- | -------------- |
+| `role`    | `'user' \                    | 'assistant'`   | Message sender |
+| `content` | `string`                     | Message text   |
 
 ## Pub/Sub Events
 
