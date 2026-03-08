@@ -9,7 +9,6 @@
 - Task queueing — new requests wait in line when all workers are busy instead of being dropped (INT-619, INT-624)
 - PR comment to code task creation with improved webhook handling (INT-618, INT-704, INT-668)
 - New AI models: Qwen, Sonnet, and MiniMax worker types for more flexibility (INT-703, INT-710, INT-706)
-- Event-driven audio transcription — voice messages automatically converted to text and processed by AI (INT-684, INT-682, INT-685, INT-616)
 - WhatsApp CTA buttons and deep links — tap to navigate directly to tasks and actions (INT-730, INT-738, INT-727, INT-732)
 - WhatsApp task progress notifications so users stay informed on their phone (INT-628)
 - User-level transcription preferences for per-user voice message settings (INT-683)
@@ -46,6 +45,7 @@
 
 ### Changed
 
+- Migrated audio transcription to event-driven architecture — dedicated worker processes voice messages via Pub/Sub instead of inline in whatsapp-service (INT-684, INT-682, INT-685, INT-616)
 - Cancelled tasks now accept messages so users can continue the conversation (INT-714)
 - Reordered sidebar navigation and removed daily cost limit display
 - Default AI model only uses models the user has API keys for (INT-571)
