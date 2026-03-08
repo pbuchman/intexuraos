@@ -150,7 +150,7 @@ function StatusPipeline({ counts, activeFilters, onToggle }: StatusPipelineProps
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[1fr_1fr_140px_120px] px-4 text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500 lg:grid">
+    <div className="mb-1 hidden grid-cols-[1fr_1fr_140px_120px] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
       <div>Issue</div>
       <div>Pipeline</div>
       <div>Time</div>
