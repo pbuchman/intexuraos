@@ -231,6 +231,73 @@ describe('groupByLinearIssue', () => {
     expect(groups[1]?.linearIssueId).toBe('INT-100');
   });
 
+  it('sorts tasks within a group by createdAt ascending', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T16:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T14:00:00Z',
+        updatedAt: '2026-03-07T15:00:00Z',
+      }),
+      createMockTask({
+        id: 't3',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'failed',
+        createdAt: '2026-03-07T12:00:00Z',
+        updatedAt: '2026-03-07T17:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // Sorted by createdAt ascending: t1 (10:00), t3 (12:00), t2 (14:00)
+    expect(groups[0]?.tasks[0]?.id).toBe('t1');
+    expect(groups[0]?.tasks[1]?.id).toBe('t3');
+    expect(groups[0]?.tasks[2]?.id).toBe('t2');
+  });
+
+  it('latestTask is still the most recently updated task after createdAt sort', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T18:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T14:00:00Z',
+        updatedAt: '2026-03-07T15:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // latestTask should be t1 (updatedAt 18:00 is most recent)
+    expect(groups[0]?.latestTask.id).toBe('t1');
+    // But tasks array should be by createdAt asc
+    expect(groups[0]?.tasks[0]?.id).toBe('t1');
+    expect(groups[0]?.tasks[1]?.id).toBe('t2');
+  });
+
   it('excludes archived tasks from latest planning/execution lookup', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'planning', status: 'archived', updatedAt: '2026-03-07T16:00:00Z' }),
