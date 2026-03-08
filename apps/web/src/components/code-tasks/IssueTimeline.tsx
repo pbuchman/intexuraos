@@ -237,10 +237,13 @@ function TimelineItem({ task }: { task: CodeTask }): React.JSX.Element {
           </p>
         </a>
 
-        {/* Third line: detail (separate — contains its own links) */}
-        <div className="mt-1">
+        {/* Third line: detail */}
+        <a
+          href={`/#/code-tasks/${task.id}/view`}
+          className="mt-1 block cursor-pointer rounded -mx-1 px-1 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+        >
           <DetailLine task={task} />
-        </div>
+        </a>
       </div>
     </div>
   );
