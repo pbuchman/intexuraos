@@ -196,42 +196,48 @@ function TimelineItem({ task }: { task: CodeTask }): React.JSX.Element {
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        {/* First line: label + chips */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`text-sm font-medium ${
-              isArchived
-                ? 'text-slate-400 line-through dark:text-slate-500'
-                : 'text-slate-700 dark:text-slate-300'
-            }`}
-          >
-            {label}
-          </span>
+        {/* Clickable area: label + chips + timestamp */}
+        <a
+          href={`/#/code-tasks/${task.id}/view`}
+          className="block cursor-pointer rounded -mx-1 px-1 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+        >
+          {/* First line: label + chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`text-sm font-medium ${
+                isArchived
+                  ? 'text-slate-400 line-through dark:text-slate-500'
+                  : 'text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              {label}
+            </span>
 
-          {/* Model chip */}
-          <span className="rounded border border-slate-300 px-1.5 py-0.5 font-mono text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
-            {task.workerType}
-          </span>
+            {/* Model chip */}
+            <span className="rounded border border-slate-300 px-1.5 py-0.5 font-mono text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
+              {task.workerType}
+            </span>
 
-          {/* Worker location chip */}
-          <span className="rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
-            {task.workerLocation}
-          </span>
+            {/* Worker location chip */}
+            <span className="rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
+              {task.workerLocation}
+            </span>
 
-          {/* followUpReason chip */}
-          {task.followUpReason !== undefined ? (
-            <FollowUpChip reason={task.followUpReason} />
-          ) : null}
-        </div>
+            {/* followUpReason chip */}
+            {task.followUpReason !== undefined ? (
+              <FollowUpChip reason={task.followUpReason} />
+            ) : null}
+          </div>
 
-        {/* Second line: timestamp + duration */}
-        <p className="mt-0.5 text-xs text-slate-500">
-          {formatDateTime(task.updatedAt)}
-          <span className="mx-1 text-slate-400 dark:text-slate-600">&middot;</span>
-          {formatElapsedTime(duration)}
-        </p>
+          {/* Second line: timestamp + duration */}
+          <p className="mt-0.5 text-xs text-slate-500">
+            {formatDateTime(task.updatedAt)}
+            <span className="mx-1 text-slate-400 dark:text-slate-600">&middot;</span>
+            {formatElapsedTime(duration)}
+          </p>
+        </a>
 
-        {/* Third line: detail */}
+        {/* Third line: detail (separate — contains its own links) */}
         <div className="mt-1">
           <DetailLine task={task} />
         </div>
