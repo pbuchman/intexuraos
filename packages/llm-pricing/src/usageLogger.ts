@@ -50,7 +50,9 @@ export type CallType =
   /** Visualization chart data analysis */
   | 'visualization_insights'
   /** Vega-Lite chart generation */
-  | 'visualization_vegalite';
+  | 'visualization_vegalite'
+  /** Tool calling / function calling agent loops */
+  | 'tool_calling';
 
 /**
  * Parameters for logging LLM usage.
