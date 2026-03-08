@@ -1,4 +1,6 @@
 import { ExternalLink } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { CodeTask, CodeTaskStatus } from '@/types';
 import { formatDateTime, formatElapsedTime } from '@/utils/dateFormat';
 
@@ -101,6 +103,32 @@ function FollowUpChip({ reason }: FollowUpChipProps): React.JSX.Element | null {
   );
 }
 
+// --- Inline markdown (compact, text-xs) ---
+
+const MARKDOWN_COMPONENTS: import('react-markdown').Components = {
+  p: ({ children }) => <span>{children}</span>,
+  a: ({ href, children }) => (
+    <a
+      href={href ?? '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-400 hover:text-blue-300 hover:underline"
+    >
+      {children}
+    </a>
+  ),
+};
+
+function InlineMarkdown({ text, className }: { text: string; className: string }): React.JSX.Element {
+  return (
+    <span className={`text-xs ${className}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+        {text}
+      </ReactMarkdown>
+    </span>
+  );
+}
+
 // --- Detail line ---
 
 function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
@@ -129,13 +157,15 @@ function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
     );
   }
 
+  const summary = task.result?.summary;
+  if (summary !== undefined) {
+    return <InlineMarkdown text={summary} className="text-slate-400" />;
+  }
+
   const prompt = task.sanitizedPrompt;
-  const truncated = prompt.length > 60
-    ? prompt.slice(0, 60) + '...'
-    : prompt;
-  return (
-    <span className="text-xs text-slate-500">{truncated}</span>
-  );
+  const words = prompt.split(/\s+/);
+  const truncated = words.length > 100 ? words.slice(0, 100).join(' ') + '...' : prompt;
+  return <InlineMarkdown text={truncated} className="text-slate-500" />;
 }
 
 // --- Timeline item ---
