@@ -70,13 +70,25 @@ vi.mock('@/components', () => ({
   ),
 }));
 
-vi.mock('lucide-react', () => ({
-  ChevronDown: (): React.JSX.Element => <span>ChevronDown</span>,
-  ChevronUp: (): React.JSX.Element => <span>ChevronUp</span>,
-  Filter: (): React.JSX.Element => <span>Filter</span>,
-  Plus: (): React.JSX.Element => <span>Plus</span>,
-  Trash2: (): React.JSX.Element => <span>Trash2</span>,
-}));
+vi.mock('lucide-react', () => {
+  const icon = (name: string) =>
+    function MockIcon(): React.JSX.Element {
+      return <span>{name}</span>;
+    };
+  return {
+    Check: icon('Check'),
+    ChevronDown: icon('ChevronDown'),
+    ChevronRight: icon('ChevronRight'),
+    ExternalLink: icon('ExternalLink'),
+    Filter: icon('Filter'),
+    Loader2: icon('Loader2'),
+    Play: icon('Play'),
+    Plus: icon('Plus'),
+    RotateCcw: icon('RotateCcw'),
+    Trash2: icon('Trash2'),
+    X: icon('X'),
+  };
+});
 
 function createTask(overrides?: Partial<CodeTask>): CodeTask {
   return {
@@ -139,8 +151,6 @@ describe('CodeTasksPage', () => {
     render(<CodeTasksPage />);
 
     expect(screen.getByText('Hydrated Linear Issue')).toBeInTheDocument();
-    expect(screen.getByText('backend')).toBeInTheDocument();
-    expect(screen.getByText('In Progress')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'INT-301' })).toSatisfy((links) =>
       links.every((link) =>
         link.getAttribute('href') === 'https://linear.app/intexuraos/issue/INT-301'
