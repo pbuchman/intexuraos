@@ -11,6 +11,26 @@ import {
 import type { CodeTask, CodeTaskStatus, SubmitCodeTaskRequest, WorkersStatusResponse } from '@/types';
 
 /**
+ * Merge incoming tasks with previous state, preserving object references
+ * for tasks that haven't changed (same status + updatedAt). This prevents
+ * unnecessary re-renders in downstream memoized components.
+ */
+function mergeTasks(prev: CodeTask[], incoming: CodeTask[]): CodeTask[] {
+  if (prev.length === 0) return incoming;
+  const prevMap = new Map(prev.map((t) => [t.id, t]));
+  let changed = prev.length !== incoming.length;
+  const merged = incoming.map((t) => {
+    const existing = prevMap.get(t.id);
+    if (existing?.status === t.status && existing.updatedAt === t.updatedAt) {
+      return existing;
+    }
+    changed = true;
+    return t;
+  });
+  return changed ? merged : prev;
+}
+
+/**
  * Hook for managing a list of code tasks with pagination.
  */
 export function useCodeTasks(options?: { status?: CodeTaskStatus[] }): {
@@ -49,10 +69,13 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus[] }): {
 
       try {
         const token = await getAccessToken();
-        const listOptions = options?.status !== undefined && options.status.length > 0 ? { status: options.status } : {};
+        const listOptions: { status?: CodeTaskStatus[]; limit: number } = { limit: 50 };
+        if (options?.status !== undefined && options.status.length > 0) {
+          listOptions.status = options.status;
+        }
         const data = await listCodeTasksApi(token, listOptions);
         if (isMountedRef.current) {
-          setTasks(data.tasks);
+          setTasks((prev) => mergeTasks(prev, data.tasks));
           setCursor(data.nextCursor);
           setHasMore(data.nextCursor !== undefined);
         }
@@ -101,7 +124,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus[] }): {
     setLoadingMore(true);
     try {
       const token = await getAccessToken();
-      const loadMoreOptions: { status?: CodeTaskStatus[]; cursor?: string } = {};
+      const loadMoreOptions: { status?: CodeTaskStatus[]; cursor?: string; limit: number } = { limit: 50 };
       if (options?.status !== undefined && options.status.length > 0) {
         loadMoreOptions.status = options.status;
       }
