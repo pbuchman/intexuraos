@@ -4,6 +4,8 @@
 
 The transcription worker is a Google Cloud Function that converts WhatsApp voice notes into text using Speechmatics Batch API. It subscribes to the `audio-stored` Pub/Sub topic, processes audio files stored in GCS, and publishes transcription results (success or failure) to the `transcription-completed` topic. Built with `@google-cloud/functions-framework` and deployed as a CloudEvent handler.
 
+> **History:** Prior to v3.2.0, transcription was handled inline by whatsapp-service. The extraction to a standalone worker (INT-684) introduced event-driven processing, user-level provider preferences, and cleaner separation of concerns.
+
 ## Architecture
 
 ```mermaid

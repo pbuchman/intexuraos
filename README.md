@@ -248,7 +248,6 @@ Everything in Terraform. No manual cloud console changes. Reproducible, auditabl
 | **Task Queueing**           | New requests wait in line when workers are busy instead of being dropped                |
 | **PR Comment Tasks**        | Leave a comment on a pull request and a code task is created automatically              |
 | **More AI Models**          | Qwen, Sonnet, and MiniMax worker types join the coding agent lineup                     |
-| **Voice Transcription**     | Voice messages automatically transcribed and processed by AI                            |
 | **WhatsApp Deep Links**     | Tap CTA buttons to navigate directly to tasks and dashboards                            |
 | **Auto-Trigger Code Tasks** | Assign a project issue and the coding agent starts designing immediately                |
 | **Smarter Code Execution**  | The agent now plans before writing, reviews its own code twice, and summarizes progress |

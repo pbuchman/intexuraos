@@ -1,5 +1,7 @@
 # Transcription Worker
 
+> **Migration note:** Voice transcription has been part of IntexuraOS since v2.x (originally inline in whatsapp-service using Speechmatics). In v3.2.0, transcription was extracted into this dedicated Cloud Function worker with event-driven processing via Pub/Sub.
+
 Convert WhatsApp voice notes into searchable text — automatically, accurately, and in any language.
 
 ## The Problem
