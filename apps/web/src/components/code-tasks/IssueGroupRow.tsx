@@ -1,14 +1,11 @@
 import { memo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Trash2 } from 'lucide-react';
 import type { IssueGroup, StepState } from '@/utils/issueGroups';
 import { formatElapsedTime, formatRelative } from '@/utils/dateFormat';
-import type { WorkerStatusTag } from '@/types';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
 
 interface IssueGroupRowProps {
   group: IssueGroup;
-  workerHealthMap: Map<string, WorkerStatusTag>;
   onAction: (taskId: string, action: 'delete' | 'retry' | 'implement') => void;
 }
 
@@ -140,14 +137,6 @@ function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Elem
   return <span className="flex items-center">{steps}</span>;
 }
 
-// --- Worker column ---
-
-function healthDotClass(health: WorkerStatusTag | undefined): string {
-  if (health === 'healthy') return 'bg-green-500';
-  if (health === 'orchestrator-unreachable' || health === 'tunnel-down') return 'bg-red-500';
-  return 'bg-slate-400';
-}
-
 // --- Duration calculation ---
 
 function computeDurationSeconds(createdAt: string, updatedAt: string, isActive: boolean): number {
@@ -160,24 +149,16 @@ function computeDurationSeconds(createdAt: string, updatedAt: string, isActive: 
 
 const IssueGroupRow = memo(function IssueGroupRow({
   group,
-  workerHealthMap,
   onAction,
 }: IssueGroupRowProps): React.JSX.Element {
-  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { latestTask, pipeline, aggregateStatus } = group;
-  const health = workerHealthMap.get(latestTask.workerLocation);
   const isActive = aggregateStatus === 'active';
   const durationSec = computeDurationSeconds(latestTask.createdAt, latestTask.updatedAt, isActive);
 
   const handleRowClick = (): void => {
-    void navigate(`/code-tasks/${latestTask.id}`);
-  };
-
-  const handleExpandToggle = (e: React.MouseEvent): void => {
-    e.stopPropagation();
     setExpanded((prev) => !prev);
   };
 
@@ -188,23 +169,18 @@ const IssueGroupRow = memo(function IssueGroupRow({
         className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${getAccentShadow(aggregateStatus)}`}
         onClick={handleRowClick}
       >
-        <div className="hidden grid-cols-[200px_1fr_200px_140px_120px] items-center gap-2 lg:grid">
+        <div className="hidden grid-cols-[1fr_1fr_140px_120px] items-center gap-2 lg:grid">
           {/* Issue column */}
           <div className="flex items-center gap-2 overflow-hidden">
-            {group.tasks.length > 1 ? (
-              <button
-                onClick={handleExpandToggle}
-                className="flex-shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-              >
-                {expanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </button>
-            ) : (
-              <span className="w-5 flex-shrink-0" />
-            )}
+            <button
+              className="flex-shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            >
+              {expanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
             <div className="min-w-0">
               {group.linearIssue !== undefined ? (
                 <>
@@ -223,7 +199,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                 </>
               ) : (
                 <p className="truncate text-sm text-slate-300 dark:text-slate-400">
-                  {latestTask.sanitizedPrompt.slice(0, 40)}
+                  {latestTask.result?.summary ?? latestTask.sanitizedPrompt}
                 </p>
               )}
             </div>
@@ -232,17 +208,6 @@ const IssueGroupRow = memo(function IssueGroupRow({
           {/* Pipeline column */}
           <div className="overflow-hidden">
             <PipelineVisualization group={group} />
-          </div>
-
-          {/* Worker column */}
-          <div className="flex items-center gap-2 overflow-hidden">
-            <span className="rounded border border-slate-300 px-1.5 py-0.5 font-mono text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
-              {latestTask.workerType}
-            </span>
-            <span className="truncate text-xs text-slate-500 dark:text-slate-400">
-              {latestTask.workerLocation}
-            </span>
-            <span className={`h-2 w-2 flex-shrink-0 rounded-full ${healthDotClass(health)}`} />
           </div>
 
           {/* Time column */}
@@ -309,18 +274,15 @@ const IssueGroupRow = memo(function IssueGroupRow({
         {/* Mobile layout (< lg) */}
         <div className="flex flex-col gap-2 lg:hidden">
           <div className="flex items-center gap-2">
-            {group.tasks.length > 1 ? (
-              <button
-                onClick={handleExpandToggle}
-                className="flex-shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-              >
-                {expanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </button>
-            ) : null}
+            <button
+              className="flex-shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            >
+              {expanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
             <div className="min-w-0 flex-1">
               {group.linearIssue !== undefined ? (
                 <a
@@ -333,8 +295,8 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   {group.linearIssue.identifier}
                 </a>
               ) : (
-                <span className="text-sm text-slate-300 dark:text-slate-400">
-                  {latestTask.sanitizedPrompt.slice(0, 40)}
+                <span className="truncate text-sm text-slate-300 dark:text-slate-400">
+                  {latestTask.result?.summary ?? latestTask.sanitizedPrompt}
                 </span>
               )}
             </div>
@@ -410,7 +372,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
       </div>
 
       {/* Expanded timeline */}
-      {expanded && group.tasks.length > 1 ? (
+      {expanded ? (
         <IssueTimeline
           tasks={group.tasks}
           referenceLocation={group.latestTask.workerLocation}
@@ -428,7 +390,6 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.group.pipeline.execution === next.group.pipeline.execution &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
-  prev.workerHealthMap === next.workerHealthMap &&
   prev.onAction === next.onAction,
 );
 
