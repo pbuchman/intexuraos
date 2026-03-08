@@ -21,6 +21,7 @@ import {
   BookmarksListPage,
   CalendarPage,
   CodeTaskViewPage,
+  CodeTaskViewPageV2,
   CodeTaskNewPage,
   CodeTasksPage,
   CompositeFeedFormPage,
@@ -126,6 +127,11 @@ function BookmarkDetailRedirect(): React.JSX.Element {
 function CodeTaskViewPageKeyed(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   return <CodeTaskViewPage key={id} />;
+}
+
+function CodeTaskViewPageV2Keyed(): React.JSX.Element {
+  const { id } = useParams<{ id: string }>();
+  return <CodeTaskViewPageV2 key={id} />;
 }
 
 function AppRoutes(): React.JSX.Element {
@@ -243,6 +249,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CodeTaskNewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/:id/view"
+        element={
+          <ProtectedRoute>
+            <CodeTaskViewPageV2Keyed />
           </ProtectedRoute>
         }
       />
