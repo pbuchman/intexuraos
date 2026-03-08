@@ -124,7 +124,7 @@ function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Elem
       <span key="pr" className="flex items-center gap-1">
         <StepDot state="completed" />
         <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
-          PR #{pipeline.pr.number}
+          #{pipeline.pr.number}
         </span>
       </span>,
     );
@@ -251,7 +251,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                 className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
               >
                 <ExternalLink className="h-3 w-3" />
-                PR #{pipeline.pr.number}
+                #{pipeline.pr.number}
               </a>
             ) : aggregateStatus === 'failed' ? (
               <button
