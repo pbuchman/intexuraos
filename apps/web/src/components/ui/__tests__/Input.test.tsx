@@ -1,8 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, it, expect } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 import { Input } from '@/components/ui/Input';
 
 describe('Input', () => {
+  afterEach(() => {
+    cleanup();
+  });
   it('renders with label and input element', () => {
     render(<Input label="Username" />);
     expect(screen.getByLabelText('Username')).toBeInTheDocument();
