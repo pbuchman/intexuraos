@@ -81,9 +81,9 @@ function FollowUpChip({ reason }: FollowUpChipProps): React.JSX.Element | null {
   if (reason === 'execution_implement') return null;
 
   const chipStyles: Record<string, string> = {
-    retry: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
-    pr_comment: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
-    user_feedback: 'border-slate-500/30 bg-slate-500/10 text-slate-400',
+    retry: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    pr_comment: 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    user_feedback: 'border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-400',
   };
 
   const labels: Record<string, string> = {
@@ -92,7 +92,7 @@ function FollowUpChip({ reason }: FollowUpChipProps): React.JSX.Element | null {
     user_feedback: 'User Feedback',
   };
 
-  const style = chipStyles[reason] ?? 'border-slate-500/30 bg-slate-500/10 text-slate-400';
+  const style = chipStyles[reason] ?? 'border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-400';
   const label = labels[reason] ?? reason;
 
   return (
@@ -111,7 +111,7 @@ const MARKDOWN_COMPONENTS: import('react-markdown').Components = {
       href={href ?? '#'}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-blue-400 hover:text-blue-300 hover:underline"
+      className="text-blue-600 hover:text-blue-500 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
     >
       {children}
     </a>
@@ -137,7 +137,7 @@ function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
 
   // Summary is always shown when available
   const summaryBlock = summary !== undefined
-    ? <InlineMarkdown text={summary} className="text-slate-400" />
+    ? <InlineMarkdown text={summary} className="text-slate-600 dark:text-slate-400" />
     : null;
 
   if (prUrl !== undefined) {
@@ -148,7 +148,7 @@ function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
           href={prUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline"
+          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-500 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
         >
           <ExternalLink className="h-3 w-3" />
           {prUrl}
@@ -164,7 +164,7 @@ function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
     return (
       <div className="flex flex-col gap-1">
         {summaryBlock}
-        <span className="text-xs text-red-400">{truncated}</span>
+        <span className="text-xs text-red-600 dark:text-red-400">{truncated}</span>
       </div>
     );
   }
@@ -176,7 +176,7 @@ function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
   const prompt = task.sanitizedPrompt;
   const words = prompt.split(/\s+/);
   const truncated = words.length > 100 ? words.slice(0, 100).join(' ') + '...' : prompt;
-  return <InlineMarkdown text={truncated} className="text-slate-500" />;
+  return <InlineMarkdown text={truncated} className="text-slate-500 dark:text-slate-500" />;
 }
 
 // --- Timeline item ---
@@ -201,20 +201,20 @@ function TimelineItem({ task }: { task: CodeTask }): React.JSX.Element {
           <span
             className={`text-sm font-medium ${
               isArchived
-                ? 'text-slate-500 line-through'
-                : 'text-slate-300'
+                ? 'text-slate-400 line-through dark:text-slate-500'
+                : 'text-slate-700 dark:text-slate-300'
             }`}
           >
             {label}
           </span>
 
           {/* Model chip */}
-          <span className="rounded border border-slate-600 px-1.5 py-0.5 font-mono text-xs text-slate-400">
+          <span className="rounded border border-slate-300 px-1.5 py-0.5 font-mono text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
             {task.workerType}
           </span>
 
           {/* Worker location chip */}
-          <span className="rounded border border-slate-600 px-1.5 py-0.5 text-xs text-slate-400">
+          <span className="rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
             {task.workerLocation}
           </span>
 
@@ -227,7 +227,7 @@ function TimelineItem({ task }: { task: CodeTask }): React.JSX.Element {
         {/* Second line: timestamp + duration */}
         <p className="mt-0.5 text-xs text-slate-500">
           {formatDateTime(task.updatedAt)}
-          <span className="mx-1 text-slate-600">&middot;</span>
+          <span className="mx-1 text-slate-400 dark:text-slate-600">&middot;</span>
           {formatElapsedTime(duration)}
         </p>
 
@@ -246,9 +246,9 @@ function IssueTimeline({ tasks, onCollapse }: IssueTimelineProps): React.JSX.Ele
   const archivedCount = tasks.filter((t) => t.status === 'archived').length;
 
   return (
-    <div className="border-t border-zinc-700 bg-zinc-900/50 px-4 py-3">
+    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/50">
       {/* Vertical timeline */}
-      <div className="border-l-2 border-zinc-700 pl-2">
+      <div className="border-l-2 border-slate-300 pl-2 dark:border-zinc-700">
         {tasks.map((task) => (
           <TimelineItem key={task.id} task={task} />
         ))}
@@ -258,7 +258,7 @@ function IssueTimeline({ tasks, onCollapse }: IssueTimelineProps): React.JSX.Ele
       <button
         type="button"
         onClick={onCollapse}
-        className="mt-2 w-full text-center text-xs text-slate-500 transition-colors hover:text-slate-400"
+        className="mt-2 w-full text-center text-xs text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400"
       >
         {String(tasks.length)} tasks{archivedCount > 0 ? <> &middot; {String(archivedCount)} archived</> : null} &middot; click to collapse
       </button>
