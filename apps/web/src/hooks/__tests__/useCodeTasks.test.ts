@@ -88,13 +88,13 @@ describe('useCodeTasks hooks', () => {
     it('fetches tasks with status filter', async () => {
       mockListCodeTasks.mockResolvedValue({ tasks: [], nextCursor: undefined });
 
-      const { result } = renderHook(() => useCodeTasks({ status: 'running' }));
+      const { result } = renderHook(() => useCodeTasks({ status: ['running'] }));
 
       await waitFor(() => {
         expect(result.current.loading).toBe(false);
       });
 
-      expect(mockListCodeTasks).toHaveBeenCalledWith('test-token', { status: 'running', limit: 50 });
+      expect(mockListCodeTasks).toHaveBeenCalledWith('test-token', { status: ['running'], limit: 50 });
     });
 
     it('handles fetch error', async () => {
