@@ -384,7 +384,6 @@ const IssueGroupRow = memo(function IssueGroupRow({
       {expanded ? (
         <IssueTimeline
           tasks={group.tasks}
-          referenceLocation={group.latestTask.workerLocation}
           onCollapse={(): void => { setExpanded(false); }}
         />
       ) : null}
