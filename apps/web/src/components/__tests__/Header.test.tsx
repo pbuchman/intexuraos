@@ -137,7 +137,7 @@ describe('Header', () => {
       expect(workersMenuItem).toBeInTheDocument();
     });
 
-    it('does not render workers status in menu when no workers', () => {
+    it('renders workers status in menu even when no workers (shows "No workers configured")', () => {
       // Mock PWA as installed
       mockUsePWA.mockReturnValue({
         ...defaultPWAValue,
@@ -159,8 +159,9 @@ describe('Header', () => {
       const userMenuButton = screen.getByRole('button', { name: /Test User/i });
       fireEvent.click(userMenuButton);
 
-      // Workers status should not be shown when there are no workers
-      expect(screen.queryByTestId('workers-status-menu')).not.toBeInTheDocument();
+      // Workers menu IS shown even with no workers (consistent with non-PWA behavior)
+      expect(screen.getByTestId('workers-status-menu')).toBeInTheDocument();
+      expect(screen.getByText('No workers configured')).toBeInTheDocument();
     });
   });
 
