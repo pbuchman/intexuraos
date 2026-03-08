@@ -94,6 +94,7 @@ describe('POST /internal/code/process', () => {
 
     taskDispatcher = createTaskDispatcherService({
       logger,
+      workerHealthProbe: mockWorkerHealthProbe,
     });
 
     _logChunkRepo = createFirestoreLogChunkRepository({
