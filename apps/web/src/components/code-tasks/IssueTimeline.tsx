@@ -6,7 +6,6 @@ import { formatDateTime, formatElapsedTime } from '@/utils/dateFormat';
 
 interface IssueTimelineProps {
   tasks: CodeTask[];
-  referenceLocation: string;
   onCollapse: () => void;
 }
 
@@ -121,7 +120,7 @@ const MARKDOWN_COMPONENTS: import('react-markdown').Components = {
 
 function InlineMarkdown({ text, className }: { text: string; className: string }): React.JSX.Element {
   return (
-    <span className={`text-xs ${className}`}>
+    <span className={`text-xs ${className} [&>*]:inline`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
         {text}
       </ReactMarkdown>
@@ -182,7 +181,7 @@ function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
 
 // --- Timeline item ---
 
-function TimelineItem({ task, referenceLocation }: { task: CodeTask; referenceLocation: string }): React.JSX.Element {
+function TimelineItem({ task }: { task: CodeTask }): React.JSX.Element {
   const dotColor = getDotColor(task);
   const label = getActionLabel(task);
   const isArchived = task.status === 'archived';
@@ -214,12 +213,10 @@ function TimelineItem({ task, referenceLocation }: { task: CodeTask; referenceLo
             {task.workerType}
           </span>
 
-          {/* Worker location chip (only if different from group's latest task) */}
-          {task.workerLocation !== referenceLocation ? (
-            <span className="rounded border border-slate-600 px-1.5 py-0.5 text-xs text-slate-400">
-              {task.workerLocation}
-            </span>
-          ) : null}
+          {/* Worker location chip */}
+          <span className="rounded border border-slate-600 px-1.5 py-0.5 text-xs text-slate-400">
+            {task.workerLocation}
+          </span>
 
           {/* followUpReason chip */}
           {task.followUpReason !== undefined ? (
@@ -245,7 +242,7 @@ function TimelineItem({ task, referenceLocation }: { task: CodeTask; referenceLo
 
 // --- Main component ---
 
-function IssueTimeline({ tasks, referenceLocation, onCollapse }: IssueTimelineProps): React.JSX.Element {
+function IssueTimeline({ tasks, onCollapse }: IssueTimelineProps): React.JSX.Element {
   const archivedCount = tasks.filter((t) => t.status === 'archived').length;
 
   return (
@@ -253,7 +250,7 @@ function IssueTimeline({ tasks, referenceLocation, onCollapse }: IssueTimelinePr
       {/* Vertical timeline */}
       <div className="border-l-2 border-zinc-700 pl-2">
         {tasks.map((task) => (
-          <TimelineItem key={task.id} task={task} referenceLocation={referenceLocation} />
+          <TimelineItem key={task.id} task={task} />
         ))}
       </div>
 
