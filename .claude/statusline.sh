@@ -314,20 +314,14 @@ if [ -n "$token_metrics" ]; then
   line2="$line2  $token_metrics"
 fi
 
-# MEGA session stats (append to line2, only if session matches)
+# MEGA session stats (append to line3, only if session matches)
 mega_sessions_file="$HOME/.make-english-great-again/sessions.json"
 if [ -f "$mega_sessions_file" ] && [ -n "$session_id" ]; then
   mega_total=$(jq -r --arg sid "$session_id" '.sessions[] | select(.session_id == $sid) | .total // 0' "$mega_sessions_file" 2>/dev/null)
   mega_saved=$(jq -r --arg sid "$session_id" '.sessions[] | select(.session_id == $sid) | .saved // 0' "$mega_sessions_file" 2>/dev/null)
-  if [ -n "$mega_total" ] && [ "$mega_total" != "null" ] && [ "$mega_total" -gt 0 ] 2>/dev/null; then
-    mega_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;183m'; fi; }
-    line2="$line2  📝 $(mega_color)MEGA: ${mega_saved}/${mega_total}$(rst)"
-  fi
 fi
 
-# Line 3: Port metrics and load average
-# Get all 3 load averages (1min, 5min, 15min)
-load_avg=$(uptime | sed -E 's/.*load averages?: ([0-9.]+)[, ]+([0-9.]+)[, ]+([0-9.]+).*/\1 \2 \3/')
+# Line 3: Port metrics and memory
 if command -v free >/dev/null 2>&1; then
   mem_usage=$(free -m | awk '/^Mem:/ { printf "%.1fG/%.1fG", $3/1024, $2/1024 }')
 else
@@ -338,7 +332,6 @@ else
   mem_used_bytes=$(( (${mem_pages_active:-0} + ${mem_pages_wired:-0} + ${mem_pages_compressed:-0}) * 4096 ))
   mem_usage=$(awk "BEGIN { printf \"%.1fG/%.1fG\", ${mem_used_bytes}/1073741824, ${mem_total_bytes:-0}/1073741824 }")
 fi
-load_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
 hostname=$(uname -n)
 hostname_display="$hostname"
 if [ "$use_color" -eq 1 ]; then
@@ -361,7 +354,13 @@ if [ -n "$api_display" ]; then
     api_segment=$(printf '🌐 %s%s%s  ' "$(api_color)" "$api_display" "$(rst)")
   fi
 fi
-line3="${api_segment}📈 ${hostname_display} $(load_color)${load_avg}  🧮 ${mem_usage}$(rst)"
+line3="${api_segment}📈 ${hostname_display}  🧮 ${mem_usage}"
+
+# Append MEGA stats to line3
+if [ -n "$mega_total" ] && [ "$mega_total" != "null" ] && [ "$mega_total" -gt 0 ] 2>/dev/null; then
+  mega_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;183m'; fi; }
+  line3="$line3  📝 $(mega_color)MEGA: ${mega_saved}/${mega_total}$(rst)"
+fi
 
 # Line 4: Cost and usage analytics (optional)
 line4=""
