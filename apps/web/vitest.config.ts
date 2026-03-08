@@ -32,6 +32,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      // Mock virtual:pwa-register for tests
+      'virtual:pwa-register': resolve(__dirname, 'src/__tests__/__mocks__/virtual-pwa-register.ts'),
     },
   },
   test: {
