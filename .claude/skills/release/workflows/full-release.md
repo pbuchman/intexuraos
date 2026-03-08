@@ -219,18 +219,69 @@ Store all results for downstream phases.
 
 ## Phase 2: Service Documentation (Silent Batch)
 
-### 2.1 For Each Modified Service
+### 2.1 Build Per-Service Release Context
+
+For each service in `MODIFIED_SERVICES`, assemble a release context block from Phase 1 data:
+
+1. **Filter Features from Change Groups**: From the `## Change Groups` → `### Features` table, select rows where "Services Touched" contains the service name
+2. **Map to Triage Descriptions**: For each matching feature group, find the corresponding line in `## Triage Summary` → `### Features` (match by PR numbers)
+3. **Include Notable Changes**: From `## Triage Summary` → `### Notable Changes`, include lines whose PR numbers appear in commits that touched this service's directory (use the commits section's file paths for matching)
+4. **Attach User Prioritization**: For each triage item, look up the priority map from Phase 1.7 — attach priority (High/Skip), highlight flag, and user comment (if any)
+
+Assemble into a structured markdown block per service:
+
+```markdown
+## Release Context
+
+Version: vX.Y.Z (from vPREV)
+Last tag: vPREV
+
+### Features Touching This Service
+
+**[Highlighted]** <feature-group-name>
+
+- Triage: <user-facing description from Triage Summary>
+- PRs: #N, #N, #N
+- Linear: INT-NNN, INT-NNN
+- Priority: High | Highlight: yes
+- User comment: "<user's comment from prioritizer, or —>"
+
+<feature-group-name>
+- Triage: <user-facing description from Triage Summary>
+- PRs: #N, #N
+- Linear: INT-NNN
+- Priority: High | Highlight: no
+- User comment: —
+
+### Notable Changes Touching This Service
+
+- <notable change description> (INT-NNN, PR #N)
+- <notable change description> (PR #N)
+```
+
+**Rules for the context block:**
+
+- **Omit Skip-priority features entirely** — if the user skipped a feature in the prioritizer, the doc agent should not emphasize it
+- **Mark highlighted items with `[Highlighted]`** — these are README/website headline features
+- **Include user comments** — the user's own words about what matters
+- **Include all notable changes** that touch the service — these are auto-included in the release (not subject to prioritization)
+- **Omit minor fixes** — too granular; the agent's own `git log` handles these
+
+### 2.2 For Each Modified Service
 
 For each service in `MODIFIED_SERVICES`:
 
 ```
 Use Task tool with:
 - subagent_type: "service-scribe"
-- prompt: "Generate documentation for the <service-name> service"
+- prompt: |
+    Generate documentation for the <service-name> service.
+
+    <release-context-block from step 2.1>
 - run_in_background: false (wait for completion)
 ```
 
-### 2.2 Parallel Execution
+### 2.3 Parallel Execution
 
 Launch ALL service-scribe agents in a single message with multiple Task tool calls:
 
@@ -241,7 +292,7 @@ Task 3: service-scribe for research-agent
 ... etc
 ```
 
-### 2.3 Wait for Completion
+### 2.4 Wait for Completion
 
 All agents must complete before proceeding. Do NOT ask for user confirmation here — this is silent batch processing.
 

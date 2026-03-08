@@ -91,7 +91,8 @@ Aborting.
 
 For each modified service detected in Phase 1:
 
-- Spawn Task tool with `subagent_type: service-scribe`
+- Build per-service release context from Phase 1 data (change groups, triage summaries, user priorities)
+- Spawn Task tool with `subagent_type: service-scribe`, passing the per-service context in the prompt
 - Run all agents in parallel
 - Wait for all to complete
 - **Post-scribe validation:** For each completed service, spawn `subagent_type: doc-validator` to check for hallucinations, missing coverage, and typographic issues
