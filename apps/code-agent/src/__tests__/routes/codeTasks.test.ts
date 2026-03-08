@@ -81,7 +81,7 @@ describe('GET /code/tasks endpoints', () => {
       logger,
     });
 
-    const taskDispatcher = createTaskDispatcherService({ logger });
+    const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe });
     const workerSettingsRepo = createWorkerSettingsRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,

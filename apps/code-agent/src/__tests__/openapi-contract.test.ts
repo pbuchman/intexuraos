@@ -94,7 +94,7 @@ describe('OpenAPI contract', () => {
       firestore: fakeFirestore,
       logger,
       codeTaskRepo,
-      taskDispatcher: createTaskDispatcherService({ logger }),
+      taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
       workerSettingsRepo,
       whatsappNotifier: createWhatsAppNotifier({
         whatsappPublisher: {

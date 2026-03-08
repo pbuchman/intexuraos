@@ -123,7 +123,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger,
     });
 
-    taskDispatcher = createTaskDispatcherService({ logger });
+    taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe });
     const workerSettingsRepo = createWorkerSettingsRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -3721,7 +3721,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo,
-      taskDispatcher: createTaskDispatcherService({ logger }),
+      taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -4034,7 +4034,7 @@ describe('POST /internal/logs', () => {
       logger,
     });
 
-    taskDispatcher = createTaskDispatcherService({ logger });
+    taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe });
     const workerSettingsRepo = createWorkerSettingsRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -4603,7 +4603,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logger,
     });
 
-    taskDispatcher = createTaskDispatcherService({ logger });
+    taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe });
     const workerSettingsRepo = createWorkerSettingsRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,

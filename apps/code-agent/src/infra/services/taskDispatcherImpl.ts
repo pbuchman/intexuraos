@@ -13,6 +13,8 @@ import type {
   DispatchWorkerCredentials,
 } from '../../domain/services/taskDispatcher.js';
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
+import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
+import type { WorkerConfig as WorkerSettingsConfig } from '../../domain/models/workerSettings.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
 
 /**
@@ -89,9 +91,11 @@ interface WorkerConfigWithCredentials {
  */
 class TaskDispatcherImpl implements TaskDispatcherService {
   private readonly logger: TaskDispatcherDeps['logger'];
+  private readonly workerHealthProbe: WorkerHealthProbe;
 
   constructor(deps: TaskDispatcherDeps) {
     this.logger = deps.logger;
+    this.workerHealthProbe = deps.workerHealthProbe;
   }
 
   async dispatch(request: DispatchRequest): Promise<Result<DispatchResult, DispatchError>> {
@@ -134,7 +138,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     const timestamp = Date.now();
 
     // Get workers from per-request credentials
-    let workers = this.getWorkerConfigsFromCredentials(request.workerCredentials);
+    const workers = this.getWorkerConfigsFromCredentials(request.workerCredentials);
 
     if (workers.length === 0) {
       return err({
@@ -143,29 +147,59 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       });
     }
 
-    // Filter to healthy workers if health statuses are available
-    /* v8 ignore start -- test-infra: requires worker health status setup @preserve */
-    if (request.workerHealthStatuses !== undefined) {
-      const healthyWorkers = workers.filter((w) => {
-        const status = request.workerHealthStatuses?.[w.name];
-        return status?.healthy === true;
-      });
+    // Probe all workers in parallel for real-time capacity
+    const probeConfigs: WorkerSettingsConfig[] = workers.map((w) => ({
+      name: w.name,
+      url: w.credentials.url,
+      cfAccessClientId: w.credentials.cfAccessClientId,
+      cfAccessClientSecret: w.credentials.cfAccessClientSecret,
+      dispatchSigningSecret: w.credentials.dispatchSigningSecret,
+      enabled: true,
+    }));
 
-      if (healthyWorkers.length > 0) {
-        this.logger.info(
-          {
-            totalWorkers: workers.length,
-            healthyWorkers: healthyWorkers.length,
-          },
-          'Using healthy workers for dispatch'
-        );
-        workers = healthyWorkers;
+    const healthResults = await this.workerHealthProbe.probeAllWorkers(probeConfigs);
+
+    // Filter to healthy workers and extract available capacity in a single pass.
+    // This avoids separate filter + lookup that would create unreachable fallback branches.
+    const workersWithCapacity: { worker: WorkerConfigWithCredentials; available: number }[] = [];
+    for (const w of workers) {
+      const health = healthResults[w.name];
+      if (health?._tag === 'healthy') {
+        workersWithCapacity.push({ worker: w, available: health.available });
       }
     }
-    /* v8 ignore stop @preserve */
+
+    if (workersWithCapacity.length === 0) {
+      this.logger.warn(
+        { totalWorkers: workers.length },
+        'All worker health probes failed, no workers available for dispatch'
+      );
+      return err({
+        code: 'worker_unavailable',
+        message: 'All worker health probes failed',
+      });
+    }
+
+    // Sort by available capacity descending, priority as tiebreaker
+    workersWithCapacity.sort((a, b) => {
+      if (b.available !== a.available) return b.available - a.available;
+      return a.worker.priority - b.worker.priority;
+    });
+
+    this.logger.info(
+      {
+        workerOrder: workersWithCapacity.map((wc) => ({
+          name: wc.worker.name,
+          available: wc.available,
+        })),
+      },
+      'Workers sorted by available capacity for dispatch'
+    );
+
+    const sortedWorkers = workersWithCapacity.map((wc) => wc.worker);
 
     // Try to dispatch to available workers
-    const result = await this.dispatchToWorker(taskRequest, body, timestamp, workers);
+    const result = await this.dispatchToWorker(taskRequest, body, timestamp, sortedWorkers);
 
     return result;
   }
