@@ -21,20 +21,25 @@ export interface IssueGroup {
 }
 
 const PR_URL_REGEX = /\/pull\/(\d+)/;
+const LINEAR_ID_REGEX = /\w+-(\d+)/;
+
+export function parseLinearIssueNumber(id: string): number | null {
+  const match = LINEAR_ID_REGEX.exec(id);
+  if (match === null) {
+    return null;
+  }
+  const num = match[1];
+  if (num === undefined) {
+    return null;
+  }
+  return Number(num);
+}
 
 const ACTIVE_STATUSES: ReadonlySet<CodeTaskStatus> = new Set<CodeTaskStatus>([
   'running',
   'dispatched',
   'queued',
 ]);
-
-const STATUS_PRIORITY: Record<GroupStatus, number> = {
-  active: 0,
-  'needs-action': 1,
-  failed: 2,
-  archived: 3,
-  done: 4,
-};
 
 function deriveStepState(status: CodeTaskStatus): StepState {
   if (status === 'planned' || status === 'implemented') {
@@ -190,11 +195,23 @@ export function groupByLinearIssue(tasks: CodeTask[]): IssueGroup[] {
     });
   }
 
-  // Step 3: Sort groups by aggregateStatus priority, then by latestTask.updatedAt desc
+  // Step 3: Sort groups by Linear issue number desc, then by latestTask.updatedAt desc
+  // Groups without linearIssueId sort before all Linear-linked groups
   groups.sort((a, b) => {
-    const priorityDiff = STATUS_PRIORITY[a.aggregateStatus] - STATUS_PRIORITY[b.aggregateStatus];
-    if (priorityDiff !== 0) {
-      return priorityDiff;
+    const aNum = a.linearIssueId !== null ? parseLinearIssueNumber(a.linearIssueId) : null;
+    const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
+
+    // Both standalone: sort by updatedAt desc
+    if (aNum === null && bNum === null) {
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    }
+    // Standalone sorts before linked
+    if (aNum === null) return -1;
+    if (bNum === null) return 1;
+
+    // Both linked: sort by issue number desc, then updatedAt desc
+    if (aNum !== bNum) {
+      return bNum - aNum;
     }
     return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
   });
