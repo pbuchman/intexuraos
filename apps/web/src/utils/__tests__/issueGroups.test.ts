@@ -175,24 +175,50 @@ describe('groupByLinearIssue', () => {
     expect(groups[0]?.aggregateStatus).toBe('done');
   });
 
-  it('sorts groups: active, needs-action, failed, done', () => {
+  it('sorts groups by Linear issue ID descending', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented', updatedAt: '2026-03-07T12:00:00Z' }),
-      createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'failed', updatedAt: '2026-03-07T13:00:00Z' }),
-      createMockTask({ id: 't3', linearIssueId: 'INT-300', agentType: 'planning', status: 'planned', updatedAt: '2026-03-07T14:00:00Z' }),
-      createMockTask({ id: 't4', linearIssueId: 'INT-400', agentType: 'execution', status: 'running', updatedAt: '2026-03-07T15:00:00Z' }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-400', agentType: 'execution', status: 'failed', updatedAt: '2026-03-07T13:00:00Z' }),
+      createMockTask({ id: 't3', linearIssueId: 'INT-200', agentType: 'planning', status: 'planned', updatedAt: '2026-03-07T14:00:00Z' }),
     ];
 
     const groups = groupByLinearIssue(tasks);
 
-    expect(groups).toHaveLength(4);
-    expect(groups[0]?.aggregateStatus).toBe('active');
-    expect(groups[1]?.aggregateStatus).toBe('needs-action');
-    expect(groups[2]?.aggregateStatus).toBe('failed');
-    expect(groups[3]?.aggregateStatus).toBe('done');
+    expect(groups).toHaveLength(3);
+    expect(groups[0]?.linearIssueId).toBe('INT-400');
+    expect(groups[1]?.linearIssueId).toBe('INT-200');
+    expect(groups[2]?.linearIssueId).toBe('INT-100');
   });
 
-  it('sorts within same status by latestTask.updatedAt desc', () => {
+  it('sorts groups without linearIssueId before those with', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented', updatedAt: '2026-03-07T12:00:00Z' }),
+      createMockTask({ id: 't2', agentType: 'planning', status: 'planned', updatedAt: '2026-03-07T14:00:00Z' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.linearIssueId).toBeNull();
+    expect(groups[1]?.linearIssueId).toBe('INT-100');
+  });
+
+  it('sorts standalone groups by updatedAt desc among themselves', () => {
+    const tasks = [
+      createMockTask({ id: 't1', agentType: 'execution', status: 'implemented', updatedAt: '2026-03-07T12:00:00Z' }),
+      createMockTask({ id: 't2', agentType: 'planning', status: 'planned', updatedAt: '2026-03-07T16:00:00Z' }),
+      createMockTask({ id: 't3', agentType: 'execution', status: 'failed', updatedAt: '2026-03-07T14:00:00Z' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(3);
+    expect(groups[0]?.latestTask.id).toBe('t2');
+    expect(groups[1]?.latestTask.id).toBe('t3');
+    expect(groups[2]?.latestTask.id).toBe('t1');
+  });
+
+  it('uses updatedAt desc as tie-breaker within same Linear ID number', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented', updatedAt: '2026-03-07T12:00:00Z' }),
       createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'implemented', updatedAt: '2026-03-07T14:00:00Z' }),
