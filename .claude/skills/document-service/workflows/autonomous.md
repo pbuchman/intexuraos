@@ -44,6 +44,39 @@ When documenting multiple services:
 
 ## Phase 2: Service Analysis & Git Context
 
+### Release Context (Optional)
+
+If the Task prompt includes a `## Release Context` section, this service
+is being documented as part of a release. Use the provided context to
+enhance documentation quality:
+
+1. **Recent Changes (technical.md)**: Use the triage descriptions as the
+   primary source for the "Recent Changes" section. These are
+   human-reviewed, netted summaries — more accurate than raw git log
+   parsing. Still run `git log` to catch fixes not covered by the
+   change groups.
+
+2. **Feature emphasis (features.md)**: Items marked `[Highlighted]` are
+   the release's headline features. Give them prominent placement —
+   they should appear early with strong benefit-oriented language.
+   Use user comments (when present) to calibrate description tone.
+
+3. **Version tag scope**: Use `Last tag` from the release context to
+   scope `git log` to only changes since that tag, rather than the
+   default `git log -n 15`.
+
+4. **Inference hints (Phase 3)**: Release context provides strong
+   signals for Q1 (recent value added) and Q5 (highlighted items are
+   killer feature candidates). Use as hints but still validate
+   against code.
+
+5. **Skip-priority items**: Features omitted from the context were
+   deliberately deprioritized. Do not highlight them. They may appear
+   in git history — document normally without special prominence.
+
+**When release context is NOT present:** Proceed with standard git log
+analysis as defined below. This subsection is a no-op.
+
 ### Git History (Smart Context)
 
 ```bash
