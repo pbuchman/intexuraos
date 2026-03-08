@@ -373,82 +373,80 @@ Use Edit tool to apply the "What's New" section following the accumulation patte
 
 ---
 
-## Phase 5: Website Improvements (Automatic)
+## Phase 5: Website Improvements
 
-### 5.1 Detect Major Version Release
+**Target file:** `apps/web/src/pages/HomePage.tsx` — all website updates happen in this single file.
 
-Check if this is a MAJOR version bump (X+1.0.0):
+**Guard condition:** Skip this phase ONLY if there are zero High-priority features. The absence of a component is NOT a reason to skip — create it.
 
-```bash
-# Compare current version with new version
-CURRENT_VERSION="2.1.0"  # From package.json
-NEW_VERSION="3.0.0"       # From Phase 1 calculation
+### 5.1 Update Version Strings
 
-if [[ $(echo "$NEW_VERSION" | cut -d'.' -f1) -gt $(echo "$CURRENT_VERSION" | cut -d'.' -f1) ]]; then
-  echo "MAJOR VERSION RELEASE"
-  # Need to create VersionHistorySection
-fi
+Find and replace the version in two hardcoded locations:
+
+1. **Hero badge** — inside the `HeroSection` function, find the `IntexuraOS vX.Y.Z` text and update to new version
+2. **Footer** — inside the `Footer` function, find the `<span>` containing `vX.Y.Z` and update
+
+Search the file for the previous version string to confirm zero remaining references.
+
+### 5.2 Add or Update WhatsNewSection
+
+For each High-priority feature from Phase 1, create a feature card in the `WhatsNewSection` function.
+
+**If `WhatsNewSection` already exists:** Update its content — replace the version in the header, add/remove/update feature cards to match the current release.
+
+**If `WhatsNewSection` does not exist:** Create it as a new function and insert `<WhatsNewSection />` between `<IntegrationsSection />` and `<GettingStartedSection />` in the `HomePage` render.
+
+**Design pattern** (matches existing sections):
+
+```tsx
+const features = [
+  {
+    title: 'Feature Name',
+    description: 'One-line user-facing description.',
+    icon: LucideIconComponent,
+    borderColor: 'border-purple-200',
+    bgGradient: 'bg-gradient-to-br from-purple-50 to-white',
+    iconBg: 'bg-purple-100',
+    iconColor: 'text-purple-700',
+  },
+  // ... one per High-priority feature
+];
 ```
 
-### 5.2 Auto-Update RecentUpdatesSection
+- **Grid:** `grid gap-6 md:grid-cols-2 lg:grid-cols-3`
+- **Card style:** `rounded-2xl`, gradient border (`border-{color}-200`), gradient bg (`bg-gradient-to-br from-{color}-50 to-white`), hover lift via `motion.div` with `whileHover={{ y: -5 }}`, icon in `rounded-xl` container
+- **Icons:** `lucide-react` — select icons that match the feature domain
+- **Color palette:** purple, cyan, emerald, blue, violet, amber, green (one per card, vary)
+- **No external skill invocations** — write JSX directly using existing patterns
+- **Content filtering:** Only genuinely new capabilities become cards. Migrations, internal refactors, and moved functionality are excluded. If a feature existed before and was moved to a new service, it is a migration — not a new feature.
 
-Map High-priority features from Phase 1 to website-ready content:
+**Section header pattern:**
 
-- Transform feature descriptions into user-facing language
-- Use user comments from Phase 1 touchpoint for richer descriptions
-- Use brutalist design: `BrutalistCard` with icon, title, description
-- Color coding (optional):
-  - Green → user-facing improvements
-  - Purple → AI/classification features
-  - Yellow → calendar/time features
-  - Cyan → model control
-  - Orange → dashboard/organization
-  - Red → safety/reliability
-
-**Tile Grid Layout:**
-
-- Mobile: 1 column
-- Tablet: 2 columns (md:grid-cols-2)
-- Desktop: 3 columns (lg:grid-cols-3)
-
-### 5.3 Generate VersionHistorySection Content (Major Release Only)
-
-**ONLY for major version releases**, create expandable version history section.
-
-**Structure:**
-
-- Expandable button below "What's New" section
-- Combined subreleases (e.g., v2.0.0, v2.1.0 → v2.x paragraph)
-- List format: paragraphs, not tiles
-- Marketing slogan from Phase 1 touchpoint (collected during step 1.7)
-
-**Example v1.x content:**
-
-```markdown
-v1.x — Launch
-
-End-to-end AI autonomy: From your mobile to the cloud and back. IntexuraOS went from architecture document to handling live traffic — voice to research, links to bookmarks, dates to calendar events. The full AI agent pipeline is now processing real user requests in production.
+```tsx
+<p className="mb-4 text-sm font-semibold uppercase tracking-wider text-cyan-600">What's New</p>
+<h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
+  vX.Y.Z —{' '}
+  <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
+    N new capabilities.
+  </span>
+</h2>
 ```
 
-### 5.4 Implement Changes
+### 5.3 Version History (Major Release Only)
 
-**Guard:** If no features were marked High priority in the Phase 1 priority map, skip the RecentUpdatesSection update. Only invoke frontend-design when there are concrete features to display.
+When releasing a NEW major version (e.g., v3.0.0):
 
-Invoke the frontend-design skill for the website updates:
+- Create a collapsible version history section below What's New
+- Content: combined features from previous major version's sub-releases
+- Format: expandable panel, not tiles
+- Uses marketing slogan from Phase 1 touchpoint
 
-```
-Use Skill tool with:
-- skill: "frontend-design"
-- args: "Update RecentUpdatesSection with [N] new feature tiles from release vX.Y.Z: [list of High-priority features with descriptions]"
-```
+**Skip condition:** Only for major version releases.
 
-For major releases, invoke VersionHistorySection **after** RecentUpdatesSection completes (sequential, not parallel — both touch the same web files):
+### Accumulation Pattern
 
-```
-Use Skill tool with:
-- skill: "frontend-design"
-- args: "Create VersionHistorySection for vX.x with marketing slogan: [slogan from Phase 1]"
-```
+- **Minor/patch releases:** Append new cards to existing `WhatsNewSection` grid, update version header
+- **Major releases:** Reset section content, move old cards to version history
 
 ---
 
@@ -591,7 +589,40 @@ OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY pnpm run embed-docs
 
 **Environment note:** The `FIRESTORE_EMULATOR_HOST=""` and `GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman` overrides are required because direnv sets emulator variables locally. Without them, the script targets the non-running emulator instead of production Firestore.
 
-### 6.5 Stage & Commit on Development
+### 6.5 Pre-Merge Release Validation (MANDATORY)
+
+Before staging the commit, verify every phase produced its expected output. Walk through this checklist and confirm each item. If any item fails, go back and fix it before committing.
+
+#### Content Checklist
+
+| Check                  | How to Verify                                                                         | Expected                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Version strings**    | Search `HomePage.tsx` for previous version string                                     | Zero matches — all updated to new version                              |
+| **What's New section** | Check `HomePage.tsx` for `WhatsNewSection`                                            | Present with cards for each High-priority feature (unless all skipped) |
+| **README What's New**  | Read the "What's New in vX.Y.Z" table in README.md                                    | Updated with new version, contains High-priority features              |
+| **CHANGELOG**          | Read top of CHANGELOG.md                                                              | Contains `## X.Y.Z` section with categorized entries                   |
+| **Package versions**   | Spot-check 3 random package.json files                                                | All show new version                                                   |
+| **docs/overview.md**   | Read the overview narrative                                                           | Reflects any new capabilities added in this release                    |
+| **Service docs**       | For each modified service, check `docs/services/<name>/technical.md` "Recent Changes" | Contains entries from this release                                     |
+
+#### Accuracy Checklist
+
+| Check                         | How to Verify                                  | Expected                                                                         |
+| ----------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
+| **No false "new" features**   | Review What's New cards and README table       | Migrations, refactors, and moved functionality are NOT presented as new features |
+| **Version numbers grounded**  | Search all modified docs for `vX.Y.Z` patterns | Every version mentioned exists in `git tag -l "v*"`                              |
+| **No hallucinated endpoints** | Spot-check 2 service technical.md files        | Every endpoint listed exists in the actual route files                           |
+
+#### Improvement Loop
+
+If any check fails:
+
+1. Fix the issue
+2. Re-run `pnpm run ci:tracked` if code was changed
+3. Re-verify the failed check
+4. Continue only when all checks pass
+
+### 6.6 Stage & Commit on Development
 
 ```bash
 git status
@@ -616,13 +647,13 @@ EOF
 )"
 ```
 
-### 6.6 Push Development
+### 6.7 Push Development
 
 ```bash
 git push origin development
 ```
 
-### 6.7 Merge Development → Main
+### 6.8 Merge Development → Main
 
 ```bash
 # Check if a dev→main PR already exists
@@ -652,7 +683,7 @@ fi
 
 **Why merge before tagging?** Tags should point to `main` — the canonical release branch. Tagging on `development` means the tag references a commit that may never reach `main` in the same form (merge commits change SHAs).
 
-### 6.8 Tag on Main
+### 6.9 Tag on Main
 
 ```bash
 # Tag the merge commit on main (not development)
@@ -662,7 +693,7 @@ git tag -a "v$NEW_VERSION" "$MAIN_SHA" -m "Release v$NEW_VERSION"
 git push origin "v$NEW_VERSION"
 ```
 
-### 6.9 Create GitHub Release
+### 6.10 Create GitHub Release
 
 ```bash
 # Verify release notes file exists
@@ -679,7 +710,7 @@ gh release create "v$NEW_VERSION" \
 
 The release notes file is built during step 6.2 (CHANGELOG and release notes generation). See the **Build GitHub Release Body** step in [`reference/semver-analysis.md`](../reference/semver-analysis.md) for the generation logic.
 
-### 6.10 Post-Release Validation
+### 6.11 Post-Release Validation
 
 Run all checks and report results. **Do NOT skip any check.**
 
@@ -728,7 +759,7 @@ CURRENT=$(git branch --show-current)
 | Merge to main fails       | Detect conflicts, STOP, ask user for guidance. Do NOT force-push or auto-resolve |
 | Wrong branch              | `git checkout development`                                                       |
 
-### 6.11 Display Summary
+### 6.12 Display Summary
 
 Use template from [`templates/release-summary.md`](../templates/release-summary.md).
 

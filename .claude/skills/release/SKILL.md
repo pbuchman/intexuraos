@@ -49,7 +49,7 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 | 2     | Service Docs    | Silent Batch | Spawn service-scribe agents in parallel                                                              |
 | 3     | High-Level Docs | Automatic    | Auto-update docs/overview.md via release-docs-updater agent                                          |
 | 4     | README          | Automatic    | Auto-generate "What's New" from High-priority items                                                  |
-| 5     | Website         | Automatic    | Auto-update RecentUpdatesSection from High-priority features                                         |
+| 5     | Website         | Automatic    | Auto-update WhatsNewSection in HomePage.tsx from High-priority features                              |
 | 6     | Finalize        | Automatic    | **Bump ALL versions**, CI check, RAG embeddings, commit, merge dev→main, tag on main, GitHub Release |
 
 ## Tool Verification (Fail Fast)
@@ -137,19 +137,16 @@ README "What's New" section accumulates features across a MAJOR version:
 
 ### Phase 5: Website Improvements (Automatic)
 
-1. Auto-update `RecentUpdatesSection.tsx` from High-priority features
-2. **If major version release**: also create `VersionHistorySection` content using marketing slogan from Phase 1 touchpoint
-3. Invoke `/frontend-design` skill for implementation
+1. Update version strings in `apps/web/src/pages/HomePage.tsx` (hero badge + footer)
+2. Add/update `WhatsNewSection` in `HomePage.tsx` with feature cards for High-priority items
+3. Uses existing design patterns (gradient cards, lucide-react icons) — no external skill needed
+4. Content filtering: only genuinely new capabilities — migrations and refactors are excluded
+5. **If major version release**: create collapsible version history section
 
-**Version History Pattern (Major Version Release Only):**
+**Accumulation Pattern:**
 
-When releasing a NEW major version (e.g., v3.0.0):
-
-- **Trigger**: Activated when new major version releases
-- **Structure**: Expandable button below "What's New" section
-- **Content**: Combined subreleases (e.g., v2.0.0, v2.1.0 → v2.x paragraph)
-- **Format**: List format with paragraphs, not tiles
-- **Required**: Marketing slogan collected during Phase 1 touchpoint
+- Minor/patch releases: append new cards to existing grid, update version header
+- Major releases: reset section, move old cards to version history
 
 ### Phase 6: Finalize
 
