@@ -207,7 +207,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-slate-300 dark:text-slate-400">
+                <p className="truncate text-sm text-slate-300 dark:text-slate-400">
                   {summaryOrPrompt(latestTask)}
                 </p>
               )}
@@ -304,7 +304,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   {group.linearIssue.identifier}
                 </a>
               ) : (
-                <span className="text-sm text-slate-300 dark:text-slate-400">
+                <span className="truncate text-sm text-slate-300 dark:text-slate-400">
                   {summaryOrPrompt(latestTask)}
                 </span>
               )}
