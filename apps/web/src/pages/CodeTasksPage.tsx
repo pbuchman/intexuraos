@@ -3,10 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
-import { useCodeTasks, useWorkersStatus } from '@/hooks';
+import { useCodeTasks } from '@/hooks';
 import { groupByLinearIssue } from '@/utils/issueGroups';
 import type { IssueGroup, GroupStatus } from '@/utils/issueGroups';
-import type { CodeTaskStatus, WorkerStatusTag } from '@/types';
+import type { CodeTaskStatus } from '@/types';
 
 // Statuses shown by default (all except archived — INT-711)
 const DEFAULT_VISIBLE_STATUSES: CodeTaskStatus[] = [
@@ -150,10 +150,9 @@ function StatusPipeline({ counts, activeFilters, onToggle }: StatusPipelineProps
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[200px_1fr_200px_140px_120px] px-4 text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500 lg:grid">
+    <div className="mb-1 hidden grid-cols-[1fr_1fr_140px_120px] px-4 text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500 lg:grid">
       <div>Issue</div>
       <div>Pipeline</div>
-      <div>Worker</div>
       <div>Time</div>
       <div>Output</div>
     </div>
@@ -177,15 +176,6 @@ export function CodeTasksPage(): React.JSX.Element {
   const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask } = useCodeTasks({
     status: apiStatuses,
   });
-  const { status: workersStatus } = useWorkersStatus();
-
-  const workerHealthMap = useMemo(
-    () => new Map<string, WorkerStatusTag>(
-      workersStatus?.workers.map((w) => [w.name, w.status] as const) ?? [],
-    ),
-    [workersStatus],
-  );
-
   const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
 
   const filteredGroups = useMemo(
@@ -297,7 +287,6 @@ export function CodeTasksPage(): React.JSX.Element {
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}
                 group={group}
-                workerHealthMap={workerHealthMap}
                 onAction={handleAction}
               />
             ))}

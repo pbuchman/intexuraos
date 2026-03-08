@@ -129,6 +129,12 @@ function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
     );
   }
 
+  const summary = task.result?.summary;
+  if (summary !== undefined) {
+    const truncated = summary.length > 100 ? summary.slice(0, 100) + '...' : summary;
+    return <span className="text-xs text-slate-400">{truncated}</span>;
+  }
+
   const prompt = task.sanitizedPrompt;
   const truncated = prompt.length > 60
     ? prompt.slice(0, 60) + '...'
