@@ -137,6 +137,15 @@ function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Elem
   return <span className="flex items-center">{steps}</span>;
 }
 
+// --- Text helpers ---
+
+function summaryOrPrompt(task: { result?: { summary?: string }; sanitizedPrompt: string }): string {
+  const summary = task.result?.summary;
+  if (summary !== undefined) return summary;
+  const words = task.sanitizedPrompt.split(/\s+/);
+  return words.length > 100 ? words.slice(0, 100).join(' ') + '...' : task.sanitizedPrompt;
+}
+
 // --- Duration calculation ---
 
 function computeDurationSeconds(createdAt: string, updatedAt: string, isActive: boolean): number {
@@ -198,8 +207,8 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   </p>
                 </>
               ) : (
-                <p className="truncate text-sm text-slate-300 dark:text-slate-400">
-                  {latestTask.result?.summary ?? latestTask.sanitizedPrompt}
+                <p className="text-sm text-slate-300 dark:text-slate-400">
+                  {summaryOrPrompt(latestTask)}
                 </p>
               )}
             </div>
@@ -295,8 +304,8 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   {group.linearIssue.identifier}
                 </a>
               ) : (
-                <span className="truncate text-sm text-slate-300 dark:text-slate-400">
-                  {latestTask.result?.summary ?? latestTask.sanitizedPrompt}
+                <span className="text-sm text-slate-300 dark:text-slate-400">
+                  {summaryOrPrompt(latestTask)}
                 </span>
               )}
             </div>
