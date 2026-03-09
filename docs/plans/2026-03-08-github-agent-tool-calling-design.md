@@ -418,29 +418,14 @@ export interface GitHubPRClient {
 }
 ```
 
-**Token strategy:** `updatePRTitle` takes a per-user OAuth token (existing pattern). The three new methods use a **platform GitHub bot token** — a PAT or GitHub App installation token owned by IntexuraOS. The interface signature difference (with/without `token` param) makes this explicit.
+**Token strategy:** All methods use per-user OAuth tokens resolved at call time. The GitHub Agent resolves `senderLogin` → `userId` via `userServiceClient.resolveGitHubUsername()`, then fetches the user's GitHub OAuth token via `userServiceClient.getOAuthToken(userId, 'github')`. This ensures the agent only evaluates PRs from users who have connected their GitHub account to IntexuraOS.
 
-**How the token reaches the implementation:** `createGitHubPRHttpClient` config is extended:
-
-```typescript
-export interface GitHubPRHttpClientConfig {
-  timeoutMs: number;
-  githubBotToken?: string;  // NEW — platform token for bot operations
-}
-```
-
-New methods use `config.githubBotToken` for `Authorization: Bearer` header. If `githubBotToken` is undefined, the methods return `err({ code: 'UNAUTHORIZED', message: 'GitHub bot token not configured' })`.
-
-**New env var required:** `INTEXURAOS_GITHUB_BOT_TOKEN` must be added to:
-1. `apps/code-agent/src/index.ts` `REQUIRED_ENV` array
-2. `terraform/environments/dev/main.tf` (code-agent service env vars)
-3. `ecosystem.config.cjs` (code-agent app config)
+**How the token reaches the implementation:** Each `GitHubPRClient` method accepts a `token: string` as its first parameter, used for `Authorization: Bearer` header. The caller (use case) is responsible for resolving the per-user token via `UserServiceClient`.
 
 **Wiring in `services.ts`:**
 ```typescript
 const gitHubPRClient = createGitHubPRHttpClient({
   timeoutMs: 10000,
-  githubBotToken: config.githubBotToken,  // NEW
 });
 ```
 
@@ -794,7 +779,7 @@ See **Prompts** section below for the full prompt template and sample.
 export interface ServiceConfig {
   // ... existing fields ...
   geminiApiKey: string;      // INTEXURAOS_GEMINI_APP_API_KEY
-  githubBotToken: string;    // INTEXURAOS_GITHUB_BOT_TOKEN
+  // Note: githubBotToken removed — per-user OAuth tokens used instead
 }
 ```
 
@@ -842,14 +827,12 @@ container = {
 export interface Config {
   // ... existing fields ...
   geminiApiKey: string;      // INTEXURAOS_GEMINI_APP_API_KEY
-  githubBotToken: string;    // INTEXURAOS_GITHUB_BOT_TOKEN
 }
 
 // Add to loadConfig() (line 35) — reads from env vars:
 const geminiApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'] ?? '';
-const githubBotToken = process.env['INTEXURAOS_GITHUB_BOT_TOKEN'] ?? '';
 // Add to return object:
-return { ...existing, geminiApiKey, githubBotToken };
+return { ...existing, geminiApiKey };
 ```
 
 **5. Env var validation in `index.ts`:**
@@ -859,11 +842,11 @@ return { ...existing, geminiApiKey, githubBotToken };
 const REQUIRED_ENV = [
   // ... existing ...
   'INTEXURAOS_GEMINI_APP_API_KEY',
-  'INTEXURAOS_GITHUB_BOT_TOKEN',
 ] as const;
 
 // index.ts already passes config.* to initServices() — new Config fields
 // flow automatically: loadConfig() → config.geminiApiKey → initServices({ geminiApiKey: config.geminiApiKey })
+// Note: INTEXURAOS_GITHUB_BOT_TOKEN was removed — per-user OAuth tokens are used instead.
 ```
 
 **5. Mock in tests:**
@@ -1496,14 +1479,14 @@ Verdict rules:
 | `apps/code-agent/src/routes/webhooks/github.ts`                 | Add `pull_request.opened/synchronize` → GitHub Agent code path + extend `GitHubWebhookBody` with `base`/`head`  |
 | `apps/code-agent/src/routes/codeRoutes.ts`                      | Add `'review'` to Fastify response schema enum                                                                  |
 | `apps/code-agent/src/services.ts`                               | Add `githubAgentUseCase` to `ServiceContainer` + `ServiceConfig` + wiring (see ServiceContainer Wiring section) |
-| `apps/code-agent/src/config.ts`                                 | Add `geminiApiKey` + `githubBotToken` to `Config` interface and `loadConfig()` function                         |
-| `apps/code-agent/src/index.ts`                                  | Add `INTEXURAOS_GEMINI_APP_API_KEY` + `INTEXURAOS_GITHUB_BOT_TOKEN` to `REQUIRED_ENV`                           |
-| `apps/code-agent/src/infra/http/gitHubPRHttpClient.ts`          | Add `githubBotToken` to config + implement getPullRequestFiles/getPullRequestCommits/postPRComment              |
+| `apps/code-agent/src/config.ts`                                 | Add `geminiApiKey` to `Config` interface and `loadConfig()` function (githubBotToken removed)                   |
+| `apps/code-agent/src/index.ts`                                  | Add `INTEXURAOS_GEMINI_APP_API_KEY` to `REQUIRED_ENV` (INTEXURAOS_GITHUB_BOT_TOKEN removed)                     |
+| `apps/code-agent/src/infra/http/gitHubPRHttpClient.ts`          | All methods use per-call token param; implement getPullRequestFiles/getPullRequestCommits/postPRComment         |
 | `apps/code-agent/src/routes/webhookRoutes.ts`                   | Add `review_*` fields to `TaskCompleteWebhookBody.result` type (line 40)                                        |
 | `apps/code-agent/src/infra/services/taskDispatcherImpl.ts`      | Add `'review'` to `CreateTaskRequestInput.agentType`                                                            |
 | `firestore.indexes.json`                                        | Add composite index: `code_tasks(repository, prNumber, agentType, status)` for `findActiveReviewForPR()`        |
-| `terraform/environments/dev/main.tf`                            | Add `INTEXURAOS_GEMINI_APP_API_KEY` + `INTEXURAOS_GITHUB_BOT_TOKEN` to code-agent env vars                      |
-| `ecosystem.config.cjs`                                          | Add `INTEXURAOS_GEMINI_APP_API_KEY` + `INTEXURAOS_GITHUB_BOT_TOKEN` to code-agent config                        |
+| `terraform/environments/dev/main.tf`                            | Add `INTEXURAOS_GEMINI_APP_API_KEY` to code-agent env vars (INTEXURAOS_GITHUB_BOT_TOKEN removed)                |
+| `ecosystem.config.cjs`                                          | Add `INTEXURAOS_GEMINI_APP_API_KEY` to code-agent config (INTEXURAOS_GITHUB_BOT_TOKEN removed)                  |
 
 ### Orchestrator Changes
 

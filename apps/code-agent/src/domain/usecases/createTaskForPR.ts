@@ -19,7 +19,7 @@ import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
-import type { UserServiceClient, OAuthProvider } from '@intexuraos/internal-clients';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../models/codeTask.js';
 import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
@@ -131,9 +131,7 @@ async function fetchGitHubToken(
   userId: string,
   logger: Logger
 ): Promise<string | null> {
-  // Cast 'github' as OAuthProvider — Stream B adds 'github' to the union type.
-  // Until merged, this cast is required for forward compatibility.
-  const tokenResult = await userServiceClient.getOAuthToken(userId, 'github' as OAuthProvider);
+  const tokenResult = await userServiceClient.getOAuthToken(userId, 'github');
 
   if (!tokenResult.ok) {
     logger.debug(

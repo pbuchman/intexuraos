@@ -103,7 +103,6 @@ export interface ServiceConfig {
   userServiceUrl: string;
   // GitHub Agent (INT-743)
   geminiAppApiKey: string;
-  githubBotToken: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -294,7 +293,7 @@ export function initServices(config: ServiceConfig): void {
   const workerHealthProbe = createWorkerHealthProbe();
   const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe });
   const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher, linearAgentClient });
-  const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000, githubBotToken: config.githubBotToken });
+  const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000 });
 
   const statusMirrorService = createStatusMirrorService({
     actionsAgentClient,
