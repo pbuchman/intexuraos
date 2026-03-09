@@ -24,6 +24,7 @@ function createFakePREvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREven
   return {
     id: 'evt-1',
     githubEventId: 1001,
+    deliveryId: null,
     repository: 'intexuraos/intexuraos',
     repositoryId: 100,
     pullRequestNumber: 42,
@@ -55,6 +56,7 @@ function createFakeGitHubPRClient(): GitHubPRClient {
     getPullRequestCommits: vi.fn().mockResolvedValue(ok([
       { sha: 'abc123', message: 'feat: add feature', author: 'dev-user' },
     ])),
+    getPullRequestBaseBranch: vi.fn().mockResolvedValue(ok('main')),
     postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
   };
 }

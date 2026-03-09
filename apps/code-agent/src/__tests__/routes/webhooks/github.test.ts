@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { randomBytes, createHmac } from 'node:crypto';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { FastifyInstance } from 'fastify';
 
 vi.mock('jose', () => ({
@@ -60,6 +60,7 @@ describe('POST /webhooks/github', () => {
       save: (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 123,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 789,
@@ -536,6 +537,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 12345,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -619,6 +621,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 12345,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -696,6 +699,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 99999,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 55,
@@ -767,6 +771,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 88888,
+        deliveryId: null,
         repository: 'intexuraos/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 60,
@@ -838,6 +843,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 77777,
+        deliveryId: null,
         repository: 'intexuraos/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 60,
@@ -910,6 +916,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 55555,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -985,6 +992,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 77777,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1059,6 +1067,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 88888,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1132,6 +1141,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 66666,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1207,6 +1217,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 55555,
+        deliveryId: null,
         repository: 'pbuchman/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1282,6 +1293,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 44444,
+        deliveryId: null,
         repository: 'pbuchman/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1356,6 +1368,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 33333,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1430,6 +1443,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 99999,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1505,6 +1519,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 11111,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1541,6 +1556,118 @@ describe('POST /webhooks/github', () => {
 
       await new Promise((resolve) => { setTimeout(resolve, 50); });
       expect(mockDispatch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('duplicate webhook delivery', () => {
+    it('should skip evaluation for duplicate webhook delivery', async () => {
+      // Override save to return DUPLICATE_EVENT error
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'DUPLICATE_EVENT' as const, message: 'Duplicate delivery: abc-123' })
+      );
+
+      const prPayload = {
+        action: 'opened',
+        number: 123,
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'pbuchman/intexuraos',
+          owner: {
+            login: 'pbuchman',
+            id: 789,
+          },
+        },
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: 'Test PR',
+          body: 'Test description',
+          state: 'open',
+          merged_at: null,
+        },
+        sender: {
+          login: 'testuser',
+          id: 999,
+          type: 'User',
+        },
+      };
+
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'abc-123',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('duplicate');
+
+      // Verify evaluator was NOT called
+      const services = (await import('../../../services.js')).getServices();
+      expect(services.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
+    });
+
+    it('should acknowledge and log error for non-duplicate save failures', async () => {
+      // Override save to return a generic FIRESTORE_ERROR
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
+      );
+
+      const prPayload = {
+        action: 'opened',
+        number: 123,
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'pbuchman/intexuraos',
+          owner: {
+            login: 'pbuchman',
+            id: 789,
+          },
+        },
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: 'Test PR',
+          body: 'Test description',
+          state: 'open',
+          merged_at: null,
+        },
+        sender: {
+          login: 'testuser',
+          id: 999,
+          type: 'User',
+        },
+      };
+
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'def-456',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('acknowledged');
     });
   });
 });

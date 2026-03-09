@@ -11,6 +11,7 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 import type { StatusMirrorService } from './statusMirrorService.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepository.js';
 import type { WebhookMessageBuilder } from './gitHubMessageBuilder.js';
 import { createTaskForPR } from '../usecases/createTaskForPR.js';
 import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
@@ -33,6 +34,7 @@ export interface WebhookDispatchService {
 }
 
 export interface WebhookDispatchServiceDeps {
+  gitHubPREventRepo: GitHubPREventRepository;
   codeTaskRepo: CodeTaskRepository;
   logLineRepo: LogLineRepository;
   userLookupService?: UserLookupService;
@@ -110,6 +112,25 @@ async function handleNewTask(
     return { success: false, dispatched: false, error: 'UserLookupService not configured' };
   }
 
+  // Resolve baseBranch from stored PR events when not in the current event
+  // (issue_comment payloads don't include base branch)
+  let resolvedBaseBranch = event.baseBranch;
+  if (resolvedBaseBranch === null) {
+    const eventsResult = await deps.gitHubPREventRepo.findByPullRequest(
+      event.repository, event.pullRequestNumber
+    );
+    if (eventsResult.ok) {
+      const eventWithBranch = eventsResult.value.find(e => e.baseBranch !== null); // @allow-result-access -- narrowed by eventsResult.ok
+      if (eventWithBranch !== undefined) {
+        resolvedBaseBranch = eventWithBranch.baseBranch;
+        logger.info(
+          { baseBranch: resolvedBaseBranch, sourceEventId: eventWithBranch.id },
+          'Resolved baseBranch from stored PR event'
+        );
+      }
+    }
+  }
+
   const createResult = await createTaskForPR(
     {
       logger,
@@ -131,9 +152,7 @@ async function handleNewTask(
       comment: event.body ?? '',
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
-      /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
-      ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
-      /* v8 ignore stop @preserve */
+      ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),
     },
   );
 

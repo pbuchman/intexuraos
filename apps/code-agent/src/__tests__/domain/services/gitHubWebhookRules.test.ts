@@ -14,6 +14,7 @@ describe('GitHubWebhookRules', () => {
   const mockEvent: GitHubPREvent = {
     id: 'event-123',
     githubEventId: 123,
+    deliveryId: null,
     repository: 'test-org/test-repo',
     repositoryId: 54321,
     pullRequestNumber: 123,

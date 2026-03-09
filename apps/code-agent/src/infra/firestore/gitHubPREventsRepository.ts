@@ -41,6 +41,11 @@ function toDate(value: unknown): Date {
 }
 /* v8 ignore stop @preserve */
 
+function readDeliveryId(data: Record<string, unknown>): string | null {
+  const raw = data['deliveryId'];
+  return typeof raw === 'string' ? raw : null;
+}
+
 const COLLECTION_NAME = 'github-pr-events';
 
 export function createFirestoreGitHubPREventsRepository(deps: {
@@ -55,35 +60,22 @@ export function createFirestoreGitHubPREventsRepository(deps: {
       input: CreateGitHubPREventInput
     ): Promise<Result<GitHubPREvent, RepositoryError>> {
       try {
-        // Check for duplicate event ID (deduplication)
-        const duplicateQuery = collection
-          .where('githubEventId', '==', input.githubEventId)
-          .limit(1);
-
-        const duplicateSnapshot = await duplicateQuery.get();
-
-        if (!duplicateSnapshot.empty) {
-          logger.debug(
-            { githubEventId: input.githubEventId },
-            'Duplicate GitHub event, skipping'
-          );
-          // Return the existing event
-          const existingDoc = duplicateSnapshot.docs[0];
-          /* v8 ignore start -- ts-type: type narrowing for TypeScript array access, branch is theoretically unreachable @preserve */
-          if (existingDoc === undefined) {
-            // Should never happen since we checked empty, but TypeScript requires this check
+        // Dedup on deliveryId (X-GitHub-Delivery header)
+        if (input.deliveryId !== null) {
+          const deliveryQuery = collection
+            .where('deliveryId', '==', input.deliveryId)
+            .limit(1);
+          const deliverySnapshot = await deliveryQuery.get();
+          if (!deliverySnapshot.empty) {
+            logger.debug(
+              { deliveryId: input.deliveryId },
+              'Duplicate webhook delivery, skipping'
+            );
             return err({
-              code: 'FIRESTORE_ERROR',
-              message: 'Unexpected empty snapshot',
+              code: 'DUPLICATE_EVENT',
+              message: `Duplicate delivery: ${input.deliveryId}`,
             });
           }
-          /* v8 ignore stop @preserve */
-          const existingData = existingDoc.data() as GitHubPREvent;
-          return ok({
-            ...existingData,
-            id: existingDoc.id,
-            baseBranch: existingData.baseBranch ?? null,
-          });
         }
 
         // Create new event document
@@ -97,6 +89,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           mergedAt: unknown;
         } = {
           githubEventId: input.githubEventId,
+          deliveryId: input.deliveryId,
           repository: input.repository,
           repositoryId: input.repositoryId,
           pullRequestNumber: input.pullRequestNumber,
@@ -121,6 +114,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
         return ok({
           id: eventId,
           githubEventId: eventData.githubEventId,
+          deliveryId: eventData.deliveryId,
           repository: eventData.repository,
           repositoryId: eventData.repositoryId,
           pullRequestNumber: eventData.pullRequestNumber,
@@ -170,6 +164,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            deliveryId: readDeliveryId(data as Record<string, unknown>),
             baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
@@ -213,6 +208,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            deliveryId: readDeliveryId(data as Record<string, unknown>),
             baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
@@ -264,6 +260,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             events.push({
               ...data,
               id: doc.id,
+              deliveryId: readDeliveryId(data as Record<string, unknown>),
               baseBranch: data.baseBranch ?? null,
               createdAt: toDate(data.createdAt),
               processedAt: toDate(data.processedAt),
@@ -302,6 +299,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            deliveryId: readDeliveryId(data as Record<string, unknown>),
             baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),

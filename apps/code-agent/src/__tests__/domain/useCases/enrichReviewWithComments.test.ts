@@ -26,6 +26,7 @@ function createCommentEvent(overrides: {
   return {
     id: `event-${String(overrides.commentId)}`,
     githubEventId: overrides.commentId,
+    deliveryId: null,
     repository: 'intexuraos/test-repo',
     repositoryId: 123,
     pullRequestNumber: 42,
@@ -204,6 +205,7 @@ describe('enrichReviewWithComments', () => {
     const badEvent: GitHubPREvent = {
       id: 'event-bad',
       githubEventId: 999,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 123,
       pullRequestNumber: 42,
@@ -240,6 +242,7 @@ describe('enrichReviewWithComments', () => {
     const nullPayloadEvent: GitHubPREvent = {
       id: 'event-null',
       githubEventId: 998,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 123,
       pullRequestNumber: 42,
@@ -276,6 +279,7 @@ describe('enrichReviewWithComments', () => {
     const malformedEvent: GitHubPREvent = {
       id: 'event-malformed',
       githubEventId: 997,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 123,
       pullRequestNumber: 42,

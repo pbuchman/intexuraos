@@ -23,6 +23,7 @@ function createFakeEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent 
   return {
     id: 'evt-1',
     githubEventId: 1001,
+    deliveryId: null,
     repository: 'intexuraos/intexuraos',
     repositoryId: 100,
     pullRequestNumber: 42,

@@ -128,7 +128,10 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     new BotReviewEditRule(ALLOWED_BOTS),
   ]);
 
+  const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
+
   const dispatchService = createWebhookDispatchService({
+    gitHubPREventRepo,
     codeTaskRepo: createFirestoreCodeTaskRepository({ firestore: fakeFirestore, logger }),
     logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore, logger }),
     userLookupService: createUserLookupService({
@@ -221,9 +224,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
     }),
     workerHealthProbe: mockWorkerHealthProbe,
-    gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
-      logger,
-    }),
+    gitHubPREventRepo,
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({
       logger,
     }),
