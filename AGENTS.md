@@ -15,19 +15,13 @@ This file is a routing gate, not a duplicate rulebook.
 Before any analysis, edits, tests, branch actions, or commits, the agent MUST read:
 
 1. `.claude/CLAUDE.md`
-2. Every concrete file explicitly referenced there as required guidance, including:
-
-- `.claude/reference/*.md` files referenced by name
-- `docs/patterns/*.md` files referenced by name
-- `docs/designs/*.md` files referenced by name
-- `.claude/hooks/*.sh` files referenced as enforcement hooks
-- `.claude/skills/**/reference/*.md` files referenced for validation rules
+2. Every concrete file explicitly required by `.claude/CLAUDE.md`
 
 ## Execution Policy
 
 - Treat completion of the Session Start Gate as a hard prerequisite.
 - If any referenced file is missing or unreadable, report it immediately and continue with the remaining available required files.
-- Keep behavior aligned to `.claude/CLAUDE.md` and its references for the entire session.
+- Keep behavior aligned to `.claude/CLAUDE.md` and any files it explicitly requires for the entire session.
 
 ## Change Control
 
