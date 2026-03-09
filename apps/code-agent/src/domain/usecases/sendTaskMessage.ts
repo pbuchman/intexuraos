@@ -128,9 +128,7 @@ export async function sendTaskMessage(
   /* v8 ignore stop @preserve */
 
   const settings = settingsResult.value;
-  /* v8 ignore start -- ts-type: optional chaining for database result @preserve */
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
-  /* v8 ignore stop @preserve */
 
   if (enabledWorkers.length === 0) {
     logger.warn({ userId }, 'User has no workers configured for messaging');

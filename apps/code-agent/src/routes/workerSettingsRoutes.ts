@@ -226,7 +226,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to GET /code/worker-settings',
@@ -254,7 +253,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
 
       return await reply.ok(response);
     }
-    /* v8 ignore stop @preserve */
   );
 
   // POST /code/worker-settings/workers - Add new worker
@@ -354,14 +352,12 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest<{ Body: WorkerConfigInput }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/worker-settings/workers',
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       const { name } = request.body;
 
@@ -488,7 +484,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (
       request: FastifyRequest<{ Params: { name: string }; Body: WorkerConfigUpdateInput }>,
       reply: FastifyReply
@@ -499,7 +494,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       const { name } = request.params;
 
@@ -615,7 +609,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest<{ Params: { name: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to DELETE /code/worker-settings/workers/:name',
@@ -623,7 +616,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       const { name } = request.params;
 
@@ -751,7 +743,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest<{ Params: { name: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/worker-settings/workers/:name/test',
@@ -759,7 +750,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       const { name } = request.params;
 
@@ -900,14 +890,12 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest<{ Body: { workerNames: string[] } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to PUT /code/worker-settings/priority',
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       const { workerNames } = request.body;
 
