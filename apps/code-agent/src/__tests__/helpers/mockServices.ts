@@ -197,6 +197,8 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     userServiceClient: mockUserServiceClient,
     gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
+    toolCallingClient: undefined,
+    githubBotToken: '',
     webhookRules: createWebhookRulesService([
       new RepositoryScopeRule(new Set(['intexuraos/*'])),
       new ActionableEventRule(ALLOWED_BOTS),

@@ -22,7 +22,7 @@ import type {
   ToolDefinition,
   ToolCallingModel,
 } from '@intexuraos/llm-contract';
-import { LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { AuditSink } from '@intexuraos/llm-audit';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import { createUsageLogger, type UsageSink } from '@intexuraos/llm-pricing';
@@ -37,7 +37,7 @@ const DEFAULT_MAX_ITERATIONS = 5;
  * Bypasses code-agent's pricingContext (which throws on pricing operations).
  */
 export const TOOL_CALLING_PRICING: Record<ToolCallingModel, ModelPricing> = {
-  'gemini-2.5-flash': {
+  [LlmModels.Gemini25Flash]: {
     inputPricePerMillion: 0.5,
     outputPricePerMillion: 2.0,
     groundingCostPerRequest: 0,
@@ -61,9 +61,7 @@ export interface ToolCallingClientConfig {
 /**
  * Create a Gemini-backed tool calling client.
  */
-export function createGeminiToolCallingClient(
-  config: ToolCallingClientConfig
-): ToolCallingClient {
+export function createGeminiToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
   const { model, userId, pricing, logger, auditSink, usageSink } = config;
 
@@ -72,11 +70,7 @@ export function createGeminiToolCallingClient(
     ...(usageSink !== undefined && { sink: usageSink }),
   });
 
-  function trackUsage(
-    usage: NormalizedUsage,
-    success: boolean,
-    errorMessage?: string
-  ): void {
+  function trackUsage(usage: NormalizedUsage, success: boolean, errorMessage?: string): void {
     void usageLogger.log({
       userId,
       provider: LlmProviders.Google,
@@ -90,12 +84,7 @@ export function createGeminiToolCallingClient(
 
   return {
     async run(params): Promise<Result<ToolCallingResult, LLMError>> {
-      const {
-        systemPrompt,
-        messages,
-        tools,
-        maxIterations = DEFAULT_MAX_ITERATIONS,
-      } = params;
+      const { systemPrompt, messages, tools, maxIterations = DEFAULT_MAX_ITERATIONS } = params;
 
       const auditContext: AuditContext = createAuditContext(
         {
@@ -153,34 +142,22 @@ export function createGeminiToolCallingClient(
           });
 
           // Aggregate usage
-          const inputTokens =
-            response.usageMetadata?.promptTokenCount ?? 0;
-          const outputTokens =
-            response.usageMetadata?.candidatesTokenCount ?? 0;
-          const iterationUsage = normalizeUsage(
-            inputTokens,
-            outputTokens,
-            false,
-            pricing
-          );
+          const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+          const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+          const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, pricing);
           aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);
 
           // Extract parts from response
-          const parts: Part[] =
-            response.candidates?.[0]?.content?.parts ?? [];
+          const parts: Part[] = response.candidates?.[0]?.content?.parts ?? [];
           lastResponseParts = parts;
 
           // Check for function call
-          const functionCallPart = parts.find(
-            (p) => p.functionCall !== undefined
-          );
+          const functionCallPart = parts.find((p) => p.functionCall !== undefined);
 
           if (functionCallPart?.functionCall !== undefined) {
-            const { name: toolName, args: toolArgs } =
-              functionCallPart.functionCall;
+            const { name: toolName, args: toolArgs } = functionCallPart.functionCall;
             const resolvedName = toolName ?? '';
-            const resolvedArgs =
-              (toolArgs as Record<string, unknown> | undefined) ?? {};
+            const resolvedArgs = toolArgs ?? {};
 
             totalToolCalls++;
 
@@ -217,9 +194,7 @@ export function createGeminiToolCallingClient(
                 toolName: resolvedName,
                 toolArgs: resolvedArgs,
                 toolResponseTruncated:
-                  toolResponse.length > 200
-                    ? toolResponse.slice(0, 200) + '...'
-                    : toolResponse,
+                  toolResponse.length > 200 ? toolResponse.slice(0, 200) + '...' : toolResponse,
                 usage: {
                   inputTokens: iterationUsage.inputTokens,
                   outputTokens: iterationUsage.outputTokens,
@@ -305,9 +280,7 @@ export function createGeminiToolCallingClient(
         }
 
         // maxIterations exhausted — check if last Gemini response had text
-        const lastTextPart = lastResponseParts.find(
-          (p) => p.text !== undefined
-        );
+        const lastTextPart = lastResponseParts.find((p) => p.text !== undefined);
         const lastText = lastTextPart?.text ?? '';
 
         if (lastText !== '') {
@@ -329,11 +302,7 @@ export function createGeminiToolCallingClient(
         await auditContext.error({
           error: 'Tool calling loop exceeded maxIterations',
         });
-        trackUsage(
-          aggregatedUsage,
-          false,
-          'Tool calling loop exceeded maxIterations'
-        );
+        trackUsage(aggregatedUsage, false, 'Tool calling loop exceeded maxIterations');
         return err({
           code: 'API_ERROR',
           message: 'Tool calling loop exceeded maxIterations',
