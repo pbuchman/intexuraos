@@ -764,7 +764,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         expect.objectContaining({
           issueId: 'original-uuid',
           addLabels: ['planned'],
-          removeLabels: ['unclear', 'code-task'],
+          removeLabels: ['unclear', 'code-task', 'planning-task'],
         })
       );
       // Original + 2 children normalized to todo
@@ -1175,10 +1175,10 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       // Both subtasks normalized + stamped with code-task in single call (removes assignee)
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-1-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-1-uuid', assigneeId: null, removeLabels: ['planned', 'unclear', 'planning-task'], addLabels: ['code-task'] })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-2-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-2-uuid', assigneeId: null, removeLabels: ['planned', 'unclear', 'planning-task'], addLabels: ['code-task'] })
       );
 
       const getResult = await codeTaskRepo.findById(task.id);
@@ -1480,13 +1480,13 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(updateIssueStateSpy).toHaveBeenCalledTimes(4); // 1 parent + 3 children
       expect(updateIssueMetadataSpy).toHaveBeenCalledTimes(4); // 1 parent + 3 children
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-1-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-1-uuid', assigneeId: null, removeLabels: ['planned', 'unclear', 'planning-task'], addLabels: ['code-task'] })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-2-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-2-uuid', assigneeId: null, removeLabels: ['planned', 'unclear', 'planning-task'], addLabels: ['code-task'] })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-3-uuid', assigneeId: null, removeLabels: ['planned', 'unclear'], addLabels: ['code-task'] })
+        expect.objectContaining({ issueId: 'child-3-uuid', assigneeId: null, removeLabels: ['planned', 'unclear', 'planning-task'], addLabels: ['code-task'] })
       );
 
       const getResult = await codeTaskRepo.findById(task.id);
@@ -1578,21 +1578,21 @@ describe('POST /internal/webhooks/task-complete', () => {
         expect.objectContaining({ issueId: 'original-uuid', state: 'todo' })
       );
 
-      // Simple: addLabels=[], removeLabels=['unclear', 'planned'], then stamp code-task
+      // Simple: addLabels=[], removeLabels=['unclear', 'planned', 'planning-task'], then stamp code-task
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           issueId: 'original-uuid',
           addLabels: [],
-          removeLabels: ['unclear', 'planned'],
+          removeLabels: ['unclear', 'planned', 'planning-task'],
         })
       );
-      // Stamp code-task label as last step (removes unclear, clears assignee)
+      // Stamp code-task label as last step (removes unclear + planning-task, clears assignee)
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           issueId: 'original-uuid',
           assigneeId: null,
           addLabels: ['code-task'],
-          removeLabels: ['unclear'],
+          removeLabels: ['unclear', 'planning-task'],
         })
       );
 
@@ -1858,7 +1858,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         expect.objectContaining({ issueId: 'routed-uuid', state: 'in_review' })
       );
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'routed-uuid', assigneeId: null, addLabels: ['code-task'], removeLabels: ['unclear'] })
+        expect.objectContaining({ issueId: 'routed-uuid', assigneeId: null, addLabels: ['code-task'], removeLabels: ['unclear', 'planning-task'] })
       );
       expect(markInReviewSpy).not.toHaveBeenCalled();
 

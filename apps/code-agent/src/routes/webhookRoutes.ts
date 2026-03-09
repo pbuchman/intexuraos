@@ -255,7 +255,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               userId: task.userId,
               issueId: originalIssueUuid,
               addLabels: isComplex ? ['planned'] : [],
-              removeLabels: isComplex ? ['unclear', 'code-task'] : ['unclear', 'planned'],
+              removeLabels: isComplex ? ['unclear', 'code-task', 'planning-task'] : ['unclear', 'planned', 'planning-task'],
             }),
           ]);
           if (!markTodo.ok) {
@@ -304,7 +304,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   userId: task.userId,
                   issueId: subtask.id,
                   assigneeId: null,
-                  removeLabels: ['planned', 'unclear'],
+                  removeLabels: ['planned', 'unclear', 'planning-task'],
                   addLabels: ['code-task'],
                 });
                 if (!normalizeMetadata.ok) {
@@ -359,7 +359,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   userId: task.userId,
                   issueId: child.id,
                   assigneeId: null,
-                  removeLabels: ['planned', 'unclear'],
+                  removeLabels: ['planned', 'unclear', 'planning-task'],
                   addLabels: ['code-task'],
                 });
                 if (!normalizeMetadata.ok) {
@@ -386,7 +386,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               issueId: originalIssueUuid,
               assigneeId: null,
               addLabels: ['code-task'],
-              removeLabels: ['unclear'],
+              removeLabels: ['unclear', 'planning-task'],
             });
             if (!stampCodeTask.ok) {
               return { ok: false, message: `Failed to add code-task label to original issue: ${stampCodeTask.error.message}` };
@@ -414,7 +414,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           userId: task.userId,
           issueId: originalIssueUuid,
           addLabels: ['unclear'],
-          removeLabels: ['planned', 'code-task'],
+          removeLabels: ['planned', 'code-task', 'planning-task'],
         });
         if (!unclearLabels.ok) {
           return { ok: false, message: `Failed to enforce unclear labels: ${unclearLabels.error.message}` };
@@ -522,7 +522,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           issueId: routedIssueValidation.value.id,
           assigneeId: null,
           addLabels: ['code-task'],
-          removeLabels: ['unclear'],
+          removeLabels: ['unclear', 'planning-task'],
         });
         if (!keepCodeTaskLabel.ok) {
           return {
