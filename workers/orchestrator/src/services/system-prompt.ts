@@ -9,13 +9,13 @@ export interface SystemPromptParams {
   taskUrl?: string;
   linearIssueLabels: string[];
   workerType?: WorkerType;
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '1.0.0',
+  version: '1.0.1',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
@@ -152,7 +152,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '1.0.0',
+  version: '1.0.1',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -263,7 +263,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '1.0.0',
+  version: '1.0.1',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -369,7 +369,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '1.0.0',
+  version: '1.0.1',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */

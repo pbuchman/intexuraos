@@ -30,6 +30,9 @@ export interface Config {
   auth0JwksUri: string;
   // Task queue configuration (INT-619)
   queue: QueueConfig;
+  // GitHub Agent (INT-743)
+  geminiAppApiKey: string;
+  githubBotToken: string;
 }
 
 export function loadConfig(): Config {
@@ -50,6 +53,8 @@ export function loadConfig(): Config {
   const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
   const githubWebhookSecret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] ?? '';
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
+  const geminiAppApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'] ?? '';
+  const githubBotToken = process.env['INTEXURAOS_GITHUB_BOT_TOKEN'] ?? '';
 
   return {
     port,
@@ -73,5 +78,7 @@ export function loadConfig(): Config {
       maxSize: parseInt(process.env['INTEXURAOS_QUEUE_MAX_SIZE'] ?? '10', 10),
       ttlMinutes: parseInt(process.env['INTEXURAOS_QUEUE_TTL_MINUTES'] ?? '30', 10),
     },
+    geminiAppApiKey,
+    githubBotToken,
   };
 }

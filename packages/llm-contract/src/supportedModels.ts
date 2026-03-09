@@ -280,3 +280,25 @@ export function isValidModel(model: string): model is LLMModel {
 export function isFastModel(model: string): model is FastModel {
   return ALL_FAST_MODELS.includes(model as FastModel);
 }
+
+// =============================================================================
+// Tool Calling Models
+// =============================================================================
+
+/**
+ * Narrowed subset of LLMModel for tool calling agent loops.
+ *
+ * Every ToolCallingModel is also a valid LLMModel, so
+ * getProviderForModel() works out of the box.
+ */
+export type ToolCallingModel = Gemini25Flash;
+
+/** All models that support tool calling */
+export const ALL_TOOL_CALLING_MODELS: ToolCallingModel[] = ['gemini-2.5-flash'];
+
+/**
+ * Check if a string is a valid tool calling model.
+ */
+export function isToolCallingModel(model: string): model is ToolCallingModel {
+  return ALL_TOOL_CALLING_MODELS.includes(model as ToolCallingModel);
+}

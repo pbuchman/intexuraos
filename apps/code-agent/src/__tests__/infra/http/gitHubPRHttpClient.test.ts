@@ -11,7 +11,7 @@ describe('GitHubPRHttpClient', () => {
     nock.cleanAll();
   });
 
-  const client = createGitHubPRHttpClient({ timeoutMs: 5000 });
+  const client = createGitHubPRHttpClient({ timeoutMs: 5000, githubBotToken: 'bot-token-123' });
 
   describe('updatePRTitle', () => {
     it('successfully updates a PR title', async () => {
@@ -100,6 +100,244 @@ describe('GitHubPRHttpClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+  });
+
+  describe('getPullRequestFiles', () => {
+    it('returns file list on success', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42/files?per_page=100')
+        .matchHeader('Authorization', 'Bearer bot-token-123')
+        .reply(200, [
+          { filename: 'src/index.ts', status: 'modified', additions: 10, deletions: 2 },
+          { filename: 'src/new.ts', status: 'added', additions: 50, deletions: 0 },
+        ]);
+
+      const result = await client.getPullRequestFiles('owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(2);
+        expect(result.value[0]).toEqual({
+          filename: 'src/index.ts',
+          status: 'modified',
+          additions: 10,
+          deletions: 2,
+        });
+      }
+    });
+
+    it('returns NOT_FOUND on 404', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/999/files?per_page=100')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.getPullRequestFiles('owner', 'repo', 999);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42/files?per_page=100')
+        .replyWithError('timeout');
+
+      const result = await client.getPullRequestFiles('owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+
+    it('returns UNAUTHORIZED when githubBotToken is not configured', async () => {
+      const clientNoToken = createGitHubPRHttpClient({ timeoutMs: 5000 });
+
+      const result = await clientNoToken.getPullRequestFiles('owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAUTHORIZED');
+        expect(result.error.message).toBe('GitHub bot token not configured');
+      }
+    });
+
+    it('paginates file fetches when Link header has next page', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42/files?per_page=100')
+        .reply(200, [{ filename: 'a.ts', status: 'modified', additions: 1, deletions: 0 }], {
+          link: '<https://api.github.com/repos/owner/repo/pulls/42/files?per_page=100&page=2>; rel="next"',
+        });
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42/files?per_page=100&page=2')
+        .reply(200, [{ filename: 'b.ts', status: 'added', additions: 5, deletions: 0 }]);
+
+      const result = await client.getPullRequestFiles('owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(2);
+        expect(result.value[0]?.filename).toBe('a.ts');
+        expect(result.value[1]?.filename).toBe('b.ts');
+      }
+    });
+
+    it('stops pagination when Link header has no next rel', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42/files?per_page=100')
+        .reply(200, [{ filename: 'a.ts', status: 'modified', additions: 1, deletions: 0 }], {
+          link: '<https://api.github.com/repos/owner/repo/pulls/42/files?per_page=100&page=1>; rel="last"',
+        });
+
+      const result = await client.getPullRequestFiles('owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.filename).toBe('a.ts');
+      }
+    });
+  });
+
+  describe('getPullRequestCommits', () => {
+    it('returns commit list on success', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42/commits?per_page=100')
+        .matchHeader('Authorization', 'Bearer bot-token-123')
+        .reply(200, [
+          {
+            sha: 'abc123',
+            commit: { message: 'feat: add feature' },
+            author: { login: 'dev-user' },
+          },
+        ]);
+
+      const result = await client.getPullRequestCommits('owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]).toEqual({
+          sha: 'abc123',
+          message: 'feat: add feature',
+          author: 'dev-user',
+        });
+      }
+    });
+
+    it('falls back to unknown when commit author is null', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42/commits?per_page=100')
+        .matchHeader('Authorization', 'Bearer bot-token-123')
+        .reply(200, [
+          {
+            sha: 'def456',
+            commit: { message: 'chore: automated commit' },
+            author: null,
+          },
+        ]);
+
+      const result = await client.getPullRequestCommits('owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]?.author).toBe('unknown');
+      }
+    });
+
+    it('returns UNAUTHORIZED on 401', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42/commits?per_page=100')
+        .reply(401, { message: 'Bad credentials' });
+
+      const result = await client.getPullRequestCommits('owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAUTHORIZED');
+      }
+    });
+
+    it('returns UNAUTHORIZED when githubBotToken is not configured', async () => {
+      const clientNoToken = createGitHubPRHttpClient({ timeoutMs: 5000 });
+
+      const result = await clientNoToken.getPullRequestCommits('owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAUTHORIZED');
+        expect(result.error.message).toBe('GitHub bot token not configured');
+      }
+    });
+  });
+
+  describe('postPRComment', () => {
+    it('posts a comment and returns commentId', async () => {
+      nock('https://api.github.com')
+        .post('/repos/owner/repo/issues/42/comments', { body: 'Review requested' })
+        .matchHeader('Authorization', 'Bearer bot-token-123')
+        .reply(201, { id: 12345 });
+
+      const result = await client.postPRComment('owner', 'repo', 42, 'Review requested');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.commentId).toBe(12345);
+      }
+    });
+
+    it('returns UNAUTHORIZED on 403', async () => {
+      nock('https://api.github.com')
+        .post('/repos/owner/repo/issues/42/comments')
+        .reply(403, { message: 'Forbidden' });
+
+      const result = await client.postPRComment('owner', 'repo', 42, 'body');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAUTHORIZED');
+      }
+    });
+
+    it('returns RATE_LIMITED on 429', async () => {
+      nock('https://api.github.com')
+        .post('/repos/owner/repo/issues/42/comments')
+        .reply(429, { message: 'rate limit exceeded' });
+
+      const result = await client.postPRComment('owner', 'repo', 42, 'body');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('https://api.github.com')
+        .post('/repos/owner/repo/issues/42/comments')
+        .replyWithError('connection refused');
+
+      const result = await client.postPRComment('owner', 'repo', 42, 'body');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+
+    it('returns UNAUTHORIZED when githubBotToken is not configured', async () => {
+      const clientNoToken = createGitHubPRHttpClient({ timeoutMs: 5000 });
+
+      const result = await clientNoToken.postPRComment('owner', 'repo', 42, 'body');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAUTHORIZED');
+        expect(result.error.message).toBe('GitHub bot token not configured');
       }
     });
   });

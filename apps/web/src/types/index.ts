@@ -1184,7 +1184,7 @@ export interface CodeTask {
     commentCount: number;
     lastCommentAt: string | null;
   };
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';

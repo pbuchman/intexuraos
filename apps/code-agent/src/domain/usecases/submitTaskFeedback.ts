@@ -326,7 +326,7 @@ ${feedback.trim()}
     parentTaskId?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
-    agentType: 'planning' | 'execution' | 'pull_request';
+    agentType: 'planning' | 'execution' | 'pull_request' | 'review';
   } = {
     taskId: followUpTask.id,
     prompt: followUpTask.sanitizedPrompt,

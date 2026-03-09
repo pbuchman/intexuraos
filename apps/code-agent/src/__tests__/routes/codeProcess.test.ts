@@ -188,6 +188,7 @@ describe('POST /internal/code/process', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
+      toolCallingClient: undefined,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -214,6 +215,8 @@ describe('POST /internal/code/process', () => {
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
+      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+
     });
 
     // Set up worker settings for the test user

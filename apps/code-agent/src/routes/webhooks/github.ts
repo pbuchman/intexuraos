@@ -16,6 +16,7 @@ import {
   shouldProcessRepository,
 } from '../../infra/github-event-parser.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
+import { isGitHubAgentEvent, evaluatePREvent } from '../../domain/usecases/githubAgent.js';
 
 export const ALLOWED_BOTS = new Set([
   'claude[bot]',
@@ -225,6 +226,21 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
           decision,
           logger
         });
+      }
+
+      // GitHub Agent: evaluate PR opened/synchronize events via tool-calling LLM
+      if (isGitHubAgentEvent(savedEvent)) {
+        const { toolCallingClient, gitHubPRClient } = getServices();
+        if (toolCallingClient === undefined) {
+          logger.warn('GitHub Agent disabled — missing Gemini API key');
+        } else {
+          void evaluatePREvent(
+            { logger, gitHubPRClient, toolCallingClient },
+            savedEvent
+          ).catch((err: unknown) => {
+            logger.error({ err }, 'Unhandled error in GitHub Agent evaluation');
+          });
+        }
       }
 
       return await reply.ok({ message: 'processed' });

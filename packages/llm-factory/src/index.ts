@@ -6,7 +6,9 @@
 
 export {
   createLlmClient,
+  createToolCallingClient,
   type LlmClientConfig,
+  type ToolCallingClientConfig,
   type LlmGenerateClient,
   type GenerateResult,
   type LLMError,

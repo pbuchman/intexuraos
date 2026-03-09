@@ -19,7 +19,7 @@ export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3
  */
 export type WorkerLocation = string;
 
-export type AgentType = 'planning' | 'execution' | 'pull_request';
+export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 
 /**
  * Task status lifecycle.
