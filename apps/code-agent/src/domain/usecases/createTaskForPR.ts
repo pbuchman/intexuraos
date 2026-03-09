@@ -392,7 +392,7 @@ export async function createTaskForPR(
     prompt: buildTaskPrompt(request),
     systemPromptHash: 'pr-comment-auto',
     repository,
-    baseBranch: request.baseBranch ?? 'main',
+    baseBranch: resolvedBaseBranch ?? 'main',
     workerType: 'auto',
     webhookUrl,
     webhookSecret,

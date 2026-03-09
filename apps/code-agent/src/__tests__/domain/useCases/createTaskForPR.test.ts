@@ -765,6 +765,38 @@ describe('createTaskForPR', () => {
       expect(result.ok).toBe(true);
       expect(capturedBaseBranch).toBe('main');
     });
+
+    it('should dispatch with the same resolved baseBranch as the task record', async () => {
+      let dispatchedBaseBranch = '';
+
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+          return ok('development');
+        },
+      };
+
+      deps.taskDispatcher = {
+        ...createMockTaskDispatcher(),
+        async dispatch(req): ReturnType<TaskDispatcherService['dispatch']> {
+          dispatchedBaseBranch = (req as unknown as Record<string, string>)['baseBranch'] ?? '';
+          return ok({ dispatched: true, workerLocation: 'home-mac' });
+        },
+      };
+
+      const noBranchRequest: CreateTaskForPRRequest = {
+        repository: request.repository,
+        prNumber: request.prNumber,
+        prTitle: 'Fix the bug',
+        senderLogin: request.senderLogin,
+        comment: request.comment,
+        eventId: request.eventId,
+      };
+
+      await createTaskForPR(deps, noBranchRequest);
+
+      expect(dispatchedBaseBranch).toBe('development');
+    });
   });
 
   describe('PR task lock cleanup', () => {
