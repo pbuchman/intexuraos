@@ -223,6 +223,25 @@ describe('formatTranscript', () => {
     expect(result).toContain('[MSG-001] ASSISTANT tool_use: Read');
   });
 
+  it('truncates assistant text blocks longer than 500 chars', () => {
+    const longText = 'y'.repeat(1000);
+    const entries: SessionJsonlEntry[] = [
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        parentUuid: 'root',
+        timestamp: '2026-03-08T23:10:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: longText }],
+        },
+      },
+    ];
+    const result = formatTranscript(entries);
+    expect(result).toContain('[truncated]');
+    expect(result.length).toBeLessThan(longText.length);
+  });
+
   it('returns empty string for empty entries', () => {
     expect(formatTranscript([])).toBe('');
   });
@@ -645,10 +664,25 @@ vi.mock('@intexuraos/llm-factory', () => ({
   createLlmClient: createLlmClientMock,
 }));
 
-const { buildDeepValidationPrompt, DEEP_VALIDATION_SCHEMA } =
+const { buildDeepValidationPrompt, DEEP_VALIDATION_SCHEMA, DEEP_VALIDATION_PROMPT_VERSION } =
   await import('../execution-deep-validator.js');
 
 describe('buildDeepValidationPrompt', () => {
+  it('includes prompt version header', () => {
+    const prompt = buildDeepValidationPrompt({
+      formattedTranscript: 'test',
+      agentClaims: {
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: '',
+        summary: 'Done.',
+      },
+      linearIssueBody: 'task',
+      planContent: undefined,
+    });
+    expect(prompt).toContain(`[deep-validation-prompt v${DEEP_VALIDATION_PROMPT_VERSION}]`);
+  });
+
   it('includes all three validation sections', () => {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: '[MSG-001] ASSISTANT tool_use: Bash\n  command: "pnpm run ci:tracked"',
@@ -794,6 +828,14 @@ import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
 const execFileAsync = promisify(execFile);
 
+// --- Constants ---
+
+export const DEEP_VALIDATION_PROMPT_VERSION = '1.0.0';
+
+/** Maximum transcript characters to send to LLM. Gemini 2.5 Flash supports ~1M tokens
+ *  but we cap to keep cost/latency reasonable for a POC. */
+const MAX_TRANSCRIPT_CHARS = 200_000;
+
 // --- Zod Schema ---
 
 const claimVerificationItem = z.object({
@@ -833,11 +875,13 @@ export const DEEP_VALIDATION_SCHEMA = z.object({
 
 export type DeepValidationResult = z.infer<typeof DEEP_VALIDATION_SCHEMA>;
 
+export type ExecutionAgentClaims = Omit<ExecutionAgentData, 'agentType'>;
+
 // --- Prompt Builder ---
 
 export interface DeepValidationPromptInput {
   formattedTranscript: string;
-  agentClaims: Omit<ExecutionAgentData, 'agentType'>;
+  agentClaims: ExecutionAgentClaims;
   linearIssueBody: string;
   planContent: string | undefined;
 }
@@ -849,7 +893,15 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
       ? `Plan file content:\n${input.planContent}`
       : 'No plan file found on branch.';
 
+  // Cap transcript to avoid exceeding LLM context / cost limits
+  const transcript =
+    input.formattedTranscript.length > MAX_TRANSCRIPT_CHARS
+      ? input.formattedTranscript.slice(0, MAX_TRANSCRIPT_CHARS) +
+        `\n\n[TRANSCRIPT TRUNCATED at ${String(MAX_TRANSCRIPT_CHARS)} chars — ${String(input.formattedTranscript.length)} total]`
+      : input.formattedTranscript;
+
   return [
+    `[deep-validation-prompt v${DEEP_VALIDATION_PROMPT_VERSION}]`,
     'You are a post-execution validator for an autonomous coding agent.',
     'Analyze the full session transcript below and answer three groups of questions.',
     'Return ONLY a JSON object matching the schema described. No markdown fences.',
@@ -907,7 +959,7 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
     '}',
     '',
     '=== Full Session Transcript ===',
-    input.formattedTranscript,
+    transcript,
   ].join('\n');
 }
 
@@ -1003,7 +1055,7 @@ export interface DeepValidationInput {
   prNumber: number;
   repository: string;
   formattedTranscript: string;
-  agentClaims: Omit<ExecutionAgentData, 'agentType'>;
+  agentClaims: ExecutionAgentClaims;
   linearIssueBody: string;
   planContent: string | undefined;
   worktreePath: string;
@@ -1280,6 +1332,21 @@ describe('OrchestratorExecutionDeepValidator', () => {
 
     expect(result).toBeUndefined();
   });
+
+  it('posts raw comment when Zod validation fails', async () => {
+    // Valid JSON but wrong schema
+    const invalidSchema = JSON.stringify({ unexpected: 'data' });
+    generateMock.mockResolvedValue({ ok: true, value: { content: invalidSchema, usage: {} } });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBeUndefined();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_abc' }),
+      expect.stringContaining('Zod validation failed')
+    );
+  });
 });
 
 describe('formatPrComment', () => {
@@ -1379,10 +1446,14 @@ Add optional `executionDeepValidator` parameter (same pattern as `turnMetricsCol
 // In constructor parameters, add after turnMetricsCollector:
 private readonly executionDeepValidator?: ExecutionDeepValidator
 
-// Add import at top:
+// Add imports at top:
 import type { ExecutionDeepValidator } from './execution-deep-validator.js';
 import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
+import type { ExecutionAgentData } from './completion-verifier.js';
+import { readFile } from 'node:fs/promises';
+import { glob } from 'node:fs/promises';
+import { join } from 'node:path';
 ```
 
 **Step 3: Add the runDeepValidation private method**
@@ -1396,7 +1467,10 @@ private async runDeepValidation(
   if (this.executionDeepValidator === undefined) return;
   if (verification.agentData?.agentType !== 'execution') return;
 
-  const prNumber = this.extractPrNumber(finalResult.prUrl);
+  // Discriminant check above narrows the union — no unsafe cast needed
+  const agentData: ExecutionAgentData = verification.agentData;
+
+  const prNumber = extractPrNumber(finalResult.prUrl);
   if (prNumber === undefined) {
     this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no PR number');
     return;
@@ -1417,13 +1491,12 @@ private async runDeepValidation(
 
     const formattedTranscript = formatTranscript(entries);
 
-    // Read Linear issue body (best-effort — may not have access)
-    const linearIssueBody = task.linearIssueId ?? 'No Linear issue linked';
+    // Read Linear issue body from the worktree's .linear-issue-body.txt if the orchestrator
+    // saved it, otherwise fall back to the issue title or ID.
+    const linearIssueBody = await this.readLinearIssueBody(task);
 
     // Try to find plan file on branch
-    const planContent = await this.findPlanOnBranch(task.worktreePath);
-
-    const agentData = verification.agentData as { agentType: 'execution'; superpowers_executing_plans: string; superpowers_requesting_code_review: string; gh_pr_url: string; summary: string };
+    const planContent = await findPlanOnBranch(task.worktreePath);
 
     await this.executionDeepValidator.validate({
       taskId: task.taskId,
@@ -1431,8 +1504,8 @@ private async runDeepValidation(
       repository: task.repository,
       formattedTranscript,
       agentClaims: {
-        superpowers_executing_plans: agentData.superpowers_executing_plans as 'used' | 'not used',
-        superpowers_requesting_code_review: agentData.superpowers_requesting_code_review as 'used' | 'not used',
+        superpowers_executing_plans: agentData.superpowers_executing_plans,
+        superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
         gh_pr_url: agentData.gh_pr_url,
         summary: agentData.summary,
       },
@@ -1450,41 +1523,138 @@ private async runDeepValidation(
   }
 }
 
-private extractPrNumber(prUrl: string | undefined): number | undefined {
+private async readLinearIssueBody(task: Task): Promise<string> {
+  // The Linear issue body is not stored on the Task object. The agent reads it via MCP
+  // at runtime. For deep validation, we construct a best-effort summary from available fields.
+  // TODO: In a future iteration, persist the Linear issue body to Firestore during dispatch
+  // so the deep validator has the full requirements text.
+  const parts: string[] = [];
+  if (task.linearIssueId !== undefined) parts.push(`Linear Issue: ${task.linearIssueId}`);
+  if (task.linearIssueTitle !== undefined) parts.push(`Title: ${task.linearIssueTitle}`);
+  if (parts.length === 0) return 'No Linear issue linked';
+  return parts.join('\n');
+}
+```
+
+**Note:** `extractPrNumber` and `findPlanOnBranch` are extracted as **module-level functions** (not private methods) so they can be tested independently:
+
+```typescript
+// At module level (exported for testing)
+
+export function extractPrNumber(prUrl: string | undefined): number | undefined {
   if (prUrl === undefined) return undefined;
   const match = /\/pull\/(\d+)/.exec(prUrl);
   return match?.[1] !== undefined ? parseInt(match[1], 10) : undefined;
 }
 
-private async findPlanOnBranch(worktreePath: string): Promise<string | undefined> {
+export async function findPlanOnBranch(worktreePath: string): Promise<string | undefined> {
   try {
-    const { stdout } = await execAsync(
-      'find docs/plans -name "*.md" -type f 2>/dev/null | head -1',
-      { cwd: worktreePath }
-    );
-    const planPath = stdout.trim();
-    if (planPath === '') return undefined;
-    const { stdout: content } = await execAsync(`cat "${planPath}"`, { cwd: worktreePath });
-    return content;
+    const pattern = join(worktreePath, 'docs', 'plans', '**', '*.md');
+    const planFiles: string[] = [];
+    for await (const filePath of glob(pattern)) {
+      planFiles.push(filePath);
+    }
+    if (planFiles.length === 0) return undefined;
+
+    // Sort by path (most recent date-prefixed plan last) and pick the last one
+    planFiles.sort();
+    const planPath = planFiles[planFiles.length - 1];
+    if (planPath === undefined) return undefined;
+    return await readFile(planPath, 'utf-8');
   } catch {
     return undefined;
   }
 }
 ```
 
-**Step 4: Add `secretsBasePath` to OrchestratorConfig if not already present**
+**Step 4: Add tests for extracted helper functions**
+
+Add tests for `extractPrNumber` and `findPlanOnBranch` in a new test file:
+
+Create: `workers/orchestrator/src/services/__tests__/deep-validator-helpers.test.ts`
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { vol } from 'memfs';
+
+vi.mock('node:fs/promises', async () => {
+  const memfs = await import('memfs');
+  return memfs.fs.promises;
+});
+
+const { extractPrNumber, findPlanOnBranch } = await import('../task-dispatcher.js');
+
+beforeEach(() => {
+  vol.reset();
+});
+
+describe('extractPrNumber', () => {
+  it('extracts number from valid PR URL', () => {
+    expect(extractPrNumber('https://github.com/pbuchman/intexuraos/pull/1071')).toBe(1071);
+  });
+
+  it('returns undefined for undefined input', () => {
+    expect(extractPrNumber(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for URL without pull number', () => {
+    expect(extractPrNumber('https://github.com/pbuchman/intexuraos')).toBeUndefined();
+  });
+
+  it('returns undefined for empty string', () => {
+    expect(extractPrNumber('')).toBeUndefined();
+  });
+
+  it('extracts from URL with trailing path segments', () => {
+    expect(extractPrNumber('https://github.com/pbuchman/intexuraos/pull/42/files')).toBe(42);
+  });
+});
+
+describe('findPlanOnBranch', () => {
+  it('returns plan content when plan file exists', async () => {
+    vol.fromJSON({
+      '/worktree/docs/plans/2026-03-09-feature.md': '# My Plan\nStep 1...',
+    });
+    const result = await findPlanOnBranch('/worktree');
+    expect(result).toBe('# My Plan\nStep 1...');
+  });
+
+  it('returns undefined when no plan files exist', async () => {
+    vol.fromJSON({ '/worktree/docs/README.md': 'readme' });
+    const result = await findPlanOnBranch('/worktree');
+    expect(result).toBeUndefined();
+  });
+
+  it('returns the last (most recent) plan when multiple exist', async () => {
+    vol.fromJSON({
+      '/worktree/docs/plans/2026-03-01-old.md': 'old plan',
+      '/worktree/docs/plans/2026-03-09-new.md': 'new plan',
+    });
+    const result = await findPlanOnBranch('/worktree');
+    expect(result).toBe('new plan');
+  });
+
+  it('returns undefined when worktree path does not exist', async () => {
+    const result = await findPlanOnBranch('/nonexistent');
+    expect(result).toBeUndefined();
+  });
+});
+```
+
+**Step 5: Add `secretsBasePath` to OrchestratorConfig if not already present**
 
 Check if `OrchestratorConfig` already has `secretsBasePath`. If not, it needs to be added (it's already used by `TurnMetricsCollectorConfig`). The deep validator reads from the same path.
 
-**Step 5: Run full CI to verify integration**
+**Step 6: Run full CI to verify integration**
 
 Run: `pnpm run ci:tracked`
 Expected: PASS — the deep validator is optional (undefined by default), so existing tests don't break.
 
-**Step 6: Commit**
+**Step 7: Commit**
 
 ```bash
-git add workers/orchestrator/src/services/task-dispatcher.ts
+git add workers/orchestrator/src/services/task-dispatcher.ts \
+      workers/orchestrator/src/services/__tests__/deep-validator-helpers.test.ts
 git commit -m "feat(orchestrator): wire execution deep validator into completion flow"
 ```
 
@@ -1556,7 +1726,12 @@ Expected: PASS with all coverage thresholds met.
 
 **Step 4: Commit**
 
+Stage only the specific files that were modified for coverage:
+
 ```bash
-git add -A
+git add workers/orchestrator/src/services/__tests__/transcript-formatter.test.ts \
+      workers/orchestrator/src/services/__tests__/transcript-reader.test.ts \
+      workers/orchestrator/src/services/__tests__/execution-deep-validator.test.ts \
+      workers/orchestrator/src/services/__tests__/deep-validator-helpers.test.ts
 git commit -m "test(orchestrator): ensure full coverage for deep validator"
 ```
