@@ -46,4 +46,4 @@ export { ServiceErrorCodes, type ServiceErrorCode } from './serviceErrorCodes.js
 export * from './tracing/index.js';
 
 // Label utilities for Linear issue labels
-export { normalizeLabel, hasCodeTaskLabel } from './labels.js';
+export { normalizeLabel, hasCodeTaskLabel, hasPlanningTaskLabel } from './labels.js';
