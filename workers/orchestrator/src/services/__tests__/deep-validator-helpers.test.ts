@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import nock from 'nock';
 import type { Logger } from '@intexuraos/common-core';
 
 vi.mock('node:fs/promises', () => ({
@@ -11,7 +12,8 @@ import { readFile, glob } from 'node:fs/promises';
 const mockReadFile = vi.mocked(readFile);
 const mockGlob = vi.mocked(glob);
 
-const { extractPrNumber, findPlanOnBranch } = await import('../deep-validator-helpers.js');
+const { extractPrNumber, findPlanOnBranch, fetchLinearIssueDescription } =
+  await import('../deep-validator-helpers.js');
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -22,6 +24,11 @@ const mockLogger: Logger = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  nock.cleanAll();
+});
+
+afterEach(() => {
+  nock.cleanAll();
 });
 
 describe('extractPrNumber', () => {
@@ -90,6 +97,60 @@ describe('findPlanOnBranch', () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ worktreePath: '/nonexistent' }),
       'Failed to find plan on branch'
+    );
+  });
+});
+
+describe('fetchLinearIssueDescription', () => {
+  it('returns description on successful response', async () => {
+    nock('https://api.linear.app')
+      .post('/graphql')
+      .reply(200, {
+        data: {
+          issueByIdentifier: {
+            description: '## Requirements\n1. Fix the bug\n2. Add tests',
+          },
+        },
+      });
+
+    const result = await fetchLinearIssueDescription('INT-123', 'test-api-key', mockLogger);
+    expect(result).toBe('## Requirements\n1. Fix the bug\n2. Add tests');
+  });
+
+  it('returns undefined when issue has no description', async () => {
+    nock('https://api.linear.app')
+      .post('/graphql')
+      .reply(200, {
+        data: {
+          issueByIdentifier: {
+            description: null,
+          },
+        },
+      });
+
+    const result = await fetchLinearIssueDescription('INT-456', 'test-api-key', mockLogger);
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined on API error', async () => {
+    nock('https://api.linear.app').post('/graphql').reply(500, 'Internal Server Error');
+
+    const result = await fetchLinearIssueDescription('INT-789', 'test-api-key', mockLogger);
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-789' }),
+      expect.stringContaining('Failed to fetch Linear issue description')
+    );
+  });
+
+  it('returns undefined on network error', async () => {
+    nock('https://api.linear.app').post('/graphql').replyWithError('connect ECONNREFUSED');
+
+    const result = await fetchLinearIssueDescription('INT-000', 'test-api-key', mockLogger);
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-000' }),
+      expect.stringContaining('Failed to fetch Linear issue description')
     );
   });
 });

@@ -215,7 +215,6 @@ const defaultInput = {
   },
   linearIssueBody: 'Fix the PWA header',
   planContent: undefined,
-  worktreePath: '/tmp/worktree',
 };
 
 describe('OrchestratorExecutionDeepValidator', () => {
@@ -245,7 +244,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
         '--body',
         expect.stringContaining('Deep Validation Report'),
       ],
-      { cwd: '/tmp/worktree' },
+      {},
       expect.any(Function)
     );
   });

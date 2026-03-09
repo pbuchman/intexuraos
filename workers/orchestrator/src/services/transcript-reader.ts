@@ -25,6 +25,7 @@ export async function readSessionTranscript(
   try {
     for await (const filePath of glob(pattern)) {
       const content = await readFile(filePath, 'utf-8');
+      let skippedLines = 0;
       for (const line of content.split('\n')) {
         if (line.trim() === '') continue;
         try {
@@ -33,8 +34,11 @@ export async function readSessionTranscript(
             entries.push(parsed);
           }
         } catch {
-          // Skip malformed lines
+          skippedLines++;
         }
+      }
+      if (skippedLines > 0) {
+        logger.warn({ filePath, skippedLines }, 'Skipped malformed JSONL lines in transcript file');
       }
     }
   } catch (error) {
@@ -43,6 +47,8 @@ export async function readSessionTranscript(
       'Failed to read session transcript'
     );
   }
+
+  entries.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
   return entries;
 }
