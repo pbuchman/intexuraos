@@ -264,6 +264,66 @@ describe('UnifiedEvaluator', () => {
       );
     });
 
+    it('remaps bot login to repo owner for review tasks', async () => {
+      const createReviewTask = vi.fn().mockResolvedValue(ok({ taskId: 'task-review-bot' }));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, toolCalls: [] },
+        })),
+        createReviewTask,
+        allowedBots: new Set(['claude[bot]']),
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({
+        eventType: 'pull_request',
+        action: 'opened',
+        senderLogin: 'claude[bot]',
+        repository: 'pbuchman/intexuraos',
+      });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(createReviewTask).toHaveBeenCalledWith(
+        logger,
+        expect.objectContaining({
+          senderLogin: 'pbuchman',
+        })
+      );
+    });
+
+    it('passes through non-bot login for review tasks', async () => {
+      const createReviewTask = vi.fn().mockResolvedValue(ok({ taskId: 'task-review-user' }));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, toolCalls: [] },
+        })),
+        createReviewTask,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({
+        eventType: 'pull_request',
+        action: 'opened',
+        senderLogin: 'dev-user',
+      });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(createReviewTask).toHaveBeenCalledWith(
+        logger,
+        expect.objectContaining({
+          senderLogin: 'dev-user',
+        })
+      );
+    });
+
     it('skips PR when LLM says skip', async () => {
       const deps = createFakeDeps({
         webhookRules: {

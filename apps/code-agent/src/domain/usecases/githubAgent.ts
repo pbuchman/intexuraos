@@ -240,7 +240,9 @@ async function evaluatePREventInternal(
   /* v8 ignore stop @preserve */
   const triage: GitHubAgentTriageResult = state.skipped
     ? { action: 'skip', reason: skipReason }
-    : { action: 'request_review', reviewTypes: reviewsRequested };
+    : reviewsRequested.length > 0
+      ? { action: 'request_review', reviewTypes: reviewsRequested }
+      : { action: 'skip', reason: 'No tool called' };
 
   return {
     ok: true,

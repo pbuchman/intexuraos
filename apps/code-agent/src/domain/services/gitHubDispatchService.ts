@@ -53,7 +53,7 @@ export interface WebhookDispatchServiceDeps {
   serviceUrl: string;
 }
 
-function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
+export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
   if (!allowedBots.has(senderLogin)) return senderLogin;
   const slashIndex = repository.indexOf('/');
   if (slashIndex <= 0) return senderLogin;
