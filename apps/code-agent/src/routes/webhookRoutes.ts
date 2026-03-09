@@ -254,8 +254,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             linearAgentClient.updateIssueMetadata({
               userId: task.userId,
               issueId: originalIssueUuid,
-              addLabels: isComplex ? ['planned'] : [],
-              removeLabels: isComplex ? ['unclear', 'code-task', 'planning-task'] : ['unclear', 'planned', 'planning-task'],
+              addLabels: isComplex ? ['complex-task'] : [],
+              removeLabels: isComplex ? ['unclear', 'code-task', 'planning-task'] : ['unclear', 'complex-task', 'planning-task'],
             }),
           ]);
           if (!markTodo.ok) {
@@ -304,7 +304,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   userId: task.userId,
                   issueId: subtask.id,
                   assigneeId: null,
-                  removeLabels: ['planned', 'unclear', 'planning-task'],
+                  removeLabels: ['complex-task', 'unclear', 'planning-task'],
                   addLabels: ['code-task'],
                 });
                 if (!normalizeMetadata.ok) {
@@ -359,7 +359,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   userId: task.userId,
                   issueId: child.id,
                   assigneeId: null,
-                  removeLabels: ['planned', 'unclear', 'planning-task'],
+                  removeLabels: ['complex-task', 'unclear', 'planning-task'],
                   addLabels: ['code-task'],
                 });
                 if (!normalizeMetadata.ok) {
@@ -414,7 +414,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           userId: task.userId,
           issueId: originalIssueUuid,
           addLabels: ['unclear'],
-          removeLabels: ['planned', 'code-task', 'planning-task'],
+          removeLabels: ['complex-task', 'code-task', 'planning-task'],
         });
         if (!unclearLabels.ok) {
           return { ok: false, message: `Failed to enforce unclear labels: ${unclearLabels.error.message}` };
