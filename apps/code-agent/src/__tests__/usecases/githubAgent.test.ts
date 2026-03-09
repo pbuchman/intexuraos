@@ -311,6 +311,44 @@ describe('evaluateEvent', () => {
       }
     });
 
+    it('handles null action by rejecting as invalid', async () => {
+      const deps = createDeps();
+      const event = createFakePREvent({ action: null });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_EVENT');
+      }
+    });
+
+    it('handles null title and body in prompt building', async () => {
+      const deps = createDeps();
+      const event = createFakePREvent({ title: null, body: null, action: 'opened' });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('handles non-string review_type argument', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'request_review',
+          toolArgs: { review_type: 42 },
+        }),
+      });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value.triage.action === 'request_review') {
+        expect(result.value.triage.reviewTypes).toHaveLength(0);
+      }
+    });
+
     it('handles synchronize action', async () => {
       const deps = createDeps();
       const event = createFakePREvent({ action: 'synchronize' });
@@ -430,6 +468,82 @@ describe('evaluateEvent', () => {
         expect(result.value.triage).toEqual({
           action: 'skip',
           reason: 'No tool called',
+        });
+      }
+    });
+
+    it('rejects issue_comment with null action', async () => {
+      const deps = createDeps();
+      const event = createFakePREvent({ eventType: 'issue_comment', action: null });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_EVENT');
+      }
+    });
+
+    it('handles null title, body, and action fields in comment events', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'dispatch_to_task',
+          toolArgs: { message_template: 'pr_comment' },
+        }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        title: null,
+        body: null,
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('handles non-string dispatch_to_task template argument', async () => {
+      const logger = createFakeLogger();
+      const deps = createDeps({
+        logger,
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'dispatch_to_task',
+          toolArgs: { message_template: 123 },
+        }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: 'test',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('handles non-string skip reason argument in comment context', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'skip',
+          toolArgs: { reason: 42 },
+        }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: 'test',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'skip',
+          reason: '(no reason provided)',
         });
       }
     });
