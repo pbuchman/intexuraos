@@ -82,6 +82,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return ok({
             ...existingData,
             id: existingDoc.id,
+            baseBranch: existingData.baseBranch ?? null,
           });
         }
 
@@ -108,6 +109,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           title: input.title,
           body: input.body,
           state: input.state,
+          baseBranch: input.baseBranch,
           mergedAt: input.mergedAt ?? null,
           createdAt: input.createdAt,
           processedAt: now,
@@ -131,6 +133,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           title: eventData.title,
           body: eventData.body,
           state: eventData.state,
+          baseBranch: eventData.baseBranch,
           mergedAt: eventData.mergedAt,
           createdAt: eventData.createdAt,
           processedAt: eventData.processedAt,
@@ -167,6 +170,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
             /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */
@@ -209,6 +213,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
             mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
@@ -259,6 +264,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             events.push({
               ...data,
               id: doc.id,
+              baseBranch: data.baseBranch ?? null,
               createdAt: toDate(data.createdAt),
               processedAt: toDate(data.processedAt),
               /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */
@@ -296,6 +302,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
             /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */

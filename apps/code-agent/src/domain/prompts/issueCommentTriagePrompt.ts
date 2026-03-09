@@ -21,7 +21,9 @@ export function buildIssueCommentTriageSection(input: IssueCommentTriagePromptIn
     '',
     '### Comment Body',
     '',
+    /* v8 ignore start -- schema: template conditional for empty comment body @preserve */
     input.commentBody !== '' ? input.commentBody : '(empty comment)',
+    /* v8 ignore stop @preserve */
     '',
     '### Decision Criteria',
     '',

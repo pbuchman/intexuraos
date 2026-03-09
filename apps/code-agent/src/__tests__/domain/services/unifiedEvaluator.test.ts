@@ -35,6 +35,7 @@ function createFakeEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent 
     title: 'feat: new feature',
     body: 'Can you fix the lint?',
     state: 'open',
+    baseBranch: null,
     mergedAt: null,
     createdAt: new Date(),
     processedAt: new Date(),
@@ -204,6 +205,61 @@ describe('UnifiedEvaluator', () => {
           decidedBy: 'github_agent',
           decision: 'request_review',
           dispatchAction: 'create_review_task',
+          dispatchParams: expect.objectContaining({
+            taskId: 'task-review-1',
+            reviewTypes: ['code_quality', 'security'],
+          }),
+        })
+      );
+    });
+
+    it('threads baseBranch from event to createReviewTask', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, toolCalls: [] },
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ taskId: 'task-review-2' })),
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request', action: 'opened', baseBranch: 'development' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.createReviewTask).toHaveBeenCalledWith(
+        logger,
+        expect.objectContaining({
+          baseBranch: 'development',
+        })
+      );
+    });
+
+    it('records skip when createReviewTask fails', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, toolCalls: [] },
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(
+          err({ code: 'task_creation_failed' as const, message: 'Firestore unavailable' })
+        ),
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'github_agent',
+          decision: 'skip',
+          reason: expect.stringContaining('review_task_failed'),
         })
       );
     });

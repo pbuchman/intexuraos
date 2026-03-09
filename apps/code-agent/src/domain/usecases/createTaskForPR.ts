@@ -39,6 +39,7 @@ export interface CreateTaskForPRRequest {
   comment: string;
   /** GitHub webhook event ID for deduplication */
   eventId: string;
+  baseBranch?: string;
 }
 
 export type CreateTaskForPRErrorCode =
@@ -260,7 +261,7 @@ export async function createTaskForPR(
         workerType: 'auto',
         workerLocation: worker.name,
         repository,
-        baseBranch: 'main',
+        baseBranch: request.baseBranch ?? 'main',
         traceId: eventId,
         actionId: `pr-comment/${repository}/${String(prNumber)}/${eventId}`,
         approvalEventId: eventId,
@@ -370,7 +371,7 @@ export async function createTaskForPR(
     prompt: buildTaskPrompt(request),
     systemPromptHash: 'pr-comment-auto',
     repository,
-    baseBranch: 'main',
+    baseBranch: request.baseBranch ?? 'main',
     workerType: 'auto',
     webhookUrl,
     webhookSecret,
