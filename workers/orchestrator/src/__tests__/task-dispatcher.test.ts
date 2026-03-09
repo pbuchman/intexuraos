@@ -16,6 +16,30 @@ import type { TokenRefresher } from '../services/isolation/token-refresher.js';
 import type { ApiKeyValidator } from '../services/api-key-validator.js';
 import type { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
 import type { CompletionVerifierVerdict } from '../services/completion-verifier.js';
+import type { ExecutionDeepValidator } from '../services/execution-deep-validator.js';
+import type { SessionJsonlEntry } from '../services/transcript-formatter.js';
+
+vi.mock('../services/transcript-reader.js', () => ({
+  readSessionTranscript: vi.fn(),
+}));
+
+vi.mock('../services/deep-validator-helpers.js', () => ({
+  extractPrNumber: vi.fn(),
+  fetchLinearIssueDescription: vi.fn(),
+  findPlanOnBranch: vi.fn(),
+}));
+
+import { readSessionTranscript } from '../services/transcript-reader.js';
+import {
+  extractPrNumber,
+  fetchLinearIssueDescription,
+  findPlanOnBranch,
+} from '../services/deep-validator-helpers.js';
+
+const mockReadSessionTranscript = vi.mocked(readSessionTranscript);
+const mockExtractPrNumber = vi.mocked(extractPrNumber);
+const mockFetchLinearIssueDescription = vi.mocked(fetchLinearIssueDescription);
+const mockFindPlanOnBranch = vi.mocked(findPlanOnBranch);
 
 const flushAsync = async (): Promise<void> => {
   await new Promise((resolve) => {
@@ -112,6 +136,7 @@ describe('TaskDispatcher', () => {
     githubAppPrivateKeyPath: '/tmp/key.pem',
     githubInstallationId: 'test-installation-id',
     orchestratorSecret: 'test-secret',
+    secretsBasePath: '/tmp/secrets',
   };
 
   // Mock StatePersistence
@@ -3320,6 +3345,478 @@ describe('TaskDispatcher', () => {
       expect(task?.status).toBe('completed');
 
       vi.useRealTimers();
+    });
+  });
+
+  describe('deep validation (prepareDeepValidationInput + executeDeepValidation)', () => {
+    type PrepareDeepValidationInput = (
+      task: Task,
+      finalResult: TaskResult,
+      verification: CompletionVerifierVerdict
+    ) => Promise<import('../services/execution-deep-validator.js').DeepValidationInput | undefined>;
+
+    type ExecuteDeepValidation = (
+      taskId: string,
+      input: import('../services/execution-deep-validator.js').DeepValidationInput
+    ) => Promise<void>;
+
+    const executionVerification: CompletionVerifierVerdict = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      trace: dummyTrace,
+      agentData: {
+        agentType: 'execution' as const,
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+        summary: 'Done.',
+      },
+    };
+
+    const mockTranscriptEntry: SessionJsonlEntry = {
+      type: 'assistant',
+      uuid: 'a1',
+      parentUuid: 'root',
+      timestamp: '2026-03-08T23:10:00.000Z',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Hello' }] },
+    };
+
+    const mockTask = {
+      taskId: 'deep-val-test',
+      repository: 'pbuchman/intexuraos',
+      worktreePath: '/tmp/worktrees/deep-val-test',
+      linearIssueLabels: [],
+    } as unknown as Task;
+
+    const mockFinalResult = {
+      prUrl: 'https://github.com/pbuchman/intexuraos/pull/123',
+    } as TaskResult;
+
+    it('prepareDeepValidationInput returns correct input shape', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockExtractPrNumber.mockReturnValue(123);
+      mockReadSessionTranscript.mockResolvedValue([mockTranscriptEntry]);
+      mockFindPlanOnBranch.mockResolvedValue('# Plan');
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const internal = deepValDispatcher as unknown as {
+        prepareDeepValidationInput: PrepareDeepValidationInput;
+      };
+      const input = await internal.prepareDeepValidationInput(
+        mockTask,
+        mockFinalResult,
+        executionVerification
+      );
+
+      expect(input).toBeDefined();
+      expect(input?.taskId).toBe('deep-val-test');
+      expect(input?.prNumber).toBe(123);
+      expect(input?.repository).toBe('pbuchman/intexuraos');
+      expect(input?.agentClaims.superpowers_executing_plans).toBe('used');
+      expect(mockReadSessionTranscript).toHaveBeenCalled();
+      expect(mockFindPlanOnBranch).toHaveBeenCalled();
+    });
+
+    it('prepareDeepValidationInput enriches linearIssueBody with description when available', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockExtractPrNumber.mockReturnValue(123);
+      mockReadSessionTranscript.mockResolvedValue([mockTranscriptEntry]);
+      mockFindPlanOnBranch.mockResolvedValue(undefined);
+      mockFetchLinearIssueDescription.mockResolvedValue('## Requirements\n1. Fix bug');
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const taskWithIssue = {
+        ...mockTask,
+        linearIssueId: 'INT-999',
+        linearIssueTitle: 'Fix the thing',
+        linearIssueLabels: ['bug'],
+      } as unknown as Task;
+
+      const internal = deepValDispatcher as unknown as {
+        prepareDeepValidationInput: PrepareDeepValidationInput;
+      };
+      const input = await internal.prepareDeepValidationInput(
+        taskWithIssue,
+        mockFinalResult,
+        executionVerification
+      );
+
+      expect(input).toBeDefined();
+      expect(mockFetchLinearIssueDescription).toHaveBeenCalledWith(
+        'INT-999',
+        expect.any(String),
+        expect.anything()
+      );
+      expect(input?.linearIssueBody).toContain('Linear Issue: INT-999');
+      expect(input?.linearIssueBody).toContain('Description:\n## Requirements\n1. Fix bug');
+    });
+
+    it('executeDeepValidation calls validate() and logs completion', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const internal = deepValDispatcher as unknown as {
+        executeDeepValidation: ExecuteDeepValidation;
+      };
+      const testInput = {
+        taskId: 'deep-val-test',
+        prNumber: 123,
+        repository: 'pbuchman/intexuraos',
+        formattedTranscript: '[MSG-001] test',
+        agentClaims: {
+          superpowers_executing_plans: 'used',
+          superpowers_requesting_code_review: 'used',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          summary: 'Done.',
+        },
+        linearIssueBody: 'Fix bug',
+        planContent: undefined,
+      } as import('../services/execution-deep-validator.js').DeepValidationInput;
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
+      await internal.executeDeepValidation('deep-val-test', testInput);
+
+      expect(mockValidator.validate).toHaveBeenCalledWith(testInput);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { taskId: 'deep-val-test' },
+        'Deep validation completed'
+      );
+      expect(mockLogForwarder.appendChunk).not.toHaveBeenCalled();
+    });
+
+    it('prepareDeepValidationInput returns undefined when validator not provided', async () => {
+      // Default dispatcher (from beforeEach) has no validator
+      const internal = dispatcher as unknown as {
+        prepareDeepValidationInput: PrepareDeepValidationInput;
+      };
+      const result = await internal.prepareDeepValidationInput(
+        mockTask,
+        mockFinalResult,
+        executionVerification
+      );
+
+      expect(result).toBeUndefined();
+      expect(mockReadSessionTranscript).not.toHaveBeenCalled();
+    });
+
+    it('prepareDeepValidationInput returns undefined for non-execution agent types', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const planningVerification: CompletionVerifierVerdict = {
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'planning' as const,
+          outcome: 'planned',
+          superpowers_writing_plans: 'used',
+          linear_url: '',
+          is_complex: '0',
+          subtask_urls: '',
+          pr_url: '',
+          summary: 'Planned',
+          unclear_clarification: '',
+        },
+      };
+
+      const internal = deepValDispatcher as unknown as {
+        prepareDeepValidationInput: PrepareDeepValidationInput;
+      };
+      const result = await internal.prepareDeepValidationInput(
+        mockTask,
+        mockFinalResult,
+        planningVerification
+      );
+
+      expect(result).toBeUndefined();
+      expect(mockValidator.validate).not.toHaveBeenCalled();
+    });
+
+    it('prepareDeepValidationInput skips and logs warning when no PR number', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockExtractPrNumber.mockReturnValue(undefined);
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const internal = deepValDispatcher as unknown as {
+        prepareDeepValidationInput: PrepareDeepValidationInput;
+      };
+      const result = await internal.prepareDeepValidationInput(
+        { ...mockTask, taskId: 'no-pr-test' } as Task,
+        mockFinalResult,
+        executionVerification
+      );
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'no-pr-test' }),
+        'Deep validation skipped: no PR number'
+      );
+    });
+
+    it('prepareDeepValidationInput skips and logs warning when transcript is empty', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockExtractPrNumber.mockReturnValue(123);
+      mockReadSessionTranscript.mockResolvedValue([]);
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const internal = deepValDispatcher as unknown as {
+        prepareDeepValidationInput: PrepareDeepValidationInput;
+      };
+      const result = await internal.prepareDeepValidationInput(
+        { ...mockTask, taskId: 'empty-transcript' } as Task,
+        mockFinalResult,
+        executionVerification
+      );
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'empty-transcript' }),
+        'Deep validation skipped: no transcript entries'
+      );
+    });
+
+    it('prepareDeepValidationInput failure does not block finalization', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockExtractPrNumber.mockReturnValue(123);
+      mockReadSessionTranscript.mockRejectedValue(new Error('I/O failure'));
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const internal = deepValDispatcher as unknown as {
+        prepareDeepValidationInput: PrepareDeepValidationInput;
+      };
+      const result = await internal.prepareDeepValidationInput(
+        mockTask,
+        mockFinalResult,
+        executionVerification
+      );
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'deep-val-test' }),
+        'Deep validation preparation failed (non-fatal, skipping deep validation)'
+      );
+    });
+
+    it('executeDeepValidation handles validation error gracefully', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockRejectedValue(new Error('LLM timeout')),
+      };
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const internal = deepValDispatcher as unknown as {
+        executeDeepValidation: ExecuteDeepValidation;
+      };
+      const testInput = {
+        taskId: 'error-val-test',
+        prNumber: 123,
+        repository: 'pbuchman/intexuraos',
+        formattedTranscript: '[MSG-001] test',
+        agentClaims: {
+          superpowers_executing_plans: 'used',
+          superpowers_requesting_code_review: 'used',
+          gh_pr_url: '',
+          summary: 'Done.',
+        },
+        linearIssueBody: 'Fix bug',
+        planContent: undefined,
+      } as import('../services/execution-deep-validator.js').DeepValidationInput;
+
+      await internal.executeDeepValidation('error-val-test', testInput);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'error-val-test', error: 'LLM timeout' }),
+        'Deep validation failed (non-fatal, task finalization continues)'
+      );
+    });
+  });
+
+  describe('buildLinearIssueSummary', () => {
+    it('returns both fields when both present', () => {
+      const internal = dispatcher as unknown as {
+        buildLinearIssueSummary: (task: Task) => string;
+      };
+      const result = internal.buildLinearIssueSummary({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+      } as unknown as Task);
+      expect(result).toContain('Linear Issue: INT-123');
+      expect(result).toContain('Title: Fix the bug');
+    });
+
+    it('returns only linearIssueId when title absent', () => {
+      const internal = dispatcher as unknown as {
+        buildLinearIssueSummary: (task: Task) => string;
+      };
+      const result = internal.buildLinearIssueSummary({
+        linearIssueId: 'INT-123',
+        linearIssueLabels: [],
+      } as unknown as Task);
+      expect(result).toContain('Linear Issue: INT-123');
+      expect(result).not.toContain('Title:');
+    });
+
+    it('returns no-issue message when neither present', () => {
+      const internal = dispatcher as unknown as {
+        buildLinearIssueSummary: (task: Task) => string;
+      };
+      const result = internal.buildLinearIssueSummary({
+        linearIssueLabels: [],
+      } as unknown as Task);
+      expect(result).toBe('No Linear issue linked');
+    });
+
+    it('includes labels when linearIssueLabels is non-empty', () => {
+      const internal = dispatcher as unknown as {
+        buildLinearIssueSummary: (task: Task) => string;
+      };
+      const result = internal.buildLinearIssueSummary({
+        linearIssueId: 'INT-456',
+        linearIssueTitle: 'Add feature',
+        linearIssueLabels: ['bug', 'code-task'],
+      } as unknown as Task);
+      expect(result).toContain('Linear Issue: INT-456');
+      expect(result).toContain('Title: Add feature');
+      expect(result).toContain('Labels: bug, code-task');
+    });
+
+    it('omits labels line when linearIssueLabels is empty', () => {
+      const internal = dispatcher as unknown as {
+        buildLinearIssueSummary: (task: Task) => string;
+      };
+      const result = internal.buildLinearIssueSummary({
+        linearIssueId: 'INT-789',
+        linearIssueLabels: [],
+      } as unknown as Task);
+      expect(result).toContain('Linear Issue: INT-789');
+      expect(result).not.toContain('Labels:');
     });
   });
 
