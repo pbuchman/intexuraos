@@ -17,7 +17,7 @@ const execFileAsync = promisify(execFile);
 
 // --- Constants ---
 
-export const DEEP_VALIDATION_PROMPT_VERSION = '2.0.0';
+export const DEEP_VALIDATION_PROMPT_VERSION = '2.1.0';
 
 /** Maximum transcript characters to send to LLM. Gemini 2.5 Flash supports ~1M tokens
  *  but we cap to keep cost/latency reasonable for deep validation. */
@@ -167,9 +167,7 @@ function verdictEmoji(
   if (verdict === 'verified' || verdict === 'fulfilled' || verdict === 'implemented') return '✅';
   if (verdict === 'contradicted' || verdict === 'violated' || verdict === 'missing') return '❌';
   if (verdict === 'partially') return '⚠️';
-  /* v8 ignore start -- ts-type: union type is exhaustive, fallback unreachable @preserve */
   return '❓';
-  /* v8 ignore stop @preserve */
 }
 
 function severityEmoji(severity: 'critical' | 'warning' | 'info'): string {
@@ -268,7 +266,6 @@ export interface DeepValidationInput {
   agentClaims: ExecutionAgentClaims;
   linearIssueBody: string;
   planContent: string | undefined; // @allow-undefined-type -- callers always provide the key, value may be undefined
-  worktreePath: string;
 }
 
 export interface ExecutionDeepValidator {
@@ -357,7 +354,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       await execFileAsync(
         'gh',
         ['pr', 'comment', String(input.prNumber), '--repo', input.repository, '--body', comment],
-        { cwd: input.worktreePath }
+        {}
       );
       this.logger.info(
         { taskId: input.taskId, prNumber: input.prNumber },
@@ -389,7 +386,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       await execFileAsync(
         'gh',
         ['pr', 'comment', String(input.prNumber), '--repo', input.repository, '--body', comment],
-        { cwd: input.worktreePath }
+        {}
       );
     } catch (error) {
       /* v8 ignore start -- upstream: stderr property only exists on execFile errors, not testable with promisify mock @preserve */

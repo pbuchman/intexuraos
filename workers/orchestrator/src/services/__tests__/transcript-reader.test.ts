@@ -76,6 +76,10 @@ describe('readSessionTranscript', () => {
 
     const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(2);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ skippedLines: 1 }),
+      'Skipped malformed JSONL lines in transcript file'
+    );
   });
 
   it('returns empty array when session directory does not exist', async () => {
@@ -197,6 +201,38 @@ describe('readSessionTranscript', () => {
 
     const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(0);
+  });
+
+  it('sorts entries by timestamp across multiple files', async () => {
+    const laterEntry = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a1',
+      parentUuid: 'root',
+      timestamp: '2026-03-08T23:15:00.000Z',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'later' }] },
+    });
+    const earlierEntry = JSON.stringify({
+      type: 'user',
+      uuid: 'u1',
+      parentUuid: 'a1',
+      timestamp: '2026-03-08T23:10:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'earlier' }] },
+    });
+
+    async function* fakeGlob(): AsyncGenerator<string> {
+      yield '/secrets/claude-session-task_abc/projects/-repo/sess1.jsonl';
+      yield '/secrets/claude-session-task_abc/projects/-repo/sess2.jsonl';
+    }
+    mockGlob.mockReturnValueOnce(fakeGlob() as never);
+    // File 1 has later timestamp, file 2 has earlier timestamp
+    mockReadFile
+      .mockResolvedValueOnce(`${laterEntry}\n`)
+      .mockResolvedValueOnce(`${earlierEntry}\n`);
+
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
+    expect(result).toHaveLength(2);
+    expect(result[0]?.timestamp).toBe('2026-03-08T23:10:00.000Z');
+    expect(result[1]?.timestamp).toBe('2026-03-08T23:15:00.000Z');
   });
 
   it('filters entries with non-array content', async () => {

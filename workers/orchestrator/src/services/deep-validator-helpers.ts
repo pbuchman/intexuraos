@@ -2,6 +2,8 @@ import { readFile, glob } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 
+const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
+
 export function extractPrNumber(prUrl: string | undefined): number | undefined {
   if (prUrl === undefined) return undefined;
   const match = /\/pull\/(\d+)/.exec(prUrl);
@@ -27,6 +29,49 @@ export async function findPlanOnBranch(
     /* v8 ignore stop @preserve */
   } catch (error) {
     logger.warn({ worktreePath, error: getErrorMessage(error) }, 'Failed to find plan on branch');
+    return undefined;
+  }
+}
+
+export async function fetchLinearIssueDescription(
+  identifier: string,
+  apiKey: string,
+  logger: Logger
+): Promise<string | undefined> {
+  try {
+    const response = await fetch(LINEAR_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: apiKey,
+      },
+      body: JSON.stringify({
+        query: `query IssueByIdentifier($id: String!) {
+          issueByIdentifier(identifier: $id) { description }
+        }`,
+        variables: { id: identifier },
+      }),
+    });
+
+    if (!response.ok) {
+      logger.warn(
+        { identifier, status: response.status },
+        'Failed to fetch Linear issue description: non-OK status'
+      );
+      return undefined;
+    }
+
+    const body = (await response.json()) as {
+      data?: { issueByIdentifier?: { description?: string | null } };
+    };
+    const description = body.data?.issueByIdentifier?.description;
+    if (description === undefined || description === null) return undefined;
+    return description;
+  } catch (error) {
+    logger.warn(
+      { identifier, error: getErrorMessage(error) },
+      'Failed to fetch Linear issue description'
+    );
     return undefined;
   }
 }

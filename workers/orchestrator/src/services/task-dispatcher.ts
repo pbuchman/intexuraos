@@ -1,7 +1,12 @@
 import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
-import { type Result, type Logger, hasCodeTaskLabel } from '@intexuraos/common-core';
+import {
+  type Result,
+  type Logger,
+  getErrorMessage,
+  hasCodeTaskLabel,
+} from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
@@ -24,11 +29,15 @@ import {
   getLast50Lines,
 } from './completion-verifier.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
-import type { ExecutionDeepValidator } from './execution-deep-validator.js';
+import type { ExecutionDeepValidator, DeepValidationInput } from './execution-deep-validator.js';
 import type { ExecutionAgentData } from './completion-verifier.js';
 import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
-import { extractPrNumber, findPlanOnBranch } from './deep-validator-helpers.js';
+import {
+  extractPrNumber,
+  fetchLinearIssueDescription,
+  findPlanOnBranch,
+} from './deep-validator-helpers.js';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -943,12 +952,17 @@ export class TaskDispatcher {
       await this.collectTurnMetrics(task, attempt);
       const finalResult = this.buildResultFromVerification(task, result, verification);
 
-      // Deep validation for execution tasks (fire-and-forget, best-effort)
+      // Deep validation for execution tasks: pre-read data before cleanup, then fire-and-forget
+      let deepValInput: DeepValidationInput | undefined;
       if (completionAgentType === 'execution' && this.executionDeepValidator !== undefined) {
-        void this.runDeepValidation(task, finalResult, verification);
+        deepValInput = await this.prepareDeepValidationInput(task, finalResult, verification);
       }
 
       await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
+
+      if (deepValInput !== undefined) {
+        void this.executeDeepValidation(task.taskId, deepValInput);
+      }
       return;
     }
 
@@ -1792,61 +1806,73 @@ export class TaskDispatcher {
     }
   }
 
-  private async runDeepValidation(
+  private async prepareDeepValidationInput(
     task: Task,
     finalResult: TaskResult,
     verification: CompletionVerifierVerdict
-  ): Promise<void> {
-    if (this.executionDeepValidator === undefined) return;
-    if (verification.agentData?.agentType !== 'execution') return;
+  ): Promise<DeepValidationInput | undefined> {
+    if (this.executionDeepValidator === undefined) return undefined;
+    if (verification.agentData?.agentType !== 'execution') return undefined;
 
     const agentData: ExecutionAgentData = verification.agentData;
 
     const prNumber = extractPrNumber(finalResult.prUrl);
     if (prNumber === undefined) {
       this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no PR number');
-      return;
+      return undefined;
     }
 
-    try {
-      this.appendOrchestratorTaskLog(task.taskId, 'Starting deep validation');
+    this.appendOrchestratorTaskLog(task.taskId, 'Starting deep validation');
 
-      const entries = await readSessionTranscript(
-        this.config.secretsBasePath,
-        task.taskId,
+    const entries = await readSessionTranscript(
+      this.config.secretsBasePath,
+      task.taskId,
+      this.logger
+    );
+    if (entries.length === 0) {
+      this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no transcript entries');
+      return undefined;
+    }
+
+    const formattedTranscript = formatTranscript(entries);
+
+    let linearIssueBody = this.buildLinearIssueSummary(task);
+    if (task.linearIssueId !== undefined) {
+      const description = await fetchLinearIssueDescription(
+        task.linearIssueId,
+        this.isolation.getSecrets().LINEAR_API_KEY,
         this.logger
       );
-      if (entries.length === 0) {
-        this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no transcript entries');
-        return;
+      if (description !== undefined) {
+        linearIssueBody = `${linearIssueBody}\n\nDescription:\n${description}`;
       }
+    }
 
-      const formattedTranscript = formatTranscript(entries);
+    const planContent = await findPlanOnBranch(task.worktreePath, this.logger);
 
-      const linearIssueBody = this.buildLinearIssueSummary(task);
+    return {
+      taskId: task.taskId,
+      prNumber,
+      repository: task.repository,
+      formattedTranscript,
+      agentClaims: {
+        superpowers_executing_plans: agentData.superpowers_executing_plans,
+        superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
+        gh_pr_url: agentData.gh_pr_url,
+        summary: agentData.summary,
+      },
+      linearIssueBody,
+      planContent,
+    };
+  }
 
-      const planContent = await findPlanOnBranch(task.worktreePath, this.logger);
-
-      await this.executionDeepValidator.validate({
-        taskId: task.taskId,
-        prNumber,
-        repository: task.repository,
-        formattedTranscript,
-        agentClaims: {
-          superpowers_executing_plans: agentData.superpowers_executing_plans,
-          superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
-          gh_pr_url: agentData.gh_pr_url,
-          summary: agentData.summary,
-        },
-        linearIssueBody,
-        planContent,
-        worktreePath: task.worktreePath,
-      });
-
-      this.appendOrchestratorTaskLog(task.taskId, 'Deep validation completed');
+  private async executeDeepValidation(taskId: string, input: DeepValidationInput): Promise<void> {
+    try {
+      await this.executionDeepValidator?.validate(input);
+      this.appendOrchestratorTaskLog(taskId, 'Deep validation completed');
     } catch (error) {
       this.logger.error(
-        { taskId: task.taskId, error: error instanceof Error ? error.message : String(error) },
+        { taskId, error: getErrorMessage(error) },
         'Deep validation failed (non-fatal, task finalization continues)'
       );
     }
@@ -1856,6 +1882,8 @@ export class TaskDispatcher {
     const parts: string[] = [];
     if (task.linearIssueId !== undefined) parts.push(`Linear Issue: ${task.linearIssueId}`);
     if (task.linearIssueTitle !== undefined) parts.push(`Title: ${task.linearIssueTitle}`);
+    if (task.linearIssueLabels.length > 0)
+      parts.push(`Labels: ${task.linearIssueLabels.join(', ')}`);
     if (parts.length === 0) return 'No Linear issue linked';
     return parts.join('\n');
   }
