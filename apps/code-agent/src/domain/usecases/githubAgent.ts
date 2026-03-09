@@ -99,14 +99,21 @@ export async function evaluatePREvent(
         },
         required: ['review_type'],
       },
+      // TODO(INT-744): Replace with actual dispatch to orchestrator review pipeline
       run(args: Record<string, unknown>): Promise<string> {
-        const reviewType = args['review_type'] as string;
+        const rawReviewType = args['review_type'];
+        const reviewType = typeof rawReviewType === 'string' ? rawReviewType : '';
+        const validTypes = ['code_quality', 'security', 'architecture'];
+        if (!validTypes.includes(reviewType)) {
+          logger.warn({ reviewType }, 'GitHub Agent requested unknown review type');
+          return Promise.resolve(JSON.stringify({ error: `Unknown review type: ${reviewType}` }));
+        }
         reviewsRequested.push(reviewType);
         logger.info(
           { repository: event.repository, prNumber: event.pullRequestNumber, reviewType },
           'GitHub Agent requested review'
         );
-        return Promise.resolve(JSON.stringify({ success: true, reviewType, message: `Review dispatched: ${reviewType}` }));
+        return Promise.resolve(JSON.stringify({ success: true, reviewType, message: `Review recorded: ${reviewType}` }));
       },
     },
     {

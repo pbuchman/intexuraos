@@ -235,7 +235,9 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
           void evaluatePREvent(
             { logger, gitHubPRClient, toolCallingClient, githubBotToken },
             savedEvent
-          );
+          ).catch((err: unknown) => {
+            logger.error({ err }, 'Unhandled error in GitHub Agent evaluation');
+          });
         }
       }
 

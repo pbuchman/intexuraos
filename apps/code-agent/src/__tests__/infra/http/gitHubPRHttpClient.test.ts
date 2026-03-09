@@ -107,7 +107,7 @@ describe('GitHubPRHttpClient', () => {
   describe('getPullRequestFiles', () => {
     it('returns file list on success', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls/42/files')
+        .get('/repos/owner/repo/pulls/42/files?per_page=100')
         .matchHeader('Authorization', 'Bearer test-token')
         .reply(200, [
           { filename: 'src/index.ts', status: 'modified', additions: 10, deletions: 2 },
@@ -130,7 +130,7 @@ describe('GitHubPRHttpClient', () => {
 
     it('returns NOT_FOUND on 404', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls/999/files')
+        .get('/repos/owner/repo/pulls/999/files?per_page=100')
         .reply(404, { message: 'Not Found' });
 
       const result = await client.getPullRequestFiles('token', 'owner', 'repo', 999);
@@ -143,7 +143,7 @@ describe('GitHubPRHttpClient', () => {
 
     it('returns NETWORK_ERROR on fetch failure', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls/42/files')
+        .get('/repos/owner/repo/pulls/42/files?per_page=100')
         .replyWithError('timeout');
 
       const result = await client.getPullRequestFiles('token', 'owner', 'repo', 42);
@@ -158,7 +158,7 @@ describe('GitHubPRHttpClient', () => {
   describe('getPullRequestCommits', () => {
     it('returns commit list on success', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls/42/commits')
+        .get('/repos/owner/repo/pulls/42/commits?per_page=100')
         .matchHeader('Authorization', 'Bearer test-token')
         .reply(200, [
           {
@@ -183,7 +183,7 @@ describe('GitHubPRHttpClient', () => {
 
     it('falls back to unknown when commit author is null', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls/42/commits')
+        .get('/repos/owner/repo/pulls/42/commits?per_page=100')
         .matchHeader('Authorization', 'Bearer test-token')
         .reply(200, [
           {
@@ -203,7 +203,7 @@ describe('GitHubPRHttpClient', () => {
 
     it('returns UNAUTHORIZED on 401', async () => {
       nock('https://api.github.com')
-        .get('/repos/owner/repo/pulls/42/commits')
+        .get('/repos/owner/repo/pulls/42/commits?per_page=100')
         .reply(401, { message: 'Bad credentials' });
 
       const result = await client.getPullRequestCommits('bad-token', 'owner', 'repo', 42);

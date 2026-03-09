@@ -281,9 +281,7 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     agentType: originalTask.agentType === 'pull_request'
       ? ('pull_request' as const)
-      : originalTask.agentType === 'review'
-        ? ('review' as const)
-        : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const),
+      : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const),
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
   };
 
