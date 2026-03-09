@@ -125,14 +125,14 @@ function StatusBadge({ status }: { status: GitHubPRStatus }): React.JSX.Element 
 
 export interface PREventsGroupProps {
   pullRequestNumber: number;
-  title: string | null;
+  title?: string | null;
   repository: string;
   status?: GitHubPRStatus;
 }
 
 export function PREventsGroup({
   pullRequestNumber,
-  title,
+  title = null,
   repository,
   status,
 }: PREventsGroupProps): React.JSX.Element {
@@ -143,6 +143,8 @@ export function PREventsGroup({
     pullRequestNumber,
     enabled: isExpanded,
   });
+
+  const derivedTitle = title ?? events.find((e) => e.title !== null)?.title ?? null;
 
   const prUrl = `https://github.com/${repository}/pull/${String(pullRequestNumber)}`;
 
@@ -163,8 +165,8 @@ export function PREventsGroup({
             <span className="font-medium text-slate-900 dark:text-slate-100">
               #{pullRequestNumber}
             </span>
-            {title !== null && title !== '' ? (
-              <span className="truncate text-slate-600 dark:text-slate-400">{title}</span>
+            {derivedTitle !== null && derivedTitle !== '' ? (
+              <span className="truncate text-slate-600 dark:text-slate-400">{derivedTitle}</span>
             ) : null}
           </div>
           <div className="text-xs text-slate-500">{repository}</div>

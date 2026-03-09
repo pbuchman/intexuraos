@@ -348,7 +348,6 @@ const MemoTaskResultSection = memo(function TaskResultSection({ task }: { task: 
     <div className="mb-6">
       <PREventsGroup
         pullRequestNumber={prNumber}
-        title={result.summary ?? null}
         repository={task.repository}
       />
     </div>
