@@ -29,6 +29,10 @@
  */
 
 import { createGeminiClient } from '@intexuraos/infra-gemini';
+import {
+  createGeminiToolCallingClient,
+  type ToolCallingClientConfig,
+} from '@intexuraos/infra-gemini';
 import { createGlmClient } from '@intexuraos/infra-glm';
 import type { AuditSink } from '@intexuraos/llm-audit';
 import type { UsageSink } from '@intexuraos/llm-pricing';
@@ -38,6 +42,7 @@ import {
   type LLMError,
   type LLMModel,
   type ModelPricing,
+  type ToolCallingClient,
 } from '@intexuraos/llm-contract';
 import type { Logger, Result } from '@intexuraos/common-core';
 
@@ -144,5 +149,30 @@ export function isSupportedProvider(provider: string): provider is SupportedProv
   return provider === LlmProviders.Google || provider === LlmProviders.Zai;
 }
 
-// Re-export LLMError for convenience
-export type { LLMError };
+/**
+ * Create a tool calling client for LLM agent loops.
+ *
+ * Routes to the appropriate provider-specific tool calling implementation.
+ * Currently supports Google (Gemini) only.
+ *
+ * @param config - Tool calling client configuration
+ * @returns ToolCallingClient instance
+ */
+export function createToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
+  const provider = getProviderForModel(config.model) as SupportedProvider;
+
+  switch (provider) {
+    case LlmProviders.Google:
+      return createGeminiToolCallingClient(config);
+    case LlmProviders.Zai: {
+      throw new Error(`Tool calling not supported for provider: ${provider}`);
+    }
+    default: {
+      const exhaustive: never = provider;
+      throw new Error(`Tool calling not supported for provider: ${String(exhaustive)}`);
+    }
+  }
+}
+
+// Re-export for convenience
+export type { LLMError, ToolCallingClientConfig };

@@ -316,7 +316,7 @@ ${additionalContext.trim()}
     retriedFrom?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
-    agentType: 'planning' | 'execution' | 'pull_request';
+    agentType: 'planning' | 'execution' | 'pull_request' | 'review';
   } = {
     taskId: retryTask.id,
     prompt: retryTask.sanitizedPrompt,

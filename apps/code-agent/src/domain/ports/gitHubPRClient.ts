@@ -1,7 +1,9 @@
 /**
  * Port for interacting with GitHub Pull Requests.
  *
- * Token is passed per-call to support per-user OAuth tokens.
+ * Bot methods (getPullRequestFiles, getPullRequestCommits, postPRComment)
+ * use the platform token baked into the client at factory time.
+ * Only updatePRTitle takes a per-call token for user OAuth tokens.
  */
 
 import type { Result } from '@intexuraos/common-core';
@@ -11,15 +13,25 @@ export interface GitHubPRClientError {
   message: string;
 }
 
+/** A file changed in a pull request. */
+export interface PullRequestFile {
+  filename: string;
+  status: 'added' | 'modified' | 'removed' | 'renamed' | 'copied' | 'changed' | 'unchanged';
+  additions: number;
+  deletions: number;
+}
+
+/** A commit in a pull request. */
+export interface PullRequestCommit {
+  sha: string;
+  message: string;
+  author: string;
+}
+
 export interface GitHubPRClient {
   /**
    * Update the title of a pull request.
-   *
-   * @param token - OAuth token for authentication
-   * @param owner - Repository owner
-   * @param repo - Repository name
-   * @param prNumber - Pull request number
-   * @param newTitle - New title for the PR
+   * Uses a per-call token (user OAuth token).
    */
   updatePRTitle(
     token: string,
@@ -28,4 +40,35 @@ export interface GitHubPRClient {
     prNumber: number,
     newTitle: string
   ): Promise<Result<void, GitHubPRClientError>>;
+
+  /**
+   * Get the list of files changed in a pull request.
+   * Uses the platform bot token baked into the client at factory time.
+   */
+  getPullRequestFiles(
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<Result<PullRequestFile[], GitHubPRClientError>>;
+
+  /**
+   * Get the list of commits in a pull request.
+   * Uses the platform bot token baked into the client at factory time.
+   */
+  getPullRequestCommits(
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<Result<PullRequestCommit[], GitHubPRClientError>>;
+
+  /**
+   * Post a comment on a pull request (via the issues API).
+   * Uses the platform bot token baked into the client at factory time.
+   */
+  postPRComment(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    body: string
+  ): Promise<Result<{ commentId: number }, GitHubPRClientError>>;
 }

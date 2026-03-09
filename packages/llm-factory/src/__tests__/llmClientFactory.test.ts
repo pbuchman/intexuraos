@@ -22,13 +22,15 @@ class MockGlmClient {
 
 vi.mock('@intexuraos/infra-gemini', () => ({
   createGeminiClient: vi.fn(() => new MockGeminiClient()),
+  createGeminiToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
 }));
 
 vi.mock('@intexuraos/infra-glm', () => ({
   createGlmClient: vi.fn(() => new MockGlmClient()),
 }));
 
-const { createLlmClient, isSupportedProvider } = await import('../llmClientFactory.js');
+const { createLlmClient, createToolCallingClient, isSupportedProvider } =
+  await import('../llmClientFactory.js');
 
 const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
   inputPricePerMillion: 0.6,
@@ -129,6 +131,46 @@ describe('llmClientFactory', () => {
           logger: mockLogger,
         })
       ).toThrow('Unsupported LLM provider');
+    });
+  });
+
+  describe('createToolCallingClient', () => {
+    it('creates tool calling client for Gemini model', () => {
+      const client = createToolCallingClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+
+      expect(client.run).toBeDefined();
+    });
+
+    it('throws for Zai provider (tool calling not supported)', () => {
+      expect(() =>
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'glm-4.7' as any,
+          userId: 'test-user',
+          pricing: createTestPricing(),
+          logger: mockLogger,
+        })
+      ).toThrow('Tool calling not supported for provider: zai');
+    });
+
+    it('throws for unsupported provider', () => {
+      expect(() =>
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'claude-sonnet-4-5-20250514' as any,
+          userId: 'test-user',
+          pricing: createTestPricing(),
+          logger: mockLogger,
+        })
+      ).toThrow('Tool calling not supported for provider');
     });
   });
 

@@ -9,3 +9,8 @@ export type {
   ImageGenerateOptions,
   SynthesisInput,
 } from './types.js';
+export {
+  createGeminiToolCallingClient,
+  TOOL_CALLING_PRICING,
+  type ToolCallingClientConfig,
+} from './toolCallingClient.js';
