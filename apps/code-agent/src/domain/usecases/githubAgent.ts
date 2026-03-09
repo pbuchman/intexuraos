@@ -16,11 +16,15 @@ import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import { githubAgentPrompt } from '../prompts/githubAgentPrompt.js';
 
+const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
+const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
+
 export interface GitHubAgentDeps {
   logger: Logger;
   gitHubPRClient: GitHubPRClient;
   toolCallingClient: ToolCallingClient;
   userServiceClient: UserServiceClient;
+  allowedBots: Set<string>;
 }
 
 /**
@@ -42,7 +46,7 @@ export interface GitHubAgentError {
 export interface GitHubAgentUsage {
   costUsd: number;
   model?: string;
-  toolCalls: Array<{ tool: string; args: Record<string, unknown> }>;
+  toolCalls: { tool: string; args: Record<string, unknown> }[];
 }
 
 /**
@@ -69,11 +73,11 @@ export async function evaluateEvent(
   }
 
   if (event.eventType === 'pull_request' && event.action !== 'opened' && event.action !== 'synchronize') {
-    return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected opened/synchronize action, got ${String(event.action)}` } };
+    return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected opened/synchronize action, got ${event.action ?? 'null'}` } };
   }
 
   if (event.eventType === 'issue_comment' && event.action !== 'created' && event.action !== 'edited') {
-    return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected created/edited action, got ${String(event.action)}` } };
+    return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected created/edited action, got ${event.action ?? 'null'}` } };
   }
 
   const [owner, repo] = event.repository.split('/');
@@ -86,7 +90,6 @@ export async function evaluateEvent(
     'GitHub Agent evaluating event'
   );
 
-  // Resolve GitHub username to IntexuraOS userId for PR events (need OAuth token for files)
   if (event.eventType === 'pull_request') {
     return await evaluatePREventInternal(deps, event, owner, repo);
   }
@@ -132,11 +135,11 @@ async function evaluatePREventInternal(
 
   const files = filesResult.value; // @allow-result-access -- narrowed by !filesResult.ok
 
-  // Build tools for PR triage
+  // Build tools for PR triage — state object avoids no-unnecessary-condition
+  // lint errors since TypeScript doesn't narrow object properties across callbacks.
+  const state = { skipped: false, skipReason: undefined as string | undefined };
   const reviewsRequested: string[] = [];
-  let skipped = false;
-  let skipReason: string | undefined;
-  const toolCalls: Array<{ tool: string; args: Record<string, unknown> }> = [];
+  const toolCalls: { tool: string; args: Record<string, unknown> }[] = [];
 
   const tools: ToolDefinition[] = [
     {
@@ -147,7 +150,7 @@ async function evaluatePREventInternal(
         properties: {
           review_type: {
             type: 'string',
-            enum: ['code_quality', 'security', 'architecture'],
+            enum: [...VALID_REVIEW_TYPES],
             description: 'The type of review to request',
           },
         },
@@ -157,8 +160,7 @@ async function evaluatePREventInternal(
         toolCalls.push({ tool: 'request_review', args });
         const rawReviewType = args['review_type'];
         const reviewType = typeof rawReviewType === 'string' ? rawReviewType : '';
-        const validTypes = ['code_quality', 'security', 'architecture'];
-        if (!validTypes.includes(reviewType)) {
+        if (!(VALID_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
           logger.warn({ reviewType }, 'GitHub Agent requested unknown review type');
           return Promise.resolve(JSON.stringify({ error: `Unknown review type: ${reviewType}` }));
         }
@@ -184,8 +186,8 @@ async function evaluatePREventInternal(
         toolCalls.push({ tool: 'skip', args });
         const rawReason = args['reason'];
         const reason = typeof rawReason === 'string' ? rawReason : '(no reason provided)';
-        skipped = true;
-        skipReason = reason;
+        state.skipped = true;
+        state.skipReason = reason;
         logger.info({ repository: event.repository, prNumber: event.pullRequestNumber, reason }, 'GitHub Agent skipped event');
         return Promise.resolve(JSON.stringify({ success: true, message: `Skipped: ${reason}` }));
       },
@@ -198,7 +200,7 @@ async function evaluatePREventInternal(
     prNumber: event.pullRequestNumber,
     prTitle: event.title ?? '(untitled)',
     prBody: event.body ?? '',
-    action: String(event.action ?? ''),
+    action: event.action ?? '',
     senderLogin: event.senderLogin,
     eventType: 'pull_request',
     files,
@@ -219,12 +221,12 @@ async function evaluatePREventInternal(
   const result = agentResult.value; // @allow-result-access -- narrowed by !agentResult.ok
 
   logger.info(
-    { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade, reviewsRequested, skipped, costUsd: result.usage.costUsd },
+    { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade, reviewsRequested, skipped: state.skipped, costUsd: result.usage.costUsd },
     'GitHub Agent evaluation complete'
   );
 
-  const triage: GitHubAgentTriageResult = skipped
-    ? { action: 'skip', reason: skipReason ?? '(no reason)' }
+  const triage: GitHubAgentTriageResult = state.skipped
+    ? { action: 'skip', reason: state.skipReason ?? '(no reason)' }
     : { action: 'request_review', reviewTypes: reviewsRequested };
 
   return {
@@ -240,12 +242,10 @@ async function evaluateCommentEventInternal(
   deps: GitHubAgentDeps,
   event: GitHubPREvent,
 ): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> {
-  const { logger, toolCallingClient } = deps;
+  const { logger, toolCallingClient, allowedBots } = deps;
 
-  let dispatchTemplate: 'pr_comment' | 'bot_review_edit' | undefined;
-  let skipped = false;
-  let skipReason: string | undefined;
-  const toolCalls: Array<{ tool: string; args: Record<string, unknown> }> = [];
+  const state = { dispatchTemplate: undefined as 'pr_comment' | 'bot_review_edit' | undefined, skipped: false, skipReason: undefined as string | undefined };
+  const toolCalls: { tool: string; args: Record<string, unknown> }[] = [];
 
   const tools: ToolDefinition[] = [
     {
@@ -256,7 +256,7 @@ async function evaluateCommentEventInternal(
         properties: {
           message_template: {
             type: 'string',
-            enum: ['pr_comment', 'bot_review_edit'],
+            enum: [...VALID_DISPATCH_TEMPLATES],
             description: 'The message template to use for dispatch',
           },
         },
@@ -266,12 +266,11 @@ async function evaluateCommentEventInternal(
         toolCalls.push({ tool: 'dispatch_to_task', args });
         const rawTemplate = args['message_template'];
         const template = typeof rawTemplate === 'string' ? rawTemplate : '';
-        const validTemplates = ['pr_comment', 'bot_review_edit'];
-        if (!validTemplates.includes(template)) {
+        if (!(VALID_DISPATCH_TEMPLATES as readonly string[]).includes(template)) {
           logger.warn({ template }, 'GitHub Agent used unknown dispatch template');
           return Promise.resolve(JSON.stringify({ error: `Unknown template: ${template}` }));
         }
-        dispatchTemplate = template as 'pr_comment' | 'bot_review_edit';
+        state.dispatchTemplate = template as 'pr_comment' | 'bot_review_edit';
         logger.info({ repository: event.repository, prNumber: event.pullRequestNumber, template }, 'GitHub Agent dispatching comment');
         return Promise.resolve(JSON.stringify({ success: true, template, message: `Dispatch queued: ${template}` }));
       },
@@ -293,24 +292,22 @@ async function evaluateCommentEventInternal(
         toolCalls.push({ tool: 'skip', args });
         const rawReason = args['reason'];
         const reason = typeof rawReason === 'string' ? rawReason : '(no reason provided)';
-        skipped = true;
-        skipReason = reason;
+        state.skipped = true;
+        state.skipReason = reason;
         logger.info({ repository: event.repository, prNumber: event.pullRequestNumber, reason }, 'GitHub Agent skipped comment');
         return Promise.resolve(JSON.stringify({ success: true, message: `Skipped: ${reason}` }));
       },
     },
   ];
 
-  // Determine if this is a bot sender
-  const KNOWN_BOTS = new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']);
-  const isBotSender = KNOWN_BOTS.has(event.senderLogin);
+  const isBotSender = allowedBots.has(event.senderLogin);
 
   const systemPrompt = githubAgentPrompt.build({
     repository: event.repository,
     prNumber: event.pullRequestNumber,
     prTitle: event.title ?? '(untitled)',
     prBody: '',
-    action: String(event.action ?? ''),
+    action: event.action ?? '',
     senderLogin: event.senderLogin,
     eventType: 'issue_comment',
     commentBody: event.body ?? '',
@@ -333,14 +330,14 @@ async function evaluateCommentEventInternal(
   const result = agentResult.value; // @allow-result-access -- narrowed by !agentResult.ok
 
   logger.info(
-    { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade, skipped, costUsd: result.usage.costUsd },
+    { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade, skipped: state.skipped, costUsd: result.usage.costUsd },
     'GitHub Agent comment evaluation complete'
   );
 
-  const triage: GitHubAgentTriageResult = skipped
-    ? { action: 'skip', reason: skipReason ?? '(no reason)' }
-    : dispatchTemplate !== undefined
-      ? { action: 'dispatch', template: dispatchTemplate }
+  const triage: GitHubAgentTriageResult = state.skipped
+    ? { action: 'skip', reason: state.skipReason ?? '(no reason)' }
+    : state.dispatchTemplate !== undefined
+      ? { action: 'dispatch', template: state.dispatchTemplate }
       : { action: 'skip', reason: 'No tool called' };
 
   return {
@@ -354,7 +351,7 @@ async function evaluateCommentEventInternal(
 
 /**
  * Legacy wrapper: evaluate a PR event using the GitHub Agent LLM.
- * @deprecated Use evaluateEvent() instead.
+ * TODO(INT-744): Remove in Step 6 when UnifiedEvaluator is wired.
  */
 export async function evaluatePREvent(
   deps: GitHubAgentDeps,
@@ -370,14 +367,14 @@ export async function evaluatePREvent(
       toolCallsMade: usage.toolCalls.length,
       reviewsRequested: triage.action === 'request_review' ? triage.reviewTypes : [],
       skipped: triage.action === 'skip',
-      ...(triage.action === 'skip' && { skipReason: triage.reason }),
+      ...(triage.action === 'skip' ? { skipReason: triage.reason } : {}),
     },
   };
 }
 
 /**
  * Check if a GitHub PR event should be evaluated by the GitHub Agent.
- * @deprecated Will be removed when UnifiedEvaluator is wired (Step 6).
+ * TODO(INT-744): Remove in Step 6 when UnifiedEvaluator is wired.
  */
 export function isGitHubAgentEvent(event: GitHubPREvent): boolean {
   return (

@@ -17,7 +17,7 @@ import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
-  decision: RuleOutcome;
+  decision: Extract<RuleOutcome, { action: 'dispatch' }>;
   logger: Logger;
 }
 

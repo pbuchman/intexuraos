@@ -16,7 +16,6 @@ import {
   shouldProcessRepository,
 } from '../../infra/github-event-parser.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
-import { isGitHubAgentEvent, evaluatePREvent } from '../../domain/usecases/githubAgent.js';
 
 export const ALLOWED_BOTS = new Set([
   'claude[bot]',
@@ -215,33 +214,11 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
-      // Evaluate actionability using domain rules (enforced)
-      const rules = getServices().webhookRules;
-      const decision = rules.evaluate(savedEvent);
-
-      if (decision.action === 'dispatch') {
-        const dispatcher = getServices().dispatchService;
-        void dispatcher.dispatch({
-          event: savedEvent,
-          decision,
-          logger
-        });
-      }
-
-      // GitHub Agent: evaluate PR opened/synchronize events via tool-calling LLM
-      if (isGitHubAgentEvent(savedEvent)) {
-        const { toolCallingClient, gitHubPRClient, userServiceClient } = getServices();
-        if (toolCallingClient === undefined) {
-          logger.warn('GitHub Agent disabled — missing Gemini API key');
-        } else {
-          void evaluatePREvent(
-            { logger, gitHubPRClient, toolCallingClient, userServiceClient },
-            savedEvent
-          ).catch((err: unknown) => {
-            logger.error({ err }, 'Unhandled error in GitHub Agent evaluation');
-          });
-        }
-      }
+      // INT-744: Unified evaluation — hard rules + optional LLM triage
+      const { unifiedEvaluator } = getServices();
+      void unifiedEvaluator.evaluate(savedEvent, logger).catch((evalErr: unknown) => {
+        logger.error({ evalErr }, 'Unhandled error in unified evaluator');
+      });
 
       return await reply.ok({ message: 'processed' });
     }

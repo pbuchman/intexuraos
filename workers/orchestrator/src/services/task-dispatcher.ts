@@ -349,22 +349,26 @@ export class TaskDispatcher {
       const isPRComment = task.linearIssueLabels.some(
         (l) => l.trim().toLowerCase() === 'pr-comment'
       );
-      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all three agents @preserve */
+      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all agents @preserve */
       const agentLabel = isPRComment
         ? 'Pull Request Agent'
-        : task.agentType === 'execution'
-          ? 'Execution Agent'
-          : task.agentType === 'planning'
-            ? 'Planning Agent'
-            : hasCodeTaskLabel(task.linearIssueLabels)
-              ? 'Execution Agent'
-              : 'Planning Agent';
+        : task.agentType === 'review'
+          ? 'Review Agent'
+          : task.agentType === 'execution'
+            ? 'Execution Agent'
+            : task.agentType === 'planning'
+              ? 'Planning Agent'
+              : hasCodeTaskLabel(task.linearIssueLabels)
+                ? 'Execution Agent'
+                : 'Planning Agent';
       const agentDesc =
         agentLabel === 'Pull Request Agent'
           ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
-          : agentLabel === 'Execution Agent'
-            ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
-            : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
+          : agentLabel === 'Review Agent'
+            ? 'Review Agent \u2014 read-only PR review, post review comments'
+            : agentLabel === 'Execution Agent'
+              ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
+              : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
       /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
@@ -748,13 +752,15 @@ export class TaskDispatcher {
     const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
     const completionAgentType: CompletionAgentType = isPRComment
       ? 'pull_request'
-      : task.agentType === 'execution'
-        ? 'execution'
-        : task.agentType === 'planning'
-          ? 'planning'
-          : hasCodeTaskLabel(task.linearIssueLabels)
-            ? 'execution'
-            : 'planning';
+      : task.agentType === 'review'
+        ? 'review'
+        : task.agentType === 'execution'
+          ? 'execution'
+          : task.agentType === 'planning'
+            ? 'planning'
+            : hasCodeTaskLabel(task.linearIssueLabels)
+              ? 'execution'
+              : 'planning';
     this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(
@@ -1083,6 +1089,12 @@ export class TaskDispatcher {
       if (task.linearIssueId !== undefined) {
         base.execution_linear_issue_url = `https://linear.app/intexuraos/issue/${task.linearIssueId}`;
       }
+    } else if (agentData.agentType === 'review') {
+      if (agentData.gh_pr_url !== '') {
+        base.prUrl = agentData.gh_pr_url;
+      }
+      base.review_comments_posted = agentData.review_comments_posted;
+      base.review_types = agentData.review_types;
     } else {
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
