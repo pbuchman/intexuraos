@@ -186,6 +186,10 @@
     "pr_task_locks": {
       "owner": "code-agent",
       "description": "PR task locks ensuring only one Claude task runs per PR at a time (INT-465)"
+    },
+    "event_decisions": {
+      "owner": "code-agent",
+      "description": "Audit trail of webhook event evaluation decisions (hard rules or LLM triage)"
     }
   }
 }

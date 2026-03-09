@@ -3,7 +3,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { createWebhookDispatchService } from '../../../domain/services/gitHubDispatchService.js';
 import type { DispatchContext, WebhookDispatchResult, WebhookDispatchServiceDeps } from '../../../domain/services/gitHubDispatchService.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
-import type { RuleResult } from '../../../domain/services/gitHubWebhookRules.js';
+import type { RuleOutcome } from '../../../domain/services/gitHubWebhookRules.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../domain/usecases/createTaskForPR.js', () => ({
@@ -48,8 +48,8 @@ const mockEvent: GitHubPREvent = {
   payload: {},
 };
 
-const mockDecision: RuleResult = {
-  shouldDispatch: true,
+const mockDecision: RuleOutcome = {
+  action: 'dispatch',
   reason: 'ALL_RULES_PASSED',
 };
 
