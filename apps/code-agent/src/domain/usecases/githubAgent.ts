@@ -130,7 +130,8 @@ export async function evaluatePREvent(
         required: ['reason'],
       },
       run(args: Record<string, unknown>): Promise<string> {
-        const reason = args['reason'] as string;
+        const rawReason = args['reason'];
+        const reason = typeof rawReason === 'string' ? rawReason : '(no reason provided)';
         skipped = true;
         skipReason = reason;
         logger.info(

@@ -603,6 +603,301 @@ describe('createGeminiClient', () => {
     });
   });
 
+  describe('mapGeminiError coverage', () => {
+    it('maps quota-only error to RATE_LIMITED in research', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('Resource quota exhausted'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+      }
+    });
+
+    it('maps 429-only error to RATE_LIMITED in research', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('HTTP 429 Too Many Requests'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+      }
+    });
+
+    it('maps blocked-only error to CONTENT_FILTERED in research', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('Response was blocked by policy'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('CONTENT_FILTERED');
+      }
+    });
+
+    it('maps SAFETY-only error to CONTENT_FILTERED in research', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('SAFETY: violates policy'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('CONTENT_FILTERED');
+      }
+    });
+
+    it('maps timeout error to TIMEOUT in research', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('Request timeout after 60s'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
+    it('maps API_KEY error to INVALID_KEY in generate', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('API_KEY invalid'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.generate('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_KEY');
+      }
+    });
+
+    it('maps timeout error to TIMEOUT in generate', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('Connection timeout'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.generate('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
+    it('maps rate limit error to RATE_LIMITED in generate', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('429 rate limit'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.generate('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+      }
+    });
+
+    it('maps content filter error to CONTENT_FILTERED in generate', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('SAFETY blocked content'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.generate('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('CONTENT_FILTERED');
+      }
+    });
+
+    it('maps API_KEY error to INVALID_KEY in generateImage', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('API_KEY expired'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_KEY');
+      }
+    });
+
+    it('maps timeout error to TIMEOUT in generateImage', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('Request timeout'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
+    it('maps rate limit error to RATE_LIMITED in generateImage', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('quota limit reached'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+      }
+    });
+
+    it('maps content filter error to CONTENT_FILTERED in generateImage', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('Content blocked by filters'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('CONTENT_FILTERED');
+      }
+    });
+
+    it('maps non-Error thrown value (string) to API_ERROR', async () => {
+      mockGenerateContent.mockRejectedValue('raw string error');
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('maps non-Error thrown value (null) to API_ERROR', async () => {
+      mockGenerateContent.mockRejectedValue(null);
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.generate('Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('maps non-Error thrown value (undefined) to API_ERROR', async () => {
+      mockGenerateContent.mockRejectedValue(undefined);
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+  });
+
   describe('research edge cases', () => {
     it('handles undefined text and usageMetadata', async () => {
       mockGenerateContent.mockResolvedValue({
