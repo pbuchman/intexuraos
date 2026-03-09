@@ -32,26 +32,28 @@ Rules apply differently based on event type. The single rule chain is shared, bu
 - **`SkipPrefixRule`**: Evaluates for `issue_comment` events only (checks comment body prefix). Returns pass-through `dispatch` for all other event types. Uses `event.eventType !== 'issue_comment'` check, NOT `event.body === null` (since `pull_request_review` events also have a `body` field).
 - **`BotReviewEditRule`**: No change needed — already returns pass-through `dispatch` for events without `changes` in payload.
 
-**Effective rule chains by event type:**
+**Effective rule behavior by event type** (single chain, all 5 rules always run):
 
-| Event Type            | Effective Rules                                                                                      |
-| --------------------- | ---------------------------------------------------------------------------------------------------- |
-| `issue_comment`       | RepositoryScopeRule → ActionableEventRule → SenderWhitelistRule → SkipPrefixRule → BotReviewEditRule |
-| `pull_request`        | RepositoryScopeRule → ActionableEventRule (others pass-through)                                      |
-| `pull_request_review` | RepositoryScopeRule → ActionableEventRule → SenderWhitelistRule (others pass-through)                |
+| Event Type            | RepositoryScope | ActionableEvent | SenderWhitelist | SkipPrefix   | BotReviewEdit |
+| --------------------- | --------------- | --------------- | --------------- | ------------ | ------------- |
+| `issue_comment`       | evaluates       | evaluates       | evaluates       | evaluates    | evaluates     |
+| `pull_request`        | evaluates       | evaluates       | pass-through    | pass-through | pass-through  |
+| `pull_request_review` | evaluates       | evaluates       | evaluates       | pass-through | pass-through  |
+
+**Note:** `RepositoryScopeRule` is handled by `shouldProcessRepository()` in the route handler before the evaluator runs. It is shown here for completeness but is NOT in the production rule chain (see `services.ts` line 348). `BotReviewEditRule` is similarly excluded from the production chain today — INT-744 does not add it back; the table reflects effective behavior via pass-through returns.
 
 ### ActionableEventRule Changes
 
 | Event                                        | Before                        | After                     |
 | -------------------------------------------- | ----------------------------- | ------------------------- |
-| `issue_comment` created (any sender)         | `dispatch`                    | **`needs_triage`**        |
+| `issue_comment` created (any allowed sender) | `dispatch`                    | **`needs_triage`**        |
 | `issue_comment` edited (by allowed bot)      | `dispatch`                    | **`needs_triage`**        |
 | `issue_comment` edited (by non-bot)          | `skip`                        | `skip` (unchanged)        |
 | `pull_request_review` submitted              | `dispatch`                    | `dispatch` (hard, no LLM) |
 | `pull_request` opened/synchronize            | `skip` (EVENT_NOT_ACTIONABLE) | **`needs_triage`**        |
 | Everything else                              | `skip`                        | `skip`                    |
 
-**Note:** `issue_comment` edited from non-bots stays `skip` — no behavioral expansion. Only bot edits go to triage (preserving current scope). `issue_comment` created from any sender goes to triage (this is the main new behavior).
+**Note:** `SenderWhitelistRule` still filters `issue_comment` events — only allowed senders (repo owner + allowed bots) reach triage. `issue_comment` edited from non-bots stays `skip` — no behavioral expansion. Only bot edits go to triage (preserving current scope).
 
 ### Rule Chain Propagation Semantics
 
@@ -268,7 +270,8 @@ Refactor `RuleResult` into the `RuleOutcome` discriminated union with event-type
   - Update `WebhookRule` interface: `evaluate()` returns `RuleOutcome`
   - Update `ActionableEventRule`:
     - `issue_comment` created → `needs_triage`
-    - `issue_comment` edited → `needs_triage`
+    - `issue_comment` edited by allowed bot → `needs_triage`
+    - `issue_comment` edited by non-bot → `skip` (unchanged)
     - `pull_request_review` submitted → `dispatch`
     - `pull_request` opened/synchronize → `needs_triage`
   - Update `SenderWhitelistRule`: return pass-through `dispatch` for `pull_request` events only; evaluate normally for `issue_comment` and `pull_request_review`
@@ -289,7 +292,7 @@ Refactor `RuleResult` into the `RuleOutcome` discriminated union with event-type
 - Test `SkipPrefixRule` passes through for `pull_request` events
 - Test `SkipPrefixRule` passes through for `pull_request_review` events (even though they have a `body`)
 
-**Critical:** This step changes the public interface of `WebhookRulesService`. Add a temporary `RuleOutcome`-to-`RuleResult` adapter at the `WebhookRulesService` boundary so existing consumers (`DispatchContext`, route handler) continue to compile. The adapter is removed in Step 6 when consumers are updated. This preserves CI between steps.
+**Critical:** This step changes the public interface of `WebhookRulesService`. Add a temporary `RuleOutcome`-to-`RuleResult` adapter at the `WebhookRulesService` boundary so existing consumers (`DispatchContext`, route handler) continue to compile. Adapter mapping: `dispatch` → `shouldDispatch: true`, `skip` → `shouldDispatch: false`, `needs_triage` → `shouldDispatch: false` (NOT true — mapping to true would cause `pull_request` events to start dispatching during the transition, which is a behavioral regression). The adapter is removed in Step 6 when consumers are updated. Only needed if steps are deployed independently; if working in a single branch, the shim can be skipped.
 
 ### Step 3: Expand GitHub Agent for Issue Comment Triage
 
@@ -330,8 +333,24 @@ Add the review prompt, verification schema, and routing for `agentType: 'review'
   - Add `reviewPrompt: PromptBuilder<SystemPromptParams>` — instructs Claude to perform read-only PR review, post review comments via `gh api`, output `REVIEW_AGENT_FINAL` block
   - Update `buildSystemPrompt()`: insert `if (resolvedAgentType === 'review') return reviewPrompt.build(params);` AFTER `resolvedAgentType` is computed (line 468) but BEFORE `overlay` is computed (line 471). Review prompt does NOT get `prReviewOverlayPrompt` appended.
 - MODIFY `services/completion-verifier.ts`:
-  - Add `REVIEW_SCHEMA = z.object({ gh_pr_url, review_comments_posted, review_types, summary })`
-  - Add `ReviewAgentData` interface to the `CompletionVerifierVerdict.agentData` union type
+  - Add schema and data type:
+    ```typescript
+    const REVIEW_SCHEMA = z.object({
+      gh_pr_url: z.string(),
+      review_comments_posted: z.string(),  // numeric-as-string (e.g., "3"), matching LLM text output convention
+      review_types: z.string(),            // comma-separated (e.g., "code_quality,security")
+      summary: z.string(),
+    });
+
+    interface ReviewAgentData {
+      agentType: 'review';
+      gh_pr_url: string;
+      review_comments_posted: string;
+      review_types: string;
+      summary: string;
+    }
+    ```
+  - Add `ReviewAgentData` to `CompletionVerifierVerdict.agentData` union: `PlanningAgentData | ExecutionAgentData | PullRequestAgentData | ReviewAgentData`
   - Add `if (agentType === 'review')` branch in `selectSchemaAndPrompt()` (line ~217) — without this, `review` silently falls through to `PULL_REQUEST_SCHEMA`
   - Add `if (agentType === 'review')` branch in `toAgentData()` (line ~239) — without this, `review` silently falls through to `PullRequestAgentData`
 - MODIFY `services/task-dispatcher.ts`:
@@ -375,11 +394,12 @@ Create the service that ties rules, GitHub Agent, decision recording, and dispat
     - `issue_comment` → fall back to dispatch (don't lose events)
     - `pull_request` → fall back to skip (preserve current behavior)
 - CREATE `domain/usecases/createReviewTask.ts`:
-  - **Standalone use case** — NOT a wrapper around `createTaskForPR`. Shares `CodeTaskRepository` and `TaskDispatcherService` but has its own:
+  - **Standalone use case** — NOT a wrapper around `createTaskForPR`. Shares `CodeTaskRepository`, `TaskDispatcherService`, and `UserLookupService` but has its own:
     - **Prompt builder**: review-specific instructions with review types and PR context (not PR-comment-style)
-    - **Label logic**: does NOT force `pr-comment` label (which would override `agentType: 'review'` routing in orchestrator)
-    - **No PR task lock**: review tasks don't conflict with comment tasks for the same PR
+    - **Label logic**: MUST NOT carry `pr-comment` label — if it did, `buildSystemPrompt()` would route to `pullRequestPrompt` instead of `reviewPrompt`
+    - **No PR task lock**: review tasks don't conflict with comment tasks for the same PR. Duplicate review tasks from rapid `synchronize` events are acceptable (LLM triage is cheap; orchestrator handles one task at a time per PR anyway)
     - **`systemPromptHash`**: `'review-auto'` (not `'pr-comment-auto'`)
+    - **No `LinearIssueService`**: review tasks are ephemeral — no Linear issue auto-creation
   - Sets `agentType: 'review'` on the task dispatch request
   - Resolves user via `UserLookupService` (same as createTaskForPR)
 
