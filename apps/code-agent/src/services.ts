@@ -338,7 +338,10 @@ export function initServices(config: ServiceConfig): void {
       })
     : undefined;
 
+  const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
+
   const dispatchService = createWebhookDispatchService({
+    gitHubPREventRepo,
     codeTaskRepo,
     logLineRepo,
     userLookupService,
@@ -406,7 +409,7 @@ export function initServices(config: ServiceConfig): void {
     metricsClient,
     workerSettingsRepo,
     workerHealthProbe,
-    gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+    gitHubPREventRepo,
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
     userServiceClient,

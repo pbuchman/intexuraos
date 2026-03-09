@@ -137,6 +137,7 @@ export function parsePullRequestEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: prNumber,
@@ -268,6 +269,7 @@ export function parsePullRequestReviewEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: prNumber,
@@ -357,6 +359,7 @@ export function parsePullRequestReviewCommentEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: prNumber,
@@ -453,6 +456,7 @@ export function parseIssueCommentEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: prNumber,
@@ -511,6 +515,7 @@ export function parsePushEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: 0, // Push events are not PR-specific

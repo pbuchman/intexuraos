@@ -68,6 +68,7 @@ describe('github-event-parser', () => {
       if (result.ok) {
         expect(result.value).toMatchObject({ // @allow-result-access -- narrowed by result.ok
           githubEventId: 12345,
+          deliveryId: null,
           repository: 'intexuraos/code-agent',
           repositoryId: 456,
           pullRequestNumber: 42,
@@ -324,6 +325,7 @@ describe('github-event-parser', () => {
       if (result.ok) {
         expect(result.value).toMatchObject({ // @allow-result-access -- narrowed by result.ok
           githubEventId: 12345,
+          deliveryId: null,
           repository: 'intexuraos/code-agent',
           pullRequestNumber: 42,
           eventType: 'pull_request_review',
@@ -504,6 +506,7 @@ describe('github-event-parser', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toMatchObject({ // @allow-result-access -- narrowed by result.ok
+          deliveryId: null,
           eventType: 'push',
           repository: 'intexuraos/code-agent',
           pullRequestNumber: 0,
@@ -596,6 +599,7 @@ describe('github-event-parser', () => {
       if (result.ok) {
         expect(result.value).toMatchObject({ // @allow-result-access -- narrowed by result.ok
           githubEventId: 12345,
+          deliveryId: null,
           repository: 'intexuraos/code-agent',
           pullRequestNumber: 42,
           eventType: 'pull_request_review_comment',
@@ -908,6 +912,7 @@ describe('github-event-parser', () => {
       if (result.ok && result.value !== null) {
         expect(result.value).toMatchObject({
           githubEventId: 12345,
+          deliveryId: null,
           repository: 'intexuraos/code-agent',
           pullRequestNumber: 42,
           pullRequestId: 101,

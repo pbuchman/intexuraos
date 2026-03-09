@@ -7,6 +7,7 @@ const ALLOWED_BOTS = new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']);
 const mockPRReviewEvent: GitHubPREvent = {
   id: 'event-123',
   githubEventId: 123,
+  deliveryId: null,
   repository: 'intexuraos/code-agent',
   repositoryId: 54321,
   pullRequestNumber: 42,
@@ -34,6 +35,7 @@ const mockPRReviewEvent: GitHubPREvent = {
 const mockIssueCommentEvent: GitHubPREvent = {
   id: 'event-124',
   githubEventId: 124,
+  deliveryId: null,
   repository: 'intexuraos/code-agent',
   repositoryId: 54321,
   pullRequestNumber: 42,
@@ -60,6 +62,7 @@ const mockIssueCommentEvent: GitHubPREvent = {
 const mockEditedBotEvent: GitHubPREvent = {
   id: 'event-125',
   githubEventId: 125,
+  deliveryId: null,
   repository: 'intexuraos/code-agent',
   repositoryId: 54321,
   pullRequestNumber: 42,

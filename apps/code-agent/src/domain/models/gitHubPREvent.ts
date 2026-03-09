@@ -45,6 +45,7 @@ export type GitHubPRAction =
 export interface GitHubPREvent {
   id: string;
   githubEventId: number;
+  deliveryId: string | null;
   repository: string;
   repositoryId: number;
   pullRequestNumber: number;
@@ -69,6 +70,7 @@ export interface GitHubPREvent {
  */
 export interface CreateGitHubPREventInput {
   githubEventId: number;
+  deliveryId: string | null;
   repository: string;
   repositoryId: number;
   pullRequestNumber: number;
