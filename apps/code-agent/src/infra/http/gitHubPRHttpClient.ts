@@ -2,8 +2,8 @@
  * HTTP implementation of GitHubPRClient.
  *
  * Uses the GitHub REST API to interact with pull requests.
- * Token is passed per-call to support per-user OAuth tokens
- * or platform-level bot tokens.
+ * Bot methods use the platform token baked into the client at factory time.
+ * Only updatePRTitle takes a per-call token for user OAuth tokens.
  */
 
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
@@ -16,6 +16,7 @@ import type {
 
 export interface GitHubPRHttpClientConfig {
   timeoutMs: number;
+  githubBotToken?: string;
 }
 
 const GITHUB_API = 'https://api.github.com';
@@ -40,6 +41,12 @@ function mapErrorStatus(status: number, context: string): GitHubPRClientError {
     return { code: 'RATE_LIMITED', message: 'GitHub API rate limit exceeded' };
   }
   return { code: 'API_ERROR', message: `GitHub API returned ${String(status)}` };
+}
+
+function parseNextPageUrl(linkHeader: string | null): string | null {
+  if (linkHeader === null) return null;
+  const match = /<([^>]+)>;\s*rel="next"/.exec(linkHeader);
+  return match?.[1] ?? null;
 }
 
 export function createGitHubPRHttpClient(
@@ -75,56 +82,70 @@ export function createGitHubPRHttpClient(
     },
 
     async getPullRequestFiles(
-      token: string,
       owner: string,
       repo: string,
       prNumber: number
     ): Promise<Result<PullRequestFile[], GitHubPRClientError>> {
-      try {
-        const response = await fetch(
-          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}/files?per_page=100`,
-          {
-            method: 'GET',
-            headers: githubHeaders(token),
-            signal: AbortSignal.timeout(config.timeoutMs),
-          }
-        );
+      if (config.githubBotToken === undefined) {
+        return err({ code: 'UNAUTHORIZED', message: 'GitHub bot token not configured' });
+      }
+      const botToken = config.githubBotToken;
 
-        if (response.ok) {
+      try {
+        const allFiles: PullRequestFile[] = [];
+        let url: string | null = `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}/files?per_page=100`;
+        const MAX_PAGES = 10;
+
+        for (let page = 0; page < MAX_PAGES && url !== null; page++) {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: githubHeaders(botToken),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          });
+
+          if (!response.ok) {
+            return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+          }
+
           const data = (await response.json()) as {
             filename: string;
             status: string;
             additions: number;
             deletions: number;
           }[];
-          return ok(
-            data.map((f) => ({
+          allFiles.push(
+            ...data.map((f) => ({
               filename: f.filename,
-              status: f.status,
+              status: f.status as PullRequestFile['status'],
               additions: f.additions,
               deletions: f.deletions,
             }))
           );
+          url = parseNextPageUrl(response.headers.get('link'));
         }
 
-        return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+        return ok(allFiles);
       } catch (error) {
         return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
       }
     },
 
     async getPullRequestCommits(
-      token: string,
       owner: string,
       repo: string,
       prNumber: number
     ): Promise<Result<PullRequestCommit[], GitHubPRClientError>> {
+      if (config.githubBotToken === undefined) {
+        return err({ code: 'UNAUTHORIZED', message: 'GitHub bot token not configured' });
+      }
+      const botToken = config.githubBotToken;
+
       try {
         const response = await fetch(
           `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}/commits?per_page=100`,
           {
             method: 'GET',
-            headers: githubHeaders(token),
+            headers: githubHeaders(botToken),
             signal: AbortSignal.timeout(config.timeoutMs),
           }
         );
@@ -151,18 +172,22 @@ export function createGitHubPRHttpClient(
     },
 
     async postPRComment(
-      token: string,
       owner: string,
       repo: string,
       prNumber: number,
       body: string
     ): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+      if (config.githubBotToken === undefined) {
+        return err({ code: 'UNAUTHORIZED', message: 'GitHub bot token not configured' });
+      }
+      const botToken = config.githubBotToken;
+
       try {
         const response = await fetch(
           `${GITHUB_API}/repos/${owner}/${repo}/issues/${String(prNumber)}/comments`,
           {
             method: 'POST',
-            headers: githubHeaders(token),
+            headers: githubHeaders(botToken),
             body: JSON.stringify({ body }),
             signal: AbortSignal.timeout(config.timeoutMs),
           }

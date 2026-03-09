@@ -230,10 +230,12 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
 
       // GitHub Agent: evaluate PR opened/synchronize events via tool-calling LLM
       if (isGitHubAgentEvent(savedEvent)) {
-        const { toolCallingClient, gitHubPRClient, githubBotToken } = getServices();
-        if (toolCallingClient !== undefined && githubBotToken !== '') {
+        const { toolCallingClient, gitHubPRClient } = getServices();
+        if (toolCallingClient === undefined) {
+          logger.warn('GitHub Agent disabled — missing Gemini API key');
+        } else {
           void evaluatePREvent(
-            { logger, gitHubPRClient, toolCallingClient, githubBotToken },
+            { logger, gitHubPRClient, toolCallingClient },
             savedEvent
           ).catch((err: unknown) => {
             logger.error({ err }, 'Unhandled error in GitHub Agent evaluation');

@@ -168,7 +168,6 @@ describe('Worker Settings Routes', () => {
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
-      githubBotToken: '',
     } as ServiceContainer);
 
     app = await buildServer();

@@ -147,6 +147,19 @@ describe('llmClientFactory', () => {
       expect(client.run).toBeDefined();
     });
 
+    it('throws for Zai provider (tool calling not supported)', () => {
+      expect(() =>
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'glm-4.7' as any,
+          userId: 'test-user',
+          pricing: createTestPricing(),
+          logger: mockLogger,
+        })
+      ).toThrow('Tool calling not supported for provider: zai');
+    });
+
     it('throws for unsupported provider', () => {
       expect(() =>
         createToolCallingClient({

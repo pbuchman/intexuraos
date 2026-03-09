@@ -90,7 +90,6 @@ function createDeps(overrides: Partial<GitHubAgentDeps> = {}): GitHubAgentDeps {
     logger: createFakeLogger(),
     gitHubPRClient: createFakeGitHubPRClient(),
     toolCallingClient: createFakeToolCallingClient(),
-    githubBotToken: 'fake-bot-token',
     ...overrides,
   };
 }
@@ -110,15 +109,15 @@ describe('evaluatePREvent', () => {
     }
   });
 
-  it('fetches PR files using the bot token', async () => {
+  it('fetches PR files using the client', async () => {
     const prClient = createFakeGitHubPRClient();
-    const deps = createDeps({ gitHubPRClient: prClient, githubBotToken: 'my-bot-token' });
+    const deps = createDeps({ gitHubPRClient: prClient });
     const event = createFakePREvent();
 
     await evaluatePREvent(deps, event);
 
     expect(prClient.getPullRequestFiles).toHaveBeenCalledWith(
-      'my-bot-token', 'intexuraos', 'intexuraos', 42
+      'intexuraos', 'intexuraos', 42
     );
   });
 
