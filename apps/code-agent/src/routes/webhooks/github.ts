@@ -16,6 +16,7 @@ import {
   shouldProcessRepository,
 } from '../../infra/github-event-parser.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
+import { isGitHubAgentEvent, evaluatePREvent } from '../../domain/usecases/githubAgent.js';
 
 export const ALLOWED_BOTS = new Set([
   'claude[bot]',
@@ -225,6 +226,17 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
           decision,
           logger
         });
+      }
+
+      // GitHub Agent: evaluate PR opened/synchronize events via tool-calling LLM
+      if (isGitHubAgentEvent(savedEvent)) {
+        const { toolCallingClient, gitHubPRClient, githubBotToken } = getServices();
+        if (toolCallingClient !== undefined && githubBotToken !== '') {
+          void evaluatePREvent(
+            { logger, gitHubPRClient, toolCallingClient, githubBotToken },
+            savedEvent
+          );
+        }
       }
 
       return await reply.ok({ message: 'processed' });

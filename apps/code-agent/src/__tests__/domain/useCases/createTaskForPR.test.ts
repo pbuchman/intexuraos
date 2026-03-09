@@ -148,6 +148,15 @@ function createMockGitHubPRClient(): GitHubPRClient {
     async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
       return ok(undefined);
     },
+    async getPullRequestFiles(): ReturnType<GitHubPRClient['getPullRequestFiles']> {
+      return ok([]);
+    },
+    async getPullRequestCommits(): ReturnType<GitHubPRClient['getPullRequestCommits']> {
+      return ok([]);
+    },
+    async postPRComment(): ReturnType<GitHubPRClient['postPRComment']> {
+      return ok({ commentId: 1 });
+    },
   };
 }
 
@@ -367,6 +376,7 @@ describe('createTaskForPR', () => {
     let capturedNewTitle = '';
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(token, _owner, _repo, _prNumber, newTitle): ReturnType<GitHubPRClient['updatePRTitle']> {
         capturedToken = token;
         capturedNewTitle = newTitle;
@@ -391,6 +401,7 @@ describe('createTaskForPR', () => {
     };
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         prTitleUpdateCalled = true;
         return ok(undefined);
@@ -407,6 +418,7 @@ describe('createTaskForPR', () => {
     let prTitleUpdateCalled = false;
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         prTitleUpdateCalled = true;
         return ok(undefined);
@@ -432,6 +444,7 @@ describe('createTaskForPR', () => {
     let prTitleUpdateCalled = false;
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         prTitleUpdateCalled = true;
         return ok(undefined);
@@ -448,6 +461,7 @@ describe('createTaskForPR', () => {
 
   it('continues successfully when PR title update fails (best-effort)', async () => {
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         return err({ code: 'API_ERROR', message: 'GitHub API error' });
       },
@@ -495,6 +509,7 @@ describe('createTaskForPR', () => {
     let prTitleUpdateCalled = false;
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         prTitleUpdateCalled = true;
         return ok(undefined);

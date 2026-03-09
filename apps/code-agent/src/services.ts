@@ -53,6 +53,9 @@ import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhook
 import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS } from './routes/webhooks/github.js';
+import { createToolCallingClient } from '@intexuraos/llm-factory';
+import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
+import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -81,6 +84,9 @@ export interface ServiceContainer {
   userLookupService?: UserLookupService;
   webhookRules: WebhookRulesService;
   dispatchService: WebhookDispatchService;
+  // GitHub Agent (INT-743)
+  toolCallingClient: ToolCallingClient | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  githubBotToken: string;
 }
 
 // Configuration required to initialize services
@@ -96,6 +102,9 @@ export interface ServiceConfig {
   orchestratorSecret: string;
   serviceUrl: string;
   userServiceUrl: string;
+  // GitHub Agent (INT-743)
+  geminiAppApiKey: string;
+  githubBotToken: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -348,6 +357,17 @@ export function initServices(config: ServiceConfig): void {
       // new "meaningful changes" filtering not present in the original code.
       // The original dispatched all edited bot comments without payload inspection.
     ]),
+    // GitHub Agent — optional: only initialized when Gemini API key is available
+    toolCallingClient: config.geminiAppApiKey !== ''
+      ? createToolCallingClient({
+          apiKey: config.geminiAppApiKey,
+          model: LlmModels.Gemini25Flash,
+          userId: 'system:github-agent',
+          pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
+          logger,
+        })
+      : undefined,
+    githubBotToken: config.githubBotToken,
     dispatchService: createWebhookDispatchService({
       codeTaskRepo,
       logLineRepo,

@@ -139,6 +139,8 @@ describe('POST /webhooks/github', () => {
         new SkipPrefixRule(['@claude', '@codex', '@ignore']),
       ]),
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
+      toolCallingClient: undefined,
+      githubBotToken: '',
     };
 
     setServices(mockServices);
@@ -301,6 +303,70 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
+    });
+
+    it('triggers GitHub Agent evaluation when toolCallingClient is configured', async () => {
+      // Reconfigure services with a toolCallingClient to cover the dispatch branch
+      const { getServices, setServices: setServicesAgain } = await import('../../../services.js');
+      const currentServices = getServices();
+      const mockRun = vi.fn().mockResolvedValue(ok({
+        content: 'done',
+        toolCallsMade: 0,
+        iterationCount: 1,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
+      }));
+      setServicesAgain({
+        ...currentServices,
+        toolCallingClient: { run: mockRun },
+        githubBotToken: 'fake-bot-token',
+        gitHubPRClient: {
+          updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
+          getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
+          getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
+          postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
+        },
+      });
+
+      const prPayload = {
+        action: 'opened',
+        number: 123,
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: { login: 'intexuraos', id: 789 },
+        },
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: 'Test PR',
+          body: 'Test description',
+          state: 'open',
+          merged_at: null,
+        },
+        sender: { login: 'testuser', id: 999, type: 'User' },
+      };
+
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Give the fire-and-forget evaluatePREvent a tick to start
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      // The LLM run should have been called (fire-and-forget)
+      expect(mockRun).toHaveBeenCalled();
     });
 
     it('should return 200 but not store events for non-intexuraos repositories', async () => {

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmModels } from '@intexuraos/llm-contract';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import type { ModelPricing, ToolCallingClient } from '@intexuraos/llm-contract';
+import type { AuditSink } from '@intexuraos/llm-audit';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 
 const mockLogger: Logger = {
@@ -34,9 +36,10 @@ vi.mock('@intexuraos/llm-pricing', () => ({
   }),
 }));
 
-const { createGeminiToolCallingClient, TOOL_CALLING_PRICING } = await import(
-  '../toolCallingClient.js'
-);
+const { createUsageLogger } = await import('@intexuraos/llm-pricing');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
+const { createGeminiToolCallingClient, TOOL_CALLING_PRICING } =
+  await import('../toolCallingClient.js');
 
 const TEST_MODEL = LlmModels.Gemini25Flash;
 
@@ -46,7 +49,7 @@ const TEST_PRICING: ModelPricing = {
   groundingCostPerRequest: 0,
 };
 
-function createClient() {
+function createClient(): ToolCallingClient {
   return createGeminiToolCallingClient({
     apiKey: 'test-key',
     model: TEST_MODEL,
@@ -56,6 +59,7 @@ function createClient() {
   });
 }
 
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- test helper with complex inline return
 function textResponse(text: string, inputTokens = 10, outputTokens = 20) {
   return {
     candidates: [{ content: { role: 'model', parts: [{ text }] } }],
@@ -66,6 +70,7 @@ function textResponse(text: string, inputTokens = 10, outputTokens = 20) {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- test helper with complex inline return
 function functionCallResponse(
   name: string,
   args: Record<string, unknown>,
@@ -107,9 +112,7 @@ describe('createGeminiToolCallingClient', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.content).toBe(
-      'No review needed — backend only changes.'
-    );
+    expect(result.value.content).toBe('No review needed — backend only changes.');
     expect(result.value.toolCallsMade).toBe(0);
     expect(result.value.iterationCount).toBe(1);
     expect(result.value.usage.inputTokens).toBe(10);
@@ -117,9 +120,9 @@ describe('createGeminiToolCallingClient', () => {
   });
 
   it('executes tool call and returns final text', async () => {
-    const mockRun = vi.fn().mockResolvedValue(
-      JSON.stringify({ status: 'dispatched', taskId: 'task_123' })
-    );
+    const mockRun = vi
+      .fn()
+      .mockResolvedValue(JSON.stringify({ status: 'dispatched', taskId: 'task_123' }));
 
     // Iteration 1: function call
     mockGenerateContent.mockResolvedValueOnce(
@@ -149,9 +152,7 @@ describe('createGeminiToolCallingClient', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.content).toBe(
-      'Dispatched frontend review for PR #42.'
-    );
+    expect(result.value.content).toBe('Dispatched frontend review for PR #42.');
     expect(result.value.toolCallsMade).toBe(1);
     expect(result.value.iterationCount).toBe(2);
     expect(mockRun).toHaveBeenCalledWith({ review_type: 'frontend' });
@@ -166,9 +167,7 @@ describe('createGeminiToolCallingClient', () => {
       functionCallResponse('nonexistent_tool', { arg: 'value' })
     );
     // Iteration 2: model self-corrects with text
-    mockGenerateContent.mockResolvedValueOnce(
-      textResponse('Sorry, no review needed.')
-    );
+    mockGenerateContent.mockResolvedValueOnce(textResponse('Sorry, no review needed.'));
 
     const client = createClient();
     const result = await client.run({
@@ -199,9 +198,7 @@ describe('createGeminiToolCallingClient', () => {
       functionCallResponse('request_review', { review_type: 'frontend' })
     );
     // Iteration 2: final text after error
-    mockGenerateContent.mockResolvedValueOnce(
-      textResponse('Review dispatch failed.')
-    );
+    mockGenerateContent.mockResolvedValueOnce(textResponse('Review dispatch failed.'));
 
     const failingRun = vi.fn().mockRejectedValue(new Error('DB connection lost'));
 
@@ -274,9 +271,7 @@ describe('createGeminiToolCallingClient', () => {
       usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 15 },
     });
     // After tool call, model returns final text
-    mockGenerateContent.mockResolvedValueOnce(
-      textResponse('Frontend review dispatched.')
-    );
+    mockGenerateContent.mockResolvedValueOnce(textResponse('Frontend review dispatched.'));
 
     const client = createClient();
     const result = await client.run({
@@ -340,9 +335,7 @@ describe('createGeminiToolCallingClient', () => {
     // Should return the text from the last response instead of error
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.content).toBe(
-      'Ran out of iterations but here is my summary.'
-    );
+    expect(result.value.content).toBe('Ran out of iterations but here is my summary.');
     expect(result.value.toolCallsMade).toBe(2);
   });
 
@@ -377,6 +370,21 @@ describe('createGeminiToolCallingClient', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('RATE_LIMITED');
+  });
+
+  it('maps SAFETY errors to CONTENT_FILTERED', async () => {
+    mockGenerateContent.mockRejectedValueOnce(new Error('SAFETY filter blocked response'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('CONTENT_FILTERED');
   });
 
   it('passes systemPrompt in config.systemInstruction', async () => {
@@ -417,10 +425,266 @@ describe('createGeminiToolCallingClient', () => {
   });
 
   it('exports TOOL_CALLING_PRICING with gemini-2.5-flash', () => {
-    expect(TOOL_CALLING_PRICING['gemini-2.5-flash']).toEqual({
+    expect(TOOL_CALLING_PRICING[LlmModels.Gemini25Flash]).toEqual({
       inputPricePerMillion: 0.5,
       outputPricePerMillion: 2.0,
       groundingCostPerRequest: 0,
     });
+  });
+
+  it('passes usageSink to createUsageLogger when provided', async () => {
+    const fakeSink: UsageSink = {
+      log: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
+
+    const client = createGeminiToolCallingClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      pricing: TEST_PRICING,
+      logger: mockLogger,
+      usageSink: fakeSink,
+    });
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(createUsageLogger).toHaveBeenCalledWith(expect.objectContaining({ sink: fakeSink }));
+  });
+
+  it('passes auditSink to createAuditContext when provided', async () => {
+    const fakeAuditSink: AuditSink = {
+      save: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+    };
+    mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
+
+    const client = createGeminiToolCallingClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      pricing: TEST_PRICING,
+      logger: mockLogger,
+      auditSink: fakeAuditSink,
+    });
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(createAuditContext).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: LlmProviders.Google, model: TEST_MODEL }),
+      expect.objectContaining({ sink: fakeAuditSink })
+    );
+  });
+
+  it('maps assistant role to model in contents', async () => {
+    mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there' },
+        { role: 'user', content: 'Do something' },
+      ],
+      tools: [],
+    });
+
+    expect(mockGenerateContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: [
+          { role: 'user', parts: [{ text: 'Hello' }] },
+          { role: 'model', parts: [{ text: 'Hi there' }] },
+          { role: 'user', parts: [{ text: 'Do something' }] },
+        ],
+      })
+    );
+  });
+
+  it('defaults to 0 tokens when usageMetadata is missing', async () => {
+    mockGenerateContent.mockResolvedValueOnce({
+      candidates: [{ content: { role: 'model', parts: [{ text: 'ok' }] } }],
+    });
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.usage.inputTokens).toBe(0);
+    expect(result.value.usage.outputTokens).toBe(0);
+  });
+
+  it('defaults to empty parts when candidates are missing', async () => {
+    mockGenerateContent.mockResolvedValueOnce({
+      usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 0 },
+    });
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toBe('Empty response from model');
+  });
+
+  it('defaults toolName to empty string when undefined', async () => {
+    mockGenerateContent.mockResolvedValueOnce({
+      candidates: [
+        {
+          content: {
+            role: 'model',
+            parts: [{ functionCall: { name: undefined, args: { a: 1 } } }],
+          },
+        },
+      ],
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+    });
+    mockGenerateContent.mockResolvedValueOnce(textResponse('done'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'my_tool',
+          description: 'A tool',
+          parameters: {},
+          run: vi.fn().mockResolvedValue('ok'),
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    // The empty string tool name won't match 'my_tool', so it's hallucinated
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: '' }),
+      'Tool calling: hallucinated tool name'
+    );
+  });
+
+  it('defaults toolArgs to empty object when undefined', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"result":"ok"}');
+
+    mockGenerateContent.mockResolvedValueOnce({
+      candidates: [
+        {
+          content: {
+            role: 'model',
+            parts: [{ functionCall: { name: 'my_tool', args: undefined } }],
+          },
+        },
+      ],
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+    });
+    mockGenerateContent.mockResolvedValueOnce(textResponse('done'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'my_tool',
+          description: 'A tool',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockRun).toHaveBeenCalledWith({});
+  });
+
+  it('truncates long tool responses in log output', async () => {
+    const longResponse = 'x'.repeat(300);
+    const mockRun = vi.fn().mockResolvedValue(longResponse);
+
+    mockGenerateContent.mockResolvedValueOnce(functionCallResponse('my_tool', { a: 1 }));
+    mockGenerateContent.mockResolvedValueOnce(textResponse('done'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'my_tool',
+          description: 'A tool',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+    });
+
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolResponseTruncated: 'x'.repeat(200) + '...',
+      }),
+      'Tool calling: iteration with tool call'
+    );
+  });
+
+  it('maps API_KEY errors to INVALID_KEY', async () => {
+    mockGenerateContent.mockRejectedValueOnce(new Error('API_KEY is invalid or missing'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INVALID_KEY');
+  });
+
+  it('maps timeout errors to TIMEOUT', async () => {
+    mockGenerateContent.mockRejectedValueOnce(new Error('Request timeout after 30s'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('TIMEOUT');
+  });
+
+  it('maps unknown errors to API_ERROR as fallback', async () => {
+    mockGenerateContent.mockRejectedValueOnce(
+      new Error('Something completely unexpected happened')
+    );
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('API_ERROR');
+    expect(result.error.message).toBe('Something completely unexpected happened');
   });
 });
