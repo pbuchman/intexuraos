@@ -1,6 +1,11 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
-import { LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
+import {
+  LlmModels,
+  type Gemini25Flash,
+  type LLMModel,
+  type ModelPricing,
+} from '@intexuraos/llm-contract';
 import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
 import { z } from 'zod';
 import { execFile } from 'node:child_process';
@@ -12,10 +17,10 @@ const execFileAsync = promisify(execFile);
 
 // --- Constants ---
 
-export const DEEP_VALIDATION_PROMPT_VERSION = '1.0.0';
+export const DEEP_VALIDATION_PROMPT_VERSION = '2.0.0';
 
 /** Maximum transcript characters to send to LLM. Gemini 2.5 Flash supports ~1M tokens
- *  but we cap to keep cost/latency reasonable for a POC. */
+ *  but we cap to keep cost/latency reasonable for deep validation. */
 const MAX_TRANSCRIPT_CHARS = 200_000;
 
 // --- Zod Schema ---
@@ -39,7 +44,7 @@ const requirementItem = z.object({
 });
 
 const anomalyItem = z.object({
-  type: z.string(),
+  type: z.enum(['fabrication', 'ignored_error', 'laziness', 'skipped_step']),
   severity: z.enum(['critical', 'warning', 'info']),
   evidence: z.string(),
   detail: z.string(),
@@ -147,14 +152,27 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
 
 // --- PR Comment Formatter ---
 
-function verdictEmoji(verdict: string): string {
+function verdictEmoji(
+  verdict:
+    | 'verified'
+    | 'contradicted'
+    | 'unverifiable'
+    | 'fulfilled'
+    | 'violated'
+    | 'not_applicable'
+    | 'implemented'
+    | 'partially'
+    | 'missing'
+): string {
   if (verdict === 'verified' || verdict === 'fulfilled' || verdict === 'implemented') return '✅';
   if (verdict === 'contradicted' || verdict === 'violated' || verdict === 'missing') return '❌';
   if (verdict === 'partially') return '⚠️';
+  /* v8 ignore start -- ts-type: union type is exhaustive, fallback unreachable @preserve */
   return '❓';
+  /* v8 ignore stop @preserve */
 }
 
-function severityEmoji(severity: string): string {
+function severityEmoji(severity: 'critical' | 'warning' | 'info'): string {
   if (severity === 'critical') return '🔴';
   if (severity === 'warning') return '🟡';
   return '🔵';
@@ -237,7 +255,7 @@ const DEEP_VALIDATOR_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
 };
 
 export interface ExecutionDeepValidatorConfig {
-  model: string;
+  model: Gemini25Flash;
   geminiApiKey: string;
   auditLogPath: string;
 }
@@ -259,7 +277,7 @@ export interface ExecutionDeepValidator {
 
 export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidator {
   private readonly llmClient: LlmGenerateClient;
-  private readonly model: string;
+  private readonly model: Gemini25Flash;
 
   constructor(
     private readonly logger: Logger,
@@ -285,7 +303,11 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
     const generated = await this.llmClient.generate(prompt);
     if (!generated.ok) {
       this.logger.error(
-        { taskId: input.taskId, errorCode: generated.error.code },
+        {
+          taskId: input.taskId,
+          errorCode: generated.error.code,
+          errorMessage: generated.error.message,
+        },
         'Deep validation LLM call failed'
       );
       return undefined;
@@ -311,9 +333,9 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
     if (!parseResult.success) {
       this.logger.warn(
         { taskId: input.taskId, zodErrors: parseResult.error.issues },
-        'Deep validation Zod validation failed (POC tolerance — posting raw)'
+        'Deep validation Zod validation failed — posting raw response as fallback'
       );
-      // POC: try to post whatever we got as a raw comment
+      // Fallback: post raw LLM response when schema parse fails
       await this.postRawComment(input, generated.value.content);
       return undefined;
     }
@@ -342,8 +364,14 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         'Deep validation PR comment posted'
       );
     } catch (error) {
+      /* v8 ignore start -- upstream: stderr property only exists on execFile errors, not testable with promisify mock @preserve */
+      const stderr =
+        error instanceof Error && 'stderr' in error
+          ? String((error as Record<string, unknown>)['stderr'])
+          : undefined;
+      /* v8 ignore stop @preserve */
       this.logger.error(
-        { taskId: input.taskId, error: getErrorMessage(error) },
+        { taskId: input.taskId, error: getErrorMessage(error), stderr },
         'Failed to post deep validation PR comment'
       );
     }
@@ -364,14 +392,21 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { cwd: input.worktreePath }
       );
     } catch (error) {
+      /* v8 ignore start -- upstream: stderr property only exists on execFile errors, not testable with promisify mock @preserve */
+      const stderr =
+        error instanceof Error && 'stderr' in error
+          ? String((error as Record<string, unknown>)['stderr'])
+          : undefined;
+      /* v8 ignore stop @preserve */
       this.logger.error(
-        { taskId: input.taskId, error: getErrorMessage(error) },
+        { taskId: input.taskId, error: getErrorMessage(error), stderr },
         'Failed to post raw deep validation PR comment'
       );
     }
   }
 
   private createLlmClient(config: ExecutionDeepValidatorConfig): LlmGenerateClient {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for type safety at API boundary
     if (config.model !== LlmModels.Gemini25Flash) {
       throw new Error('Deep validator must use model gemini-2.5-flash');
     }

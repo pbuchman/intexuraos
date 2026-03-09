@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Logger } from '@intexuraos/common-core';
 
 vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
@@ -11,6 +12,13 @@ const mockReadFile = vi.mocked(readFile);
 const mockGlob = vi.mocked(glob);
 
 const { readSessionTranscript } = await import('../transcript-reader.js');
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,7 +53,7 @@ describe('readSessionTranscript', () => {
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
     mockReadFile.mockResolvedValueOnce(`${entry1}\n${entry2}\n`);
 
-    const result = await readSessionTranscript('/secrets', 'task_abc');
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(2);
     expect(result[0]?.type).toBe('assistant');
     expect(result[1]?.type).toBe('user');
@@ -66,7 +74,7 @@ describe('readSessionTranscript', () => {
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
     mockReadFile.mockResolvedValueOnce(`${validEntry}\nBAD_JSON\n${validEntry}\n`);
 
-    const result = await readSessionTranscript('/secrets', 'task_abc');
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(2);
   });
 
@@ -75,8 +83,12 @@ describe('readSessionTranscript', () => {
       throw new Error('ENOENT');
     });
 
-    const result = await readSessionTranscript('/secrets', 'task_nonexistent');
+    const result = await readSessionTranscript('/secrets', 'task_nonexistent', mockLogger);
     expect(result).toEqual([]);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ secretsBasePath: '/secrets', taskId: 'task_nonexistent' }),
+      'Failed to read session transcript'
+    );
   });
 
   it('filters out entries without message.content', async () => {
@@ -98,7 +110,7 @@ describe('readSessionTranscript', () => {
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
     mockReadFile.mockResolvedValueOnce(`${valid}\n${noContent}\n`);
 
-    const result = await readSessionTranscript('/secrets', 'task_abc');
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(1);
   });
 
@@ -121,7 +133,7 @@ describe('readSessionTranscript', () => {
       .mockResolvedValueOnce(`${entry('a1')}\n`)
       .mockResolvedValueOnce(`${entry('a2')}\n`);
 
-    const result = await readSessionTranscript('/secrets', 'task_abc');
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(2);
   });
 
@@ -132,7 +144,7 @@ describe('readSessionTranscript', () => {
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
     mockReadFile.mockResolvedValueOnce('null\n');
 
-    const result = await readSessionTranscript('/secrets', 'task_abc');
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(0);
   });
 
@@ -144,8 +156,35 @@ describe('readSessionTranscript', () => {
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
     mockReadFile.mockResolvedValueOnce(`${noTypeString}\n`);
 
-    const result = await readSessionTranscript('/secrets', 'task_abc');
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(0);
+  });
+
+  it('filters out entries with non-user/non-assistant type', async () => {
+    const systemEntry = JSON.stringify({
+      type: 'system',
+      uuid: 's1',
+      parentUuid: 'root',
+      timestamp: '2026-03-08T23:10:00.000Z',
+      message: { role: 'system', content: [{ type: 'text', text: 'system msg' }] },
+    });
+    const validEntry = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a1',
+      parentUuid: 'root',
+      timestamp: '2026-03-08T23:10:00.000Z',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+    });
+
+    async function* fakeGlob(): AsyncGenerator<string> {
+      yield '/secrets/claude-session-task_abc/projects/-repo/session.jsonl';
+    }
+    mockGlob.mockReturnValueOnce(fakeGlob() as never);
+    mockReadFile.mockResolvedValueOnce(`${systemEntry}\n${validEntry}\n`);
+
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.type).toBe('assistant');
   });
 
   it('filters entries with null message', async () => {
@@ -156,7 +195,7 @@ describe('readSessionTranscript', () => {
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
     mockReadFile.mockResolvedValueOnce(`${nullMessage}\n`);
 
-    const result = await readSessionTranscript('/secrets', 'task_abc');
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(0);
   });
 
@@ -171,7 +210,7 @@ describe('readSessionTranscript', () => {
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
     mockReadFile.mockResolvedValueOnce(`${badContent}\n`);
 
-    const result = await readSessionTranscript('/secrets', 'task_abc');
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
     expect(result).toHaveLength(0);
   });
 });

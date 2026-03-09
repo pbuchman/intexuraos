@@ -145,6 +145,23 @@ describe('DEEP_VALIDATION_SCHEMA', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('rejects anomaly with invalid type value', () => {
+    const result = DEEP_VALIDATION_SCHEMA.safeParse({
+      claimVerification: [],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [
+        {
+          type: 'unknown_type',
+          severity: 'info',
+          evidence: 'MSG-001',
+          detail: 'some detail',
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // --- Task 7 tests: validate() method and formatPrComment ---
@@ -180,7 +197,7 @@ beforeEach(() => {
 });
 
 const defaultConfig = {
-  model: 'gemini-2.5-flash',
+  model: 'gemini-2.5-flash' as const,
   geminiApiKey: 'test-key',
   auditLogPath: '/tmp/deep-validator-audit.test.log',
 };
@@ -217,6 +234,20 @@ describe('OrchestratorExecutionDeepValidator', () => {
     expect(result).toBeDefined();
     expect(result?.claimVerification).toHaveLength(1);
     expect(result?.claimVerification[0]?.verdict).toBe('verified');
+    expect(execFileMock).toHaveBeenCalledWith(
+      'gh',
+      [
+        'pr',
+        'comment',
+        '1071',
+        '--repo',
+        'pbuchman/intexuraos',
+        '--body',
+        expect.stringContaining('Deep Validation Report'),
+      ],
+      { cwd: '/tmp/worktree' },
+      expect.any(Function)
+    );
   });
 
   it('returns undefined when LLM call fails', async () => {
@@ -230,7 +261,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
 
     expect(result).toBeUndefined();
     expect(loggerError).toHaveBeenCalledWith(
-      expect.objectContaining({ errorCode: 'SERVICE_UNAVAILABLE' }),
+      expect.objectContaining({ errorCode: 'SERVICE_UNAVAILABLE', errorMessage: 'down' }),
       expect.any(String)
     );
   });
@@ -280,7 +311,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       () =>
         new OrchestratorExecutionDeepValidator(logger, {
           ...defaultConfig,
-          model: 'gpt-4o',
+          model: 'gpt-4o' as unknown as 'gemini-2.5-flash',
         })
     ).toThrow('Deep validator must use model gemini-2.5-flash');
   });
@@ -324,7 +355,7 @@ describe('formatPrComment', () => {
       },
       anomalies: [
         {
-          type: 'fabrication',
+          type: 'fabrication' as const,
           severity: 'critical' as const,
           evidence: 'MSG-048',
           detail: 'Lied about review',
@@ -375,12 +406,17 @@ describe('formatPrComment', () => {
       },
       anomalies: [
         {
-          type: 'laziness',
+          type: 'laziness' as const,
           severity: 'warning' as const,
           evidence: 'MSG-003',
           detail: 'Skipped steps',
         },
-        { type: 'info_note', severity: 'info' as const, evidence: 'MSG-004', detail: 'FYI' },
+        {
+          type: 'skipped_step' as const,
+          severity: 'info' as const,
+          evidence: 'MSG-004',
+          detail: 'FYI',
+        },
       ],
     };
 

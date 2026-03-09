@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Logger } from '@intexuraos/common-core';
 
 vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
@@ -11,6 +12,13 @@ const mockReadFile = vi.mocked(readFile);
 const mockGlob = vi.mocked(glob);
 
 const { extractPrNumber, findPlanOnBranch } = await import('../deep-validator-helpers.js');
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -46,7 +54,7 @@ describe('findPlanOnBranch', () => {
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
     mockReadFile.mockResolvedValueOnce('# My Plan\nStep 1...');
 
-    const result = await findPlanOnBranch('/worktree');
+    const result = await findPlanOnBranch('/worktree', mockLogger);
     expect(result).toBe('# My Plan\nStep 1...');
   });
 
@@ -56,7 +64,7 @@ describe('findPlanOnBranch', () => {
     }
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
 
-    const result = await findPlanOnBranch('/worktree');
+    const result = await findPlanOnBranch('/worktree', mockLogger);
     expect(result).toBeUndefined();
   });
 
@@ -68,7 +76,7 @@ describe('findPlanOnBranch', () => {
     mockGlob.mockReturnValueOnce(fakeGlob() as never);
     mockReadFile.mockResolvedValueOnce('new plan');
 
-    const result = await findPlanOnBranch('/worktree');
+    const result = await findPlanOnBranch('/worktree', mockLogger);
     expect(result).toBe('new plan');
   });
 
@@ -77,7 +85,11 @@ describe('findPlanOnBranch', () => {
       throw new Error('ENOENT');
     });
 
-    const result = await findPlanOnBranch('/nonexistent');
+    const result = await findPlanOnBranch('/nonexistent', mockLogger);
     expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ worktreePath: '/nonexistent' }),
+      'Failed to find plan on branch'
+    );
   });
 });
