@@ -146,6 +146,8 @@ describe('POST /webhooks/github', () => {
       ]),
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
       toolCallingClient: undefined,
+      eventDecisionRepo: { save: vi.fn().mockResolvedValue({ ok: true, value: {} }) },
+      unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
     };
 
     setServices(mockServices);
@@ -310,26 +312,10 @@ describe('POST /webhooks/github', () => {
       expect(body.success).toBe(true);
     });
 
-    it('triggers GitHub Agent evaluation when toolCallingClient is configured', async () => {
-      // Reconfigure services with a toolCallingClient to cover the dispatch branch
-      const { getServices, setServices: setServicesAgain } = await import('../../../services.js');
+    it('triggers unified evaluator for pull_request events', async () => {
+      const { getServices } = await import('../../../services.js');
       const currentServices = getServices();
-      const mockRun = vi.fn().mockResolvedValue(ok({
-        content: 'done',
-        toolCallsMade: 0,
-        iterationCount: 1,
-        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
-      }));
-      setServicesAgain({
-        ...currentServices,
-        toolCallingClient: { run: mockRun },
-        gitHubPRClient: {
-          updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
-          getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
-          getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
-          postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
-        },
-      });
+      const mockEvaluate = vi.mocked(currentServices.unifiedEvaluator.evaluate);
 
       const prPayload = {
         action: 'opened',
@@ -366,11 +352,11 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Give the fire-and-forget evaluatePREvent a tick to start
+      // Give the fire-and-forget evaluate a tick to start
       await new Promise((resolve) => { setTimeout(resolve, 50); });
 
-      // The LLM run should have been called (fire-and-forget)
-      expect(mockRun).toHaveBeenCalled();
+      // The unified evaluator should have been called
+      expect(mockEvaluate).toHaveBeenCalled();
     });
 
     it('should return 200 but not store events for non-intexuraos repositories', async () => {

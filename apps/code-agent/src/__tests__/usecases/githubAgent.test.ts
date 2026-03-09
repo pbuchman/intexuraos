@@ -105,6 +105,7 @@ function createDeps(overrides: Partial<GitHubAgentDeps> = {}): GitHubAgentDeps {
     gitHubPRClient: createFakeGitHubPRClient(),
     toolCallingClient: createFakeToolCallingClient(),
     userServiceClient: createFakeUserServiceClient(),
+    allowedBots: new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']),
     ...overrides,
   };
 }

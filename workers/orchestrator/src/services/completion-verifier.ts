@@ -27,7 +27,7 @@ export interface CompletionVerifierVerdict {
   passed: boolean;
   missingFields: string[];
   verifierFailure: boolean;
-  agentData?: PlanningAgentData | ExecutionAgentData | PullRequestAgentData;
+  agentData?: PlanningAgentData | ExecutionAgentData | PullRequestAgentData | ReviewAgentData;
   trace: CompletionVerifierTrace;
 }
 
@@ -55,6 +55,14 @@ export interface PullRequestAgentData {
   agentType: 'pull_request';
   gh_pr_url: string;
   comments_replied: 'yes' | 'no';
+  summary: string;
+}
+
+export interface ReviewAgentData {
+  agentType: 'review';
+  gh_pr_url: string;
+  review_comments_posted: string;
+  review_types: string;
   summary: string;
 }
 
@@ -91,6 +99,13 @@ export const EXECUTION_SCHEMA = z.object({
 export const PULL_REQUEST_SCHEMA = z.object({
   gh_pr_url: z.string(),
   comments_replied: z.enum(['yes', 'no']),
+  summary: z.string(),
+});
+
+export const REVIEW_SCHEMA = z.object({
+  gh_pr_url: z.string(),
+  review_comments_posted: z.string(),
+  review_types: z.string(),
   summary: z.string(),
 });
 
@@ -192,6 +207,27 @@ export function buildPullRequestPrompt(transcript: string): string {
   ].join('\n');
 }
 
+export function buildReviewPrompt(transcript: string): string {
+  return [
+    'You are a task-completion verifier for the Review Agent.',
+    'Analyze the transcript below and extract the following fields as JSON.',
+    'Return ONLY a JSON object, no markdown fences.',
+    '',
+    ...sharedPreamble(),
+    'Fields:',
+    '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
+    '- review_comments_posted: number of review comments posted as a string (e.g., "3")',
+    '- review_types: comma-separated list of review types performed (e.g., "code_quality,security")',
+    '- summary: 3-5 sentence summary of the review findings — the LLM agent typically states this clearly as a summary block in its final output',
+    '',
+    'Example valid response:',
+    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_comments_posted":"3","review_types":"code_quality,security","summary":"The review agent analyzed PR #901 for code quality and security issues. Found 3 issues: a missing null check, an unused import, and a potential XSS vulnerability. All findings were posted as inline review comments."}',
+    '',
+    'Transcript (last 50 lines):',
+    transcript,
+  ].join('\n');
+}
+
 export function buildResumeSummaryPrompt(transcript: string): string {
   return [
     'You are summarizing the output of a resumed Claude coding session.',
@@ -224,6 +260,9 @@ function selectSchemaAndPrompt(
   if (agentType === 'execution') {
     return { schema: EXECUTION_SCHEMA, prompt: buildExecutionPrompt(transcript) };
   }
+  if (agentType === 'review') {
+    return { schema: REVIEW_SCHEMA, prompt: buildReviewPrompt(transcript) };
+  }
   return { schema: PULL_REQUEST_SCHEMA, prompt: buildPullRequestPrompt(transcript) };
 }
 
@@ -239,7 +278,7 @@ function getMissingFields(error: z.ZodError): string[] {
 function toAgentData(
   agentType: CompletionAgentType,
   parsed: unknown
-): PlanningAgentData | ExecutionAgentData | PullRequestAgentData {
+): PlanningAgentData | ExecutionAgentData | PullRequestAgentData | ReviewAgentData {
   if (agentType === 'planning') {
     const data = parsed as z.infer<typeof PLANNING_SCHEMA>;
     return { agentType: 'planning', ...data };
@@ -247,6 +286,10 @@ function toAgentData(
   if (agentType === 'execution') {
     const data = parsed as z.infer<typeof EXECUTION_SCHEMA>;
     return { agentType: 'execution', ...data };
+  }
+  if (agentType === 'review') {
+    const data = parsed as z.infer<typeof REVIEW_SCHEMA>;
+    return { agentType: 'review', ...data };
   }
   const data = parsed as z.infer<typeof PULL_REQUEST_SCHEMA>;
   return { agentType: 'pull_request', ...data };

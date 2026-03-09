@@ -31,10 +31,7 @@ export interface EventDecision {
 
   llmModel?: string;
   llmCostUsd?: number;
-  llmToolCalls?: Array<{
-    tool: string;
-    args: Record<string, unknown>;
-  }>;
+  llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
 
   createdAt: Date;
   decisionLatencyMs: number;
@@ -66,10 +63,7 @@ export interface CreateEventDecisionInput {
 
   llmModel?: string;
   llmCostUsd?: number;
-  llmToolCalls?: Array<{
-    tool: string;
-    args: Record<string, unknown>;
-  }>;
+  llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
 
   decisionLatencyMs: number;
 }
