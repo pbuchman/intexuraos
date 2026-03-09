@@ -625,7 +625,7 @@ describe('Linear Webhook Routes', () => {
             updatedAt: '2025-01-02T00:00:00.000Z',
             state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
             assignee: { id: 'user-1', name: 'Test User' },
-            labels: [{ id: 'label-1', name: 'bug' }],
+            labels: [{ id: 'label-planning', name: 'planning-task' }],
             team: { id: teamId, key: 'INT' },
           },
           ...overrides,
@@ -713,7 +713,7 @@ describe('Linear Webhook Routes', () => {
         expect(codeAgentClient.getLastRequest()).toBeNull();
       });
 
-      it('triggers even when issue has Code Task label', async () => {
+      it('triggers when issue has code-task label', async () => {
         const payload = createAssignmentPayload({
           data: {
             id: 'issue-uuid-1',
@@ -726,7 +726,7 @@ describe('Linear Webhook Routes', () => {
             updatedAt: '2025-01-02T00:00:00.000Z',
             state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
             assignee: { id: 'user-1', name: 'Test User' },
-            labels: [{ id: 'label-code', name: 'Code Task' }],
+            labels: [{ id: 'label-code', name: 'code-task' }],
             team: { id: teamId, key: 'INT' },
           },
         });
@@ -944,7 +944,7 @@ describe('Linear Webhook Routes', () => {
             updatedAt: '2025-01-02T00:00:00.000Z',
             state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
             assignee: { id: 'user-1', name: 'Test User' },
-            labels: [{ id: 'label-1', name: 'bug' }],
+            labels: [{ id: 'label-planning', name: 'planning-task' }],
             team: { id: teamId, key: 'INT' },
           },
         });
