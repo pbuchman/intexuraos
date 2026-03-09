@@ -8,6 +8,7 @@ function isValidEntry(raw: unknown): raw is SessionJsonlEntry {
   const obj = raw as Record<string, unknown>;
   if (typeof obj['type'] !== 'string') return false;
   if (obj['type'] !== 'user' && obj['type'] !== 'assistant') return false;
+  if (typeof obj['timestamp'] !== 'string') return false;
   if (typeof obj['message'] !== 'object' || obj['message'] === null) return false;
   const msg = obj['message'] as Record<string, unknown>;
   return Array.isArray(msg['content']);

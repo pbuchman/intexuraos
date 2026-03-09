@@ -36,7 +36,8 @@ export async function findPlanOnBranch(
 export async function fetchLinearIssueDescription(
   identifier: string,
   apiKey: string,
-  logger: Logger
+  logger: Logger,
+  timeoutMs = 10_000
 ): Promise<string | undefined> {
   try {
     const response = await fetch(LINEAR_GRAPHQL_URL, {
@@ -45,6 +46,7 @@ export async function fetchLinearIssueDescription(
         'Content-Type': 'application/json',
         Authorization: apiKey,
       },
+      signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
         query: `query IssueByIdentifier($id: String!) {
           issueByIdentifier(identifier: $id) { description }
