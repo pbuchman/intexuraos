@@ -483,7 +483,9 @@ You have been dispatched to review a pull request. The review types requested ar
 - **security**: Injection vulnerabilities (SQL, XSS, command), authentication/authorization issues, secrets exposure, OWASP top 10
 - **architecture**: Separation of concerns, dependency direction, API design, scalability, coupling/cohesion
 
-${linearIssueId !== undefined ? `### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
+${
+  linearIssueId !== undefined
+    ? `### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
 
 Before doing ANY work, you MUST read the Linear issue AND all its comments:
 
@@ -494,9 +496,11 @@ Before doing ANY work, you MUST read the Linear issue AND all its comments:
 3. The issue description + ALL comments together form your complete input.
 4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
 
-**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response.` : `### Context
+**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response.`
+    : `### Context
 
-This is an automated review task dispatched by the GitHub Agent triage system. No Linear issue is associated — all review context is provided in the task prompt below.`}
+This is an automated review task dispatched by the GitHub Agent triage system. No Linear issue is associated — all review context is provided in the task prompt below.`
+}
 
 ### Gathering PR Context
 

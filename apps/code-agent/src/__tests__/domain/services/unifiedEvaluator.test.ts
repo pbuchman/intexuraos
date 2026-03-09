@@ -299,6 +299,110 @@ describe('UnifiedEvaluator', () => {
     });
   });
 
+  it('records LLM model when present in usage on dispatch path', async () => {
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(ok({
+        triage: { action: 'dispatch', template: 'pr_comment' },
+        usage: { costUsd: 0.001, model: 'test-model-id', toolCalls: [] },
+      })),
+    });
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent();
+
+    await evaluator.evaluate(event, logger);
+
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        llmModel: 'test-model-id',
+      })
+    );
+  });
+
+  it('records LLM model on request_review path', async () => {
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(ok({
+        triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+        usage: { costUsd: 0.002, model: 'test-model-id', toolCalls: [] },
+      })),
+    });
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+    await evaluator.evaluate(event, logger);
+
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        llmModel: 'test-model-id',
+      })
+    );
+  });
+
+  it('records LLM model on skip path', async () => {
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(ok({
+        triage: { action: 'skip', reason: 'Docs only' },
+        usage: { costUsd: 0.001, model: 'test-model-id', toolCalls: [] },
+      })),
+    });
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent();
+
+    await evaluator.evaluate(event, logger);
+
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        llmModel: 'test-model-id',
+      })
+    );
+  });
+
+  it('logs error when createReviewTask fails', async () => {
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(ok({
+        triage: { action: 'request_review', reviewTypes: ['security'] },
+        usage: { costUsd: 0.002, toolCalls: [] },
+      })),
+      createReviewTask: vi.fn().mockResolvedValue(
+        err({ code: 'dispatch_failed', message: 'Worker unavailable' })
+      ),
+    });
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+    await evaluator.evaluate(event, logger);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'evt-1' }),
+      'Failed to create review task'
+    );
+  });
+
+  it('handles event with null action in recordDecision', async () => {
+    const deps = createFakeDeps();
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({ action: null });
+
+    await evaluator.evaluate(event, logger);
+
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventAction: 'unknown',
+      })
+    );
+  });
+
   it('records decision latency', async () => {
     const deps = createFakeDeps();
     const evaluator = createUnifiedEvaluator(deps);

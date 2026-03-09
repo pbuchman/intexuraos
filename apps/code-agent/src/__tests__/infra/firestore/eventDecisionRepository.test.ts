@@ -98,7 +98,7 @@ describe('createFirestoreEventDecisionRepository', () => {
         decidedBy: 'github_agent',
         decision: 'request_review',
         reason: 'PR needs code review',
-        llmModel: 'gemini-2.5-flash',
+        llmModel: 'test-model-id',
         llmCostUsd: 0.0012,
         llmToolCalls: [
           { tool: 'request_review', args: { review_type: 'code_quality' } },
@@ -116,7 +116,7 @@ describe('createFirestoreEventDecisionRepository', () => {
       if (result.ok) {
         expect(result.value.decidedBy).toBe('github_agent');
         expect(result.value.decision).toBe('request_review');
-        expect(result.value.llmModel).toBe('gemini-2.5-flash');
+        expect(result.value.llmModel).toBe('test-model-id');
         expect(result.value.llmCostUsd).toBe(0.0012);
         expect(result.value.llmToolCalls).toHaveLength(2);
         expect(result.value.dispatchAction).toBe('create_review_task');

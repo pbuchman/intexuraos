@@ -139,6 +139,56 @@ describe('createReviewTask', () => {
     }
   });
 
+  it('returns no_workers_configured when user has no enabled workers', async () => {
+    const deps = createFakeDeps({
+      userLookupService: {
+        resolveByGitHubUsername: vi.fn().mockResolvedValue(
+          err({ code: 'NO_ENABLED_WORKER' as const, message: 'No enabled workers' })
+        ),
+      } as unknown as UserLookupService,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-6',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('no_workers_configured');
+    }
+  });
+
+  it('returns error when task creation fails', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(
+          err({ code: 'FIRESTORE_ERROR' as const, message: 'Write failed' })
+        ),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-7',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('task_creation_failed');
+    }
+  });
+
   it('returns error when dispatch fails', async () => {
     const deps = createFakeDeps({
       taskDispatcher: {
