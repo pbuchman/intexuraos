@@ -893,7 +893,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.send({ received: true });
       }
 
-      /* v8 ignore start -- test-infra: status === 'failed' conditional requires specific webhook payload @preserve */
       if (status === 'failed') {
         const taskError = error ?? { code: 'UNKNOWN_FAILURE', message: 'Task failed without error details' };
         if (taskError.code === 'PLANNING_AGENT_UNCLEAR' && result?.planning_outcome_label === 'unclear') {
@@ -971,16 +970,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             request.log.warn({ taskId, error: err }, 'Failed to record task duration metric');
           });
         }
-        /* v8 ignore stop @preserve */
 
         request.log.info({ taskId, error: taskError }, 'Task marked as failed');
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
       }
 
-      /* v8 ignore start -- test-infra: status === 'interrupted' conditional requires specific webhook payload @preserve */
       if (status === 'interrupted') {
-      /* v8 ignore stop @preserve */
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'interrupted',
           completedAt,
@@ -1225,7 +1221,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // First log delivery for this task — task might still be dispatched.
       // Update to running and mirror to action.
-      /* v8 ignore start -- test-infra: requires first log chunk delivery to test @preserve */
       if (!taskFormatterStates.has(taskId)) {
         const taskResult = await codeTaskRepo.findById(taskId);
         /* v8 ignore start -- ts-type: Result.ok check creates type narrowing branch @preserve */
@@ -1240,7 +1235,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         /* v8 ignore stop @preserve */
       }
-      /* v8 ignore stop @preserve */
 
       // Step 3: Store chunks in Firestore subcollection
       const logChunks = chunks.map((chunk) => ({
