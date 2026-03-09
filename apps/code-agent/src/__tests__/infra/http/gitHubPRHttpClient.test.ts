@@ -11,7 +11,7 @@ describe('GitHubPRHttpClient', () => {
     nock.cleanAll();
   });
 
-  const client = createGitHubPRHttpClient({ timeoutMs: 5000, githubBotToken: 'bot-token-123' });
+  const client = createGitHubPRHttpClient({ timeoutMs: 5000 });
 
   describe('updatePRTitle', () => {
     it('successfully updates a PR title', async () => {
@@ -108,13 +108,13 @@ describe('GitHubPRHttpClient', () => {
     it('returns file list on success', async () => {
       nock('https://api.github.com')
         .get('/repos/owner/repo/pulls/42/files?per_page=100')
-        .matchHeader('Authorization', 'Bearer bot-token-123')
+        .matchHeader('Authorization', 'Bearer test-token')
         .reply(200, [
           { filename: 'src/index.ts', status: 'modified', additions: 10, deletions: 2 },
           { filename: 'src/new.ts', status: 'added', additions: 50, deletions: 0 },
         ]);
 
-      const result = await client.getPullRequestFiles('owner', 'repo', 42);
+      const result = await client.getPullRequestFiles('test-token', 'owner', 'repo', 42);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -133,7 +133,7 @@ describe('GitHubPRHttpClient', () => {
         .get('/repos/owner/repo/pulls/999/files?per_page=100')
         .reply(404, { message: 'Not Found' });
 
-      const result = await client.getPullRequestFiles('owner', 'repo', 999);
+      const result = await client.getPullRequestFiles('test-token', 'owner', 'repo', 999);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -146,23 +146,11 @@ describe('GitHubPRHttpClient', () => {
         .get('/repos/owner/repo/pulls/42/files?per_page=100')
         .replyWithError('timeout');
 
-      const result = await client.getPullRequestFiles('owner', 'repo', 42);
+      const result = await client.getPullRequestFiles('test-token', 'owner', 'repo', 42);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NETWORK_ERROR');
-      }
-    });
-
-    it('returns UNAUTHORIZED when githubBotToken is not configured', async () => {
-      const clientNoToken = createGitHubPRHttpClient({ timeoutMs: 5000 });
-
-      const result = await clientNoToken.getPullRequestFiles('owner', 'repo', 42);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('UNAUTHORIZED');
-        expect(result.error.message).toBe('GitHub bot token not configured');
       }
     });
 
@@ -176,7 +164,7 @@ describe('GitHubPRHttpClient', () => {
         .get('/repos/owner/repo/pulls/42/files?per_page=100&page=2')
         .reply(200, [{ filename: 'b.ts', status: 'added', additions: 5, deletions: 0 }]);
 
-      const result = await client.getPullRequestFiles('owner', 'repo', 42);
+      const result = await client.getPullRequestFiles('test-token', 'owner', 'repo', 42);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -193,7 +181,7 @@ describe('GitHubPRHttpClient', () => {
           link: '<https://api.github.com/repos/owner/repo/pulls/42/files?per_page=100&page=1>; rel="last"',
         });
 
-      const result = await client.getPullRequestFiles('owner', 'repo', 42);
+      const result = await client.getPullRequestFiles('test-token', 'owner', 'repo', 42);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -207,7 +195,7 @@ describe('GitHubPRHttpClient', () => {
     it('returns commit list on success', async () => {
       nock('https://api.github.com')
         .get('/repos/owner/repo/pulls/42/commits?per_page=100')
-        .matchHeader('Authorization', 'Bearer bot-token-123')
+        .matchHeader('Authorization', 'Bearer test-token')
         .reply(200, [
           {
             sha: 'abc123',
@@ -216,7 +204,7 @@ describe('GitHubPRHttpClient', () => {
           },
         ]);
 
-      const result = await client.getPullRequestCommits('owner', 'repo', 42);
+      const result = await client.getPullRequestCommits('test-token', 'owner', 'repo', 42);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -232,7 +220,7 @@ describe('GitHubPRHttpClient', () => {
     it('falls back to unknown when commit author is null', async () => {
       nock('https://api.github.com')
         .get('/repos/owner/repo/pulls/42/commits?per_page=100')
-        .matchHeader('Authorization', 'Bearer bot-token-123')
+        .matchHeader('Authorization', 'Bearer test-token')
         .reply(200, [
           {
             sha: 'def456',
@@ -241,7 +229,7 @@ describe('GitHubPRHttpClient', () => {
           },
         ]);
 
-      const result = await client.getPullRequestCommits('owner', 'repo', 42);
+      const result = await client.getPullRequestCommits('test-token', 'owner', 'repo', 42);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -254,23 +242,11 @@ describe('GitHubPRHttpClient', () => {
         .get('/repos/owner/repo/pulls/42/commits?per_page=100')
         .reply(401, { message: 'Bad credentials' });
 
-      const result = await client.getPullRequestCommits('owner', 'repo', 42);
+      const result = await client.getPullRequestCommits('test-token', 'owner', 'repo', 42);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('UNAUTHORIZED');
-      }
-    });
-
-    it('returns UNAUTHORIZED when githubBotToken is not configured', async () => {
-      const clientNoToken = createGitHubPRHttpClient({ timeoutMs: 5000 });
-
-      const result = await clientNoToken.getPullRequestCommits('owner', 'repo', 42);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('UNAUTHORIZED');
-        expect(result.error.message).toBe('GitHub bot token not configured');
       }
     });
   });
@@ -279,10 +255,10 @@ describe('GitHubPRHttpClient', () => {
     it('posts a comment and returns commentId', async () => {
       nock('https://api.github.com')
         .post('/repos/owner/repo/issues/42/comments', { body: 'Review requested' })
-        .matchHeader('Authorization', 'Bearer bot-token-123')
+        .matchHeader('Authorization', 'Bearer test-token')
         .reply(201, { id: 12345 });
 
-      const result = await client.postPRComment('owner', 'repo', 42, 'Review requested');
+      const result = await client.postPRComment('test-token', 'owner', 'repo', 42, 'Review requested');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -295,7 +271,7 @@ describe('GitHubPRHttpClient', () => {
         .post('/repos/owner/repo/issues/42/comments')
         .reply(403, { message: 'Forbidden' });
 
-      const result = await client.postPRComment('owner', 'repo', 42, 'body');
+      const result = await client.postPRComment('test-token', 'owner', 'repo', 42, 'body');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -308,7 +284,7 @@ describe('GitHubPRHttpClient', () => {
         .post('/repos/owner/repo/issues/42/comments')
         .reply(429, { message: 'rate limit exceeded' });
 
-      const result = await client.postPRComment('owner', 'repo', 42, 'body');
+      const result = await client.postPRComment('test-token', 'owner', 'repo', 42, 'body');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -321,23 +297,11 @@ describe('GitHubPRHttpClient', () => {
         .post('/repos/owner/repo/issues/42/comments')
         .replyWithError('connection refused');
 
-      const result = await client.postPRComment('owner', 'repo', 42, 'body');
+      const result = await client.postPRComment('test-token', 'owner', 'repo', 42, 'body');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NETWORK_ERROR');
-      }
-    });
-
-    it('returns UNAUTHORIZED when githubBotToken is not configured', async () => {
-      const clientNoToken = createGitHubPRHttpClient({ timeoutMs: 5000 });
-
-      const result = await clientNoToken.postPRComment('owner', 'repo', 42, 'body');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('UNAUTHORIZED');
-        expect(result.error.message).toBe('GitHub bot token not configured');
       }
     });
   });
