@@ -276,6 +276,33 @@ describe('evaluatePREvent', () => {
     }
   });
 
+  it('handles non-string reason in skip_review tool', async () => {
+    const toolClient: ToolCallingClient = {
+      async run(params): ReturnType<ToolCallingClient['run']> {
+        const skipTool = params.tools.find((t: ToolDefinition) => t.name === 'skip_review');
+        if (skipTool !== undefined) {
+          await skipTool.run({});
+        }
+        return ok({
+          content: 'Skipped.',
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 80, outputTokens: 30, totalTokens: 110, costUsd: 0.0005 },
+        });
+      },
+    };
+    const deps = createDeps({ toolCallingClient: toolClient });
+    const event = createFakePREvent();
+
+    const result = await evaluatePREvent(deps, event);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.skipped).toBe(true);
+      expect(result.value.skipReason).toBe('(no reason provided)');
+    }
+  });
+
   it('handles synchronize action', async () => {
     const deps = createDeps();
     const event = createFakePREvent({ action: 'synchronize' });

@@ -161,6 +161,55 @@ describe('createGeminiToolCallingClient', () => {
     expect(result.value.usage.outputTokens).toBe(25);
   });
 
+  it('sends functionResponse with role "user" as expected by @google/genai SDK', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
+
+    mockGenerateContent.mockResolvedValueOnce(
+      functionCallResponse('request_review', { review_type: 'frontend' })
+    );
+    mockGenerateContent.mockResolvedValueOnce(textResponse('done'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+    });
+
+    // Second call should include the functionCall (model) and functionResponse (user) contents
+    const secondCallContents = mockGenerateContent.mock.calls[1]?.[0]?.contents as
+      | { role: string; parts: unknown[] }[]
+      | undefined;
+    expect(secondCallContents).toBeDefined();
+    if (secondCallContents === undefined) return;
+
+    // Model's functionCall part
+    expect(secondCallContents[1]).toEqual({
+      role: 'model',
+      parts: [{ functionCall: { name: 'request_review', args: { review_type: 'frontend' } } }],
+    });
+
+    // Our functionResponse part — must be 'user' for @google/genai SDK
+    expect(secondCallContents[2]).toEqual({
+      role: 'user',
+      parts: [
+        {
+          functionResponse: {
+            name: 'request_review',
+            response: { result: '{"status":"ok"}' },
+          },
+        },
+      ],
+    });
+  });
+
   it('sends error for hallucinated tool name', async () => {
     // Iteration 1: hallucinated tool
     mockGenerateContent.mockResolvedValueOnce(
@@ -686,5 +735,141 @@ describe('createGeminiToolCallingClient', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('API_ERROR');
     expect(result.error.message).toBe('Something completely unexpected happened');
+  });
+
+  it('maps quota-only error to RATE_LIMITED', async () => {
+    mockGenerateContent.mockRejectedValueOnce(new Error('Resource quota exhausted'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('RATE_LIMITED');
+  });
+
+  it('maps 429-only error (without quota) to RATE_LIMITED', async () => {
+    mockGenerateContent.mockRejectedValueOnce(new Error('HTTP 429 Too Many Requests'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('RATE_LIMITED');
+  });
+
+  it('maps blocked-only error (without SAFETY) to CONTENT_FILTERED', async () => {
+    mockGenerateContent.mockRejectedValueOnce(new Error('Response was blocked by policy'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('CONTENT_FILTERED');
+  });
+
+  it('maps non-Error thrown value (string) to API_ERROR', async () => {
+    mockGenerateContent.mockRejectedValueOnce('plain string error');
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('API_ERROR');
+  });
+
+  it('maps non-Error thrown value (null) to API_ERROR', async () => {
+    mockGenerateContent.mockRejectedValueOnce(null);
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('API_ERROR');
+  });
+
+  it('maps non-Error thrown value (number) to API_ERROR', async () => {
+    mockGenerateContent.mockRejectedValueOnce(500);
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('API_ERROR');
+  });
+
+  it('maps non-Error thrown value (object without message) to API_ERROR', async () => {
+    mockGenerateContent.mockRejectedValueOnce({ status: 503, reason: 'unavailable' });
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('API_ERROR');
+  });
+
+  it('preserves error message in mapped result', async () => {
+    mockGenerateContent.mockRejectedValueOnce(new Error('API_KEY was revoked by admin'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INVALID_KEY');
+    expect(result.error.message).toBe('API_KEY was revoked by admin');
+  });
+
+  it('maps SAFETY-only error (without blocked) to CONTENT_FILTERED', async () => {
+    mockGenerateContent.mockRejectedValueOnce(new Error('SAFETY: content violates usage policy'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('CONTENT_FILTERED');
   });
 });
