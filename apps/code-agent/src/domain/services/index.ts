@@ -8,7 +8,7 @@ export {
   BotReviewEditRule,
   type WebhookRulesService,
   type WebhookRule,
-  type RuleResult,
+  type RuleOutcome,
 } from './gitHubWebhookRules.js';
 
 export {

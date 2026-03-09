@@ -1,6 +1,6 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
-import type { RuleResult } from './gitHubWebhookRules.js';
+import type { RuleOutcome } from './gitHubWebhookRules.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
@@ -17,7 +17,7 @@ import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
-  decision: RuleResult;
+  decision: RuleOutcome;
   logger: Logger;
 }
 

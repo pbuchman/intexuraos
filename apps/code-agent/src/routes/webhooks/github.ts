@@ -219,7 +219,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
       const rules = getServices().webhookRules;
       const decision = rules.evaluate(savedEvent);
 
-      if (decision.shouldDispatch) {
+      if (decision.action === 'dispatch') {
         const dispatcher = getServices().dispatchService;
         void dispatcher.dispatch({
           event: savedEvent,

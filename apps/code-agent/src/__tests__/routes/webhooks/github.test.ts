@@ -1245,12 +1245,11 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ event: expect.objectContaining({ repository: 'pbuchman/intexuraos', pullRequestNumber: 42 }) })
-      );
+      // issue_comment events now return needs_triage (INT-744), not dispatched directly
+      expect(mockDispatch).not.toHaveBeenCalled();
     });
 
-    it('dispatches issue_comment from chatgpt-codex-connector[bot]', async () => {
+    it('does not dispatch issue_comment from chatgpt-codex-connector[bot] (needs_triage)', async () => {
       const codexBotPayload = {
         action: 'created',
         issue: {
@@ -1320,9 +1319,8 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ event: expect.objectContaining({ repository: 'pbuchman/intexuraos', pullRequestNumber: 42 }) })
-      );
+      // issue_comment events now return needs_triage (INT-744), not dispatched directly
+      expect(mockDispatch).not.toHaveBeenCalled();
     });
 
     it('blocks dispatch when payload has no repository owner', async () => {
@@ -1467,9 +1465,8 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ event: expect.objectContaining({ repository: 'test/intexuraos', pullRequestNumber: 42 }) })
-      );
+      // issue_comment events now return needs_triage (INT-744), not dispatched directly
+      expect(mockDispatch).not.toHaveBeenCalled();
     });
 
     it('does not dispatch edited issue_comment from regular user', async () => {
