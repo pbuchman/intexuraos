@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { randomBytes, createHmac } from 'node:crypto';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { FastifyInstance } from 'fastify';
 
 vi.mock('jose', () => ({
@@ -60,6 +60,7 @@ describe('POST /webhooks/github', () => {
       save: (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 123,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 789,
@@ -72,6 +73,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'Test description',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -146,6 +148,8 @@ describe('POST /webhooks/github', () => {
       ]),
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
       toolCallingClient: undefined,
+      eventDecisionRepo: { save: vi.fn().mockResolvedValue({ ok: true, value: {} }) },
+      unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
     };
 
     setServices(mockServices);
@@ -310,26 +314,10 @@ describe('POST /webhooks/github', () => {
       expect(body.success).toBe(true);
     });
 
-    it('triggers GitHub Agent evaluation when toolCallingClient is configured', async () => {
-      // Reconfigure services with a toolCallingClient to cover the dispatch branch
-      const { getServices, setServices: setServicesAgain } = await import('../../../services.js');
+    it('triggers unified evaluator for pull_request events', async () => {
+      const { getServices } = await import('../../../services.js');
       const currentServices = getServices();
-      const mockRun = vi.fn().mockResolvedValue(ok({
-        content: 'done',
-        toolCallsMade: 0,
-        iterationCount: 1,
-        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
-      }));
-      setServicesAgain({
-        ...currentServices,
-        toolCallingClient: { run: mockRun },
-        gitHubPRClient: {
-          updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
-          getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
-          getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
-          postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
-        },
-      });
+      const mockEvaluate = vi.mocked(currentServices.unifiedEvaluator.evaluate);
 
       const prPayload = {
         action: 'opened',
@@ -366,11 +354,11 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Give the fire-and-forget evaluatePREvent a tick to start
+      // Give the fire-and-forget evaluate a tick to start
       await new Promise((resolve) => { setTimeout(resolve, 50); });
 
-      // The LLM run should have been called (fire-and-forget)
-      expect(mockRun).toHaveBeenCalled();
+      // The unified evaluator should have been called
+      expect(mockEvaluate).toHaveBeenCalled();
     });
 
     it('should return 200 but not store events for non-intexuraos repositories', async () => {
@@ -549,6 +537,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 12345,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -561,6 +550,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'please fix the linting errors',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -631,6 +621,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 12345,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -643,6 +634,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'please fix the linting errors',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -707,6 +699,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 99999,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 55,
@@ -719,6 +712,7 @@ describe('POST /webhooks/github', () => {
         title: 'Refactor utils',
         body: 'this variable naming is confusing',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -777,6 +771,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 88888,
+        deliveryId: null,
         repository: 'intexuraos/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 60,
@@ -789,6 +784,7 @@ describe('POST /webhooks/github', () => {
         title: 'Add feature',
         body: 'please address these issues',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -847,6 +843,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 77777,
+        deliveryId: null,
         repository: 'intexuraos/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 60,
@@ -859,6 +856,7 @@ describe('POST /webhooks/github', () => {
         title: 'Add feature',
         body: 'Dismissing stale review',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -918,6 +916,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 55555,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -930,6 +929,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'I have addressed the review comments.',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -992,6 +992,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 77777,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1004,6 +1005,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: '@claude review completeness of the design',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -1065,6 +1067,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 88888,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1077,6 +1080,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: '@codex fix this lint error',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -1137,6 +1141,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 66666,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1149,6 +1154,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'Coverage: 94.2%',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -1211,6 +1217,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 55555,
+        deliveryId: null,
         repository: 'pbuchman/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1223,6 +1230,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'please fix the linting errors',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -1245,12 +1253,11 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ event: expect.objectContaining({ repository: 'pbuchman/intexuraos', pullRequestNumber: 42 }) })
-      );
+      // issue_comment events now return needs_triage (INT-744), not dispatched directly
+      expect(mockDispatch).not.toHaveBeenCalled();
     });
 
-    it('dispatches issue_comment from chatgpt-codex-connector[bot]', async () => {
+    it('does not dispatch issue_comment from chatgpt-codex-connector[bot] (needs_triage)', async () => {
       const codexBotPayload = {
         action: 'created',
         issue: {
@@ -1286,6 +1293,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 44444,
+        deliveryId: null,
         repository: 'pbuchman/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1298,6 +1306,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'Codex Review: Found 2 issues.',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -1320,9 +1329,8 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ event: expect.objectContaining({ repository: 'pbuchman/intexuraos', pullRequestNumber: 42 }) })
-      );
+      // issue_comment events now return needs_triage (INT-744), not dispatched directly
+      expect(mockDispatch).not.toHaveBeenCalled();
     });
 
     it('blocks dispatch when payload has no repository owner', async () => {
@@ -1360,6 +1368,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 33333,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1372,6 +1381,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'some comment',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -1433,6 +1443,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 99999,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1445,6 +1456,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'Finalized implementation plan for the task.',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -1467,9 +1479,8 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ event: expect.objectContaining({ repository: 'test/intexuraos', pullRequestNumber: 42 }) })
-      );
+      // issue_comment events now return needs_triage (INT-744), not dispatched directly
+      expect(mockDispatch).not.toHaveBeenCalled();
     });
 
     it('does not dispatch edited issue_comment from regular user', async () => {
@@ -1508,6 +1519,7 @@ describe('POST /webhooks/github', () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 11111,
+        deliveryId: null,
         repository: 'test/intexuraos',
         repositoryId: 456,
         pullRequestNumber: 42,
@@ -1520,6 +1532,7 @@ describe('POST /webhooks/github', () => {
         title: 'Test PR',
         body: 'Updated my review comment with more details.',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
@@ -1543,6 +1556,118 @@ describe('POST /webhooks/github', () => {
 
       await new Promise((resolve) => { setTimeout(resolve, 50); });
       expect(mockDispatch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('duplicate webhook delivery', () => {
+    it('should skip evaluation for duplicate webhook delivery', async () => {
+      // Override save to return DUPLICATE_EVENT error
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'DUPLICATE_EVENT' as const, message: 'Duplicate delivery: abc-123' })
+      );
+
+      const prPayload = {
+        action: 'opened',
+        number: 123,
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'pbuchman/intexuraos',
+          owner: {
+            login: 'pbuchman',
+            id: 789,
+          },
+        },
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: 'Test PR',
+          body: 'Test description',
+          state: 'open',
+          merged_at: null,
+        },
+        sender: {
+          login: 'testuser',
+          id: 999,
+          type: 'User',
+        },
+      };
+
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'abc-123',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('duplicate');
+
+      // Verify evaluator was NOT called
+      const services = (await import('../../../services.js')).getServices();
+      expect(services.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
+    });
+
+    it('should acknowledge and log error for non-duplicate save failures', async () => {
+      // Override save to return a generic FIRESTORE_ERROR
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
+      );
+
+      const prPayload = {
+        action: 'opened',
+        number: 123,
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'pbuchman/intexuraos',
+          owner: {
+            login: 'pbuchman',
+            id: 789,
+          },
+        },
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: 'Test PR',
+          body: 'Test description',
+          state: 'open',
+          merged_at: null,
+        },
+        sender: {
+          login: 'testuser',
+          id: 999,
+          type: 'User',
+        },
+      };
+
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'def-456',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('acknowledged');
     });
   });
 });

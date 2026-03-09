@@ -1,6 +1,6 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
-import type { RuleResult } from './gitHubWebhookRules.js';
+import type { RuleOutcome } from './gitHubWebhookRules.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
@@ -11,13 +11,14 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 import type { StatusMirrorService } from './statusMirrorService.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepository.js';
 import type { WebhookMessageBuilder } from './gitHubMessageBuilder.js';
 import { createTaskForPR } from '../usecases/createTaskForPR.js';
 import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
-  decision: RuleResult;
+  decision: Extract<RuleOutcome, { action: 'dispatch' }>;
   logger: Logger;
 }
 
@@ -33,6 +34,7 @@ export interface WebhookDispatchService {
 }
 
 export interface WebhookDispatchServiceDeps {
+  gitHubPREventRepo: GitHubPREventRepository;
   codeTaskRepo: CodeTaskRepository;
   logLineRepo: LogLineRepository;
   userLookupService?: UserLookupService;
@@ -53,11 +55,15 @@ export interface WebhookDispatchServiceDeps {
   serviceUrl: string;
 }
 
-function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
+export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
   if (!allowedBots.has(senderLogin)) return senderLogin;
   const slashIndex = repository.indexOf('/');
   if (slashIndex <= 0) return senderLogin;
-  return repository.slice(0, slashIndex);
+  const owner = repository.slice(0, slashIndex);
+  // Only remap for personal forks (e.g. pbuchman/intexuraos),
+  // not org repos (e.g. intexuraos/some-repo) where the owner is an org, not a user.
+  if (owner === 'intexuraos') return senderLogin;
+  return owner;
 }
 
 export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): WebhookDispatchService {
@@ -110,6 +116,25 @@ async function handleNewTask(
     return { success: false, dispatched: false, error: 'UserLookupService not configured' };
   }
 
+  // Resolve baseBranch from stored PR events when not in the current event
+  // (issue_comment payloads don't include base branch)
+  let resolvedBaseBranch = event.baseBranch;
+  if (resolvedBaseBranch === null) {
+    const eventsResult = await deps.gitHubPREventRepo.findByPullRequest(
+      event.repository, event.pullRequestNumber
+    );
+    if (eventsResult.ok) {
+      const eventWithBranch = eventsResult.value.find(e => e.baseBranch !== null); // @allow-result-access -- narrowed by eventsResult.ok
+      if (eventWithBranch !== undefined) {
+        resolvedBaseBranch = eventWithBranch.baseBranch;
+        logger.info(
+          { baseBranch: resolvedBaseBranch, sourceEventId: eventWithBranch.id },
+          'Resolved baseBranch from stored PR event'
+        );
+      }
+    }
+  }
+
   const createResult = await createTaskForPR(
     {
       logger,
@@ -131,6 +156,7 @@ async function handleNewTask(
       comment: event.body ?? '',
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
+      ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),
     },
   );
 
