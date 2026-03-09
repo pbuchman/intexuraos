@@ -5,6 +5,7 @@ import {
   executionPrompt,
   pullRequestPrompt,
   prReviewOverlayPrompt,
+  reviewPrompt,
 } from '../system-prompt.js';
 
 describe('system-prompt', () => {
@@ -16,6 +17,7 @@ describe('system-prompt', () => {
       { name: 'executionPrompt', prompt: executionPrompt },
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
+      { name: 'reviewPrompt', prompt: reviewPrompt },
     ])('$name has valid semver version', ({ prompt }) => {
       expect(prompt.version).toMatch(SEMVER_REGEX);
     });
@@ -25,6 +27,7 @@ describe('system-prompt', () => {
       { name: 'executionPrompt', prompt: executionPrompt },
       { name: 'pullRequestPrompt', prompt: pullRequestPrompt },
       { name: 'prReviewOverlayPrompt', prompt: prReviewOverlayPrompt },
+      { name: 'reviewPrompt', prompt: reviewPrompt },
     ])('$name has required metadata fields', ({ prompt }) => {
       expect(prompt.name).toBeTruthy();
       expect(prompt.description).toBeTruthy();
@@ -422,5 +425,72 @@ describe('system-prompt', () => {
     expect(planningReadingSection).toContain('MANDATORY PREREQUISITE');
     expect(planningReadingSection).toContain('prerequisite step');
     expect(planningReadingSection).toContain('Complexity Judgment');
+  });
+
+  it('builds review agent prompt with review markers and REVIEW_AGENT_FINAL', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('[AGENT:REVIEW]');
+    expect(result).toContain('REVIEW_AGENT_FINAL:');
+    expect(result).not.toContain('[AGENT:PLANNING]');
+    expect(result).not.toContain('[AGENT:EXECUTION]');
+    expect(result).not.toContain('[AGENT:PULL_REQUEST]');
+  });
+
+  it('review agent prompt does NOT include prReviewOverlayPrompt', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).not.toContain('[PR REVIEW MODE');
+  });
+
+  it('review agent prompt includes PR analysis instructions', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('read-only');
+    expect(result).toContain('gh api');
+    expect(result).toContain('review');
+  });
+
+  it('review agent prompt includes review types and PR context fields', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('review_comments_posted');
+    expect(result).toContain('review_types');
+  });
+
+  it('review agent prompt omits Linear section when linearIssueId is undefined', () => {
+    const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
+    const result = buildSystemPrompt({
+      ...paramsWithoutLinear,
+      agentType: 'review',
+    });
+
+    expect(result).not.toContain('MANDATORY FIRST ACTION');
+    expect(result).not.toContain('mcp__linear__get_issue');
+    expect(result).toContain('No Linear issue is associated');
+    expect(result).toContain('[AGENT:REVIEW]');
+  });
+
+  it('review agent prompt includes Linear section when linearIssueId is provided', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('MANDATORY FIRST ACTION');
+    expect(result).toContain('mcp__linear__get_issue');
+    expect(result).toContain('INT-123');
   });
 });

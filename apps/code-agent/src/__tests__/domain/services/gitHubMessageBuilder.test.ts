@@ -7,6 +7,7 @@ const ALLOWED_BOTS = new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']);
 const mockPRReviewEvent: GitHubPREvent = {
   id: 'event-123',
   githubEventId: 123,
+  deliveryId: null,
   repository: 'intexuraos/code-agent',
   repositoryId: 54321,
   pullRequestNumber: 42,
@@ -19,6 +20,7 @@ const mockPRReviewEvent: GitHubPREvent = {
   title: 'Test PR',
   body: 'Looks good, minor nit on line 5',
   state: 'open',
+  baseBranch: null,
   mergedAt: null,
   createdAt: new Date('2026-03-03T10:00:00Z'),
   processedAt: new Date('2026-03-03T10:00:00Z'),
@@ -33,6 +35,7 @@ const mockPRReviewEvent: GitHubPREvent = {
 const mockIssueCommentEvent: GitHubPREvent = {
   id: 'event-124',
   githubEventId: 124,
+  deliveryId: null,
   repository: 'intexuraos/code-agent',
   repositoryId: 54321,
   pullRequestNumber: 42,
@@ -45,6 +48,7 @@ const mockIssueCommentEvent: GitHubPREvent = {
   title: 'Test PR',
   body: 'Can you fix the lint error?',
   state: 'open',
+  baseBranch: null,
   mergedAt: null,
   createdAt: new Date('2026-03-03T10:00:00Z'),
   processedAt: new Date('2026-03-03T10:00:00Z'),
@@ -58,6 +62,7 @@ const mockIssueCommentEvent: GitHubPREvent = {
 const mockEditedBotEvent: GitHubPREvent = {
   id: 'event-125',
   githubEventId: 125,
+  deliveryId: null,
   repository: 'intexuraos/code-agent',
   repositoryId: 54321,
   pullRequestNumber: 42,
@@ -70,6 +75,7 @@ const mockEditedBotEvent: GitHubPREvent = {
   title: 'Test PR',
   body: '## Code Review\n- Found unused import on line 3',
   state: 'open',
+  baseBranch: null,
   mergedAt: null,
   createdAt: new Date('2026-03-03T10:00:00Z'),
   processedAt: new Date('2026-03-03T10:00:00Z'),
