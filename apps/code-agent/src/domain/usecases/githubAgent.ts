@@ -13,6 +13,7 @@
 
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { ToolCallingClient, ToolDefinition } from '@intexuraos/llm-contract';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import { githubAgentPrompt } from '../prompts/githubAgentPrompt.js';
@@ -21,6 +22,7 @@ export interface GitHubAgentDeps {
   logger: Logger;
   gitHubPRClient: GitHubPRClient;
   toolCallingClient: ToolCallingClient;
+  userServiceClient: UserServiceClient;
 }
 
 export interface GitHubAgentResult {
@@ -31,7 +33,7 @@ export interface GitHubAgentResult {
 }
 
 export interface GitHubAgentError {
-  code: 'GITHUB_API_FAILED' | 'LLM_FAILED' | 'INVALID_EVENT';
+  code: 'GITHUB_API_FAILED' | 'LLM_FAILED' | 'INVALID_EVENT' | 'USER_NOT_FOUND' | 'TOKEN_NOT_AVAILABLE';
   message: string;
 }
 
@@ -42,7 +44,7 @@ export async function evaluatePREvent(
   deps: GitHubAgentDeps,
   event: GitHubPREvent
 ): Promise<Result<GitHubAgentResult, GitHubAgentError>> {
-  const { logger, gitHubPRClient, toolCallingClient } = deps;
+  const { logger, gitHubPRClient, toolCallingClient, userServiceClient } = deps;
 
   // Validate event is a PR opened/synchronize
   if (event.eventType !== 'pull_request') {
@@ -62,9 +64,42 @@ export async function evaluatePREvent(
     'GitHub Agent evaluating PR event'
   );
 
+  // Resolve GitHub username to IntexuraOS userId
+  const userResult = await userServiceClient.resolveGitHubUsername(event.senderLogin);
+
+  if (!userResult.ok) {
+    logger.warn(
+      { senderLogin: event.senderLogin, error: userResult.error.code },
+      'GitHub Agent: user resolution failed'
+    );
+    return { ok: false, error: { code: 'USER_NOT_FOUND', message: `Failed to resolve GitHub user: ${event.senderLogin}` } };
+  }
+
+  const resolvedUser = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
+  if (resolvedUser === null) {
+    logger.info(
+      { senderLogin: event.senderLogin },
+      'GitHub Agent: sender has no linked IntexuraOS account'
+    );
+    return { ok: false, error: { code: 'USER_NOT_FOUND', message: `No IntexuraOS account linked for GitHub user: ${event.senderLogin}` } };
+  }
+
+  // Fetch per-user GitHub OAuth token
+  const tokenResult = await userServiceClient.getOAuthToken(resolvedUser.userId, 'github');
+
+  if (!tokenResult.ok) {
+    logger.info(
+      { userId: resolvedUser.userId, error: tokenResult.error.code },
+      'GitHub Agent: OAuth token not available'
+    );
+    return { ok: false, error: { code: 'TOKEN_NOT_AVAILABLE', message: `GitHub OAuth token not available for user: ${resolvedUser.userId}` } };
+  }
+
+  const accessToken = tokenResult.value.accessToken; // @allow-result-access -- narrowed by !tokenResult.ok
+
   // Fetch PR files for context
   const filesResult = await gitHubPRClient.getPullRequestFiles(
-    owner, repo, event.pullRequestNumber
+    accessToken, owner, repo, event.pullRequestNumber
   );
 
   if (!filesResult.ok) {

@@ -510,7 +510,6 @@ module "secret_manager" {
     # Orchestrator repository management (INT-515)
     "INTEXURAOS_REPOSITORY_URL"        = "GitHub repository URL for orchestrator self-managed clone"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
-    "INTEXURAOS_GITHUB_BOT_TOKEN"      = "GitHub personal access token for GitHub Agent API calls"
     # Dash0 OpenTelemetry observability
     "INTEXURAOS_DASH0_OTLP_ENDPOINT" = "Dash0 OTLP HTTP ingress endpoint for OpenTelemetry"
     "INTEXURAOS_DASH0_AUTH_TOKEN"    = "Dash0 Bearer auth token for OTLP export"
@@ -1442,7 +1441,6 @@ module "code_agent" {
     INTEXURAOS_ORCHESTRATOR_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
     INTEXURAOS_TOKEN_ENCRYPTION_KEY  = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
     INTEXURAOS_GITHUB_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
-    INTEXURAOS_GITHUB_BOT_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_BOT_TOKEN"]
   })
 
   env_vars = merge(local.common_service_env_vars, {

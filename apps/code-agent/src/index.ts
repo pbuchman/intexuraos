@@ -41,7 +41,6 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_GEMINI_APP_API_KEY',
-  'INTEXURAOS_GITHUB_BOT_TOKEN',
 ];
 
 // In E2E mode, only validate core env vars; others have sensible defaults
@@ -75,7 +74,6 @@ async function main(): Promise<void> {
     serviceUrl: config.serviceUrl,
     userServiceUrl: config.userServiceUrl,
     geminiAppApiKey: config.geminiAppApiKey,
-    githubBotToken: config.githubBotToken,
   });
 
   const { firestore, logger } = getServices();
