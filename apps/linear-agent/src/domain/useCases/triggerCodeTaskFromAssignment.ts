@@ -1,3 +1,4 @@
+import { hasCodeTaskLabel, hasPlanningTaskLabel } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import type { CodeAgentClient } from '../ports.js';
 import type { LinearWebhookEvent } from '../webhookTypes.js';
@@ -13,14 +14,16 @@ const ASSIGNMENT_PROMPT =
 const EXECUTION_PROMPT =
   'Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.';
 
-const CODE_TASK_LABEL = 'code-task';
-
 export function shouldTriggerCodeTask(event: LinearWebhookEvent): boolean {
   if (event.action !== 'update') return false;
   if (event.updatedFrom === undefined) return false;
   if (event.updatedFrom.assigneeId !== null) return false;
   if (event.data.assignee === null) return false;
   if (event.data.state.type !== 'backlog' && event.data.state.type !== 'unstarted') return false;
+
+  // Require planning-task or code-task label to trigger
+  const labelNames = event.data.labels.map((l) => l.name);
+  if (!hasPlanningTaskLabel(labelNames) && !hasCodeTaskLabel(labelNames)) return false;
 
   return true;
 }
@@ -33,8 +36,8 @@ export async function triggerCodeTaskFromAssignment(
   const { codeAgentClient, logger } = deps;
 
   // Check if issue has code-task label to determine prompt
-  const hasCodeTaskLabel = event.data.labels.some((label) => label.name === CODE_TASK_LABEL);
-  const prompt = hasCodeTaskLabel ? EXECUTION_PROMPT : ASSIGNMENT_PROMPT;
+  const labelNames = event.data.labels.map((l) => l.name);
+  const prompt = hasCodeTaskLabel(labelNames) ? EXECUTION_PROMPT : ASSIGNMENT_PROMPT;
 
   const result = await codeAgentClient.triggerCodeTask({
     userId,
