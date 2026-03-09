@@ -468,6 +468,43 @@ describe('submitTaskFeedback use case', () => {
       );
     });
 
+    it('should preserve review agentType from original task instead of using label-based routing', async () => {
+      const mockTask = createMockTask({ agentType: 'review' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Review feedback test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      let createInputAgentType: unknown;
+      mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        return ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+          agentType: input['agentType'],
+        });
+      });
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
+
+      expect(result.ok).toBe(true);
+      expect(createInputAgentType).toBe('review');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'review' })
+      );
+    });
+
     it('should fall back to label-based routing when original task is not pull_request', async () => {
       // agentType is undefined (legacy task) — should use labels to decide
       const mockTask = createMockTask();

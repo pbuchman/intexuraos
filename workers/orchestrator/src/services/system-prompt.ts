@@ -9,7 +9,7 @@ export interface SystemPromptParams {
   taskUrl?: string;
   linearIssueLabels: string[];
   workerType?: WorkerType;
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {

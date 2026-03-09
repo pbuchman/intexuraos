@@ -281,7 +281,9 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     agentType: originalTask.agentType === 'pull_request'
       ? ('pull_request' as const)
-      : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const),
+      : originalTask.agentType === 'review'
+        ? ('review' as const)
+        : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const),
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
   };
 
@@ -316,7 +318,7 @@ ${additionalContext.trim()}
     retriedFrom?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
-    agentType: 'planning' | 'execution' | 'pull_request';
+    agentType: 'planning' | 'execution' | 'pull_request' | 'review';
   } = {
     taskId: retryTask.id,
     prompt: retryTask.sanitizedPrompt,

@@ -45,7 +45,7 @@ export interface DispatchRequest {
   /** For retried tasks: points to the original task ID that this task is retrying. */
   retriedFrom?: string;
   /** Agent type for orchestrator agent-based routing. */
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
   /** Branch name of planning PR to merge into execution worktree. */
   planningPrBranch?: string;
   /** PR URL to close after successful execution. */

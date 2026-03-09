@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { stripDockerHeaders } from './log-formatter.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
-export type CompletionAgentType = 'planning' | 'execution' | 'pull_request';
+export type CompletionAgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 
 export interface CompletionVerifierInput {
   taskId: string;
