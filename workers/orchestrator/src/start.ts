@@ -36,6 +36,7 @@ import type { CompletionControlConfig, IsolationConfig } from './services/task-d
 import { LlmModels } from '@intexuraos/llm-contract';
 import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
 import { TurnMetricsCollector } from './services/turn-metrics-collector.js';
+import { OrchestratorExecutionDeepValidator } from './services/execution-deep-validator.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
@@ -414,6 +415,7 @@ async function bootstrap(): Promise<void> {
     githubAppPrivateKeyPath: privateKeyPath,
     githubInstallationId,
     orchestratorSecret,
+    secretsBasePath: join(orchestratorDir, 'secrets'),
   };
 
   const logFilePath = join(logsDir, 'orchestrator.log');
@@ -516,7 +518,7 @@ async function bootstrap(): Promise<void> {
   );
 
   // Create Docker isolation provider
-  const secretsBasePath = join(orchestratorDir, 'secrets');
+  const { secretsBasePath } = config;
   const workerImage = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE);
   const keepContainersAlive = process.env['KEEP_CONTAINERS_ALIVE'] === '1';
   if (keepContainersAlive) {
@@ -677,6 +679,12 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  const executionDeepValidator = new OrchestratorExecutionDeepValidator(logger, {
+    model: LlmModels.Gemini25Flash,
+    geminiApiKey: geminiVerifierKey,
+    auditLogPath: llmAuditLogPath,
+  });
+
   const dispatcher = new TaskDispatcher(
     config,
     statePersistence,
@@ -687,7 +695,8 @@ async function bootstrap(): Promise<void> {
     logger,
     isolationConfig,
     completionControl,
-    turnMetricsCollector
+    turnMetricsCollector,
+    executionDeepValidator
   );
 
   // Credential monitoring loop — trigger Docker-based refresh when near expiry

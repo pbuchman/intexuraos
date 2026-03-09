@@ -24,6 +24,11 @@ import {
   getLast50Lines,
 } from './completion-verifier.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
+import type { ExecutionDeepValidator } from './execution-deep-validator.js';
+import type { ExecutionAgentData } from './completion-verifier.js';
+import { readSessionTranscript } from './transcript-reader.js';
+import { formatTranscript } from './transcript-formatter.js';
+import { extractPrNumber, findPlanOnBranch } from './deep-validator-helpers.js';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -92,7 +97,8 @@ export class TaskDispatcher {
     private readonly logger: Logger,
     private readonly isolation: IsolationConfig,
     completionControl: CompletionControlConfig,
-    private readonly turnMetricsCollector?: TurnMetricsCollector
+    private readonly turnMetricsCollector?: TurnMetricsCollector,
+    private readonly executionDeepValidator?: ExecutionDeepValidator
   ) {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
@@ -936,6 +942,12 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       const finalResult = this.buildResultFromVerification(task, result, verification);
+
+      // Deep validation for execution tasks (non-blocking, best-effort)
+      if (completionAgentType === 'execution' && this.executionDeepValidator !== undefined) {
+        await this.runDeepValidation(task, finalResult, verification);
+      }
+
       await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
       return;
     }
@@ -1778,6 +1790,70 @@ export class TaskDispatcher {
         'Failed to collect turn metrics (non-fatal, task finalization continues)'
       );
     }
+  }
+
+  private async runDeepValidation(
+    task: Task,
+    finalResult: TaskResult,
+    verification: CompletionVerifierVerdict
+  ): Promise<void> {
+    if (this.executionDeepValidator === undefined) return;
+    if (verification.agentData?.agentType !== 'execution') return;
+
+    const agentData: ExecutionAgentData = verification.agentData;
+
+    const prNumber = extractPrNumber(finalResult.prUrl);
+    if (prNumber === undefined) {
+      this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no PR number');
+      return;
+    }
+
+    try {
+      this.appendOrchestratorTaskLog(task.taskId, 'Starting deep validation');
+
+      const entries = await readSessionTranscript(this.config.secretsBasePath, task.taskId);
+      if (entries.length === 0) {
+        this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no transcript entries');
+        return;
+      }
+
+      const formattedTranscript = formatTranscript(entries);
+
+      const linearIssueBody = this.buildLinearIssueSummary(task);
+
+      const planContent = await findPlanOnBranch(task.worktreePath);
+
+      await this.executionDeepValidator.validate({
+        taskId: task.taskId,
+        prNumber,
+        repository: task.repository,
+        formattedTranscript,
+        agentClaims: {
+          superpowers_executing_plans: agentData.superpowers_executing_plans,
+          superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
+          gh_pr_url: agentData.gh_pr_url,
+          summary: agentData.summary,
+        },
+        linearIssueBody,
+        planContent,
+        worktreePath: task.worktreePath,
+      });
+
+      this.appendOrchestratorTaskLog(task.taskId, 'Deep validation completed');
+    } catch (error) {
+      this.logger.error(
+        { taskId: task.taskId, error: String(error) },
+        'Deep validation failed (non-fatal, task finalization continues)'
+      );
+    }
+  }
+
+  private buildLinearIssueSummary(task: Task): string {
+    const parts: string[] = [];
+    if (task.linearIssueId !== undefined) parts.push(`Linear Issue: ${task.linearIssueId}`);
+    if (task.linearIssueTitle !== undefined) parts.push(`Title: ${task.linearIssueTitle}`);
+    if (parts.length === 0) return 'No Linear issue linked';
+    return parts.join('\n');
   }
 
   private clearTaskTimers(taskId: string): void {
