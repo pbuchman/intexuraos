@@ -143,6 +143,20 @@ describe('fetchLinearIssueDescription', () => {
     );
   });
 
+  it('returns undefined when request times out', async () => {
+    nock('https://api.linear.app')
+      .post('/graphql')
+      .delayConnection(200)
+      .reply(200, { data: { issueByIdentifier: { description: 'too late' } } });
+
+    const result = await fetchLinearIssueDescription('INT-TIMEOUT', 'test-api-key', mockLogger, 50);
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'INT-TIMEOUT' }),
+      'Failed to fetch Linear issue description'
+    );
+  });
+
   it('returns undefined on network error', async () => {
     nock('https://api.linear.app').post('/graphql').replyWithError('connect ECONNREFUSED');
 

@@ -3521,9 +3521,16 @@ describe('TaskDispatcher', () => {
         planContent: undefined,
       } as import('../services/execution-deep-validator.js').DeepValidationInput;
 
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
       await internal.executeDeepValidation('deep-val-test', testInput);
 
       expect(mockValidator.validate).toHaveBeenCalledWith(testInput);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { taskId: 'deep-val-test' },
+        'Deep validation completed'
+      );
+      expect(mockLogForwarder.appendChunk).not.toHaveBeenCalled();
     });
 
     it('prepareDeepValidationInput returns undefined when validator not provided', async () => {
@@ -3663,6 +3670,44 @@ describe('TaskDispatcher', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'empty-transcript' }),
         'Deep validation skipped: no transcript entries'
+      );
+    });
+
+    it('prepareDeepValidationInput failure does not block finalization', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockExtractPrNumber.mockReturnValue(123);
+      mockReadSessionTranscript.mockRejectedValue(new Error('I/O failure'));
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const internal = deepValDispatcher as unknown as {
+        prepareDeepValidationInput: PrepareDeepValidationInput;
+      };
+      const result = await internal.prepareDeepValidationInput(
+        mockTask,
+        mockFinalResult,
+        executionVerification
+      );
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'deep-val-test' }),
+        'Deep validation preparation failed (non-fatal, skipping deep validation)'
       );
     });
 

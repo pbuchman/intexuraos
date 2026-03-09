@@ -192,7 +192,11 @@ describe('readSessionTranscript', () => {
   });
 
   it('filters entries with null message', async () => {
-    const nullMessage = JSON.stringify({ type: 'assistant', message: null });
+    const nullMessage = JSON.stringify({
+      type: 'assistant',
+      timestamp: '2026-03-08T23:10:00.000Z',
+      message: null,
+    });
     async function* fakeGlob(): AsyncGenerator<string> {
       yield '/secrets/claude-session-task_abc/projects/-repo/session.jsonl';
     }
@@ -235,9 +239,27 @@ describe('readSessionTranscript', () => {
     expect(result[1]?.timestamp).toBe('2026-03-08T23:15:00.000Z');
   });
 
+  it('filters entries with missing timestamp', async () => {
+    const noTimestamp = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a1',
+      parentUuid: 'root',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+    });
+    async function* fakeGlob(): AsyncGenerator<string> {
+      yield '/secrets/claude-session-task_abc/projects/-repo/session.jsonl';
+    }
+    mockGlob.mockReturnValueOnce(fakeGlob() as never);
+    mockReadFile.mockResolvedValueOnce(`${noTimestamp}\n`);
+
+    const result = await readSessionTranscript('/secrets', 'task_abc', mockLogger);
+    expect(result).toHaveLength(0);
+  });
+
   it('filters entries with non-array content', async () => {
     const badContent = JSON.stringify({
       type: 'assistant',
+      timestamp: '2026-03-08T23:10:00.000Z',
       message: { role: 'assistant', content: 'not-an-array' },
     });
     async function* fakeGlob(): AsyncGenerator<string> {
