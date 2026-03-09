@@ -859,7 +859,6 @@ function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
       {hasValidPr ? (
         <PREventsGroup
           pullRequestNumber={prNumber}
-          title={result.summary ?? null}
           repository={task.repository}
         />
       ) : null}
