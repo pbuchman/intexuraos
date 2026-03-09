@@ -206,6 +206,32 @@ describe('formatTranscript', () => {
     expect(result).toContain('Skill(superpowers:requesting-code-review)');
   });
 
+  it('does not include skill field in formatted input for Skill tool_use', () => {
+    const entries: SessionJsonlEntry[] = [
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        parentUuid: 'root',
+        timestamp: '2026-03-08T23:10:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_abc',
+              name: 'Skill',
+              input: { skill: 'superpowers:requesting-code-review', args: '--verbose' },
+            },
+          ],
+        },
+      },
+    ];
+    const result = formatTranscript(entries);
+    expect(result).toContain('Skill(superpowers:requesting-code-review)');
+    expect(result).not.toContain('skill: "superpowers:requesting-code-review"');
+    expect(result).toContain('args: "--verbose"');
+  });
+
   it('handles Agent tool_use entries', () => {
     const entries: SessionJsonlEntry[] = [
       {

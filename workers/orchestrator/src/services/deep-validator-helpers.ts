@@ -1,5 +1,6 @@
 import { readFile, glob } from 'node:fs/promises';
 import { join } from 'node:path';
+import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 
 export function extractPrNumber(prUrl: string | undefined): number | undefined {
   if (prUrl === undefined) return undefined;
@@ -7,7 +8,10 @@ export function extractPrNumber(prUrl: string | undefined): number | undefined {
   return match?.[1] !== undefined ? parseInt(match[1], 10) : undefined;
 }
 
-export async function findPlanOnBranch(worktreePath: string): Promise<string | undefined> {
+export async function findPlanOnBranch(
+  worktreePath: string,
+  logger: Logger
+): Promise<string | undefined> {
   try {
     const pattern = join(worktreePath, 'docs', 'plans', '**', '*.md');
     const planFiles: string[] = [];
@@ -21,7 +25,8 @@ export async function findPlanOnBranch(worktreePath: string): Promise<string | u
     /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback, length check above guarantees element exists @preserve */
     return await readFile(planFiles[planFiles.length - 1] ?? '', 'utf-8');
     /* v8 ignore stop @preserve */
-  } catch {
+  } catch (error) {
+    logger.warn({ worktreePath, error: getErrorMessage(error) }, 'Failed to find plan on branch');
     return undefined;
   }
 }

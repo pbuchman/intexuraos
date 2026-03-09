@@ -943,9 +943,9 @@ export class TaskDispatcher {
       await this.collectTurnMetrics(task, attempt);
       const finalResult = this.buildResultFromVerification(task, result, verification);
 
-      // Deep validation for execution tasks (non-blocking, best-effort)
+      // Deep validation for execution tasks (fire-and-forget, best-effort)
       if (completionAgentType === 'execution' && this.executionDeepValidator !== undefined) {
-        await this.runDeepValidation(task, finalResult, verification);
+        void this.runDeepValidation(task, finalResult, verification);
       }
 
       await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
@@ -1811,7 +1811,11 @@ export class TaskDispatcher {
     try {
       this.appendOrchestratorTaskLog(task.taskId, 'Starting deep validation');
 
-      const entries = await readSessionTranscript(this.config.secretsBasePath, task.taskId);
+      const entries = await readSessionTranscript(
+        this.config.secretsBasePath,
+        task.taskId,
+        this.logger
+      );
       if (entries.length === 0) {
         this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no transcript entries');
         return;
@@ -1821,7 +1825,7 @@ export class TaskDispatcher {
 
       const linearIssueBody = this.buildLinearIssueSummary(task);
 
-      const planContent = await findPlanOnBranch(task.worktreePath);
+      const planContent = await findPlanOnBranch(task.worktreePath, this.logger);
 
       await this.executionDeepValidator.validate({
         taskId: task.taskId,
@@ -1842,7 +1846,7 @@ export class TaskDispatcher {
       this.appendOrchestratorTaskLog(task.taskId, 'Deep validation completed');
     } catch (error) {
       this.logger.error(
-        { taskId: task.taskId, error: String(error) },
+        { taskId: task.taskId, error: error instanceof Error ? error.message : String(error) },
         'Deep validation failed (non-fatal, task finalization continues)'
       );
     }

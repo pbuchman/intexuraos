@@ -39,7 +39,7 @@ function formatToolName(block: { name: string; input: Record<string, unknown> })
 
 function formatInput(input: Record<string, unknown>): string {
   const entries = Object.entries(input)
-    .filter(([key]) => key !== 'subagent_type') // already shown in tool name
+    .filter(([key]) => key !== 'subagent_type' && key !== 'skill') // already shown in tool name
     .map(([key, value]) => {
       const str = typeof value === 'string' ? value : JSON.stringify(value);
       const truncated = str.length > 200 ? str.slice(0, 200) + '...' : str;
