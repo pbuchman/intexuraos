@@ -12,6 +12,7 @@ import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import type { CreateEventDecisionInput } from '../models/eventDecision.js';
 import type { WebhookRulesService, RuleOutcome } from './gitHubWebhookRules.js';
 import type { WebhookDispatchService } from './gitHubDispatchService.js';
+import { resolveLoginForTaskCreation } from './gitHubDispatchService.js';
 import type { EventDecisionRepository } from '../repositories/eventDecisionRepository.js';
 import type { GitHubAgentEvalResult, GitHubAgentError } from '../usecases/githubAgent.js';
 import type { CreateReviewTaskRequest, CreateReviewTaskError } from '../usecases/createReviewTask.js';
@@ -102,7 +103,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           {
             repository: event.repository,
             prNumber: event.pullRequestNumber,
-            senderLogin: event.senderLogin,
+            senderLogin: resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
             reviewTypes: triage.reviewTypes,
             eventId: event.id,
             ...(event.title !== null && { prTitle: event.title }),

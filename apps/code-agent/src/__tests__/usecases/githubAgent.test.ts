@@ -230,13 +230,25 @@ describe('evaluateEvent', () => {
       const result = await evaluateEvent(deps, event);
 
       expect(result.ok).toBe(true);
-      if (result.ok && result.value.triage.action === 'request_review') {
-        expect(result.value.triage.reviewTypes).toHaveLength(0);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
       }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ reviewType: 'performance' }),
         'GitHub Agent requested unknown review type'
       );
+    });
+
+    it('returns skip when no tool is called for PR event', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+      });
+      const event = createFakePREvent();
+      const result = await evaluateEvent(deps, event);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
+      }
     });
 
     it('handles multiple review types', async () => {
@@ -345,8 +357,8 @@ describe('evaluateEvent', () => {
       const result = await evaluateEvent(deps, event);
 
       expect(result.ok).toBe(true);
-      if (result.ok && result.value.triage.action === 'request_review') {
-        expect(result.value.triage.reviewTypes).toHaveLength(0);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
       }
     });
 
