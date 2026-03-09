@@ -242,6 +242,18 @@ describe('GitHubDispatchService', () => {
       expect(requestArg?.senderLogin).toBe('claude[bot]');
     });
 
+    it('should not remap bot senderLogin for org-owned repos', async () => {
+      const botEvent = { ...mockEvent, senderLogin: 'claude[bot]', repository: 'intexuraos/api-gateway' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-org' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: botEvent });
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg?.senderLogin).toBe('claude[bot]');
+    });
+
     it('should not resolve non-bot senderLogin', async () => {
       vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
       mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-human' }));

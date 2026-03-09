@@ -59,7 +59,11 @@ export function resolveLoginForTaskCreation(senderLogin: string, repository: str
   if (!allowedBots.has(senderLogin)) return senderLogin;
   const slashIndex = repository.indexOf('/');
   if (slashIndex <= 0) return senderLogin;
-  return repository.slice(0, slashIndex);
+  const owner = repository.slice(0, slashIndex);
+  // Only remap for personal forks (e.g. pbuchman/intexuraos),
+  // not org repos (e.g. intexuraos/some-repo) where the owner is an org, not a user.
+  if (owner === 'intexuraos') return senderLogin;
+  return owner;
 }
 
 export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): WebhookDispatchService {
