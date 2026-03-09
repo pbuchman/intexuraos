@@ -21,8 +21,6 @@ export interface GitHubAgentDeps {
   logger: Logger;
   gitHubPRClient: GitHubPRClient;
   toolCallingClient: ToolCallingClient;
-  /** GitHub bot token for API calls (fetching files, posting comments) */
-  githubBotToken: string;
 }
 
 export interface GitHubAgentResult {
@@ -44,7 +42,7 @@ export async function evaluatePREvent(
   deps: GitHubAgentDeps,
   event: GitHubPREvent
 ): Promise<Result<GitHubAgentResult, GitHubAgentError>> {
-  const { logger, gitHubPRClient, toolCallingClient, githubBotToken } = deps;
+  const { logger, gitHubPRClient, toolCallingClient } = deps;
 
   // Validate event is a PR opened/synchronize
   if (event.eventType !== 'pull_request') {
@@ -66,7 +64,7 @@ export async function evaluatePREvent(
 
   // Fetch PR files for context
   const filesResult = await gitHubPRClient.getPullRequestFiles(
-    githubBotToken, owner, repo, event.pullRequestNumber
+    owner, repo, event.pullRequestNumber
   );
 
   if (!filesResult.ok) {

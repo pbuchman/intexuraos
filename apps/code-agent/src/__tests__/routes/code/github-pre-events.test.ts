@@ -204,7 +204,6 @@ describe('GET /code/github-pr-events', () => {
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
-      githubBotToken: '',
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -232,7 +231,7 @@ describe('GET /code/github-pr-events', () => {
       webhookRules: import('../../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
-      githubBotToken: string;
+
     });
 
     server = await buildServer();

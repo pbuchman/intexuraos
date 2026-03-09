@@ -159,13 +159,18 @@ export function isSupportedProvider(provider: string): provider is SupportedProv
  * @returns ToolCallingClient instance
  */
 export function createToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
-  const provider = getProviderForModel(config.model);
+  const provider = getProviderForModel(config.model) as SupportedProvider;
 
   switch (provider) {
     case LlmProviders.Google:
       return createGeminiToolCallingClient(config);
-    default:
+    case LlmProviders.Zai: {
       throw new Error(`Tool calling not supported for provider: ${provider}`);
+    }
+    default: {
+      const exhaustive: never = provider;
+      throw new Error(`Tool calling not supported for provider: ${String(exhaustive)}`);
+    }
   }
 }
 

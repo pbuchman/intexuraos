@@ -1,8 +1,9 @@
 /**
  * Port for interacting with GitHub Pull Requests.
  *
- * Token is passed per-call to support per-user OAuth tokens
- * or platform-level bot tokens.
+ * Bot methods (getPullRequestFiles, getPullRequestCommits, postPRComment)
+ * use the platform token baked into the client at factory time.
+ * Only updatePRTitle takes a per-call token for user OAuth tokens.
  */
 
 import type { Result } from '@intexuraos/common-core';
@@ -15,7 +16,7 @@ export interface GitHubPRClientError {
 /** A file changed in a pull request. */
 export interface PullRequestFile {
   filename: string;
-  status: string;
+  status: 'added' | 'modified' | 'removed' | 'renamed' | 'copied' | 'changed' | 'unchanged';
   additions: number;
   deletions: number;
 }
@@ -30,6 +31,7 @@ export interface PullRequestCommit {
 export interface GitHubPRClient {
   /**
    * Update the title of a pull request.
+   * Uses a per-call token (user OAuth token).
    */
   updatePRTitle(
     token: string,
@@ -41,9 +43,9 @@ export interface GitHubPRClient {
 
   /**
    * Get the list of files changed in a pull request.
+   * Uses the platform bot token baked into the client at factory time.
    */
   getPullRequestFiles(
-    token: string,
     owner: string,
     repo: string,
     prNumber: number
@@ -51,9 +53,9 @@ export interface GitHubPRClient {
 
   /**
    * Get the list of commits in a pull request.
+   * Uses the platform bot token baked into the client at factory time.
    */
   getPullRequestCommits(
-    token: string,
     owner: string,
     repo: string,
     prNumber: number
@@ -61,9 +63,9 @@ export interface GitHubPRClient {
 
   /**
    * Post a comment on a pull request (via the issues API).
+   * Uses the platform bot token baked into the client at factory time.
    */
   postPRComment(
-    token: string,
     owner: string,
     repo: string,
     prNumber: number,

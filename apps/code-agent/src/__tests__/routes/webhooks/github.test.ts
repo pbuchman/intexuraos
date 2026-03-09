@@ -140,7 +140,6 @@ describe('POST /webhooks/github', () => {
       ]),
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
       toolCallingClient: undefined,
-      githubBotToken: '',
     };
 
     setServices(mockServices);
@@ -318,7 +317,6 @@ describe('POST /webhooks/github', () => {
       setServicesAgain({
         ...currentServices,
         toolCallingClient: { run: mockRun },
-        githubBotToken: 'fake-bot-token',
         gitHubPRClient: {
           updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
           getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),

@@ -86,7 +86,6 @@ export interface ServiceContainer {
   dispatchService: WebhookDispatchService;
   // GitHub Agent (INT-743)
   toolCallingClient: ToolCallingClient | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
-  githubBotToken: string;
 }
 
 // Configuration required to initialize services
@@ -295,7 +294,7 @@ export function initServices(config: ServiceConfig): void {
   const workerHealthProbe = createWorkerHealthProbe();
   const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe });
   const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher, linearAgentClient });
-  const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000 });
+  const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000, githubBotToken: config.githubBotToken });
 
   const statusMirrorService = createStatusMirrorService({
     actionsAgentClient,
@@ -367,7 +366,6 @@ export function initServices(config: ServiceConfig): void {
           logger,
         })
       : undefined,
-    githubBotToken: config.githubBotToken,
     dispatchService: createWebhookDispatchService({
       codeTaskRepo,
       logLineRepo,

@@ -239,7 +239,6 @@ describe('POST /internal/webhooks/task-complete', () => {
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
-      githubBotToken: '',
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -267,7 +266,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
-      githubBotToken: string;
+
     });
 
     app = await buildServer();
@@ -3778,7 +3777,6 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
-      githubBotToken: '',
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -3806,7 +3804,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
-      githubBotToken: string;
+
     });
 
     app = await buildServer();
@@ -4128,7 +4126,6 @@ describe('POST /internal/logs', () => {
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
-      githubBotToken: '',
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4156,7 +4153,7 @@ describe('POST /internal/logs', () => {
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
-      githubBotToken: string;
+
     });
 
     app = await buildServer();
@@ -4700,7 +4697,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
-      githubBotToken: '',
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4728,7 +4724,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
-      githubBotToken: string;
+
     });
 
     app = await buildServer();
