@@ -131,7 +131,13 @@ describe('POST /webhooks/github', () => {
       gitHubPREventRepo: mockEventRepo,
       gitHubPRSummaryRepo: mockSummaryRepo,
       turnMetricsRepo: {} as never,
-      userServiceClient: {} as never,
+      userServiceClient: {
+        getApiKeys: vi.fn(),
+        getLlmClient: vi.fn(),
+        reportLlmSuccess: vi.fn(),
+        resolveGitHubUsername: vi.fn().mockResolvedValue(ok({ userId: 'user-1' })),
+        getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'oauth-token-123', email: 'test@test.com' })),
+      } as never,
       gitHubPRClient: {} as never,
       webhookRules: createWebhookRulesService([
         new ActionableEventRule(ALLOWED_BOTS),

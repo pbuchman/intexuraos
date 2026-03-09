@@ -5,6 +5,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { ToolCallingClient, ToolDefinition } from '@intexuraos/llm-contract';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import { evaluatePREvent, isGitHubAgentEvent, type GitHubAgentDeps } from '../../domain/usecases/githubAgent.js';
@@ -85,11 +86,22 @@ function createFakeToolCallingClient(options?: {
   };
 }
 
+function createFakeUserServiceClient(): UserServiceClient {
+  return {
+    getApiKeys: vi.fn().mockResolvedValue(ok({})),
+    getLlmClient: vi.fn().mockResolvedValue(ok({})),
+    reportLlmSuccess: vi.fn().mockResolvedValue(undefined),
+    resolveGitHubUsername: vi.fn().mockResolvedValue(ok({ userId: 'user-1' })),
+    getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'oauth-token-123', email: 'test@test.com' })),
+  };
+}
+
 function createDeps(overrides: Partial<GitHubAgentDeps> = {}): GitHubAgentDeps {
   return {
     logger: createFakeLogger(),
     gitHubPRClient: createFakeGitHubPRClient(),
     toolCallingClient: createFakeToolCallingClient(),
+    userServiceClient: createFakeUserServiceClient(),
     ...overrides,
   };
 }
@@ -109,7 +121,7 @@ describe('evaluatePREvent', () => {
     }
   });
 
-  it('fetches PR files using the client', async () => {
+  it('fetches PR files using the client with OAuth token', async () => {
     const prClient = createFakeGitHubPRClient();
     const deps = createDeps({ gitHubPRClient: prClient });
     const event = createFakePREvent();
@@ -117,7 +129,7 @@ describe('evaluatePREvent', () => {
     await evaluatePREvent(deps, event);
 
     expect(prClient.getPullRequestFiles).toHaveBeenCalledWith(
-      'intexuraos', 'intexuraos', 42
+      'oauth-token-123', 'intexuraos', 'intexuraos', 42
     );
   });
 
@@ -299,6 +311,52 @@ describe('evaluatePREvent', () => {
     if (result.ok) {
       expect(result.value.skipped).toBe(true);
       expect(result.value.skipReason).toBe('(no reason provided)');
+    }
+  });
+
+  it('returns USER_NOT_FOUND when GitHub user has no linked account', async () => {
+    const userClient = createFakeUserServiceClient();
+    vi.mocked(userClient.resolveGitHubUsername).mockResolvedValue(ok(null));
+    const deps = createDeps({ userServiceClient: userClient });
+    const event = createFakePREvent();
+
+    const result = await evaluatePREvent(deps, event);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('USER_NOT_FOUND');
+    }
+  });
+
+  it('returns USER_NOT_FOUND when user resolution fails', async () => {
+    const userClient = createFakeUserServiceClient();
+    vi.mocked(userClient.resolveGitHubUsername).mockResolvedValue(
+      err({ code: 'NETWORK_ERROR' as const, message: 'Connection refused' })
+    );
+    const deps = createDeps({ userServiceClient: userClient });
+    const event = createFakePREvent();
+
+    const result = await evaluatePREvent(deps, event);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('USER_NOT_FOUND');
+    }
+  });
+
+  it('returns TOKEN_NOT_AVAILABLE when OAuth token fetch fails', async () => {
+    const userClient = createFakeUserServiceClient();
+    vi.mocked(userClient.getOAuthToken).mockResolvedValue(
+      err({ code: 'CONNECTION_NOT_FOUND' as const, message: 'No GitHub OAuth connection' })
+    );
+    const deps = createDeps({ userServiceClient: userClient });
+    const event = createFakePREvent();
+
+    const result = await evaluatePREvent(deps, event);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('TOKEN_NOT_AVAILABLE');
     }
   });
 
