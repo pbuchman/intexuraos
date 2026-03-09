@@ -4,9 +4,9 @@
  * Re-exports from @intexuraos/common-core.
  */
 
-import { normalizeLabel, hasCodeTaskLabel } from '@intexuraos/common-core';
+import { normalizeLabel, hasCodeTaskLabel, hasPlanningTaskLabel } from '@intexuraos/common-core';
 
-export { hasCodeTaskLabel };
+export { hasCodeTaskLabel, hasPlanningTaskLabel };
 
 export function hasUnclearLabel(labels: string[]): boolean {
   return labels.some((label) => normalizeLabel(label) === 'unclear');
