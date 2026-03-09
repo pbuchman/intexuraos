@@ -139,13 +139,13 @@ describe('createReviewTask', () => {
     }
   });
 
-  it('returns no_workers_configured when user has no enabled workers', async () => {
+  it('returns task_creation_failed when codeTaskRepo.create fails', async () => {
     const deps = createFakeDeps({
-      userLookupService: {
-        resolveByGitHubUsername: vi.fn().mockResolvedValue(
-          err({ code: 'NO_ENABLED_WORKER' as const, message: 'No enabled workers' })
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(
+          err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
         ),
-      } as unknown as UserLookupService,
+      } as unknown as CodeTaskRepository,
     });
 
     const result = await createReviewTask(deps, {
@@ -158,21 +158,17 @@ describe('createReviewTask', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe('no_workers_configured');
+      expect(result.error.code).toBe('task_creation_failed');
     }
   });
 
-  it('returns error when task creation fails', async () => {
+  it('returns no_workers_configured when user lookup returns NO_ENABLED_WORKER', async () => {
     const deps = createFakeDeps({
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(
-          err({ code: 'FIRESTORE_ERROR' as const, message: 'Write failed' })
+      userLookupService: {
+        resolveByGitHubUsername: vi.fn().mockResolvedValue(
+          err({ code: 'NO_ENABLED_WORKER' as const, message: 'No workers enabled for user' })
         ),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
+      } as unknown as UserLookupService,
     });
 
     const result = await createReviewTask(deps, {
@@ -185,7 +181,31 @@ describe('createReviewTask', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe('task_creation_failed');
+      expect(result.error.code).toBe('no_workers_configured');
+    }
+  });
+
+  it('uses provided baseBranch instead of default main', async () => {
+    const deps = createFakeDeps();
+    await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-8',
+      baseBranch: 'development',
+    });
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+    expect(createCall).toBeDefined();
+    if (createCall !== undefined) {
+      expect(createCall[0].baseBranch).toBe('development');
+    }
+
+    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
+    expect(dispatchCall).toBeDefined();
+    if (dispatchCall !== undefined) {
+      expect(dispatchCall[0].baseBranch).toBe('development');
     }
   });
 

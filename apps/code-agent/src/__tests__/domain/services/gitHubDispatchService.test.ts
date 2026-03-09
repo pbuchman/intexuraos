@@ -42,6 +42,7 @@ const mockEvent: GitHubPREvent = {
   title: 'Test PR',
   body: 'Test description',
   state: 'open',
+  baseBranch: null,
   mergedAt: null,
   createdAt: new Date('2026-03-03T10:00:00Z'),
   processedAt: new Date('2026-03-03T10:00:00Z'),

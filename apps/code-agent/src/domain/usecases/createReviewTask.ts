@@ -23,6 +23,7 @@ export interface CreateReviewTaskRequest {
   reviewTypes: string[];
   eventId: string;
   prTitle?: string;
+  baseBranch?: string;
 }
 
 export interface CreateReviewTaskError {
@@ -93,7 +94,7 @@ export async function createReviewTask(
   const webhookSecret = createHmac('sha256', orchestratorSecret).update(eventId).digest('hex');
 
   const [owner] = repository.split('/');
-  const baseBranch = 'main';
+  const baseBranch = request.baseBranch ?? 'main';
 
   const taskInput: CreateTaskInput = {
     userId,

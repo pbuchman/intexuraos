@@ -36,6 +36,7 @@ function createFakePREvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREven
     title: 'feat: add new feature',
     body: 'This PR adds a new feature.',
     state: 'open',
+    baseBranch: null,
     mergedAt: null,
     createdAt: new Date(),
     processedAt: new Date(),

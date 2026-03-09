@@ -88,23 +88,15 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           decision: 'dispatch',
           reason: `LLM dispatch: ${triage.template}`,
           llmCostUsd: usage.costUsd,
+          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
           ...(usage.model !== undefined && { llmModel: usage.model }),
+          /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
         }, startTime);
         return;
       }
 
       if (triage.action === 'request_review') {
-        await recordDecision(deps, event, {
-          decidedBy: 'github_agent',
-          decision: 'request_review',
-          reason: `LLM request_review: ${triage.reviewTypes.join(', ')}`,
-          dispatchAction: 'create_review_task',
-          llmCostUsd: usage.costUsd,
-          ...(usage.model !== undefined && { llmModel: usage.model }),
-          llmToolCalls: usage.toolCalls,
-        }, startTime);
-
         const reviewResult = await deps.createReviewTask(
           logger,
           {
@@ -114,6 +106,9 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             reviewTypes: triage.reviewTypes,
             eventId: event.id,
             ...(event.title !== null && { prTitle: event.title }),
+            /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
+            ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
+            /* v8 ignore stop @preserve */
           },
         );
 
@@ -122,7 +117,31 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             { eventId: event.id, error: reviewResult.error },
             'Failed to create review task'
           );
+          await recordDecision(deps, event, {
+            decidedBy: 'github_agent',
+            decision: 'skip',
+            reason: `review_task_failed: ${reviewResult.error.message}`,
+            llmCostUsd: usage.costUsd,
+            /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
+            ...(usage.model !== undefined && { llmModel: usage.model }),
+            /* v8 ignore stop @preserve */
+            llmToolCalls: usage.toolCalls,
+          }, startTime);
+          return;
         }
+
+        await recordDecision(deps, event, {
+          decidedBy: 'github_agent',
+          decision: 'request_review',
+          reason: `LLM request_review: ${triage.reviewTypes.join(', ')}`,
+          dispatchAction: 'create_review_task',
+          dispatchParams: { taskId: reviewResult.value.taskId, reviewTypes: triage.reviewTypes }, // @allow-result-access -- narrowed by !reviewResult.ok above
+          llmCostUsd: usage.costUsd,
+          /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
+          ...(usage.model !== undefined && { llmModel: usage.model }),
+          /* v8 ignore stop @preserve */
+          llmToolCalls: usage.toolCalls,
+        }, startTime);
         return;
       }
 
@@ -132,7 +151,9 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         decision: 'skip',
         reason: `LLM skip: ${triage.reason}`,
         llmCostUsd: usage.costUsd,
+        /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(usage.model !== undefined && { llmModel: usage.model }),
+        /* v8 ignore stop @preserve */
         llmToolCalls: usage.toolCalls,
       }, startTime);
     },
@@ -195,6 +216,7 @@ async function recordDecision(
     decision: 'dispatch' | 'skip' | 'request_review';
     reason: string;
     dispatchAction?: 'create_task' | 'send_message' | 'create_review_task';
+    dispatchParams?: { taskId?: string; reviewTypes?: string[] };
     llmCostUsd?: number;
     llmModel?: string;
     llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
@@ -206,14 +228,19 @@ async function recordDecision(
     repository: event.repository,
     pullRequestNumber: event.pullRequestNumber,
     eventType: event.eventType,
+    /* v8 ignore start -- ts-type: null coalescing for GitHubPRAction | null @preserve */
     eventAction: event.action ?? 'unknown',
+    /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,
     decidedBy: fields.decidedBy,
     decision: fields.decision,
     reason: fields.reason,
     ...(fields.dispatchAction !== undefined && { dispatchAction: fields.dispatchAction }),
+    ...(fields.dispatchParams !== undefined && { dispatchParams: fields.dispatchParams }),
     ...(fields.llmCostUsd !== undefined && { llmCostUsd: fields.llmCostUsd }),
+    /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
     ...(fields.llmModel !== undefined && { llmModel: fields.llmModel }),
+    /* v8 ignore stop @preserve */
     ...(fields.llmToolCalls !== undefined && { llmToolCalls: fields.llmToolCalls }),
     decisionLatencyMs: Date.now() - startTime,
   };

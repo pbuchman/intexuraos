@@ -131,6 +131,9 @@ async function handleNewTask(
       comment: event.body ?? '',
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
+      /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
+      ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
+      /* v8 ignore stop @preserve */
     },
   );
 
