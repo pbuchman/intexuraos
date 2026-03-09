@@ -41,7 +41,7 @@ export interface Task {
    */
   retriedFrom?: string;
   /** Agent type from code-agent. When set, used instead of recalculating from labels. */
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
   /** Branch name of planning PR to merge into execution worktree. */
   planningPrBranch?: string;
   /** PR URL to close after successful execution. */

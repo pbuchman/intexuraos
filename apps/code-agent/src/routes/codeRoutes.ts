@@ -106,7 +106,7 @@ const codeTaskSchema = {
       ...linearIssueForDisplaySchema,
       nullable: true,
     },
-    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
+    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review'] },
     implementationTaskId: { type: 'string' },
     parentTaskId: { type: 'string' },
     followUpReason: { type: 'string' },
@@ -201,7 +201,7 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: string;
@@ -247,7 +247,7 @@ function taskToApiResponse(task: {
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: string;
@@ -1387,7 +1387,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         webhookSecret: string;
         linearIssueLabels: string[];
         hasChildren: boolean;
-        agentType: 'planning' | 'execution' | 'pull_request';
+        agentType: 'planning' | 'execution' | 'pull_request' | 'review';
         workerCredentials: { workers: Array<{ name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }> };
       } = {
         taskId: task.id,
@@ -1689,7 +1689,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     ...linearIssueForDisplaySchema,
                     nullable: true,
                   },
-                  agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
+                  agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review'] },
                   implementationTaskId: { type: 'string' },
                   parentTaskId: { type: 'string' },
                   followUpReason: { type: 'string' },
