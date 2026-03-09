@@ -58,6 +58,7 @@ describe('main.ts', () => {
     githubAppPrivateKeyPath: '/tmp/key.pem',
     githubInstallationId: 'test-installation-id',
     orchestratorSecret: 'test-secret',
+    secretsBasePath: '/tmp/secrets',
   };
 
   const mockLogger: Logger = {

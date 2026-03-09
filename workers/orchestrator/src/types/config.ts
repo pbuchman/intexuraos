@@ -10,4 +10,5 @@ export interface OrchestratorConfig {
   githubAppPrivateKeyPath: string;
   githubInstallationId: string;
   orchestratorSecret: string;
+  secretsBasePath: string;
 }
