@@ -188,6 +188,66 @@ describe('evaluatePREvent', () => {
     }
   });
 
+  it('rejects unknown review_type in request_review tool', async () => {
+    const toolClient: ToolCallingClient = {
+      async run(params): ReturnType<ToolCallingClient['run']> {
+        const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+        if (requestReview !== undefined) {
+          const result = await requestReview.run({ review_type: 'performance' });
+          expect(result).toContain('Unknown review type');
+        }
+        return ok({
+          content: 'Done.',
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 80, outputTokens: 30, totalTokens: 110, costUsd: 0.0005 },
+        });
+      },
+    };
+    const logger = createFakeLogger();
+    const deps = createDeps({ toolCallingClient: toolClient, logger });
+    const event = createFakePREvent();
+
+    const result = await evaluatePREvent(deps, event);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Invalid review types should not be added to reviewsRequested
+      expect(result.value.reviewsRequested).toHaveLength(0);
+    }
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewType: 'performance' }),
+      'GitHub Agent requested unknown review type'
+    );
+  });
+
+  it('handles non-string review_type in request_review tool', async () => {
+    const toolClient: ToolCallingClient = {
+      async run(params): ReturnType<ToolCallingClient['run']> {
+        const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+        if (requestReview !== undefined) {
+          const result = await requestReview.run({});
+          expect(result).toContain('Unknown review type');
+        }
+        return ok({
+          content: 'Done.',
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 80, outputTokens: 30, totalTokens: 110, costUsd: 0.0005 },
+        });
+      },
+    };
+    const deps = createDeps({ toolCallingClient: toolClient });
+    const event = createFakePREvent();
+
+    const result = await evaluatePREvent(deps, event);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.reviewsRequested).toHaveLength(0);
+    }
+  });
+
   it('handles skip_review tool call', async () => {
     const toolClient: ToolCallingClient = {
       async run(params): ReturnType<ToolCallingClient['run']> {

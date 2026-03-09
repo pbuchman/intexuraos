@@ -213,11 +213,9 @@ ${feedback.trim()}
     }
   }
 
-  const agentType: 'planning' | 'execution' | 'pull_request' | 'review' = originalTask.agentType === 'pull_request'
+  const agentType: 'planning' | 'execution' | 'pull_request' = originalTask.agentType === 'pull_request'
     ? 'pull_request'
-    : originalTask.agentType === 'review'
-      ? 'review'
-      : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'planning';
+    : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'planning';
 
   // Step 8: Create follow-up task with parentTaskId
   const createInput = {

@@ -82,7 +82,7 @@ export function createGitHubPRHttpClient(
     ): Promise<Result<PullRequestFile[], GitHubPRClientError>> {
       try {
         const response = await fetch(
-          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}/files`,
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}/files?per_page=100`,
           {
             method: 'GET',
             headers: githubHeaders(token),
@@ -121,7 +121,7 @@ export function createGitHubPRHttpClient(
     ): Promise<Result<PullRequestCommit[], GitHubPRClientError>> {
       try {
         const response = await fetch(
-          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}/commits`,
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}/commits?per_page=100`,
           {
             method: 'GET',
             headers: githubHeaders(token),
