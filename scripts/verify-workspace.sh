@@ -20,9 +20,11 @@ if [ -d "$PROJECT_ROOT/apps/$WORKSPACE/src" ]; then
   SERVICE_DIR="apps/$WORKSPACE"
 elif [ -d "$PROJECT_ROOT/workers/$WORKSPACE/src" ]; then
   SERVICE_DIR="workers/$WORKSPACE"
+elif [ -d "$PROJECT_ROOT/packages/$WORKSPACE/src" ]; then
+  SERVICE_DIR="packages/$WORKSPACE"
 else
   echo "ERROR: Cannot find workspace directory for $WORKSPACE"
-  echo "Looked in: apps/$WORKSPACE/src, workers/$WORKSPACE/src"
+  echo "Looked in: apps/$WORKSPACE/src, workers/$WORKSPACE/src, packages/$WORKSPACE/src"
   exit 1
 fi
 
@@ -61,6 +63,18 @@ echo ""
 echo "[2/4] TypeCheck (tests)..."
 # Create temporary tsconfig in project root for workspace-specific test checking
 TEMP_TSCONFIG="$PROJECT_ROOT/.tsconfig.tests-workspace.json"
+
+# Check if tests are in nested __tests__ directories (packages pattern) or src/__tests__ (apps/workers pattern)
+if fd -q "\.test\.ts$" "$SERVICE_DIR/src/"; then
+  # Use fd to find all test directories for packages with nested tests
+  TEST_INCLUDE=$(fd -t d "__tests__" "$SERVICE_DIR/src/" | while read -r dir; do echo "\"$dir/**/*.ts\""; done | tr '\n' ',' | sed 's/,$//')
+  if [ -z "$TEST_INCLUDE" ]; then
+    TEST_INCLUDE="\"$SERVICE_DIR/src/__tests__/**/*.ts\""
+  fi
+else
+  TEST_INCLUDE="\"$SERVICE_DIR/src/__tests__/**/*.ts\""
+fi
+
 cat > "$TEMP_TSCONFIG" << EOF
 {
   "extends": "./tsconfig.base.json",
@@ -72,7 +86,7 @@ cat > "$TEMP_TSCONFIG" << EOF
       "@intexuraos/*": ["packages/*/src", "apps/*/src", "workers/*/src"]
     }
   },
-  "include": ["$SERVICE_DIR/src/__tests__/**/*.ts"],
+  "include": [$TEST_INCLUDE],
   "exclude": ["node_modules", "dist"]
 }
 EOF
