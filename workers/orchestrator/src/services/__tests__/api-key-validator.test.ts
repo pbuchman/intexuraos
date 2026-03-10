@@ -155,6 +155,26 @@ describe('ApiKeyValidator', () => {
     expect(result.errorMessage).toBe('HTTP 401 Unauthorized');
   });
 
+  it('should fall back to Unauthorized when 403 response has empty statusText', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('', { status: 403, statusText: '' }));
+
+    const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: 'sk-ant-bad' }, mockLogger);
+    const result = await validator.validate('anthropic');
+
+    expect(result.valid).toBe(false);
+    expect(result.errorMessage).toBe('HTTP 403 Unauthorized');
+  });
+
+  it('should use actual statusText when 403 response has non-empty statusText', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('', { status: 403, statusText: 'Forbidden' }));
+
+    const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: 'sk-ant-bad' }, mockLogger);
+    const result = await validator.validate('anthropic');
+
+    expect(result.valid).toBe(false);
+    expect(result.errorMessage).toBe('HTTP 403 Forbidden');
+  });
+
   it('should handle non-Error thrown from fetch', async () => {
     fetchSpy.mockRejectedValueOnce('string error');
 

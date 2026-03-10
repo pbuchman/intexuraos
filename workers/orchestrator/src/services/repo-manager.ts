@@ -21,10 +21,8 @@ export function normalizeUrl(url: string): string {
     parsed.password = '';
     return parsed.toString().toLowerCase();
   } catch {
-    /* v8 ignore start -- upstream: URL parsing fails only for truly malformed non-git input @preserve */
     return httpsUrl.toLowerCase();
   }
-  /* v8 ignore stop @preserve */
 }
 
 /**
@@ -75,9 +73,7 @@ export async function validateRepository(
     const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], { cwd: path });
     actualUrl = stdout.trim();
   } catch (error: unknown) {
-    /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
     const message = error instanceof Error ? error.message : 'Unknown error';
-    /* v8 ignore stop @preserve */
     throw new Error(
       `Failed to get remote origin URL for repository at ${path}: ${message}\n` +
         `Ensure the repository has an 'origin' remote configured.`
@@ -152,9 +148,7 @@ export async function cloneRepository(url: string, path: string, logger: Logger)
       },
       'Failed to clone repository'
     );
-    /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
     const message = execError.message ?? 'Unknown error';
-    /* v8 ignore stop @preserve */
     const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
     throw new Error(`Failed to clone repository: ${message}${stderrInfo}`);
   }
@@ -180,9 +174,7 @@ export async function fetchRemote(path: string, logger: Logger): Promise<void> {
       },
       'Failed to fetch from remote'
     );
-    /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
     const message = execError.message ?? 'Unknown error';
-    /* v8 ignore stop @preserve */
     const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
     throw new Error(`Failed to fetch from remote: ${message}${stderrInfo}`);
   }
@@ -210,9 +202,7 @@ export async function cleanWorktree(path: string, logger: Logger): Promise<void>
       },
       'Failed to clean worktree'
     );
-    /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
     const message = execError.message ?? 'Unknown error';
-    /* v8 ignore stop @preserve */
     const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
     throw new Error(`Failed to clean worktree: ${message}${stderrInfo}`);
   }
