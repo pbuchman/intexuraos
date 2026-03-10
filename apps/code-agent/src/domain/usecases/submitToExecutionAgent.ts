@@ -291,12 +291,14 @@ export async function submitToExecutionAgent(
     // Rollback the optimistic lock
     logger.error({ error: createResult.error }, 'Failed to create Execution Agent task, rolling back optimistic lock');
     const lockRollbackResult = await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
+    /* v8 ignore start -- upstream: cascading failure requires create AND rollback to both fail, FakeCodeTaskRepo cannot simulate double-fault @preserve */
     if (!lockRollbackResult.ok) {
       logger.error(
         { taskId: originalTask.id, error: lockRollbackResult.error },
         'Failed to rollback implementationTaskId after create failure'
       );
     }
+    /* v8 ignore stop @preserve */
     return err({
       code: 'internal_error',
       message: 'Failed to create Execution Agent task',

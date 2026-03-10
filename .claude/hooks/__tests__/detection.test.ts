@@ -492,7 +492,8 @@ return result.value`,
             tool_input: {
               file_path: testFile,
               old_string: 'export const x = 1;',
-              new_string: '/* v8 ignore ts-type -- reason @preserve */\nexport const x = 1;',
+              new_string:
+                '/* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires fallback despite length check @preserve */\nexport const x = 1;\n/* v8 ignore stop @preserve */',
             },
           },
         });
@@ -505,7 +506,7 @@ return result.value`,
       it('soft-blocks Write creating file with v8 ignore', () => {
         const testFile = createTestFile(
           'v8-write.ts',
-          '/* v8 ignore ts-type -- reason @preserve */\nexport const x = 1;'
+          '/* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires fallback despite length check @preserve */\nexport const x = 1;\n/* v8 ignore stop @preserve */'
         );
 
         const result = executeHookSync({
@@ -514,7 +515,8 @@ return result.value`,
             tool_name: 'Write',
             tool_input: {
               file_path: testFile,
-              content: '/* v8 ignore ts-type -- reason @preserve */\nexport const x = 1;',
+              content:
+                '/* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires fallback despite length check @preserve */\nexport const x = 1;\n/* v8 ignore stop @preserve */',
             },
           },
         });
@@ -579,6 +581,70 @@ return result.value`,
         expectAllowed(result);
       });
 
+      it('soft-blocks with specific message when explanation is too short', () => {
+        const testFile = createTestFile('v8-short.ts', 'export const x = 1;');
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: 'export const x = 1;',
+              new_string:
+                '/* v8 ignore start -- ts-type: short @preserve */\nexport const x = 1;\n/* v8 ignore stop @preserve */',
+            },
+          },
+        });
+
+        expectSoftBlock(result, {
+          stderrIncludes: 'v8-ignore-short-explanation',
+        });
+      });
+
+      it('soft-blocks when explanation describes code instead of naming blocker', () => {
+        const testFile = createTestFile('v8-bad-explain.ts', 'export const x = 1;');
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: 'export const x = 1;',
+              new_string:
+                '/* v8 ignore start -- test-infra: error handling for database failures @preserve */\nexport const x = 1;\n/* v8 ignore stop @preserve */',
+            },
+          },
+        });
+
+        expectSoftBlock(result, {
+          stderrIncludes: 'v8-ignore-describes-code',
+        });
+      });
+
+      it('allows v8 ignore with proper blocker explanation (generic reminder only)', () => {
+        const testFile = createTestFile('v8-good-explain.ts', 'export const x = 1;');
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: 'export const x = 1;',
+              new_string:
+                '/* v8 ignore start -- test-infra: FakeAuthPlugin always returns valid user, cannot simulate null @preserve */\nexport const x = 1;\n/* v8 ignore stop @preserve */',
+            },
+          },
+        });
+
+        // Should still soft-block (generic reminder) but NOT with describes-code or short-explanation
+        expectSoftBlock(result, {
+          stderrIncludes: 'v8-ignore-added',
+        });
+      });
+
       it('includes educational message in output', () => {
         const testFile = createTestFile('v8-msg.ts', 'export const x = 1;');
 
@@ -589,7 +655,8 @@ return result.value`,
             tool_input: {
               file_path: testFile,
               old_string: 'export const x = 1;',
-              new_string: '/* v8 ignore ts-type -- reason @preserve */\nexport const x = 1;',
+              new_string:
+                '/* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires fallback despite length check @preserve */\nexport const x = 1;\n/* v8 ignore stop @preserve */',
             },
           },
         });
