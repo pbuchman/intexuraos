@@ -132,7 +132,7 @@ export function parseSummaryResponse(
       'LLM summary parse error'
     );
 
-    /* v8 ignore start -- ts-type: thrown errors are always ParseValidationError @preserve */
+    /* v8 ignore start -- ts-type: only ParseValidationError is thrown -- catch(unknown) fallback unreachable @preserve */
     const code = error instanceof ParseValidationError ? error.code : 'EMPTY';
     /* v8 ignore stop @preserve */
 
@@ -195,7 +195,7 @@ export function parseSummaryResponseSync(content: string): Result<ParsedSummary,
       operation: 'parseSummaryResponse',
     });
 
-    /* v8 ignore start -- ts-type: thrown errors are always ParseValidationError @preserve */
+    /* v8 ignore start -- ts-type: only ParseValidationError is thrown -- catch(unknown) fallback unreachable @preserve */
     const code = error instanceof ParseValidationError ? error.code : 'EMPTY';
     /* v8 ignore stop @preserve */
 

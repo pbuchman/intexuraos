@@ -221,7 +221,7 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
       }
 
       const favicon = extractFavicon($, url);
-      /* v8 ignore start -- ts-type: extractFavicon always returns defined for URLs that pass fetch @preserve */
+      /* v8 ignore start -- ts-type: extractFavicon never returns undefined for URLs surviving fetch @preserve */
       if (favicon !== undefined) {
         preview.favicon = favicon;
       }
