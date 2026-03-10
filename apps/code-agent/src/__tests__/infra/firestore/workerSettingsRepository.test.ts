@@ -763,37 +763,30 @@ describe('workerSettingsRepository', () => {
   describe('encryption error in addWorker (line 235)', () => {
     it('should return error when encryption fails in production', async () => {
       // Set production mode and invalid encryption key to cause encryption to fail
-      const originalEnv = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
-      const originalNodeEnv = process.env['NODE_ENV'];
+      // Using vi.stubEnv for automatic cleanup after test
+      vi.stubEnv('INTEXURAOS_TOKEN_ENCRYPTION_KEY', 'invalid-key'); // Too short
+      vi.stubEnv('NODE_ENV', 'production');
 
-      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'invalid-key'; // Too short
-      process.env['NODE_ENV'] = 'production';
+      try {
+        const repo = createWorkerSettingsRepository({
+          firestore: fakeFirestore as unknown as Firestore,
+          logger,
+        });
 
-      const repo = createWorkerSettingsRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
+        const result = await repo.addWorker('user-1', createWorkerConfig({
+          name: 'test-worker',
+          url: 'https://test.example.com',
+        }));
 
-      const result = await repo.addWorker('user-1', createWorkerConfig({
-        name: 'test-worker',
-        url: 'https://test.example.com',
-      }));
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('internal_error');
-      }
-
-      // Restore original env
-      if (originalEnv === undefined) {
-        delete process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
-      } else {
-        process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = originalEnv;
-      }
-      if (originalNodeEnv === undefined) {
-        delete process.env['NODE_ENV'];
-      } else {
-        process.env['NODE_ENV'] = originalNodeEnv;
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('internal_error');
+          expect(result.error.message.toLowerCase()).toContain('encrypt');
+        }
+      } finally {
+        // Reset environment after test to prevent leaking to subsequent tests
+        vi.stubEnv('INTEXURAOS_TOKEN_ENCRYPTION_KEY', undefined);
+        vi.stubEnv('NODE_ENV', undefined);
       }
     });
   });

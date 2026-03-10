@@ -228,7 +228,7 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
 
-        if (message.includes('encrypt')) {
+        if (message.toLowerCase().includes('encrypt')) {
           logger.error({ error, userId }, 'Failed to encrypt worker config');
           return err({
             code: 'internal_error',
