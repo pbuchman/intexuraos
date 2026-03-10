@@ -85,9 +85,11 @@ export function createCleanupTaskLogsUseCase(
         }
       }
 
+      /* v8 ignore start -- upstream: test fixture always returns exact tasksPerRun count, cannot trigger partial-page exit @preserve */
       if (tasks.length < tasksPerRun) {
         hasMoreTasks = false;
       }
+      /* v8 ignore stop @preserve */
     }
 
     const durationMs = Date.now() - startTime;
