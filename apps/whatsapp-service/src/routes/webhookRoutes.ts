@@ -173,17 +173,15 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
         // Get raw body for signature validation
         const rawBody =
-          /* v8 ignore start -- ts-type: rawBody nullish coalescing @preserve */
+          /* v8 ignore start -- ts-type: rawBody always set by Fastify rawBody plugin in tests @preserve */
           (request as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(request.body);
-          /* v8 ignore stop @preserve */
+        /* v8 ignore stop @preserve */
 
         // Get signature from header
         const signature = request.headers[SIGNATURE_HEADER];
         if (typeof signature !== 'string' || signature === '') {
-        /* v8 ignore start -- ts-type: Type check makes empty string branch unreachable @preserve */
           request.log.warn(
             { reason: 'missing_signature' },
-          /* v8 ignore stop @preserve */
             'Webhook rejected: missing X-Hub-Signature-256 header'
           );
           return await reply.fail('UNAUTHORIZED', 'Missing X-Hub-Signature-256 header');
@@ -271,19 +269,15 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
           receivedAt,
         });
 
-        /* v8 ignore start -- test-infra: publish result error branch @preserve */
         if (!publishResult.ok) {
-        /* v8 ignore stop @preserve */
           request.log.error(
             { error: publishResult.error, eventId: savedEvent.id },
             'Failed to publish webhook for processing'
           );
-/* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
           // Update event status to failed since it won't be processed
           await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
             failureDetails: `Pub/Sub publish failed: ${publishResult.error.message}`,
           });
-          /* v8 ignore stop @preserve */
           // Return 500 so WhatsApp retries
           reply.status(500);
           // @allow-raw-send: WhatsApp Meta webhook error contract
@@ -387,7 +381,6 @@ export async function processWebhookEvent(
       return;
     }
 
-    /* v8 ignore start -- test-infra: tests always send complete message payloads @preserve */
     if (messageType === 'image' && imageMedia === null) {
       request.log.info({ eventId: savedEvent.id }, 'Ignoring image message without media info');
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
@@ -398,7 +391,6 @@ export async function processWebhookEvent(
       });
       return;
     }
-    /* v8 ignore stop @preserve */
 
     if (messageType === 'audio' && audioMedia === null) {
       request.log.info({ eventId: savedEvent.id }, 'Ignoring audio message without media info');
@@ -411,7 +403,6 @@ export async function processWebhookEvent(
       return;
     }
 
-    /* v8 ignore start -- test-infra: tests use complete message payloads @preserve */
     if (messageType === 'reaction' && reactionData === null) {
       request.log.info({ eventId: savedEvent.id }, 'Ignoring reaction message without data');
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
@@ -422,8 +413,6 @@ export async function processWebhookEvent(
       });
       return;
     }
-    /* v8 ignore stop @preserve */
-/* v8 ignore start -- test-infra: tests use complete message payloads @preserve */
 
     if ((messageType === 'button' || messageType === 'interactive') && buttonResponse === null) {
       request.log.info({ eventId: savedEvent.id, messageType }, 'Ignoring button/interactive message without data');
@@ -435,8 +424,7 @@ export async function processWebhookEvent(
       });
       return;
     }
-    /* v8 ignore stop @preserve */
-    
+
 
     // Look up user by phone number
     request.log.info({ eventId: savedEvent.id, fromNumber }, 'Looking up user by phone number');
@@ -477,7 +465,6 @@ export async function processWebhookEvent(
 
     // Check if user mapping is connected
     const mappingResult = await userMappingRepository.getMapping(userId);
-    /* v8 ignore start -- test-infra: tests use connected user mappings @preserve */
     if (!mappingResult.ok || mappingResult.value?.connected !== true) {
       request.log.info(
         { eventId: savedEvent.id, userId },
@@ -492,7 +479,6 @@ export async function processWebhookEvent(
       });
       return;
     }
-    /* v8 ignore stop @preserve */
 
     // Extract common message details
     const waMessageId = extractMessageId(request.body) ?? `unknown-${savedEvent.id}`;
@@ -577,7 +563,7 @@ export async function processWebhookEvent(
       timestamp,
       senderName,
       phoneNumberId,
-      /* v8 ignore start -- ts-type: messageText nullish coalescing @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires nullish coalescing despite prior text-type validation @preserve */
       messageText ?? ''
       /* v8 ignore stop @preserve */
     );
@@ -732,9 +718,7 @@ async function handleButtonMessage(
           );
         }
       },
-      /* v8 ignore start -- upstream: WhatsApp API promise rejection is non-reproducible in fakes @preserve */
       (error: unknown) => { request.log.error({ error }, 'markAsReadWithTyping threw unexpectedly'); }
-      /* v8 ignore stop @preserve */
     );
   }
 
@@ -774,14 +758,15 @@ async function handleButtonMessage(
   // Action approval intents: approve, cancel, convert
   // Code task intents: cancel-task (INT-379), view-task (INT-379)
   // Execution intents: proceed-implementation (INT-678)
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes intent potentially undefined after length check @preserve */
+  const intentValue = intent ?? '';
+  /* v8 ignore stop @preserve */
   const validIntents = ['approve', 'cancel', 'reject', 'convert', 'cancel-task', 'view-task', 'proceed-implementation'];
-  /* v8 ignore start -- test-infra: tests only send valid button intents @preserve */
-  if (!validIntents.includes(intent ?? '')) {
+  if (!validIntents.includes(intentValue)) {
     request.log.warn(
       { eventId: savedEvent.id, intent },
       'Unknown button intent'
     );
-/* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
     await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
       ignoredReason: {
         code: 'UNKNOWN_BUTTON_INTENT',
@@ -789,10 +774,8 @@ async function handleButtonMessage(
         details: { intent, buttonId: buttonResponse.buttonId },
       },
     });
-    /* v8 ignore stop @preserve */
     return;
   }
-  /* v8 ignore stop @preserve */
 
   request.log.info(
     {
@@ -807,42 +790,35 @@ async function handleButtonMessage(
 
   // Publish approval reply event with button data
   // replyText is a human-readable indicator of the intent
-  const getReplyText = (intentType: string): string => {
-    switch (intentType) {
-      case 'approve': return 'yes';
-      case 'cancel': return 'no';
-      case 'reject': return 'no';
-      case 'convert': return 'convert';
-      case 'cancel-task': return 'cancel-task';
-      case 'view-task': return 'view-task';
-      case 'proceed-implementation': return 'proceed-implementation';
-      /* v8 ignore start -- ts-type: default unreachable after intent validation above @preserve */
-      default: return intentType;
-      /* v8 ignore stop @preserve */
-    }
+  const INTENT_REPLY_MAP: Record<string, string> = {
+    approve: 'yes',
+    cancel: 'no',
+    reject: 'no',
+    convert: 'convert',
+    'cancel-task': 'cancel-task',
+    'view-task': 'view-task',
+    'proceed-implementation': 'proceed-implementation',
   };
   const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
     type: 'action.approval.reply',
     replyToWamid: buttonResponse.replyToWamid,
-    replyText: getReplyText(intent ?? ''),
+    /* v8 ignore start -- upstream: validIntents.includes check above guarantees key exists in INTENT_REPLY_MAP @preserve */
+    replyText: INTENT_REPLY_MAP[intentValue] ?? intentValue,
+    /* v8 ignore stop @preserve */
     userId,
     timestamp: new Date().toISOString(),
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes actionId potentially undefined after destructuring @preserve */
     actionId: actionId ?? '', // For cancel-task/view-task, this is the taskId
+    /* v8 ignore stop @preserve */
     buttonId: buttonResponse.buttonId,
     buttonTitle: buttonResponse.buttonTitle,
   };
-/* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
 
   const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
-  /* v8 ignore stop @preserve */
-  /* v8 ignore stop @preserve */
-/* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
 
   if (!approvalPublishResult.ok) {
     request.log.error(
       {
-    /* v8 ignore stop @preserve */
         eventId: savedEvent.id,
         error: approvalPublishResult.error,
         replyToWamid: buttonResponse.replyToWamid,
@@ -902,6 +878,7 @@ async function handleTextMessage(
   };
 
   // Add metadata only if we have any values
+  /* v8 ignore start -- ts-type: createWebhookPayload helper always includes senderName and phoneNumberId @preserve */
   if (senderName !== null || phoneNumberId !== null) {
     const metadata: { senderName?: string; phoneNumberId?: string } = {};
     if (senderName !== null) {
@@ -910,14 +887,12 @@ async function handleTextMessage(
     if (phoneNumberId !== null) {
       metadata.phoneNumberId = phoneNumberId;
     }
-/* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
     messageToSave.metadata = metadata;
-    /* v8 ignore stop @preserve */
   }
+  /* v8 ignore stop @preserve */
 
   // Save message to Firestore
   const saveResult = await messageRepository.saveMessage(messageToSave);
-/* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
 
   if (!saveResult.ok) {
     request.log.error(
@@ -929,7 +904,6 @@ async function handleTextMessage(
     });
     return;
   }
-  /* v8 ignore stop @preserve */
 
   const savedMessage = saveResult.value;
 
@@ -1002,7 +976,6 @@ async function handleTextMessage(
       };
 
       const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
-    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
 
       if (!approvalPublishResult.ok) {
         request.log.error(
@@ -1013,9 +986,7 @@ async function handleTextMessage(
           },
           'Failed to publish approval reply event'
         );
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       } else {
-      /* v8 ignore stop @preserve */
         request.log.info(
           {
             eventId: savedEvent.id,
@@ -1026,7 +997,6 @@ async function handleTextMessage(
           'Published approval reply event'
         );
       }
-      /* v8 ignore stop @preserve */
     }
   }
 
@@ -1053,10 +1023,8 @@ async function handleTextMessage(
     });
 
     if (!commandPublishResult.ok) {
-    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       request.log.error(
         { eventId: savedEvent.id, error: commandPublishResult.error },
-      /* v8 ignore stop @preserve */
         'Failed to publish command ingest event'
       );
     }
@@ -1069,7 +1037,6 @@ async function handleTextMessage(
     userId,
     text: messageText,
   });
-/* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
 
   if (!linkPreviewPublishResult.ok) {
     request.log.error(
@@ -1077,7 +1044,6 @@ async function handleTextMessage(
       'Failed to publish link preview extraction event'
     );
   }
-  /* v8 ignore stop @preserve */
 
   request.log.info(
     { eventId: savedEvent.id, userId, messageId: savedMessage.id },
@@ -1130,10 +1096,9 @@ async function markAudioAsReadWithTyping(
   const originalMessageId = extractMessageId(request.body);
   const phoneNumberId = extractPhoneNumberId(request.body);
 
+  /* v8 ignore start -- ts-type: createWebhookPayload helper always provides messageId and phoneNumberId @preserve */
   if (phoneNumberId !== null && originalMessageId !== null) {
-    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
     const result = await whatsappCloudApi.markAsReadWithTyping(phoneNumberId, originalMessageId);
-    /* v8 ignore stop @preserve */
 
     if (result.ok) {
       request.log.info(
@@ -1145,8 +1110,7 @@ async function markAudioAsReadWithTyping(
         { eventId: savedEvent.id, error: result.error, messageId: originalMessageId },
         'Failed to mark audio message as read with typing indicator'
       );
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
     }
-    /* v8 ignore stop @preserve */
   }
+  /* v8 ignore stop @preserve */
 }

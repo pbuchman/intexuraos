@@ -155,6 +155,30 @@ describe('outboundMessageRepository', () => {
 });
 
 describe('createOutboundMessage', () => {
+  it('throws when wamid is empty', () => {
+    expect(() =>
+      createOutboundMessage({ wamid: '', correlationId: 'corr-1', userId: 'user-1' })
+    ).toThrow('wamid is required');
+  });
+
+  it('throws when wamid is whitespace only', () => {
+    expect(() =>
+      createOutboundMessage({ wamid: '   ', correlationId: 'corr-1', userId: 'user-1' })
+    ).toThrow('wamid is required');
+  });
+
+  it('throws when correlationId is empty', () => {
+    expect(() =>
+      createOutboundMessage({ wamid: 'wamid-1', correlationId: '', userId: 'user-1' })
+    ).toThrow('correlationId is required');
+  });
+
+  it('throws when userId is empty', () => {
+    expect(() =>
+      createOutboundMessage({ wamid: 'wamid-1', correlationId: 'corr-1', userId: '' })
+    ).toThrow('userId is required');
+  });
+
   it('creates message with correct fields', () => {
     const message = createOutboundMessage({
       wamid: 'wamid.test',
