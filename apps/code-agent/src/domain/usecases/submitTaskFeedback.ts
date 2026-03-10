@@ -116,9 +116,7 @@ export async function submitTaskFeedback(
   }
 
   // Step 3: Check for active tasks on same Linear issue (if exists)
-  /* v8 ignore start -- ts-type: optional field check for linearIssueId creates type narrowing branch @preserve */
   if (originalTask.linearIssueId !== undefined) {
-    /* v8 ignore stop @preserve */
     const activeCheckResult = await codeTaskRepo.hasActiveTaskForLinearIssue(originalTask.linearIssueId);
 
     if (!activeCheckResult.ok) {
@@ -263,9 +261,7 @@ ${feedback.trim()}
   );
 
   // Step 9: Update Linear issue to In Progress (if exists)
-  /* v8 ignore start -- ts-type: optional field check for linearIssueId creates type narrowing branch @preserve */
   if (originalTask.linearIssueId !== undefined) {
-    /* v8 ignore stop @preserve */
     const updateResult = await linearAgentClient.updateIssueState({
       userId,
       issueId: originalTask.linearIssueId,
@@ -354,9 +350,7 @@ ${feedback.trim()}
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
 
-  /* v8 ignore start -- upstream: dispatcher error handling covered by integration tests @preserve */
   if (!dispatchResult.ok) {
-    /* v8 ignore stop @preserve */
     // Update task with error and mark as failed
     const dispatchError = dispatchResult.error;
     await codeTaskRepo.update(followUpTask.id, {

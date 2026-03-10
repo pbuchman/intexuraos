@@ -442,14 +442,12 @@ export function createWorkerSettingsRepository(
         const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
 
         const existingWorker = existingData.workers[workerIndex];
-        /* v8 ignore start -- test-infra: NOT_FOUND error path requires missing config fixture @preserve */
         if (workerIndex === -1 || existingWorker === undefined) {
           return err({
             code: 'not_found',
             message: `Worker '${workerName}' not found`,
           });
         }
-        /* v8 ignore stop @preserve */
 
         const now = new Date().toISOString();
 

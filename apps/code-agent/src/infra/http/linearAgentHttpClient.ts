@@ -226,12 +226,10 @@ export function createLinearAgentHttpClient(
           parentId: body.data.parentId ?? null,
         });
       } catch (error) {
-        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error({ timeoutMs }, 'linear-agent request timed out');
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.error({ error }, 'linear-agent validateIssue request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
@@ -292,12 +290,10 @@ export function createLinearAgentHttpClient(
           issueType: body.data.issueType,
         });
       } catch (error) {
-        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error({ timeoutMs }, 'linear-agent request timed out');
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.error({ error }, 'linear-agent generateTitle request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
@@ -519,12 +515,10 @@ export function createLinearAgentHttpClient(
           lastCommentAt: body.data.lastCommentAt,
         });
       } catch (error) {
-        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error({ timeoutMs }, 'linear-agent request timed out');
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.error({ error }, 'linear-agent fetchIssueForDisplay request failed');
         return err({ code: 'UNKNOWN', message: String(error) });

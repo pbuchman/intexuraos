@@ -64,7 +64,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
       clearTimeout(timeout);
       const responseTimeMs = Date.now() - startTime;
 
-      /* v8 ignore start -- test-infra: requires mock fetch for non-OK responses @preserve */
       if (!response.ok) {
         if (response.status >= 500) {
           this.logger.info(
@@ -86,7 +85,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           code: String(response.status),
         };
       }
-      /* v8 ignore stop @preserve */
 
       let data: unknown;
       try {
@@ -99,7 +97,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
         };
       }
 
-      /* v8 ignore start -- test-infra: requires mock fetch for invalid health responses @preserve */
       if (this.isValidOrchestratorHealth(data)) {
         this.logger.info(
           { worker: worker.name, capacity: data.capacity, available: data.available },
@@ -120,7 +117,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
         healthy: false,
         error: 'Invalid health response format',
       };
-      /* v8 ignore stop @preserve */
     } catch (error) {
       clearTimeout(timeout);
 
@@ -129,7 +125,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
 
       this.logger.error({ worker: worker.name, error: errorMessage }, 'Health probe failed');
 
-      /* v8 ignore start -- test-infra: requires mock fetch for AbortError @preserve */
       if (error instanceof Error && error.name === 'AbortError') {
         return {
           _tag: 'orchestrator-unreachable',
@@ -137,23 +132,21 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           reason: 'timeout',
         };
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: requires mock fetch for connection errors @preserve */
       if (['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT'].includes(errorCode ?? '')) {
         const result: TunnelDownStateResult = {
           _tag: 'tunnel-down',
           healthy: false,
           reason: errorCode === 'ENOTFOUND' ? 'dns-failed' : 'connection-refused',
         };
+        /* v8 ignore start -- ts-type: errorCode is always defined when includes() matches a non-empty string @preserve */
         if (errorCode !== undefined) {
+        /* v8 ignore stop @preserve */
           result.code = errorCode;
         }
         return result;
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: requires mock fetch for TLS errors @preserve */
       if (errorMessage.includes('TLS') || errorMessage.includes('certificate')) {
         const result: TunnelDownStateResult = {
           _tag: 'tunnel-down',
@@ -167,7 +160,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
         }
         return result;
       }
-      /* v8 ignore stop @preserve */
 
       return {
         _tag: 'unknown',
@@ -194,7 +186,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
     return results;
   }
 
-  /* v8 ignore start -- test-infra: type guard requires testing with various invalid data shapes @preserve */
   private isValidOrchestratorHealth(data: unknown): data is OrchestratorHealthResponse {
     return (
       typeof data === 'object' &&
@@ -209,7 +200,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
       typeof data.available === 'number'
     );
   }
-  /* v8 ignore stop @preserve */
 }
 
 /**

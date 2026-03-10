@@ -160,6 +160,26 @@ describe('cleanupTaskLogs', () => {
     expect(findArchivableTasksMock).toHaveBeenCalledTimes(1);
   });
 
+  it('should continue paginating when tasks returned equals tasksPerRun', async () => {
+    const tasksPerRun = 2;
+
+    findArchivableTasksMock
+      .mockResolvedValueOnce(ok([{ taskId: 'task-1' }, { taskId: 'task-2' }]))
+      .mockResolvedValueOnce(ok([{ taskId: 'task-3' }]));
+
+    archiveTaskLogsMock.mockResolvedValue(ok({ logCount: 5, archivedAt: new Date() }));
+
+    const result = await useCase({ tasksPerRun });
+
+    expect(result.ok).toBe(true);
+    if (result.ok === true) {
+      expect(result.value.tasksProcessed).toBe(3);
+      expect(result.value.logsDeleted).toBe(15);
+    }
+    expect(findArchivableTasksMock).toHaveBeenCalledTimes(2);
+    expect(archiveTaskLogsMock).toHaveBeenCalledTimes(3);
+  });
+
   it('should return zero counts when no tasks to process', async () => {
     findArchivableTasksMock.mockResolvedValue(ok([]));
 
