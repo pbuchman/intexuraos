@@ -480,11 +480,11 @@ function makeGroup(overrides: {
 
 describe('sortIssueGroups', () => {
   describe('linear-id sort', () => {
-    it('returns groups in the same order as input', () => {
+    it('sorts by Linear issue number descending regardless of input order', () => {
       const groups: IssueGroup[] = [
+        makeGroup({ linearIssueId: 'INT-700' }),
         makeGroup({ linearIssueId: 'INT-900' }),
         makeGroup({ linearIssueId: 'INT-800' }),
-        makeGroup({ linearIssueId: 'INT-700' }),
       ];
       const result = sortIssueGroups(groups, 'linear-id');
       expect(result.map((g) => g.linearIssueId)).toEqual(['INT-900', 'INT-800', 'INT-700']);
@@ -504,10 +504,14 @@ describe('sortIssueGroups', () => {
       expect(sortIssueGroups([], 'linear-id')).toEqual([]);
     });
 
-    it('returns standalone (null linearIssueId) groups unchanged', () => {
-      const groups: IssueGroup[] = [makeGroup({ linearIssueId: null }), makeGroup({ linearIssueId: null })];
+    it('puts standalone (null linearIssueId) groups before Linear-linked groups', () => {
+      const groups: IssueGroup[] = [
+        makeGroup({ linearIssueId: 'INT-100' }),
+        makeGroup({ linearIssueId: null }),
+      ];
       const result = sortIssueGroups(groups, 'linear-id');
-      expect(result).toHaveLength(2);
+      expect(result[0]?.linearIssueId).toBeNull();
+      expect(result[1]?.linearIssueId).toBe('INT-100');
     });
   });
 
