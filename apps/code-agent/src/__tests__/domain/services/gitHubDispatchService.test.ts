@@ -3,7 +3,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { createWebhookDispatchService } from '../../../domain/services/gitHubDispatchService.js';
 import type { DispatchContext, WebhookDispatchResult, WebhookDispatchServiceDeps } from '../../../domain/services/gitHubDispatchService.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
-import type { RuleResult } from '../../../domain/services/gitHubWebhookRules.js';
+import type { RuleOutcome } from '../../../domain/services/gitHubWebhookRules.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../domain/usecases/createTaskForPR.js', () => ({
@@ -30,6 +30,7 @@ const mockLogger: Logger = {
 const mockEvent: GitHubPREvent = {
   id: 'event-123',
   githubEventId: 123,
+  deliveryId: null,
   repository: 'test-owner/test-repo',
   repositoryId: 54321,
   pullRequestNumber: 42,
@@ -42,19 +43,27 @@ const mockEvent: GitHubPREvent = {
   title: 'Test PR',
   body: 'Test description',
   state: 'open',
+  baseBranch: null,
   mergedAt: null,
   createdAt: new Date('2026-03-03T10:00:00Z'),
   processedAt: new Date('2026-03-03T10:00:00Z'),
   payload: {},
 };
 
-const mockDecision: RuleResult = {
-  shouldDispatch: true,
+const mockDecision: RuleOutcome = {
+  action: 'dispatch',
   reason: 'ALL_RULES_PASSED',
 };
 
 function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): WebhookDispatchServiceDeps {
   return {
+    gitHubPREventRepo: {
+      findByPullRequest: vi.fn().mockResolvedValue(ok([])),
+      save: vi.fn(),
+      findByRepository: vi.fn(),
+      findAll: vi.fn(),
+      findReviewComments: vi.fn(),
+    } as never,
     codeTaskRepo: {
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       create: vi.fn(),
@@ -233,6 +242,18 @@ describe('GitHubDispatchService', () => {
       expect(requestArg?.senderLogin).toBe('claude[bot]');
     });
 
+    it('should not remap bot senderLogin for org-owned repos', async () => {
+      const botEvent = { ...mockEvent, senderLogin: 'claude[bot]', repository: 'intexuraos/api-gateway' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-org' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: botEvent });
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg?.senderLogin).toBe('claude[bot]');
+    });
+
     it('should not resolve non-bot senderLogin', async () => {
       vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
       mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-human' }));
@@ -254,6 +275,62 @@ describe('GitHubDispatchService', () => {
 
       const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
       expect(requestArg?.comment).toBe('');
+    });
+
+    it('should resolve baseBranch from stored PR events when event.baseBranch is null', async () => {
+      const nullBranchEvent = { ...mockEvent, baseBranch: null };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.gitHubPREventRepo.findByPullRequest).mockResolvedValue(ok([
+        { ...mockEvent, baseBranch: 'development' },
+      ]));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-resolved' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: nullBranchEvent });
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg?.baseBranch).toBe('development');
+    });
+
+    it('should pass baseBranch directly when event.baseBranch is set', async () => {
+      const branchEvent = { ...mockEvent, baseBranch: 'feature-branch' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-direct' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: branchEvent });
+
+      expect(deps.gitHubPREventRepo.findByPullRequest).not.toHaveBeenCalled();
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg?.baseBranch).toBe('feature-branch');
+    });
+
+    it('should omit baseBranch when findByPullRequest fails', async () => {
+      const nullBranchEvent = { ...mockEvent, baseBranch: null };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.gitHubPREventRepo.findByPullRequest).mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
+      );
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-err' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: nullBranchEvent });
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('baseBranch');
+    });
+
+    it('should omit baseBranch when lookup finds no events with baseBranch', async () => {
+      const nullBranchEvent = { ...mockEvent, baseBranch: null };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      vi.mocked(deps.gitHubPREventRepo.findByPullRequest).mockResolvedValue(ok([]));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-no-branch' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: nullBranchEvent });
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('baseBranch');
     });
   });
 

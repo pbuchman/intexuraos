@@ -26,7 +26,6 @@ function isRetryableInfraStatus(status: number): boolean {
     || (status >= 520 && status <= 530);
 }
 
-/* v8 ignore start -- test-infra: requires worker HTTP endpoint to return specific JSON/text error bodies @preserve */
 /** Extract human-readable error message from a response body (may be JSON `{"error":"..."}` or plain text). */
 function extractErrorMessage(text: string): string {
   try {
@@ -39,7 +38,6 @@ function extractErrorMessage(text: string): string {
   }
   return text;
 }
-/* v8 ignore stop @preserve */
 
 /**
  * Worker task request body sent to worker orchestrator.
@@ -414,14 +412,12 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       { logger: this.logger, dispatchSigningSecret: credentials.dispatchSigningSecret },
       { body, timestamp, nonce }
     );
-    /* v8 ignore start -- test-infra: HMAC signing failure requires invalid secret configuration @preserve */
     if (!signatureResult.ok) {
       return err({
         code: 'signing_failed',
         message: `Failed to sign message request: ${signatureResult.error.message}`,
       });
     }
-    /* v8 ignore stop @preserve */
 
     try {
       const response = await this.fetchWithTimeout(`${credentials.url}/tasks/${taskId}/message`, {
@@ -438,7 +434,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         signal: AbortSignal.timeout(30000),
       });
 
-      /* v8 ignore start -- test-infra: requires worker HTTP endpoint to return error response @preserve */
       if (!response.ok) {
         // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors
         if (isRetryableInfraStatus(response.status)) {
@@ -454,7 +449,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           message: `Worker returned HTTP ${String(response.status)}: ${errorMessage}`,
         });
       }
-      /* v8 ignore stop @preserve */
 
       const data = (await response.json()) as { action: 'queued' | 'resumed'; pendingMessages?: string[] };
       return ok(data);
@@ -484,7 +478,6 @@ if (credentials === undefined) {
         signal: AbortSignal.timeout(10000),
       });
 
-      /* v8 ignore start -- test-infra: requires worker to return error response @preserve */
       if (!response.ok) {
         this.logger.warn(
           { taskId, location, status: response.status },
@@ -492,7 +485,6 @@ if (credentials === undefined) {
         );
         return;
       }
-      /* v8 ignore stop @preserve */
 
       this.logger.info({ taskId, location }, 'Worker cancellation request successful');
     } catch (error) {

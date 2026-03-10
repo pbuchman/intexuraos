@@ -93,7 +93,7 @@ const codeTaskSchema = {
     traceId: { type: 'string' },
     status: {
       type: 'string',
-      enum: ['dispatched', 'running', 'queued', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled'],
+      enum: ['dispatched', 'running', 'queued', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled'],
     },
     dedupKey: { type: 'string' },
     callbackReceived: { type: 'boolean' },
@@ -193,7 +193,7 @@ function taskToApiResponse(task: {
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
+  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'reviewed' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: unknown;
@@ -239,7 +239,7 @@ function taskToApiResponse(task: {
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
+  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'reviewed' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;
@@ -847,7 +847,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Record task completion for rate limiting (decrement concurrent, update cost)
       // Do this for terminal states: completed, failed, cancelled, interrupted
       /* v8 ignore start -- ts-type: optional chaining and array includes create type narrowing branches @preserve */
-      const terminalStatuses = ['planned', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
+      const terminalStatuses = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'] as const;
       /* v8 ignore stop @preserve */
       /* v8 ignore start -- ts-type: terminal status includes check @preserve */
       if (body.status !== undefined && terminalStatuses.includes(body.status)) {
@@ -1549,7 +1549,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
 
       // Parse comma-separated status filter (matching actions-agent pattern)
-      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'queued', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled', 'archived'];
+      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'queued', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled', 'archived'];
       let statusFilter: TaskStatus[] | undefined;
       if (request.query.status !== undefined) {
         statusFilter = request.query.status

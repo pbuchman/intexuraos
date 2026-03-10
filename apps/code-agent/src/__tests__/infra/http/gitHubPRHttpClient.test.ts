@@ -305,4 +305,60 @@ describe('GitHubPRHttpClient', () => {
       }
     });
   });
+
+  describe('getPullRequestBaseBranch', () => {
+    it('returns base branch on success', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, { base: { ref: 'development' } });
+
+      const result = await client.getPullRequestBaseBranch('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('development');
+      }
+    });
+
+    it('returns error on 404', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/999')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.getPullRequestBaseBranch('test-token', 'owner', 'repo', 999);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('returns error when base.ref is missing from response', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .reply(200, { base: {} });
+
+      const result = await client.getPullRequestBaseBranch('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('base.ref');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .replyWithError('connection refused');
+
+      const result = await client.getPullRequestBaseBranch('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+  });
 });

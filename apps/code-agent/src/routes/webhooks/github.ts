@@ -15,8 +15,8 @@ import {
   parseGitHubWebhookEvent,
   shouldProcessRepository,
 } from '../../infra/github-event-parser.js';
+import type { CreateGitHubPREventInput } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
-import { isGitHubAgentEvent, evaluatePREvent } from '../../domain/usecases/githubAgent.js';
 
 export const ALLOWED_BOTS = new Set([
   'claude[bot]',
@@ -112,6 +112,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
 
       const signatureHeader = request.headers['x-hub-signature-256'];
       const eventType = request.headers['x-github-event'];
+      const deliveryId = request.headers['x-github-delivery'];
 
       // Get raw request body for signature verification
       // Fastify parses JSON, so we need to get the raw body
@@ -171,16 +172,24 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
       }
       /* v8 ignore stop @preserve */
 
-      // Save to Firestore
-      const saveResult = await gitHubPREventRepo.save(parsedEvent);
+      // Enrich with X-GitHub-Delivery header for deduplication
+      const eventWithDeliveryId: CreateGitHubPREventInput = {
+        ...parsedEvent,
+        deliveryId: typeof deliveryId === 'string' ? deliveryId : null,
+      };
 
-      /* v8 ignore start -- upstream: error handling for Firestore save failures @preserve */
+      // Save to Firestore
+      const saveResult = await gitHubPREventRepo.save(eventWithDeliveryId);
+
       if (!saveResult.ok) {
+        if (saveResult.error.code === 'DUPLICATE_EVENT') { // @allow-result-access -- narrowed by !saveResult.ok
+          logger.debug({ deliveryId }, 'Duplicate webhook delivery, skipping evaluation');
+          return await reply.ok({ message: 'duplicate' });
+        }
         logger.error({ error: saveResult.error }, 'Failed to save GitHub PR event'); // @allow-result-access -- narrowed by !saveResult.ok
         // Still return 200 to prevent GitHub from retrying on transient errors
         return await reply.ok({ message: 'acknowledged' });
       }
-      /* v8 ignore stop @preserve */
 
       const savedEvent = saveResult.value; // @allow-result-access -- narrowed by !saveResult.ok above
 
@@ -215,33 +224,11 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
-      // Evaluate actionability using domain rules (enforced)
-      const rules = getServices().webhookRules;
-      const decision = rules.evaluate(savedEvent);
-
-      if (decision.shouldDispatch) {
-        const dispatcher = getServices().dispatchService;
-        void dispatcher.dispatch({
-          event: savedEvent,
-          decision,
-          logger
-        });
-      }
-
-      // GitHub Agent: evaluate PR opened/synchronize events via tool-calling LLM
-      if (isGitHubAgentEvent(savedEvent)) {
-        const { toolCallingClient, gitHubPRClient, userServiceClient } = getServices();
-        if (toolCallingClient === undefined) {
-          logger.warn('GitHub Agent disabled — missing Gemini API key');
-        } else {
-          void evaluatePREvent(
-            { logger, gitHubPRClient, toolCallingClient, userServiceClient },
-            savedEvent
-          ).catch((err: unknown) => {
-            logger.error({ err }, 'Unhandled error in GitHub Agent evaluation');
-          });
-        }
-      }
+      // INT-744: Unified evaluation — hard rules + optional LLM triage
+      const { unifiedEvaluator } = getServices();
+      void unifiedEvaluator.evaluate(savedEvent, logger).catch((evalErr: unknown) => {
+        logger.error({ evalErr }, 'Unhandled error in unified evaluator');
+      });
 
       return await reply.ok({ message: 'processed' });
     }

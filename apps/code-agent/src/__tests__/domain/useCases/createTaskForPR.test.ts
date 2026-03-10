@@ -154,6 +154,9 @@ function createMockGitHubPRClient(): GitHubPRClient {
     async getPullRequestCommits(): ReturnType<GitHubPRClient['getPullRequestCommits']> {
       return ok([]);
     },
+    async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+      return ok('main');
+    },
     async postPRComment(): ReturnType<GitHubPRClient['postPRComment']> {
       return ok({ commentId: 1 });
     },
@@ -674,6 +677,125 @@ describe('createTaskForPR', () => {
         expect(result.error.code).toBe('internal_error');
         expect(result.error.message).toBe('Failed to queue task');
       }
+    });
+  });
+
+  describe('baseBranch API fetch (Layer 2)', () => {
+    it('should fetch baseBranch from GitHub API when not in request', async () => {
+      let capturedBaseBranch = '';
+
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+          return ok('development');
+        },
+      };
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedBaseBranch = (input as unknown as Record<string, string>)['baseBranch'] ?? '';
+          return ok({} as never);
+        },
+      };
+
+      // Use request without baseBranch
+      const noBranchRequest: CreateTaskForPRRequest = {
+        repository: request.repository,
+        prNumber: request.prNumber,
+        prTitle: 'Fix the bug',
+        senderLogin: request.senderLogin,
+        comment: request.comment,
+        eventId: request.eventId,
+      };
+
+      await createTaskForPR(deps, noBranchRequest);
+
+      expect(capturedBaseBranch).toBe('development');
+    });
+
+    it('should not fetch baseBranch when already provided in request', async () => {
+      let getPullRequestBaseBranchCalled = false;
+
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+          getPullRequestBaseBranchCalled = true;
+          return ok('development');
+        },
+      };
+
+      request.baseBranch = 'feature-branch';
+
+      await createTaskForPR(deps, request);
+
+      expect(getPullRequestBaseBranchCalled).toBe(false);
+    });
+
+    it('should fall back to main when API fetch fails', async () => {
+      let capturedBaseBranch = '';
+
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+          return err({ code: 'NOT_FOUND', message: 'PR not found' });
+        },
+      };
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedBaseBranch = (input as unknown as Record<string, string>)['baseBranch'] ?? '';
+          return ok({} as never);
+        },
+      };
+
+      // Use request without baseBranch
+      const noBranchRequest: CreateTaskForPRRequest = {
+        repository: request.repository,
+        prNumber: request.prNumber,
+        prTitle: 'Fix the bug',
+        senderLogin: request.senderLogin,
+        comment: request.comment,
+        eventId: request.eventId,
+      };
+
+      const result = await createTaskForPR(deps, noBranchRequest);
+
+      expect(result.ok).toBe(true);
+      expect(capturedBaseBranch).toBe('main');
+    });
+
+    it('should dispatch with the same resolved baseBranch as the task record', async () => {
+      let dispatchedBaseBranch = '';
+
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+          return ok('development');
+        },
+      };
+
+      deps.taskDispatcher = {
+        ...createMockTaskDispatcher(),
+        async dispatch(req): ReturnType<TaskDispatcherService['dispatch']> {
+          dispatchedBaseBranch = (req as unknown as Record<string, string>)['baseBranch'] ?? '';
+          return ok({ dispatched: true, workerLocation: 'home-mac' });
+        },
+      };
+
+      const noBranchRequest: CreateTaskForPRRequest = {
+        repository: request.repository,
+        prNumber: request.prNumber,
+        prTitle: 'Fix the bug',
+        senderLogin: request.senderLogin,
+        comment: request.comment,
+        eventId: request.eventId,
+      };
+
+      await createTaskForPR(deps, noBranchRequest);
+
+      expect(dispatchedBaseBranch).toBe('development');
     });
   });
 

@@ -52,6 +52,7 @@ describe('github-event-parser', () => {
         body: 'Test description',
         state: 'open',
         merged_at: null,
+        base: { ref: 'main' },
       },
       sender: {
         login: 'testuser',
@@ -67,6 +68,7 @@ describe('github-event-parser', () => {
       if (result.ok) {
         expect(result.value).toMatchObject({ // @allow-result-access -- narrowed by result.ok
           githubEventId: 12345,
+          deliveryId: null,
           repository: 'intexuraos/code-agent',
           repositoryId: 456,
           pullRequestNumber: 42,
@@ -78,6 +80,7 @@ describe('github-event-parser', () => {
           title: 'Test PR',
           body: 'Test description',
           state: 'open',
+          baseBranch: 'main',
           mergedAt: null,
         });
         expect(result.value.createdAt).toBeInstanceOf(Date); // @allow-result-access -- narrowed by result.ok
@@ -108,8 +111,26 @@ describe('github-event-parser', () => {
         expect(result.value.title).toBeNull(); // @allow-result-access -- narrowed by result.ok
         expect(result.value.body).toBeNull(); // @allow-result-access -- narrowed by result.ok
         expect(result.value.state).toBeNull(); // @allow-result-access -- narrowed by result.ok
+        expect(result.value.baseBranch).toBeNull(); // @allow-result-access -- no base in payload
         expect(result.value.action).toBeNull(); // Not a valid action
         expect(result.value.mergedAt).toBeNull(); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should parse baseBranch as null when base is missing', () => {
+      const payloadWithoutBase = {
+        ...validPRPayload,
+        pull_request: {
+          ...validPRPayload.pull_request,
+          base: undefined,
+        },
+      };
+
+      const result = parsePullRequestEvent(payloadWithoutBase);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.baseBranch).toBeNull(); // @allow-result-access -- no base in payload
       }
     });
 
@@ -283,6 +304,7 @@ describe('github-event-parser', () => {
         number: 42,
         title: 'Test PR',
         state: 'open',
+        base: { ref: 'main' },
       },
       review: {
         id: 456,
@@ -303,12 +325,14 @@ describe('github-event-parser', () => {
       if (result.ok) {
         expect(result.value).toMatchObject({ // @allow-result-access -- narrowed by result.ok
           githubEventId: 12345,
+          deliveryId: null,
           repository: 'intexuraos/code-agent',
           pullRequestNumber: 42,
           eventType: 'pull_request_review',
           action: 'submitted',
           senderLogin: 'reviewer',
           body: 'LGTM',
+          baseBranch: 'main',
         });
       }
     });
@@ -482,12 +506,14 @@ describe('github-event-parser', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toMatchObject({ // @allow-result-access -- narrowed by result.ok
+          deliveryId: null,
           eventType: 'push',
           repository: 'intexuraos/code-agent',
           pullRequestNumber: 0,
           pullRequestId: 0,
           action: null,
           title: 'Push to main',
+          baseBranch: null,
         });
       }
     });
@@ -551,6 +577,7 @@ describe('github-event-parser', () => {
         number: 42,
         title: 'Test PR',
         state: 'open',
+        base: { ref: 'main' },
       },
       comment: {
         id: 789,
@@ -572,12 +599,14 @@ describe('github-event-parser', () => {
       if (result.ok) {
         expect(result.value).toMatchObject({ // @allow-result-access -- narrowed by result.ok
           githubEventId: 12345,
+          deliveryId: null,
           repository: 'intexuraos/code-agent',
           pullRequestNumber: 42,
           eventType: 'pull_request_review_comment',
           action: 'created',
           senderLogin: 'reviewer',
           body: 'Nice code!',
+          baseBranch: 'main',
         });
       }
     });
@@ -883,6 +912,7 @@ describe('github-event-parser', () => {
       if (result.ok && result.value !== null) {
         expect(result.value).toMatchObject({
           githubEventId: 12345,
+          deliveryId: null,
           repository: 'intexuraos/code-agent',
           pullRequestNumber: 42,
           pullRequestId: 101,
@@ -892,6 +922,7 @@ describe('github-event-parser', () => {
           body: 'Great work on this PR!',
           title: 'Test PR',
           state: 'open',
+          baseBranch: null,
         });
       }
     });
