@@ -360,9 +360,9 @@ ${additionalContext.trim()}
         logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
       }
       /* v8 ignore stop @preserve */
-      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize;
+      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
 
-      if (queueCount >= config.queue.maxSize) {
+      if (queueCount > config.queue.maxSize) {
         await codeTaskRepo.update(retryTask.id, {
           status: 'failed',
           error: {
@@ -377,21 +377,8 @@ ${additionalContext.trim()}
         });
       }
 
-      const queuedAt = new Date();
-      const queueUpdateResult = await codeTaskRepo.update(retryTask.id, {
-        status: 'queued',
-        queuedAt,
-      });
-
-      if (!queueUpdateResult.ok) {
-        logger.error({ taskId: retryTask.id, error: queueUpdateResult.error }, 'Failed to persist queued status');
-        return err({
-          code: 'internal_error',
-          message: 'Failed to queue task',
-        });
-      }
-
-      const queuePosition = queueCount + 1;
+      // Task is already in 'queued' status from creation — no status update needed
+      const queuePosition = queueCount;
       const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
       await whatsappNotifier.notifyTaskQueued(userId, retryTask, queuePosition, estimatedWaitMinutes);
 
@@ -504,6 +491,7 @@ ${additionalContext.trim()}
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(retryTask.id, {
+    status: 'dispatched',
     workerLocation: dispatchValue.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,

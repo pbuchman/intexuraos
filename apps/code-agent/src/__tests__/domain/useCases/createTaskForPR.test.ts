@@ -610,13 +610,11 @@ describe('createTaskForPR', () => {
     });
 
     it('queues task when at_capacity and queue has room', async () => {
-      let capturedStatus = '';
+      const updateCalls: Record<string, unknown>[] = [];
       deps.codeTaskRepo = {
         ...createMockCodeTaskRepo(),
         async update(_id: string, data: Record<string, unknown>): ReturnType<CodeTaskRepository['update']> {
-          if (typeof data['status'] === 'string') {
-            capturedStatus = data['status'];
-          }
+          updateCalls.push(data);
           return ok({} as never);
         },
       };
@@ -627,14 +625,16 @@ describe('createTaskForPR', () => {
       if (result.ok) {
         expect(result.value.taskId).toMatch(/^task_/);
       }
-      expect(capturedStatus).toBe('queued');
+      // Task already starts as 'queued' — no status update call in the at_capacity path
+      const statusUpdates = updateCalls.filter(d => typeof d['status'] === 'string');
+      expect(statusUpdates).toHaveLength(0);
     });
 
     it('returns queue_full when at_capacity and queue is full', async () => {
       deps.codeTaskRepo = {
         ...createMockCodeTaskRepo(),
         async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
-          return ok(10);
+          return ok(11);
         },
       };
 
@@ -662,22 +662,6 @@ describe('createTaskForPR', () => {
       }
     });
 
-    it('returns internal_error when queue status update fails', async () => {
-      deps.codeTaskRepo = {
-        ...createMockCodeTaskRepo(),
-        async update(): ReturnType<CodeTaskRepository['update']> {
-          return err({ code: 'FIRESTORE_ERROR', message: 'Failed to update' });
-        },
-      };
-
-      const result = await createTaskForPR(deps, request);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('internal_error');
-        expect(result.error.message).toBe('Failed to queue task');
-      }
-    });
   });
 
   describe('baseBranch API fetch (Layer 2)', () => {
@@ -828,7 +812,7 @@ describe('createTaskForPR', () => {
       deps.codeTaskRepo = {
         ...createMockCodeTaskRepo(),
         async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
-          return ok(10);
+          return ok(11);
         },
       };
 

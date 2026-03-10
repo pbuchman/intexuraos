@@ -412,9 +412,9 @@ export async function createTaskForPR(
       if (!queueCountResult.ok) {
         logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
       }
-      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize;
+      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
 
-      if (queueCount >= config.queue.maxSize) {
+      if (queueCount > config.queue.maxSize) {
         await codeTaskRepo.update(taskId, {
           status: 'failed',
           error: {
@@ -429,20 +429,8 @@ export async function createTaskForPR(
         });
       }
 
-      const queueUpdateResult = await codeTaskRepo.update(taskId, {
-        status: 'queued',
-        queuedAt: new Date(),
-      });
-
-      if (!queueUpdateResult.ok) {
-        logger.error({ taskId, error: queueUpdateResult.error }, 'Failed to persist queued status');
-        return err({
-          code: 'internal_error',
-          message: 'Failed to queue task',
-        });
-      }
-
-      const queuePosition = queueCount + 1;
+      // Task is already in 'queued' status from creation — no status update needed
+      const queuePosition = queueCount;
       const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
       const queuedTask = {
         id: taskId,
@@ -468,8 +456,9 @@ export async function createTaskForPR(
     });
   }
 
-  // Update task with worker location
+  // Update task with dispatched status and worker location
   await codeTaskRepo.update(taskId, {
+    status: 'dispatched',
     workerLocation: dispatchResult.value.workerLocation, // @allow-result-access -- narrowed by !dispatchResult.ok above
   });
 
