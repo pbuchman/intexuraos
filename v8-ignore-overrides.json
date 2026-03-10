@@ -137,9 +137,9 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/whatsapp-service"
     },
-    "PENDING-packages-common-core": {
-      "files": ["packages/common-core/src/errors.ts"],
-      "description": "Write tests for tightened v8 ignore blocks in packages/common-core"
+    "PENDING-packages-internal-clients": {
+      "files": ["packages/internal-clients/src/user-service/client.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
     },
     "PENDING-packages-llm-prompts": {
       "files": [
