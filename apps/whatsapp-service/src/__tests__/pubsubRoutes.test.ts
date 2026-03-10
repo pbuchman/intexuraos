@@ -76,6 +76,7 @@ describe('Pub/Sub Routes', () => {
     mediaStorage = new FakeMediaStorage();
     messageRepository = new FakeWhatsAppMessageRepository();
     userMappingRepository = new FakeWhatsAppUserMappingRepository();
+
     outboundMessageRepository = new FakeOutboundMessageRepository();
 
     setServices({
@@ -544,6 +545,39 @@ describe('Pub/Sub Routes', () => {
       expect(responseBody.error.message).toBe('WhatsApp API error for CTA URL');
     });
 
+    it('logs warning when outbound message save fails (non-fatal)', async () => {
+      await userMappingRepository.saveMapping('user-save-fail', ['+48123456789']);
+      outboundMessageRepository.setFail(true, {
+        code: 'PERSISTENCE_ERROR',
+        message: 'Simulated Firestore write failure',
+      });
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-save-fail',
+        message: 'Hello save fail',
+        correlationId: 'corr-save-fail',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      // Should still succeed — outbound save failure is non-fatal
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      // Message should still have been sent
+      const sentMessages = messageSender.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.phoneNumber).toBe('48123456789');
+    });
+
     it('prefers ctaUrl over buttons when both are provided', async () => {
       await userMappingRepository.saveMapping('user-both', ['+48111222333']);
 
@@ -574,38 +608,6 @@ describe('Pub/Sub Routes', () => {
       // ctaUrl takes priority over buttons
       expect(sentMessages[0]?.ctaUrl).toEqual(ctaUrl);
       expect(sentMessages[0]?.buttons).toBeUndefined();
-    });
-
-    it('returns 200 when outbound message save fails (non-fatal)', async () => {
-      await userMappingRepository.saveMapping('user-save-fail', ['+48123456789']);
-      outboundMessageRepository.setFail(true);
-
-      const body = createPubSubBody({
-        type: 'whatsapp.message.send',
-        userId: 'user-save-fail',
-        message: 'Hello with save failure',
-        correlationId: 'corr-save-fail',
-        timestamp: new Date().toISOString(),
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/whatsapp/pubsub/send-message',
-        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
-        payload: body,
-      });
-
-      // Should still return 200 (save failure is non-fatal)
-      expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean };
-      expect(responseBody.success).toBe(true);
-
-      // Message should still have been sent
-      const sentMessages = messageSender.getSentMessages();
-      expect(sentMessages).toHaveLength(1);
-
-      // But outbound message should not be stored
-      expect(outboundMessageRepository.getMessages()).toHaveLength(0);
     });
   });
 

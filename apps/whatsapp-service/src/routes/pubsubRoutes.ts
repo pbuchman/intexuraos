@@ -115,6 +115,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
+
         if (isPubSubPush) {
           // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
           request.log.info(
@@ -128,6 +129,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           
           // Direct service call: validate x-internal-auth header
           const authResult = validateInternalAuth(request);
+
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -135,6 +137,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             );
             return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/send-message endpoint');
           }
+
         }
 
         const body = request.body as PubSubPushMessage;
@@ -272,6 +275,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
               correlationId: eventData.correlationId,
               error: saveResult.error.message,
             },
+
             'Failed to save outbound message for reply correlation (non-fatal)'
           );
         } else {
@@ -369,6 +373,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
+
         if (isPubSubPush) {
           // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
           request.log.info(
@@ -382,6 +387,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           
           // Direct service call: validate x-internal-auth header
           const authResult = validateInternalAuth(request);
+
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -389,6 +395,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             );
             return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/media-cleanup endpoint');
           }
+
         }
 
         const body = request.body as PubSubPushMessage;
@@ -522,6 +529,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
+
         if (isPubSubPush) {
           request.log.info(
             { from: fromHeader, userAgent: request.headers['user-agent'] },
@@ -529,6 +537,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           );
         } else {
           const authResult = validateInternalAuth(request);
+
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -536,6 +545,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             );
             return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/transcription-completed endpoint');
           }
+
         }
 
         const body = request.body as PubSubPushMessage;
@@ -628,6 +638,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
+
         if (isPubSubPush) {
           request.log.info(
             { from: fromHeader, userAgent: request.headers['user-agent'] },
@@ -636,6 +647,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         } else {
           
           const authResult = validateInternalAuth(request);
+
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -643,6 +655,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             );
             return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/process-webhook endpoint');
           }
+
         }
 
         const body = request.body as PubSubPushMessage;

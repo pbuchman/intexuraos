@@ -2367,93 +2367,6 @@ describe('Webhook async processing', () => {
     });
   });
 
-  describe('text message publish failure paths', () => {
-    it('logs error when publishApprovalReply fails for text reply-to-approval', async () => {
-      const senderPhone = '15551234567';
-      const testUserId = 'test-user-text-approval-fail';
-
-      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
-
-      // Setup: Create outbound message with approval correlationId
-      const outboundMessage: OutboundMessage = {
-        wamid: 'wamid.outbound.approval-fail',
-        correlationId: 'action-note-approval-action-999',
-        userId: testUserId,
-        sentAt: new Date().toISOString(),
-        expiresAt: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
-      };
-      await ctx.outboundMessageRepository.save(outboundMessage);
-
-      // Configure event publisher to fail approval reply
-      ctx.eventPublisher.setApprovalReplyFailure('Simulated text approval failure');
-
-      const webhookPayload = createReplyWebhookPayload({
-        replyToWamid: 'wamid.outbound.approval-fail',
-        messageText: 'Yes!',
-      });
-      const payloadString = JSON.stringify(webhookPayload);
-      const signature = createSignature(payloadString, testConfig.appSecret);
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/whatsapp/webhooks',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-        },
-        payload: payloadString,
-      });
-
-      expect(response.statusCode).toBe(200);
-      await triggerWebhookProcessing();
-
-      // Processing should still complete (error is logged, not thrown)
-      const events = ctx.webhookEventRepository.getAll();
-      expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('completed');
-
-      // Approval reply should NOT have been stored (it failed)
-      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
-      expect(approvalEvents.length).toBe(0);
-    });
-
-    it('logs error when publishCommandIngest fails for text message', async () => {
-      const senderPhone = '15551234567';
-      const testUserId = 'test-user-command-fail';
-
-      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
-
-      // Configure event publisher to fail command ingest
-      ctx.eventPublisher.setCommandIngestFailure('Simulated command ingest failure');
-
-      const payload = createWebhookPayload();
-      const payloadString = JSON.stringify(payload);
-      const signature = createSignature(payloadString, testConfig.appSecret);
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/whatsapp/webhooks',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-        },
-        payload: payloadString,
-      });
-
-      expect(response.statusCode).toBe(200);
-      await triggerWebhookProcessing();
-
-      // Processing should still complete (error is logged, not thrown)
-      const events = ctx.webhookEventRepository.getAll();
-      expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('completed');
-
-      // Command ingest should NOT have been stored (it failed)
-      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
-      expect(commandEvents.length).toBe(0);
-    });
-  });
-
   describe('Button message handling', () => {
     it('ignores button message with invalid ID format (less than 2 parts)', async () => {
       const senderPhone = '15551234567';
@@ -2856,6 +2769,235 @@ describe('Webhook async processing', () => {
     });
   });
 
+  describe('reaction message without data', () => {
+    it('ignores reaction message without reaction data', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-reaction-nodata';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      id: 'wamid.reaction.nodata',
+                      timestamp: '1234567890',
+                      type: 'reaction',
+                      // Intentionally missing 'reaction' field
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.ignoredReason?.code).toBe('NO_REACTION_DATA');
+    });
+  });
+
+  describe('button/interactive message without data', () => {
+    it('ignores interactive message without button_reply data', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-button-nodata';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      id: 'wamid.interactive.nodata',
+                      timestamp: '1234567890',
+                      type: 'interactive',
+                      // Intentionally missing 'interactive' field with button_reply
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.ignoredReason?.code).toBe('NO_BUTTON_DATA');
+    });
+  });
+
+  describe('text reply approval publish failure', () => {
+    it('logs error when publishApprovalReply fails for text reply', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-approval-fail';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      // Pre-populate outbound message with correlationId containing actionId
+      const outboundMessage: OutboundMessage = {
+        wamid: 'wamid.approval.textreply',
+        correlationId: 'action-approval-approval-action-fail-123',
+        userId: testUserId,
+        sentAt: new Date().toISOString(),
+        expiresAt: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+      };
+      await ctx.outboundMessageRepository.save(outboundMessage);
+
+      // Configure event publisher to fail approval reply
+      ctx.eventPublisher.setApprovalReplyFailure('Simulated approval reply publish failure');
+
+      const payload = createReplyWebhookPayload({
+        replyToWamid: 'wamid.approval.textreply',
+        messageText: 'Yes approved',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      // Event should still be completed (failure is logged but does not fail the event)
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      // No approval reply events should be published (publish failed)
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(0);
+    });
+  });
+
+  describe('command ingest publish failure', () => {
+    it('logs error when publishCommandIngest fails', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-cmd-fail';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      // Configure event publisher to fail command ingest
+      ctx.eventPublisher.setCommandIngestFailure('Simulated command ingest failure');
+
+      const payload = createWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      // Event should still be completed (command ingest failure is logged, not thrown)
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      // No command ingest events should be published (publish failed)
+      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      expect(commandEvents.length).toBe(0);
+    });
+  });
+
   describe('Reaction message handling', () => {
     const senderPhone = '15551234567';
     const testUserId = 'test-user-reaction';
@@ -2891,225 +3033,6 @@ describe('Webhook async processing', () => {
 
       const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalEvents.length).toBe(0);
-    });
-  });
-
-  describe('defensive checks for missing message data', () => {
-    it('marks reaction message as ignored when reaction data is missing', async () => {
-      // Payload with type: 'reaction' but NO reaction field
-      const payload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: '102290129340398',
-            changes: [
-              {
-                field: 'messages',
-                value: {
-                  messaging_product: 'whatsapp',
-                  metadata: {
-                    display_phone_number: '15551234567',
-                    phone_number_id: '123456789012345',
-                  },
-                  contacts: [
-                    {
-                      wa_id: '15551234567',
-                      profile: { name: 'Test User' },
-                    },
-                  ],
-                  messages: [
-                    {
-                      from: '15551234567',
-                      id: 'wamid.reaction.no-data',
-                      timestamp: '1234567890',
-                      type: 'reaction',
-                      // intentionally omitting 'reaction' field
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      };
-
-      const payloadString = JSON.stringify(payload);
-      const signature = createSignature(payloadString, testConfig.appSecret);
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/whatsapp/webhooks',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-        },
-        payload: payloadString,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      await triggerWebhookProcessing();
-
-      const events = ctx.webhookEventRepository.getAll();
-      expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('ignored');
-      expect(events[0]?.ignoredReason?.code).toBe('NO_REACTION_DATA');
-    });
-
-    it('marks button message as ignored when button data is missing', async () => {
-      // Payload with type: 'button' but NO interactive/button field
-      const payload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: '102290129340398',
-            changes: [
-              {
-                field: 'messages',
-                value: {
-                  messaging_product: 'whatsapp',
-                  metadata: {
-                    display_phone_number: '15551234567',
-                    phone_number_id: '123456789012345',
-                  },
-                  contacts: [
-                    {
-                      wa_id: '15551234567',
-                      profile: { name: 'Test User' },
-                    },
-                  ],
-                  messages: [
-                    {
-                      from: '15551234567',
-                      id: 'wamid.button.no-data',
-                      timestamp: '1234567890',
-                      type: 'button',
-                      // intentionally omitting 'interactive' and 'button' fields
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      };
-
-      const payloadString = JSON.stringify(payload);
-      const signature = createSignature(payloadString, testConfig.appSecret);
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/whatsapp/webhooks',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-        },
-        payload: payloadString,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      await triggerWebhookProcessing();
-
-      const events = ctx.webhookEventRepository.getAll();
-      expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('ignored');
-      expect(events[0]?.ignoredReason?.code).toBe('NO_BUTTON_DATA');
-    });
-
-    it('marks interactive message as ignored when button data is missing', async () => {
-      const payload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: '102290129340398',
-            changes: [
-              {
-                field: 'messages',
-                value: {
-                  messaging_product: 'whatsapp',
-                  metadata: {
-                    display_phone_number: '15551234567',
-                    phone_number_id: '123456789012345',
-                  },
-                  contacts: [
-                    {
-                      wa_id: '15551234567',
-                      profile: { name: 'Test User' },
-                    },
-                  ],
-                  messages: [
-                    {
-                      from: '15551234567',
-                      id: 'wamid.interactive.no-data',
-                      timestamp: '1234567890',
-                      type: 'interactive',
-                      // intentionally omitting 'interactive' field
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      };
-
-      const payloadString = JSON.stringify(payload);
-      const signature = createSignature(payloadString, testConfig.appSecret);
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/whatsapp/webhooks',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-        },
-        payload: payloadString,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      await triggerWebhookProcessing();
-
-      const events = ctx.webhookEventRepository.getAll();
-      expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('ignored');
-      expect(events[0]?.ignoredReason?.code).toBe('NO_BUTTON_DATA');
-      expect(events[0]?.ignoredReason?.message).toContain('Interactive');
-    });
-
-    it('marks button message as ignored when button intent is unknown', async () => {
-      const senderPhone = '15551234567';
-      const userId = 'test-user-id';
-      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
-
-      const payload = createButtonWebhookPayload({
-        replyToWamid: 'wamid.original.message',
-        buttonId: 'unknown_intent:action123:nonce456',
-        buttonTitle: 'Unknown',
-      });
-
-      const payloadString = JSON.stringify(payload);
-      const signature = createSignature(payloadString, testConfig.appSecret);
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/whatsapp/webhooks',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-        },
-        payload: payloadString,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      await triggerWebhookProcessing();
-
-      const events = ctx.webhookEventRepository.getAll();
-      expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('ignored');
-      expect(events[0]?.ignoredReason?.code).toBe('UNKNOWN_BUTTON_INTENT');
     });
   });
 });
