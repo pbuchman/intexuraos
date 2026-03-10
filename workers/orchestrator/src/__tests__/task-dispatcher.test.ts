@@ -1869,6 +1869,28 @@ describe('TaskDispatcher', () => {
       expect(log).toContain('Planning Agent');
     });
 
+    it('uses agentType=pull_request over missing pr-comment label', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
+      const request: CreateTaskRequest = {
+        taskId: 'pull-request-phase-override-task',
+        workerType: 'auto',
+        prompt: 'Test pull request phase override',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['bug'],
+        hasChildren: false,
+        agentType: 'pull_request',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Pull Request Agent');
+    });
+
     it('falls back to label detection when agentType is absent', async () => {
       vi.mocked(mockLogForwarder.appendChunk).mockClear();
 
