@@ -623,6 +623,96 @@ describe('GitHubTokenService', () => {
       expect(mockOctokitRequest).toHaveBeenCalledTimes(1);
     });
 
+    it('should invoke refreshToken via setInterval callback when token is expiring soon', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+
+      try {
+        const service = new GitHubTokenService(
+          mockConfig.appId,
+          mockConfig.privateKeyPath,
+          mockConfig.installationId,
+          mockConfig.tokenFilePath
+        );
+
+        // Set up mock to return a token expiring in 14 minutes (within 15-min threshold)
+        mockOctokitRequest.mockImplementation(() => {
+          return Promise.resolve({
+            data: {
+              token: 'ghp_expiring_soon',
+              expires_at: new Date(Date.now() + 14 * 60 * 1000).toISOString(),
+            },
+          });
+        });
+
+        // Initial refresh so the service has a token that is expiring soon
+        await service.refreshToken();
+        expect(service.isExpiringSoon()).toBe(true);
+
+        // Spy on refreshToken and mock it to prevent fire-and-forget async leaks
+        const refreshSpy = vi
+          .spyOn(service, 'refreshToken')
+          .mockResolvedValue({ ok: true, value: 'ghp_spied' });
+
+        // Start background refresh with a 1-minute interval
+        service.startBackgroundRefresh(1);
+
+        // Advance timer by 1 minute to trigger the setInterval callback
+        vi.advanceTimersByTime(60 * 1000);
+
+        // The interval callback should have called refreshToken because isExpiringSoon() === true
+        expect(refreshSpy).toHaveBeenCalledTimes(1);
+
+        service.stopBackgroundRefresh();
+        refreshSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should not invoke refreshToken via setInterval callback when token is fresh', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+
+      try {
+        const service = new GitHubTokenService(
+          mockConfig.appId,
+          mockConfig.privateKeyPath,
+          mockConfig.installationId,
+          mockConfig.tokenFilePath
+        );
+
+        // Set up mock to return a token expiring in 2 hours (well beyond threshold)
+        mockOctokitRequest.mockImplementation(() => {
+          return Promise.resolve({
+            data: {
+              token: 'ghp_fresh_token',
+              expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+            },
+          });
+        });
+
+        // Initial refresh so the service has a fresh token
+        await service.refreshToken();
+        expect(service.isExpiringSoon()).toBe(false);
+
+        // Spy on refreshToken to verify it does NOT get called by the interval callback
+        const refreshSpy = vi.spyOn(service, 'refreshToken');
+
+        // Start background refresh with a 1-minute interval
+        service.startBackgroundRefresh(1);
+
+        // Advance timer by 1 minute to trigger the setInterval callback
+        vi.advanceTimersByTime(60 * 1000);
+
+        // The interval callback should NOT have called refreshToken because isExpiringSoon() === false
+        expect(refreshSpy).not.toHaveBeenCalled();
+
+        service.stopBackgroundRefresh();
+        refreshSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should trigger refresh in interval callback when token is expiring soon', async () => {
       let refreshCount = 0;
       mockOctokitRequest.mockImplementation(() => {

@@ -1463,4 +1463,113 @@ describe('DockerProvider', () => {
       );
     });
   });
+
+  describe('resolveForensicsSeccompProfilePath', () => {
+    it('returns the first candidate path that exists', async () => {
+      const fs = await import('node:fs');
+      (fs.existsSync as Mock).mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompProfilePath();
+
+      expect(result).toBeTypeOf('string');
+      expect(result).toContain('claude-worker-forensics-seccomp.json');
+    });
+
+    it('returns null when no candidate path exists', async () => {
+      const fs = await import('node:fs');
+      // Use mockReturnValueOnce for each candidate (3 candidates) to avoid polluting other tests
+      (fs.existsSync as Mock)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompProfilePath();
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ candidates: expect.any(Array) }),
+        expect.stringContaining('Forensics seccomp profile not found')
+      );
+    });
+  });
+
+  describe('resolveForensicsSeccompSecurityOpt', () => {
+    it('returns null when profile path is not found', async () => {
+      const fs = await import('node:fs');
+      // Use mockReturnValueOnce for each candidate (3 candidates) to avoid polluting other tests
+      (fs.existsSync as Mock)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompSecurityOpt();
+
+      expect(result).toBeNull();
+    });
+
+    it('returns seccomp security opt string when profile is valid', async () => {
+      const fs = await import('node:fs');
+      (fs.existsSync as Mock).mockReturnValueOnce(true);
+      const profileJson = { defaultAction: 'SCMP_ACT_ERRNO', syscalls: [] };
+      (fs.readFileSync as Mock).mockReturnValueOnce(JSON.stringify(profileJson));
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompSecurityOpt();
+
+      expect(result).toBe(`seccomp=${JSON.stringify(profileJson)}`);
+    });
+
+    it('returns null and logs warning when profile read throws', async () => {
+      const fs = await import('node:fs');
+      (fs.existsSync as Mock).mockReturnValueOnce(true);
+      (fs.readFileSync as Mock).mockImplementationOnce(() => {
+        throw new Error('ENOENT: no such file');
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompSecurityOpt();
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          profilePath: expect.any(String),
+          error: expect.any(Error),
+        }),
+        expect.stringContaining('Forensics seccomp profile is invalid')
+      );
+    });
+
+    it('returns null and logs warning when profile contains invalid JSON', async () => {
+      const fs = await import('node:fs');
+      (fs.existsSync as Mock).mockReturnValueOnce(true);
+      (fs.readFileSync as Mock).mockReturnValueOnce('not-valid-json{{{');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompSecurityOpt();
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          profilePath: expect.any(String),
+          error: expect.any(SyntaxError),
+        }),
+        expect.stringContaining('Forensics seccomp profile is invalid')
+      );
+    });
+  });
+
+  describe('createWorker continueSession guard', () => {
+    it('throws when worker already exists and continueSession is not true', async () => {
+      const config = createTestConfig({ taskId: 'task-duplicate' });
+      const handle = await provider.createWorker(config);
+      expect(handle.taskId).toBe('task-duplicate');
+
+      await expect(
+        provider.createWorker(createTestConfig({ taskId: 'task-duplicate' }))
+      ).rejects.toThrow('Worker already exists for task task-duplicate');
+    });
+  });
 });

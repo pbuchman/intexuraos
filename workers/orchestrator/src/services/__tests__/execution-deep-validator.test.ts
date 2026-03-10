@@ -606,6 +606,128 @@ describe('postRawComment strips double fences', () => {
   });
 });
 
+describe('postPrComment stderr extraction', () => {
+  it('extracts stderr from execFile error that has stderr property', async () => {
+    const validResponse = JSON.stringify({
+      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [],
+    });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: validResponse, usage: { costUsd: 0.05 } },
+    });
+
+    // Simulate execFile error with stderr property (like real execFile errors)
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        const error = new Error('Command failed');
+        (error as unknown as Record<string, unknown>)['stderr'] = 'gh: permission denied';
+        cb(error);
+      }
+    );
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBeDefined();
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_abc',
+        stderr: 'gh: permission denied',
+      }),
+      'Failed to post deep validation PR comment'
+    );
+  });
+
+  it('sets stderr to undefined when execFile error lacks stderr property', async () => {
+    const validResponse = JSON.stringify({
+      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [],
+    });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: validResponse, usage: { costUsd: 0.05 } },
+    });
+
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(new Error('plain error without stderr'));
+      }
+    );
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBeDefined();
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_abc',
+        stderr: undefined,
+      }),
+      'Failed to post deep validation PR comment'
+    );
+  });
+});
+
+describe('postRawComment stderr extraction', () => {
+  it('extracts stderr from execFile error with stderr property in raw comment path', async () => {
+    // Invalid schema triggers postRawComment
+    const invalidSchema = JSON.stringify({ unexpected: 'data' });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: invalidSchema, usage: { costUsd: 0.042 } },
+    });
+
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        const error = new Error('Command failed');
+        (error as unknown as Record<string, unknown>)['stderr'] = 'gh: rate limit exceeded';
+        cb(error);
+      }
+    );
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    await validator.validate(defaultInput);
+
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_abc',
+        stderr: 'gh: rate limit exceeded',
+      }),
+      'Failed to post raw deep validation PR comment'
+    );
+  });
+
+  it('sets stderr to undefined when raw comment execFile error lacks stderr property', async () => {
+    const invalidSchema = JSON.stringify({ unexpected: 'data' });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: invalidSchema, usage: { costUsd: 0.042 } },
+    });
+
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(new Error('plain error'));
+      }
+    );
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    await validator.validate(defaultInput);
+
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_abc',
+        stderr: undefined,
+      }),
+      'Failed to post raw deep validation PR comment'
+    );
+  });
+});
+
 describe('buildDeepValidationPrompt edge cases', () => {
   it('truncates transcript exceeding MAX_TRANSCRIPT_CHARS', () => {
     const longTranscript = 'A'.repeat(250_000);
