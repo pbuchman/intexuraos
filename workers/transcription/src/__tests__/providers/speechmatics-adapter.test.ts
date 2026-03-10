@@ -363,6 +363,25 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
       }
     });
 
+    it('falls back to metadata language when results array is empty', async () => {
+      mockGetJobResult.mockResolvedValue({
+        results: [],
+        metadata: {
+          language_pack_info: {
+            language_description: 'Polish',
+          },
+        },
+      });
+
+      const result = await adapter.getTranscript('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.detectedLanguage).toBe('pl');
+        expect(result.value.text).toBe('');
+      }
+    });
+
     it('handles non-array results gracefully', async () => {
       mockGetJobResult.mockResolvedValue({
         results: 'not-an-array',
@@ -373,6 +392,7 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.text).toBe('');
+        expect(result.value.detectedLanguage).toBeUndefined();
       }
     });
   });
