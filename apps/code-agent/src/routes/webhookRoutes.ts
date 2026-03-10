@@ -783,7 +783,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         const resolvedStatus =
-          task.agentType === 'planning' ? 'planned' : 'implemented';
+          task.agentType === 'planning' ? 'planned' :
+          task.agentType === 'review' ? 'reviewed' : 'implemented';
         const updateResult = await codeTaskRepo.update(taskId, {
           status: resolvedStatus,
           completedAt,

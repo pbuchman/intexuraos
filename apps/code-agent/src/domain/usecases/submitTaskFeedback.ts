@@ -107,7 +107,7 @@ export async function submitTaskFeedback(
   const originalTask = originalTaskResult.value;
 
   // Step 2: Validate status is completed
-  if (originalTask.status !== 'planned' && originalTask.status !== 'implemented') {
+  if (originalTask.status !== 'planned' && originalTask.status !== 'implemented' && originalTask.status !== 'reviewed') {
     logger.warn({ taskId: originalTask.id, status: originalTask.status }, 'Attempted to provide feedback on non-completed task');
     return err({
       code: 'invalid_status',

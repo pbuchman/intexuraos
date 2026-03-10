@@ -93,6 +93,7 @@ describe('createReviewTask', () => {
       expect.objectContaining({
         agentType: 'review',
         systemPromptHash: 'review-auto',
+        webhookUrl: 'https://code-agent.example.com/internal/webhooks/task-complete',
       })
     );
   });
