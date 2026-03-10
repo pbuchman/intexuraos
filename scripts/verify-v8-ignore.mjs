@@ -8,6 +8,37 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(__dirname, '..');
 
+const NO_OVERRIDES = process.argv.includes('--no-overrides');
+
+// ============================================================================
+// OVERRIDE MECHANISM
+// ============================================================================
+
+function loadOverrides() {
+  if (NO_OVERRIDES) {
+    return { overriddenFiles: new Set(), taskMap: new Map() };
+  }
+
+  const overridesPath = resolve(ROOT_DIR, 'v8-ignore-overrides.json');
+
+  if (!existsSync(overridesPath)) {
+    return { overriddenFiles: new Set(), taskMap: new Map() };
+  }
+
+  const data = JSON.parse(readFileSync(overridesPath, 'utf8'));
+  const overriddenFiles = new Set();
+  const taskMap = new Map();
+
+  for (const [taskId, entry] of Object.entries(data.overrides ?? {})) {
+    for (const file of entry.files ?? []) {
+      overriddenFiles.add(file);
+      taskMap.set(file, taskId);
+    }
+  }
+
+  return { overriddenFiles, taskMap };
+}
+
 const VALID_CATEGORIES = [
   'ts-type',
   'regex',
@@ -37,6 +68,7 @@ const CATEGORY_DETECTORS = {
       const searchEnd = Math.min(lines.length, lineIdx + 5);
       const context = lines.slice(searchStart, searchEnd).join('\n');
 
+      // Only actual type-narrowing evidence
       const patterns = [
         /\.length\s*[><=!]+/,
         /\.filter\s*\(/,
@@ -47,12 +79,6 @@ const CATEGORY_DETECTORS = {
         /!==?\s*null/,
         /===?\s*null/,
         /!==?\s*undefined/,
-        /if\s*\(/,
-        /snapshot/i,
-        /document/i,
-        /query/i,
-        /find/i,
-        /get/i,
       ];
 
       for (const pattern of patterns) {
@@ -61,9 +87,17 @@ const CATEGORY_DETECTORS = {
         }
       }
 
+      // Also check if explanation references noUncheckedIndexedAccess
+      const commentContent = lines[lineIdx] ?? '';
+      if (/noUncheckedIndexedAccess/i.test(commentContent)) {
+        return { valid: true };
+      }
+
       return {
         valid: false,
-        suggestion: 'No type-related pattern found in context',
+        suggestion:
+          'No type-narrowing pattern found. ' +
+          'ts-type requires actual TypeScript type system evidence (typeof, instanceof, ??, ?., length check, null/undefined check).',
       };
     },
   },
@@ -198,29 +232,15 @@ const CATEGORY_DETECTORS = {
       const searchEnd = Math.min(lines.length, lineIdx + 10);
       const context = lines.slice(searchStart, searchEnd).join('\n');
 
+      // Only genuinely untestable infrastructure patterns
       const patterns = [
         /requireAuth/i,
         /validateInternalAuth/i,
-        /collection\(/,
         /FakeAuth|FakeFirestore|FakePubSub/i,
-        /mock/i,
-        /fake/i,
-        /stub/i,
-        /test/i,
-        /null/,
-        /undefined/,
-        /error/i,
-        /response/i,
-        /status/i,
-        /ok\s*:/,
-        /infra/i,
-        /http/i,
-        /client/i,
+        /collection\(/,
+        /subcollection/i,
+        /fakeauthplugin/i,
       ];
-
-      if (filePath.includes('/infra/') || filePath.includes('/routes/')) {
-        return { valid: true };
-      }
 
       for (const pattern of patterns) {
         if (pattern.test(context)) {
@@ -228,7 +248,12 @@ const CATEGORY_DETECTORS = {
         }
       }
 
-      return { valid: false, suggestion: 'No test infrastructure pattern found' };
+      return {
+        valid: false,
+        suggestion:
+          'No genuine test-infra limitation found. ' +
+          'test-infra requires naming a specific Fake/Mock that cannot produce the needed state.',
+      };
     },
   },
 
@@ -238,35 +263,47 @@ const CATEGORY_DETECTORS = {
       const lines = sourceCode.split('\n');
       const lineIdx = commentLine - 1;
       const searchStart = Math.max(0, lineIdx - 50);
-      const searchEnd = Math.min(lines.length, lineIdx + 10);
       const contextAbove = lines.slice(searchStart, lineIdx).join('\n');
-      const contextBelow = lines.slice(lineIdx, searchEnd).join('\n');
 
-      const patterns = [
-        /\breturn\b/,
-        /\bthrow\b/,
-        /\bif\s*\(/,
-        /\belse\b/,
-        /\bswitch\b/,
-        /\bcase\b/,
-        /!==?\s*(null|undefined)/,
-        /===?\s*(null|undefined)/,
-        /\.length/,
-        /function\s+\w+/,
+      // Require actual early-exit patterns (if+return or if+throw) above
+      const hasEarlyReturn =
+        /if\s*\([^)]+\)\s*\{[^}]*\breturn\b/s.test(contextAbove) ||
+        /if\s*\([^)]+\)\s*\breturn\b/.test(contextAbove);
+      const hasEarlyThrow =
+        /if\s*\([^)]+\)\s*\{[^}]*\bthrow\b/s.test(contextAbove) ||
+        /if\s*\([^)]+\)\s*\bthrow\b/.test(contextAbove);
+
+      if (hasEarlyReturn || hasEarlyThrow) {
+        return { valid: true };
+      }
+
+      // Check for upstream-guarantee keywords in the comment explanation
+      const commentContent = lines[lineIdx] ?? '';
+      if (/guaranteed|ensures|always\s+(returns|succeeds|set)/i.test(commentContent)) {
+        return { valid: true };
+      }
+
+      // Check for semantic upstream-guard keywords in context above
+      const semanticPatterns = [
         /only\s+called/i,
         /called\s+from/i,
-        /guaranteed/i,
-        /ensures/i,
-        /always/i,
+        /!==?\s*(null|undefined)/,
+        /===?\s*(null|undefined)/,
       ];
 
-      for (const pattern of patterns) {
-        if (pattern.test(contextAbove) || pattern.test(contextBelow)) {
+      for (const pattern of semanticPatterns) {
+        if (pattern.test(contextAbove)) {
           return { valid: true };
         }
       }
 
-      return { valid: false, suggestion: 'No upstream guard pattern found' };
+      return {
+        valid: false,
+        suggestion:
+          'No upstream guard found. ' +
+          'upstream requires an early return/throw above that makes this branch unreachable, ' +
+          'or a null/undefined check in the upstream context.',
+      };
     },
   },
 
@@ -547,8 +584,9 @@ function validateSyntax(comments) {
 // PHASE C: Pattern Validation
 // ============================================================================
 
-function validatePatterns(comments) {
+function validatePatterns(comments, overriddenFiles, taskMap) {
   const errors = [];
+  const overrideSkips = [];
 
   for (const comment of comments) {
     const detector = CATEGORY_DETECTORS[comment.category];
@@ -564,6 +602,13 @@ function validatePatterns(comments) {
     const result = detector.detect(sourceCode, comment.line, comment.file);
 
     if (!result.valid) {
+      // Check override before reporting error
+      if (overriddenFiles.has(comment.file)) {
+        const taskId = taskMap.get(comment.file) ?? 'UNKNOWN';
+        overrideSkips.push({ file: comment.file, line: comment.line, taskId });
+        continue;
+      }
+
       errors.push({
         file: comment.file,
         line: comment.line,
@@ -572,7 +617,75 @@ function validatePatterns(comments) {
     }
   }
 
-  return errors;
+  return { errors, overrideSkips };
+}
+
+// ============================================================================
+// PHASE C-1: NEVER-valid Pattern Blocklist
+// ============================================================================
+
+const NEVER_VALID_PATTERNS = [
+  {
+    pattern: /\bcatch\s*\(/,
+    message: 'Catch blocks are always testable — throw in test via mock dependency',
+  },
+  {
+    pattern: /if\s*\(\s*![\w.]+\.ok\b/,
+    message: 'Result error paths are always testable — mock dependency to return err()',
+  },
+  {
+    pattern: /if\s*\(\s*[\w.]+\s*===?\s*['"]failed['"]/,
+    message: 'Status checks are always testable — pass matching input in test',
+  },
+  {
+    pattern: /if\s*\(\s*[\w.]+\s*===?\s*['"]interrupted['"]/,
+    message: 'Status checks are always testable — pass matching input in test',
+  },
+];
+
+// Categories that legitimately cover NEVER-valid patterns
+const NEVER_VALID_EXEMPT_CATEGORIES = ['auth-guard', 'module-init'];
+
+function validateNeverValidPatterns(comments, overriddenFiles, taskMap) {
+  const errors = [];
+  const overrideSkips = [];
+
+  for (const comment of comments) {
+    if (NEVER_VALID_EXEMPT_CATEGORIES.includes(comment.category)) continue;
+
+    const filePath = resolve(ROOT_DIR, comment.file);
+    const sourceCode = readFileSync(filePath, 'utf8');
+    const lines = sourceCode.split('\n');
+    const commentLineIdx = comment.line - 1;
+
+    // Find the matching stop to get the ignored code block
+    const stopLineIdx = lines.findIndex(
+      (l, i) => i > commentLineIdx && V8_IGNORE_STOP_REGEX.test(l)
+    );
+    if (stopLineIdx === -1) continue;
+
+    const ignoredBlock = lines.slice(commentLineIdx + 1, stopLineIdx).join('\n');
+
+    for (const { pattern, message } of NEVER_VALID_PATTERNS) {
+      if (pattern.test(ignoredBlock)) {
+        // Check override before reporting error
+        if (overriddenFiles.has(comment.file)) {
+          const taskId = taskMap.get(comment.file) ?? 'UNKNOWN';
+          overrideSkips.push({ file: comment.file, line: comment.line, taskId });
+          break;
+        }
+
+        errors.push({
+          file: comment.file,
+          line: comment.line,
+          message: `NEVER-valid pattern in ignored code: ${message}`,
+        });
+        break; // One NEVER-valid match is enough to fail
+      }
+    }
+  }
+
+  return { errors, overrideSkips };
 }
 
 // ============================================================================
@@ -886,6 +999,10 @@ async function main() {
     console.log('Valid categories:');
     VALID_CATEGORIES.forEach((cat) => console.log(`  - ${cat}`));
     console.log('');
+    console.log('Flags:');
+    console.log('  --no-overrides  Ignore v8-ignore-overrides.json (strict auditing)');
+    console.log('  --all           Show all uncovered branches (not just first 50)');
+    console.log('');
     console.log('Rules:');
     console.log('  - Every start must have a matching stop in the same file');
     console.log('  - Category must match the code context (validated by detectors)');
@@ -922,8 +1039,19 @@ async function main() {
   // Phase B: Syntax validation
   const { errors: syntaxErrors, validComments } = validateSyntax(comments);
 
+  // Load overrides
+  const { overriddenFiles, taskMap } = loadOverrides();
+
   // Phase C: Pattern validation
-  const patternErrors = validatePatterns(Array.from(validComments));
+  const { errors: patternErrors, overrideSkips: patternOverrideSkips } = validatePatterns(
+    Array.from(validComments),
+    overriddenFiles,
+    taskMap
+  );
+
+  // Phase C-1: NEVER-valid pattern blocklist
+  const { errors: neverValidErrors, overrideSkips: neverValidOverrideSkips } =
+    validateNeverValidPatterns(Array.from(validComments), overriddenFiles, taskMap);
 
   // Phase D: Coverage cross-reference
   const coveragePath = resolve(ROOT_DIR, 'coverage/coverage-final.json');
@@ -962,12 +1090,21 @@ async function main() {
   }
 
   // Output
-  const allErrors = [...syntaxErrors, ...patternErrors, ...coverageErrors];
+  const allErrors = [...syntaxErrors, ...patternErrors, ...neverValidErrors, ...coverageErrors];
   const validCount = validComments.size;
 
   // Count lines within v8 ignore blocks
   const startComments = comments.filter((c) => c.type === 'start');
   const blockCount = startComments.length;
+
+  // Report override skips
+  const allOverrideSkips = [...patternOverrideSkips, ...neverValidOverrideSkips];
+  if (allOverrideSkips.length > 0) {
+    console.log(`\n⏭ ${allOverrideSkips.length} block(s) skipped via overrides:`);
+    for (const skip of allOverrideSkips) {
+      console.log(`  ⏭ OVERRIDE: ${skip.file}:${skip.line} (${skip.taskId})`);
+    }
+  }
 
   console.log(`\n✓ ${validCount} v8 ignore comments validated`);
   console.log(
