@@ -25,7 +25,7 @@ export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
  * Task status lifecycle.
  * Design reference: Lines 316, 1422
  *
- * Flow: queued → dispatched → running → planned|implemented|failed|cancelled
+ * Flow: queued → dispatched → running → planned|implemented|reviewed|failed|cancelled
  *       dispatched → interrupted (if worker dies)
  *       queued → failed (if TTL expires or queue full)
  *       failed|cancelled|interrupted → archived (when task is retried, INT-711)
@@ -39,6 +39,7 @@ export type TaskStatus =
   | 'queued'       // Waiting for worker capacity (INT-619)
   | 'planned'      // Planning Agent task finished
   | 'implemented'  // Execution Agent task finished
+  | 'reviewed'     // Review Agent task finished
   | 'failed'       // Error occurred
   | 'interrupted'  // Worker died unexpectedly
   | 'cancelled'    // User cancelled
