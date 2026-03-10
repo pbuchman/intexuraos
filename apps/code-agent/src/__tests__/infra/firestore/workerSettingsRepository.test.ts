@@ -14,6 +14,7 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
+import { encryptToken } from '../../../infra/firestore/encryption.js';
 import type { WorkerConfigInput } from '../../../domain/models/workerSettings.js';
 import { WORKER_NAME_REGEX, MAX_WORKERS_PER_USER } from '../../../domain/models/workerSettings.js';
 
@@ -684,6 +685,263 @@ describe('workerSettingsRepository', () => {
       expect(decrypted.ok).toBe(true);
       if (decrypted.ok && decrypted.value !== null) {
         expect(decrypted.value.workers[0]?.cfAccessClientSecret).toBe('super-secret-value-12345');
+      }
+    });
+  });
+
+  // Tests for v8 ignore blocks
+  describe('decryption error path (line 138)', () => {
+    it('should return error for corrupted encrypted data', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Write corrupted (non-base64) encrypted data directly to Firestore
+      const collection = fakeFirestore.collection('code_worker_settings');
+      await collection.doc('corrupted-user').set({
+        userId: 'corrupted-user',
+        workers: [
+          {
+            name: 'test-worker',
+            url: 'https://test.example.com',
+            cfAccessClientId: 'not-valid-base64!!!', // corrupted encrypted data
+            cfAccessClientSecret: 'also-corrupted',
+            dispatchSigningSecret: 'bad-data',
+            enabled: true,
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result = await repo.getSettings('corrupted-user');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('Failed to decrypt');
+      }
+    });
+  });
+
+  describe('getWorkerByName error propagation (line 162)', () => {
+    it('should propagate error from getSettings when data is corrupted', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Write corrupted encrypted data directly to Firestore
+      const collection = fakeFirestore.collection('code_worker_settings');
+      await collection.doc('corrupted-user').set({
+        userId: 'corrupted-user',
+        workers: [
+          {
+            name: 'test-worker',
+            url: 'https://test.example.com',
+            cfAccessClientId: 'invalid-base64-data',
+            cfAccessClientSecret: 'more-bad-data',
+            dispatchSigningSecret: 'still-bad',
+            enabled: true,
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result = await repo.getWorkerByName('corrupted-user', 'test-worker');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('Failed to decrypt');
+      }
+    });
+  });
+
+  describe('encryption error in addWorker (line 235)', () => {
+    it('should return error when encryption fails in production', async () => {
+      // Set production mode and invalid encryption key to cause encryption to fail
+      const originalEnv = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+      const originalNodeEnv = process.env['NODE_ENV'];
+
+      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'invalid-key'; // Too short
+      process.env['NODE_ENV'] = 'production';
+
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.addWorker('user-1', createWorkerConfig({
+        name: 'test-worker',
+        url: 'https://test.example.com',
+      }));
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
+
+      // Restore original env
+      if (originalEnv === undefined) {
+        delete process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+      } else {
+        process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = originalEnv;
+      }
+      if (originalNodeEnv === undefined) {
+        delete process.env['NODE_ENV'];
+      } else {
+        process.env['NODE_ENV'] = originalNodeEnv;
+      }
+    });
+  });
+
+  describe('conditional spreads in updateWorker (line 299)', () => {
+    it('should preserve test fields when updating other fields', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // First add a worker
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'test-worker' }));
+
+      // Update test result to set test fields
+      await repo.updateTestResult('user-1', 'test-worker', {
+        status: 'success',
+        message: 'Connection successful',
+      });
+
+      // Now update a different field using updateWorker
+      await repo.updateWorker('user-1', 'test-worker', {
+        url: 'https://updated.example.com',
+      });
+
+      // Verify test fields are preserved
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        const worker = settings.value.workers.find((w) => w.name === 'test-worker');
+        expect(worker?.testStatus).toBe('success');
+        expect(worker?.testMessage).toBe('Connection successful');
+        expect(worker?.lastTestedAt).toBeDefined();
+        expect(worker?.url).toBe('https://updated.example.com');
+      }
+    });
+
+    it('should preserve test fields when they are undefined', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Add a worker without test fields
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'test-worker' }));
+
+      // Update a field - should not add test fields if they didn't exist
+      await repo.updateWorker('user-1', 'test-worker', {
+        url: 'https://updated.example.com',
+      });
+
+      // Verify test fields are still undefined/not present
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        const worker = settings.value.workers.find((w) => w.name === 'test-worker');
+        expect(worker?.testStatus).toBeUndefined();
+        expect(worker?.testMessage).toBeUndefined();
+        expect(worker?.lastTestedAt).toBeUndefined();
+      }
+    });
+  });
+
+  describe('getHealthStatuses edge cases (line 483)', () => {
+    it('should return null for non-existent user', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.getHealthStatuses('non-existent-user');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should return null when user has no workerHealthStatuses field', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create user with workers but no health statuses
+      const collection = fakeFirestore.collection('code_worker_settings');
+      await collection.doc('user-no-health').set({
+        userId: 'user-no-health',
+        workers: [
+          {
+            name: 'test-worker',
+            url: 'https://test.example.com',
+            cfAccessClientId: encryptToken('client-id'),
+            cfAccessClientSecret: encryptToken('secret'),
+            dispatchSigningSecret: encryptToken('signing'),
+            enabled: true,
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        // Note: no workerHealthStatuses field
+      });
+
+      const result = await repo.getHealthStatuses('user-no-health');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should return health statuses when they exist', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create user with health statuses
+      const collection = fakeFirestore.collection('code_worker_settings');
+      await collection.doc('user-with-health').set({
+        userId: 'user-with-health',
+        workers: [
+          {
+            name: 'test-worker',
+            url: 'https://test.example.com',
+            cfAccessClientId: encryptToken('client-id'),
+            cfAccessClientSecret: encryptToken('secret'),
+            dispatchSigningSecret: encryptToken('signing'),
+            enabled: true,
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        workerHealthStatuses: {
+          'test-worker': {
+            state: { status: 'healthy' },
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
+        },
+      });
+
+      const result = await repo.getHealthStatuses('user-with-health');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value['test-worker']).toBeDefined();
+        expect(result.value['test-worker']?.stale).toBe(false);
       }
     });
   });
