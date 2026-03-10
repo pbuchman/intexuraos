@@ -108,6 +108,11 @@ describe('RepoManager', () => {
         'https://github.com/pbuchman/intexuraos'
       );
     });
+
+    it('should fall back to toLowerCase when URL parsing fails for malformed input', async () => {
+      const { normalizeUrl } = await loadRepoManager();
+      expect(normalizeUrl('notaurl')).toBe('notaurl');
+    });
   });
 
   describe('urlsMatch', () => {
@@ -209,6 +214,20 @@ describe('RepoManager', () => {
       await expect(
         validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
       ).rejects.toThrow('Failed to get remote origin URL');
+    });
+
+    it('should include "Unknown error" when git remote get-url rejects with a non-Error', async () => {
+      const { validateRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'non-error-origin');
+      mkdirSync(join(repoPath, '.git'), { recursive: true });
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        throw 'string rejection';
+      };
+
+      await expect(
+        validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
+      ).rejects.toThrow('Unknown error');
     });
 
     it('should throw when package.json name is not intexuraos', async () => {
@@ -318,6 +337,19 @@ describe('RepoManager', () => {
       ).rejects.toThrow('Git output: Cloning into: Permission denied');
     });
 
+    it('should include "Unknown error" when clone rejects with an object without message', async () => {
+      const { cloneRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'failed-clone-no-msg');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        throw { code: 128 };
+      };
+
+      await expect(
+        cloneRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).rejects.toThrow('Failed to clone repository: Unknown error');
+    });
+
     it('should log error with context before throwing', async () => {
       const { cloneRepository } = await loadRepoManager();
       const repoPath = join(tempDir, 'failed-clone-log');
@@ -403,6 +435,19 @@ describe('RepoManager', () => {
       );
     });
 
+    it('should include "Unknown error" when fetch rejects with an object without message', async () => {
+      const { fetchRemote } = await loadRepoManager();
+      const repoPath = join(tempDir, 'repo-fetch-no-msg');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        throw { code: 128 };
+      };
+
+      await expect(fetchRemote(repoPath, mockLogger)).rejects.toThrow(
+        'Failed to fetch from remote: Unknown error'
+      );
+    });
+
     it('should log error with context before throwing', async () => {
       const { fetchRemote } = await loadRepoManager();
       const repoPath = join(tempDir, 'repo-fetch-log');
@@ -454,6 +499,19 @@ describe('RepoManager', () => {
       };
 
       await expect(cleanWorktree(repoPath, mockLogger)).rejects.toThrow('Failed to clean worktree');
+    });
+
+    it('should include "Unknown error" when clean rejects with an object without message', async () => {
+      const { cleanWorktree } = await loadRepoManager();
+      const repoPath = join(tempDir, 'repo-clean-no-msg');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        throw { code: 128 };
+      };
+
+      await expect(cleanWorktree(repoPath, mockLogger)).rejects.toThrow(
+        'Failed to clean worktree: Unknown error'
+      );
     });
 
     it('should include stderr in error when available', async () => {

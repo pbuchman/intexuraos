@@ -96,9 +96,7 @@ export class ApiKeyValidator {
         return result;
       }
 
-      /* v8 ignore start -- ts-type: ternary for empty statusText fallback @preserve */
       const statusText = resp.statusText !== '' ? resp.statusText : 'Unauthorized';
-      /* v8 ignore stop @preserve */
       const result: ApiKeyValidationResult = {
         valid: false,
         errorMessage: `HTTP ${String(resp.status)} ${statusText}`,

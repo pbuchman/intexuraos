@@ -362,7 +362,7 @@ describe('FirestoreLogChunkRepository', () => {
         expect(result.ok).toBe(false);
         if (!result.ok) {
           expect(result.error.code).toBe('FIRESTORE_ERROR');
-          expect(result.error.message).toBe('Unknown error');
+          expect(result.error.message).toBe('string error');
         }
       });
 

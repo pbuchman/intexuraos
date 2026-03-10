@@ -333,11 +333,9 @@ ${additionalContext.trim()}
   };
 
   // Only include optional fields if defined
-  /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
   if (retryTask.linearIssueId !== undefined) {
     dispatchRequest.linearIssueId = retryTask.linearIssueId;
   }
-  /* v8 ignore stop @preserve */
   // traceId was set in createInput, so it's always defined on retryTask
   // Use ?? for type safety (traceId?: string in CodeTask type)
   /* v8 ignore start -- ts-type: nullish coalescing creates type narrowing branch @preserve */
@@ -354,11 +352,9 @@ ${additionalContext.trim()}
     // INT-619: Queue task when all workers are at capacity
     if (dispatchError.code === 'at_capacity') {
       const queueCountResult = await codeTaskRepo.countQueued();
-      /* v8 ignore start -- test-infra: Firestore countQueued failure fallback to fail-closed @preserve */
       if (!queueCountResult.ok) {
         logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
       }
-      /* v8 ignore stop @preserve */
       const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
 
       if (queueCount > config.queue.maxSize) {
@@ -469,7 +465,6 @@ ${additionalContext.trim()}
       body: commentBody,
     });
 
-    /* v8 ignore start -- test-infra: addComment success path tested but not detected by coverage tool @preserve */
     if (!commentResult.ok) {
       logger.warn(
         { linearIssueId: originalTask.linearIssueId, error: commentResult.error },
@@ -477,7 +472,6 @@ ${additionalContext.trim()}
       );
       // Don't fail the retry - continue without comment
     }
-    /* v8 ignore stop @preserve */
   }
 
   // Step 13: Record metrics
@@ -496,7 +490,6 @@ ${additionalContext.trim()}
     cancelNonceExpiresAt,
   });
 
-  /* v8 ignore start -- test-infra: update success path tested but not detected by coverage tool @preserve */
   if (updateResult.ok) {
     const updatedTask = updateResult.value;
     const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
@@ -506,7 +499,6 @@ ${additionalContext.trim()}
   } else {
     logger.warn({ taskId: retryTask.id, error: updateResult.error }, 'Failed to update retry task with cancel nonce');
   }
-  /* v8 ignore stop @preserve */
 
   // Step 15: Archive original task (automatic cleanup on retry, INT-711)
   const archiveResult = await codeTaskRepo.update(originalTaskId, {

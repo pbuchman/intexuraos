@@ -123,6 +123,28 @@ describe('createUserServiceClient', () => {
       }
     });
 
+    it('omits google key when it is null', async () => {
+      const mockKeys = {
+        google: null,
+        openai: 'openai-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockKeys });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getApiKeys('user123');
+
+      if (result.ok) {
+        expect(result.value.google).toBeUndefined();
+        expect(result.value.openai).toBe('openai-key');
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
     it('includes all provider keys when all are configured', async () => {
       const mockKeys = {
         google: 'google-key',

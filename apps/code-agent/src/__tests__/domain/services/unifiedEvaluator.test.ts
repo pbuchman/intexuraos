@@ -128,6 +128,170 @@ describe('UnifiedEvaluator', () => {
     });
   });
 
+  describe('dispatch result tracking', () => {
+    it('records dispatchSuccess: true when hard-rule dispatch succeeds', async () => {
+      const deps = createFakeDeps({
+        dispatchService: {
+          dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: true }),
+        } as unknown as WebhookDispatchService,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dispatchSuccess: true,
+        })
+      );
+    });
+
+    it('records dispatchSuccess: false and dispatchError when hard-rule dispatch fails', async () => {
+      const deps = createFakeDeps({
+        dispatchService: {
+          dispatch: vi.fn().mockResolvedValue({ success: false, dispatched: false, error: 'Worker unavailable' }),
+        } as unknown as WebhookDispatchService,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dispatchSuccess: false,
+          dispatchError: 'Worker unavailable',
+        })
+      );
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: 'evt-1' }),
+        expect.stringContaining('Dispatch failed')
+      );
+    });
+
+    it('records dispatchSuccess: true when LLM dispatch succeeds', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'dispatch', template: 'pr_comment' },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'LLM reasoning.',
+        })),
+        dispatchService: {
+          dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: true }),
+        } as unknown as WebhookDispatchService,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'github_agent',
+          decision: 'dispatch',
+          dispatchSuccess: true,
+        })
+      );
+    });
+
+    it('records dispatchSuccess: false when LLM dispatch fails', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'dispatch', template: 'pr_comment' },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'LLM reasoning.',
+        })),
+        dispatchService: {
+          dispatch: vi.fn().mockResolvedValue({ success: false, dispatched: false, error: 'Timeout' }),
+        } as unknown as WebhookDispatchService,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'github_agent',
+          dispatchSuccess: false,
+          dispatchError: 'Timeout',
+        })
+      );
+    });
+
+    it('records dispatchSuccess: true when fallback dispatch succeeds', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: undefined,
+        dispatchService: {
+          dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: true }),
+        } as unknown as WebhookDispatchService,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'issue_comment' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dispatchSuccess: true,
+        })
+      );
+    });
+
+    it('records dispatchSuccess: false when fallback dispatch fails', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: undefined,
+        dispatchService: {
+          dispatch: vi.fn().mockResolvedValue({ success: false, dispatched: false, error: 'No workers' }),
+        } as unknown as WebhookDispatchService,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'issue_comment' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dispatchSuccess: false,
+          dispatchError: 'No workers',
+        })
+      );
+    });
+  });
+
+  describe('recordDecision resilience', () => {
+    it('does not throw when eventDecisionRepo.save fails', async () => {
+      const deps = createFakeDeps({
+        eventDecisionRepo: {
+          save: vi.fn().mockRejectedValue(new Error('Firestore unavailable')),
+        } as unknown as EventDecisionRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      // Should not throw — dispatch already happened, losing the audit record
+      // is better than crashing and triggering a retry that re-dispatches
+      await expect(evaluator.evaluate(event, logger)).resolves.not.toThrow();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: 'evt-1' }),
+        'Failed to save event decision audit record'
+      );
+    });
+  });
+
   describe('needs_triage with LLM', () => {
     it('dispatches issue_comment when LLM says dispatch', async () => {
       const deps = createFakeDeps({

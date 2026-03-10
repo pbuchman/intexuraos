@@ -115,19 +115,13 @@ export function createOutboundMessage(params: {
 }): OutboundMessage {
   // Validate required fields are not empty
   // These are defensive checks - in practice, callers always provide valid values
-  /* v8 ignore start -- test-infra: block coverage @preserve */
   if (params.wamid.trim() === '') {
     throw new Error('wamid is required');
   }
-  /* v8 ignore stop @preserve */
-  /* v8 ignore start -- test-infra: correlationId validation @preserve */
   if (params.correlationId.trim() === '') {
-  /* v8 ignore stop @preserve */
     throw new Error('correlationId is required');
   }
-  /* v8 ignore start -- test-infra: userId validation @preserve */
   if (params.userId.trim() === '') {
-  /* v8 ignore stop @preserve */
     throw new Error('userId is required');
   }
   
