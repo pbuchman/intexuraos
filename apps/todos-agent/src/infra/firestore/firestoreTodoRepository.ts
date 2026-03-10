@@ -65,9 +65,7 @@ function toTodo(id: string, doc: TodoDocument): Todo {
     description: doc.description,
     tags: doc.tags,
     priority: doc.priority,
-    /* v8 ignore start -- test-infra: test data typically includes dueDate @preserve */
     dueDate: doc.dueDate !== null ? new Date(doc.dueDate) : null,
-    /* v8 ignore stop @preserve */
     source: doc.source,
     sourceId: doc.sourceId,
     status: doc.status,

@@ -12,12 +12,10 @@ export interface UpdateTodoItemDeps {
   logger: MinimalLogger;
 }
 
-function computeTodoStatus(items: TodoItem[]): 'pending' | 'in_progress' | 'completed' {
-  /* v8 ignore start -- test-infra: called only when updating existing item, so items.length >= 1 @preserve */
+export function computeTodoStatus(items: TodoItem[]): 'pending' | 'in_progress' | 'completed' {
   if (items.length === 0) {
     return 'pending';
   }
-  /* v8 ignore stop @preserve */
 
   const allCompleted = items.every((item) => item.status === 'completed');
   if (allCompleted) {
