@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CodeTask } from '@/types';
-import { groupByLinearIssue } from '../issueGroups.js';
+import { groupByLinearIssue, sortGroups } from '../issueGroups.js';
 
 function createMockTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
   return {
@@ -437,5 +437,123 @@ describe('groupByLinearIssue', () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0]?.pipeline.pr).toBeNull();
+  });
+});
+
+describe('sortGroups', () => {
+  it('sorts by linearId (default)', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented', updatedAt: '2026-03-07T12:00:00Z' }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'implemented', updatedAt: '2026-03-07T13:00:00Z' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const sorted = sortGroups(groups, 'linearId');
+
+    expect(sorted[0]?.linearIssueId).toBe('INT-200');
+    expect(sorted[1]?.linearIssueId).toBe('INT-100');
+  });
+
+  it('sorts by startedAt - most recently dispatched first', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'running', dispatchedAt: '2026-03-07T10:00:00Z' }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'running', dispatchedAt: '2026-03-07T12:00:00Z' }),
+      createMockTask({ id: 't3', linearIssueId: 'INT-300', agentType: 'execution', status: 'running' }), // no dispatchedAt
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const sorted = sortGroups(groups, 'startedAt');
+
+    // INT-200 (12:00) first, INT-100 (10:00) second, INT-300 (no dispatchedAt) last
+    expect(sorted[0]?.linearIssueId).toBe('INT-200');
+    expect(sorted[1]?.linearIssueId).toBe('INT-100');
+    expect(sorted[2]?.linearIssueId).toBe('INT-300');
+  });
+
+  it('sorts by startedAt - groups without dispatchedAt sort last', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'planning', status: 'planned' }), // no dispatchedAt
+      createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'running', dispatchedAt: '2026-03-07T12:00:00Z' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const sorted = sortGroups(groups, 'startedAt');
+
+    // INT-200 first (has dispatchedAt), INT-100 last (no dispatchedAt)
+    expect(sorted[0]?.linearIssueId).toBe('INT-200');
+    expect(sorted[1]?.linearIssueId).toBe('INT-100');
+  });
+
+  it('sorts by finished - most recently finished first', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented', updatedAt: '2026-03-07T10:00:00Z' }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'reviewed', updatedAt: '2026-03-07T12:00:00Z' }),
+      createMockTask({ id: 't3', linearIssueId: 'INT-300', agentType: 'execution', status: 'running' }), // not finished
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const sorted = sortGroups(groups, 'finished');
+
+    // INT-200 (reviewed at 12:00) first, INT-100 (implemented at 10:00) second, INT-300 (not finished) last
+    expect(sorted[0]?.linearIssueId).toBe('INT-200');
+    expect(sorted[1]?.linearIssueId).toBe('INT-100');
+    expect(sorted[2]?.linearIssueId).toBe('INT-300');
+  });
+
+  it('sorts by finished - groups without finished sort last', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'queued' }), // not finished
+      createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'implemented', updatedAt: '2026-03-07T12:00:00Z' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const sorted = sortGroups(groups, 'finished');
+
+    // INT-200 first (finished), INT-100 last (not finished)
+    expect(sorted[0]?.linearIssueId).toBe('INT-200');
+    expect(sorted[1]?.linearIssueId).toBe('INT-100');
+  });
+
+  it('sorts by pr - groups with PRs first by PR number desc', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented', result: { prUrl: 'https://github.com/org/repo/pull/10' } }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'implemented', result: { prUrl: 'https://github.com/org/repo/pull/50' } }),
+      createMockTask({ id: 't3', linearIssueId: 'INT-300', agentType: 'execution', status: 'running' }), // no PR
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const sorted = sortGroups(groups, 'pr');
+
+    // INT-200 (PR 50) first, INT-100 (PR 10) second, INT-300 (no PR) last
+    expect(sorted[0]?.linearIssueId).toBe('INT-200');
+    expect(sorted[1]?.linearIssueId).toBe('INT-100');
+    expect(sorted[2]?.linearIssueId).toBe('INT-300');
+  });
+
+  it('sorts by pr - groups without PRs sort last', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'planning', status: 'planned' }), // no PR
+      createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'implemented', result: { prUrl: 'https://github.com/org/repo/pull/50' } }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const sorted = sortGroups(groups, 'pr');
+
+    // INT-200 first (has PR), INT-100 last (no PR)
+    expect(sorted[0]?.linearIssueId).toBe('INT-200');
+    expect(sorted[1]?.linearIssueId).toBe('INT-100');
+  });
+
+  it('does not mutate original groups array', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented', dispatchedAt: '2026-03-07T10:00:00Z' }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-200', agentType: 'execution', status: 'implemented', dispatchedAt: '2026-03-07T12:00:00Z' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const originalOrder = groups.map((g) => g.linearIssueId);
+    sortGroups(groups, 'startedAt');
+
+    expect(groups.map((g) => g.linearIssueId)).toEqual(originalOrder);
   });
 });

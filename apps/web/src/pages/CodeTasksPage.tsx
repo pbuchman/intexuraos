@@ -4,8 +4,8 @@ import { Plus } from 'lucide-react';
 import { Button, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useCodeTasks } from '@/hooks';
-import { groupByLinearIssue } from '@/utils/issueGroups';
-import type { IssueGroup, GroupStatus } from '@/utils/issueGroups';
+import { groupByLinearIssue, sortGroups } from '@/utils/issueGroups';
+import type { IssueGroup, GroupStatus, SortKey } from '@/utils/issueGroups';
 import type { CodeTaskStatus } from '@/types';
 
 // Statuses shown by default (all except archived — INT-711)
@@ -52,8 +52,27 @@ const INACTIVE_SEGMENT_CLASS =
   'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500';
 
 const STORAGE_KEY = 'code-tasks-group-filter';
+const SORT_STORAGE_KEY = 'code-tasks-sort';
 
 const DEFAULT_NON_ARCHIVED: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'linearId', label: 'Linear ID' },
+  { key: 'pr', label: 'PR #' },
+  { key: 'finished', label: 'Finished' },
+  { key: 'startedAt', label: 'Started At' },
+];
+
+function loadSortFromStorage(): SortKey {
+  const stored = localStorage.getItem(SORT_STORAGE_KEY);
+  if (stored !== null) {
+    const parsed = JSON.parse(stored) as unknown;
+    if (typeof parsed === 'string' && SORT_OPTIONS.some((o) => o.key === parsed)) {
+      return parsed as SortKey;
+    }
+  }
+  return 'linearId';
+}
 
 function loadFiltersFromStorage(): Set<GroupStatus> {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -146,6 +165,39 @@ function StatusPipeline({ counts, activeFilters, onToggle }: StatusPipelineProps
   );
 }
 
+// --- SortControl ---
+
+interface SortControlProps {
+  activeSort: SortKey;
+  onSortChange: (sort: SortKey) => void;
+}
+
+function SortControl({ activeSort, onSortChange }: SortControlProps): React.JSX.Element {
+  return (
+    <div className="mb-4 flex flex-wrap gap-1">
+      <span className="mr-2 self-center text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500">
+        Sort:
+      </span>
+      {SORT_OPTIONS.map((option) => {
+        const isActive = activeSort === option.key;
+        return (
+          <button
+            key={option.key}
+            onClick={(): void => { onSortChange(option.key); }}
+            className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+              isActive
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // --- ColumnHeader ---
 
 function ColumnHeader(): React.JSX.Element {
@@ -165,6 +217,7 @@ export function CodeTasksPage(): React.JSX.Element {
   const navigate = useNavigate();
 
   const [activeFilters, setActiveFilters] = useState<Set<GroupStatus>>(loadFiltersFromStorage);
+  const [activeSort, setActiveSort] = useState<SortKey>(loadSortFromStorage);
 
   // When the Archived filter is active, include 'archived' in the API status filter
   // so the backend returns archived tasks. Otherwise use default (non-archived) statuses.
@@ -178,13 +231,17 @@ export function CodeTasksPage(): React.JSX.Element {
   });
   const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
 
-  const filteredGroups = useMemo(
-    () =>
-      activeFilters.size === 0
-        ? allGroups
-        : allGroups.filter((g) => activeFilters.has(g.aggregateStatus)),
-    [allGroups, activeFilters],
-  );
+  const filteredGroups = useMemo(() => {
+    const filtered = activeFilters.size === 0
+      ? allGroups
+      : allGroups.filter((g) => activeFilters.has(g.aggregateStatus));
+    return sortGroups(filtered, activeSort);
+  }, [allGroups, activeFilters, activeSort]);
+
+  const handleSortChange = useCallback((sort: SortKey): void => {
+    setActiveSort(sort);
+    localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(sort));
+  }, []);
 
   const counts = useMemo(() => {
     const c: Record<GroupStatus, number> = {
@@ -244,6 +301,8 @@ export function CodeTasksPage(): React.JSX.Element {
         activeFilters={activeFilters}
         onToggle={handleToggleFilter}
       />
+
+      <SortControl activeSort={activeSort} onSortChange={handleSortChange} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
