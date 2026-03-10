@@ -602,12 +602,7 @@ function validatePatterns(comments, overriddenFiles, taskMap) {
     const result = detector.detect(sourceCode, comment.line, comment.file);
 
     if (!result.valid) {
-      // Check override before reporting error
-      if (overriddenFiles.has(comment.file)) {
-        const taskId = taskMap.get(comment.file) ?? 'UNKNOWN';
-        overrideSkips.push({ file: comment.file, line: comment.line, taskId });
-        continue;
-      }
+      if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) continue;
 
       errors.push({
         file: comment.file,
@@ -621,9 +616,25 @@ function validatePatterns(comments, overriddenFiles, taskMap) {
 }
 
 // ============================================================================
+// Override helper (shared by Phase C and C-1)
+// ============================================================================
+
+function checkOverride(comment, overriddenFiles, taskMap, overrideSkips) {
+  if (overriddenFiles.has(comment.file)) {
+    const taskId = taskMap.get(comment.file) ?? 'UNKNOWN';
+    overrideSkips.push({ file: comment.file, line: comment.line, taskId });
+    return true;
+  }
+  return false;
+}
+
+// ============================================================================
 // PHASE C-1: NEVER-valid Pattern Blocklist
 // ============================================================================
 
+// Intentionally conservative patterns — catches the most common !result.ok form.
+// Does NOT match `result.ok === false`, compound checks, or destructured patterns
+// to avoid false positives. Broadening requires auditing all existing v8 ignores.
 const NEVER_VALID_PATTERNS = [
   {
     pattern: /\bcatch\s*\(/,
@@ -668,12 +679,7 @@ function validateNeverValidPatterns(comments, overriddenFiles, taskMap) {
 
     for (const { pattern, message } of NEVER_VALID_PATTERNS) {
       if (pattern.test(ignoredBlock)) {
-        // Check override before reporting error
-        if (overriddenFiles.has(comment.file)) {
-          const taskId = taskMap.get(comment.file) ?? 'UNKNOWN';
-          overrideSkips.push({ file: comment.file, line: comment.line, taskId });
-          break;
-        }
+        if (checkOverride(comment, overriddenFiles, taskMap, overrideSkips)) break;
 
         errors.push({
           file: comment.file,
