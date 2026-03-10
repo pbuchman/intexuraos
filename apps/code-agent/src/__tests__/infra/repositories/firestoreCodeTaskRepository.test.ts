@@ -397,6 +397,25 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.agentType).toBeUndefined();
     });
+
+    it('accepts external transaction via options parameter', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({ id: 'task_external-tx' });
+
+      // Use an external transaction (the same pattern createTaskForPR uses)
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction(async (tx) => {
+        return repo.create(input, { transaction: tx });
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.id).toBe('task_external-tx');
+      expect(result.value.status).toBe('dispatched');
+    });
   });
 
   describe('findById', () => {

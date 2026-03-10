@@ -4,6 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
+import type FirebaseFirestore from '@google-cloud/firestore';
 import type { CodeTask, TaskStatus } from '../models/codeTask.js';
 
 export interface CreateTaskInput {
@@ -97,7 +98,7 @@ export interface CodeTaskRepository {
    * 2. dedupKey (prevents UI double-taps) - lines 1543-1554
    * 3. linearIssueId active check - lines 448-458
    */
-  create(input: CreateTaskInput): Promise<Result<CodeTask, RepositoryError>>;
+  create(input: CreateTaskInput, options?: { transaction?: FirebaseFirestore.Transaction }): Promise<Result<CodeTask, RepositoryError>>;
 
   findById(taskId: string): Promise<Result<CodeTask, RepositoryError>>;
 
