@@ -171,6 +171,69 @@ describe('WorkerHealthProbe', () => {
         error: 'Invalid health response format',
       });
     });
+
+    it('should return unknown state when response body is not valid JSON', async () => {
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async (): Promise<unknown> => {
+          throw new SyntaxError('Unexpected token');
+        },
+      } as Response);
+
+      const result = await probe.probeWorker(mockWorker);
+
+      expect(result).toEqual({
+        _tag: 'unknown',
+        healthy: false,
+        error: 'Invalid health response format',
+      });
+    });
+
+    it('should return tunnel-down with connection-refused when connection resets', async () => {
+      const connError = new Error('read ECONNRESET') as Error & { code?: string };
+      connError.code = 'ECONNRESET';
+      mockedFetch.mockRejectedValueOnce(connError);
+
+      const result = await probe.probeWorker(mockWorker);
+
+      expect(result).toEqual({
+        _tag: 'tunnel-down',
+        healthy: false,
+        reason: 'connection-refused',
+        code: 'ECONNRESET',
+      });
+    });
+
+    it('should return tunnel-down with connection-refused when connection times out at TCP level', async () => {
+      const connError = new Error('connect ETIMEDOUT') as Error & { code?: string };
+      connError.code = 'ETIMEDOUT';
+      mockedFetch.mockRejectedValueOnce(connError);
+
+      const result = await probe.probeWorker(mockWorker);
+
+      expect(result).toEqual({
+        _tag: 'tunnel-down',
+        healthy: false,
+        reason: 'connection-refused',
+        code: 'ETIMEDOUT',
+      });
+    });
+
+    it('should return tunnel-down with tls-error and preserve error code when TLS fails with code', async () => {
+      const tlsError = new Error('TLS handshake failed') as Error & { code?: string };
+      tlsError.code = 'ERR_TLS_CERT_ALTNAME_INVALID';
+      mockedFetch.mockRejectedValueOnce(tlsError);
+
+      const result = await probe.probeWorker(mockWorker);
+
+      expect(result).toEqual({
+        _tag: 'tunnel-down',
+        healthy: false,
+        reason: 'tls-error',
+        code: 'ERR_TLS_CERT_ALTNAME_INVALID',
+      });
+    });
   });
 
   describe('probeAllWorkers', () => {
