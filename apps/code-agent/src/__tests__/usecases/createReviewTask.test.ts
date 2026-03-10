@@ -120,6 +120,12 @@ describe('createReviewTask', () => {
         webhookUrl: 'https://code-agent.example.com/internal/webhooks/task-complete',
       })
     );
+
+    // Verify task status is updated to dispatched after successful dispatch
+    expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
+      'task-review-1',
+      { status: 'dispatched' }
+    );
   });
 
   it('does not include pr-comment label', async () => {
@@ -274,6 +280,15 @@ describe('createReviewTask', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('dispatch_failed');
     }
+
+    // Verify task is marked as failed with error details
+    expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
+      'task-review-1',
+      {
+        status: 'failed',
+        error: { code: 'dispatch_failed', message: 'Queue full' },
+      }
+    );
   });
 
   describe('PR notification after dispatch', () => {
