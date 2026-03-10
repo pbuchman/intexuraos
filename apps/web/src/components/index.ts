@@ -9,6 +9,7 @@ export { ChartDefinitionDisplay } from './ChartDefinitionDisplay.js';
 export { DevBar } from './DevBar.js';
 export { ChartPreview } from './ChartPreview.js';
 export { CommandDetailModal } from './CommandDetailModal.js';
+export { CodeTaskLogsModal } from './CodeTaskLogsModal.js';
 export { ConfigurableActionButton } from './ConfigurableActionButton.js';
 export { DataInsightCard } from './DataInsightCard.js';
 export { DataInsightsTabs } from './DataInsightsTabs.js';
