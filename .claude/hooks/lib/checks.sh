@@ -182,12 +182,79 @@ check_v8_ignore_added() {
 
     if echo "$content" | grep -q "v8 ignore"; then
         local issues=""
+
+        # Extract explanation text (after "-- " category+colon and before " @preserve")
+        local explanation
+        explanation=$(echo "$content" | grep -o '\-\-[^@]*@preserve' | head -1 | sed 's/^--[[:space:]]*//' | sed 's/[[:space:]]*@preserve$//')
+        # Strip category prefix (e.g., "ts-type: " or "test-infra: ")
+        explanation=$(echo "$explanation" | sed 's/^[a-z-]*:[[:space:]]*//')
+
+        # Check 1: Explanation too short (<20 chars)
+        local explanation_len=${#explanation}
+        if [[ -n "$explanation" ]] && [[ $explanation_len -lt 20 ]]; then
+            issues+="v8-ignore-short-explanation at $file_path - Explanation too short (${explanation_len} chars, minimum 20). Name the BLOCKER, not just the code.\n"
+            issues+="\n"
+            issues+="  BAD:  'error handling'\n"
+            issues+="  GOOD: 'FakeFirestore has no fault injection for subcollection queries'\n"
+
+            log_warned "$hook_name" "v8-ignore-short-explanation" "$file_path" \
+                "Explanation: '$explanation'" \
+                "Name the specific blocker: which fake/mock/tool cannot produce the needed state?"
+
+            echo -e "$issues"
+            return 0
+        fi
+
+        # Check 2: Explanation describes code behavior, not testing blocker
+        local bad_patterns=(
+            "error handling"
+            "error path"
+            "conditional requires"
+            "optional field check"
+            "creates type narrowing"
+            "type narrowing branch"
+            "optional property check"
+            "string literal comparison"
+            "validation branch"
+            "null check"
+            "guard clause"
+            "fallback value"
+            "safety check"
+            "defensive check"
+        )
+
+        local matched_bad=""
+        for bad in "${bad_patterns[@]}"; do
+            if echo "$explanation" | grep -qi "$bad"; then
+                matched_bad="$bad"
+                break
+            fi
+        done
+
+        if [[ -n "$matched_bad" ]]; then
+            issues+="v8-ignore-describes-code at $file_path - Explanation describes code ('$matched_bad') instead of naming the blocker.\n"
+            issues+="\n"
+            issues+="  BAD:  'error handling for database failures'\n"
+            issues+="  GOOD: 'FakeFirestore has no fault injection for subcollection queries'\n"
+            issues+="\n"
+            issues+="  Name the BLOCKER: which fake/mock/tool cannot produce the needed state?\n"
+            issues+="  Use words like: cannot, unable, always returns, no support, does not expose\n"
+
+            log_warned "$hook_name" "v8-ignore-describes-code" "$file_path" \
+                "Explanation describes code: '$matched_bad'" \
+                "Name the blocker instead. See .claude/reference/coverage-exemptions.md"
+
+            echo -e "$issues"
+            return 0
+        fi
+
+        # Check 3: Generic reminder (for explanations that pass checks 1 & 2)
         issues+="v8-ignore-added at $file_path - Adding v8 ignore comment. Did you write a test first?\n"
         issues+="\n"
         issues+="  REQUIRED WORKFLOW before using v8 ignore:\n"
         issues+="  1. Write a failing test that exercises this branch\n"
         issues+="  2. Confirm the branch is GENUINELY untestable (not just inconvenient)\n"
-        issues+="  3. Verify the category matches a canonical pattern\n"
+        issues+="  3. Verify the explanation names the BLOCKER, not the code\n"
         issues+="\n"
         issues+="  NEVER valid for v8 ignore: catch blocks, error paths, validation branches,\n"
         issues+="  conditional returns, if/else branches, default switch cases, null guards.\n"
