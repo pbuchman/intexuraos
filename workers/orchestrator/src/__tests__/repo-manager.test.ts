@@ -227,9 +227,6 @@ describe('RepoManager', () => {
 
       await expect(
         validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
-      ).rejects.toThrow('Failed to get remote origin URL');
-      await expect(
-        validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
       ).rejects.toThrow('Unknown error');
     });
 

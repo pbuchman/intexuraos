@@ -378,18 +378,8 @@ describe('LogForwarder', () => {
         state.totalBytes = 4 * 1024 * 1024 + 1;
       }
 
-      // Append more content — should be dropped
-      fwd.appendChunk('task-maxsize', 'should be dropped\n');
-      // Use flush (non-force) which checks the limit
-      await fwd.flush('task-maxsize');
-
-      // flush calls drainPartialLine + flushBuffer(taskId, true) with force=true
-      // But we need non-force path. Let's trigger via timer instead.
-      // Actually, flush() calls flushBuffer(taskId, true) which bypasses the check.
-      // We need to trigger flushBuffer without force. Let's use the timer.
-
-      // Reset and try differently — use appendChunk to put content in buffer,
-      // then advance timer to trigger non-force flush
+      // Append content — the non-force flushBuffer path checks totalBytes
+      // Use timer-triggered flush (non-force) to exercise the limit check
       fwd.appendChunk('task-maxsize', 'more content\n');
       await vi.advanceTimersByTimeAsync(3100); // CHUNK_INTERVAL_MS = 3000
 
@@ -433,19 +423,20 @@ describe('LogForwarder', () => {
 
       // Need real timers for retry delays
       vi.useRealTimers();
-      await fwd.flush('task-batch-fail');
+      try {
+        await fwd.flush('task-batch-fail');
 
-      expect(fwd.getDroppedChunkCount('task-batch-fail')).toBeGreaterThan(0);
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: 'task-batch-fail',
-          url: expect.stringContaining('/internal/logs'),
-        }),
-        expect.stringContaining('Failed to upload log chunks after retries')
-      );
-
-      // Re-enable fake timers for afterEach cleanup
-      vi.useFakeTimers();
+        expect(fwd.getDroppedChunkCount('task-batch-fail')).toBeGreaterThan(0);
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-batch-fail',
+            url: expect.stringContaining('/internal/logs'),
+          }),
+          expect.stringContaining('Failed to upload log chunks after retries')
+        );
+      } finally {
+        vi.useFakeTimers();
+      }
     });
   });
 
@@ -466,17 +457,19 @@ describe('LogForwarder', () => {
       fwd.appendChunk('task-non-error', 'content\n');
 
       vi.useRealTimers();
-      await fwd.flush('task-non-error');
+      try {
+        await fwd.flush('task-non-error');
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: 'task-non-error',
-          error: 'string error',
-        }),
-        'Log upload failed, retrying'
-      );
-
-      vi.useFakeTimers();
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-non-error',
+            error: 'string error',
+          }),
+          'Log upload failed, retrying'
+        );
+      } finally {
+        vi.useFakeTimers();
+      }
     });
 
     it('handles Error objects in catch block and logs warn', async () => {
@@ -494,18 +487,20 @@ describe('LogForwarder', () => {
       fwd.appendChunk('task-err-obj', 'content\n');
 
       vi.useRealTimers();
-      await fwd.flush('task-err-obj');
+      try {
+        await fwd.flush('task-err-obj');
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: 'task-err-obj',
-          name: 'Error',
-          message: 'network failure',
-        }),
-        'Log upload failed, retrying'
-      );
-
-      vi.useFakeTimers();
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-err-obj',
+            name: 'Error',
+            message: 'network failure',
+          }),
+          'Log upload failed, retrying'
+        );
+      } finally {
+        vi.useFakeTimers();
+      }
     });
   });
 
