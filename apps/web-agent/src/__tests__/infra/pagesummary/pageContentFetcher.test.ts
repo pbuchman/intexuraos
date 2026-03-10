@@ -215,6 +215,24 @@ describe('PageContentFetcher', () => {
       }
     });
 
+    it('returns FETCH_FAILED with fallback message when success=false and error_message is undefined', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: false,
+        }),
+      });
+
+      const fetcher = createPageContentFetcher({ apiKey: testApiKey }, logger);
+      const result = await fetcher.fetchPageContent(testUrl);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FETCH_FAILED');
+        expect(result.error.message).toBe('Crawl4AI crawl failed');
+      }
+    });
+
     it('returns NO_CONTENT when markdown is undefined', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -369,6 +387,19 @@ describe('PageContentFetcher', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('FETCH_FAILED');
         expect(result.error.message).toBe('Network error');
+      }
+    });
+
+    it('returns FETCH_FAILED with Unknown error when non-Error is thrown', async () => {
+      mockFetch.mockRejectedValue('string-error');
+
+      const fetcher = createPageContentFetcher({ apiKey: testApiKey }, logger);
+      const result = await fetcher.fetchPageContent(testUrl);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FETCH_FAILED');
+        expect(result.error.message).toBe('Unknown error');
       }
     });
 

@@ -190,6 +190,15 @@ describe('parseSummaryResponse', () => {
       }
     });
 
+    it('does not strip prefix when next char is a letter (prefix boundary check)', () => {
+      // "Here island" starts with "here is" (7 chars), but charAt(7) is "l" — not [\s:\n]
+      const result = parseSummaryResponse('Here island is a nice place to visit.');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.summary).toBe('Here island is a nice place to visit.');
+      }
+    });
+
     it('strips prefix when followed by colon', () => {
       const result = parseSummaryResponse('Summary: The content follows');
       expect(result.ok).toBe(true);
