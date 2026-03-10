@@ -165,6 +165,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             reviewTypes: triage.reviewTypes,
             eventId: event.id,
             ...(event.title !== null && { prTitle: event.title }),
+            ...(event.body !== null && { prBody: event.body }),
             /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
             ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
             /* v8 ignore stop @preserve */

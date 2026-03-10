@@ -360,12 +360,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
     });
     generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
     execFileMock.mockImplementation(
-      (
-        _cmd: string,
-        _args: string[],
-        _opts: unknown,
-        cb: (err: Error | null) => void
-      ) => {
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
         cb(new Error('gh CLI not found'));
       }
     );
