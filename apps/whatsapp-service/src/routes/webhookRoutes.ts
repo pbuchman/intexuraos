@@ -419,7 +419,7 @@ export async function processWebhookEvent(
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'NO_BUTTON_DATA',
-          /* v8 ignore start -- ts-type: both ternary branches tested via separate message type payloads @preserve */
+          /* v8 ignore start -- ts-type: ternary branch within covered line not tracked by v8 coverage @preserve */
           message: `${messageType === 'interactive' ? 'Interactive' : 'Button'} message has no button_reply data`,
           /* v8 ignore stop @preserve */
         },

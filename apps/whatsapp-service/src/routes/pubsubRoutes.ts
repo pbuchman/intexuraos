@@ -115,7 +115,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-
         if (isPubSubPush) {
           // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
           request.log.info(
@@ -126,7 +125,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          
           // Direct service call: validate x-internal-auth header
           const authResult = validateInternalAuth(request);
 
@@ -373,7 +371,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-
         if (isPubSubPush) {
           // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
           request.log.info(
@@ -384,7 +381,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          
           // Direct service call: validate x-internal-auth header
           const authResult = validateInternalAuth(request);
 
@@ -529,7 +525,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-
         if (isPubSubPush) {
           request.log.info(
             { from: fromHeader, userAgent: request.headers['user-agent'] },
@@ -637,7 +632,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
 
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
-
 
         if (isPubSubPush) {
           request.log.info(
