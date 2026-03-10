@@ -172,7 +172,7 @@ describe('submitTaskFeedback use case', () => {
     });
 
     it('should return error when task status is not completed', async () => {
-      const nonCompletedStatuses: TaskStatus[] = ['dispatched', 'running', 'failed', 'interrupted', 'cancelled'];
+      const nonCompletedStatuses: TaskStatus[] = ['queued', 'dispatched', 'running', 'failed', 'interrupted', 'cancelled'];
 
       for (const status of nonCompletedStatuses) {
         vi.clearAllMocks();

@@ -4548,6 +4548,7 @@ describe('POST /internal/logs', () => {
       traceId: 'trace_123',
       webhookSecret: 'test-webhook-secret',
       actionId: 'action-first-log',
+      initialStatus: 'dispatched',
     });
 
     expect(createResult.ok).toBe(true);

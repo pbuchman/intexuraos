@@ -55,10 +55,25 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.userId).toBe('user-123');
       expect(result.value.prompt).toBe('Fix login bug');
-      expect(result.value.status).toBe('dispatched');
+      expect(result.value.status).toBe('queued');
       expect(result.value.dedupKey).toMatch(/^[a-f0-9]{16}$/);
       expect(result.value.createdAt).toBeDefined();
       expect(result.value.updatedAt).toBeDefined();
+    });
+
+    it('creates task with dispatched status when initialStatus is dispatched', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({ initialStatus: 'dispatched' });
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.status).toBe('dispatched');
     });
 
     it('Layer 0: rejects duplicate approvalEventId with DUPLICATE_APPROVAL', async () => {
