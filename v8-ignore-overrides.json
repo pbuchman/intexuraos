@@ -22,14 +22,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/bookmarks-agent"
     },
-    "PENDING-apps-calendar-agent": {
-      "files": [
-        "apps/calendar-agent/src/domain/useCases/generateCalendarPreview.ts",
-        "apps/calendar-agent/src/domain/useCases/processCalendarAction.ts",
-        "apps/calendar-agent/src/routes/internalRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/calendar-agent"
-    },
     "PENDING-apps-chat-agent": {
       "files": [
         "apps/chat-agent/src/domain/usecases/generateResponse.ts",
