@@ -135,15 +135,11 @@ export function serializeError(error: unknown): SerializedError {
     name: error.name,
   };
 
-  /* v8 ignore start -- ts-type: Error.stack can be undefined per TS types but practically always exists in JS runtimes @preserve */
   if (error.stack !== undefined) {
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- test-infra: MAX_STACK_LENGTH truncation branch requires generating 100KB+ stack trace @preserve */
     result.stack =
       error.stack.length > MAX_STACK_LENGTH
         ? error.stack.substring(0, MAX_STACK_LENGTH)
         : error.stack;
-    /* v8 ignore stop @preserve */
   }
 
   const errorWithCode = error as Error & { code?: unknown; errno?: unknown; syscall?: unknown };
