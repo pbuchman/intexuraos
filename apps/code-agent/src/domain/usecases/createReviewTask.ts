@@ -120,7 +120,7 @@ export async function createReviewTask(
   const task = createResult.value; // @allow-result-access -- narrowed by !createResult.ok
 
   // Dispatch
-  const webhookUrl = `${serviceUrl}/internal/tasks/${task.id}/callback`;
+  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
 
   const dispatchResult = await taskDispatcher.dispatch({
     taskId: task.id,
