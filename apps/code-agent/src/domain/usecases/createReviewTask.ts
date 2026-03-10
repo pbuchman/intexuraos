@@ -24,6 +24,7 @@ export interface CreateReviewTaskRequest {
   reviewTypes: string[];
   eventId: string;
   prTitle?: string;
+  prBody?: string;
   baseBranch?: string;
 }
 
@@ -71,8 +72,10 @@ async function resolveLinearIssueId(
   }
 
   // Tier 3: Create new Linear issue
-  const title = prTitle ?? `Review PR #${String(prNumber)} in ${repository}`;
-  const description = `Automated PR review for PR #${String(prNumber)} in ${repository}`;
+  const title = prTitle !== undefined
+    ? `[Review] PR #${String(prNumber)}: ${prTitle}`
+    : `[Review] PR #${String(prNumber)} in ${repository}`;
+  const description = buildLinearIssueDescription(request);
   const createResult = await linearAgentClient.createIssue({ userId, title, description });
   if (createResult.ok) {
     const created = createResult.value; // @allow-result-access -- narrowed by createResult.ok
@@ -82,6 +85,28 @@ async function resolveLinearIssueId(
 
   logger.warn({ error: createResult.error, prNumber }, 'Failed to create Linear issue for review task');
   return undefined;
+}
+
+const PR_BODY_MAX_LENGTH = 500;
+
+function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
+  const { repository, prNumber, prBody, reviewTypes } = request;
+  const lines: string[] = [
+    'Automated PR review created by GitHub Agent triage system.',
+    '',
+    `**Pull Request:** #${String(prNumber)} in ${repository}`,
+  ];
+
+  if (prBody !== undefined) {
+    const truncated = prBody.length > PR_BODY_MAX_LENGTH
+      ? `${prBody.slice(0, PR_BODY_MAX_LENGTH)}...`
+      : prBody;
+    lines.push('', '**PR Description:**', truncated);
+  }
+
+  lines.push('', `**Review types:** ${reviewTypes.join(', ')}`);
+
+  return lines.join('\n');
 }
 
 function buildReviewPrompt(request: CreateReviewTaskRequest): string {

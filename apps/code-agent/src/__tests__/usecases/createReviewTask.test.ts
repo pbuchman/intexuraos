@@ -313,8 +313,8 @@ describe('createReviewTask', () => {
 
       expect(deps.linearAgentClient?.createIssue).toHaveBeenCalledWith({
         userId: 'user-1',
-        title: 'Fix bug',
-        description: 'Automated PR review for PR #42 in intexuraos/intexuraos',
+        title: '[Review] PR #42: Fix bug',
+        description: expect.stringContaining('Automated PR review created by GitHub Agent triage system.'),
       });
 
       const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
@@ -419,9 +419,60 @@ describe('createReviewTask', () => {
 
       expect(deps.linearAgentClient?.createIssue).toHaveBeenCalledWith({
         userId: 'user-1',
-        title: 'Review PR #42 in intexuraos/intexuraos',
-        description: 'Automated PR review for PR #42 in intexuraos/intexuraos',
+        title: '[Review] PR #42 in intexuraos/intexuraos',
+        description: expect.stringContaining('Automated PR review created by GitHub Agent triage system.'),
       });
+    });
+
+    it('includes prBody in Linear issue description when provided', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      const deps = createFakeDeps({ linearAgentClient });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality', 'security'],
+        eventId: 'evt-link-8',
+        prTitle: 'Fix auth bug',
+        prBody: 'This PR fixes the authentication bypass vulnerability in the login flow.',
+      });
+
+      const createIssueCall = vi.mocked(linearAgentClient.createIssue).mock.calls[0];
+      expect(createIssueCall).toBeDefined();
+      if (createIssueCall !== undefined) {
+        const description = createIssueCall[0].description;
+        expect(description).toContain('Automated PR review created by GitHub Agent triage system.');
+        expect(description).toContain('#42');
+        expect(description).toContain('intexuraos/intexuraos');
+        expect(description).toContain('This PR fixes the authentication bypass vulnerability in the login flow.');
+        expect(description).toContain('code_quality');
+        expect(description).toContain('security');
+      }
+    });
+
+    it('truncates long prBody in Linear issue description', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      const deps = createFakeDeps({ linearAgentClient });
+      const longBody = 'A'.repeat(600);
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-link-9',
+        prTitle: 'Big PR',
+        prBody: longBody,
+      });
+
+      const createIssueCall = vi.mocked(linearAgentClient.createIssue).mock.calls[0];
+      expect(createIssueCall).toBeDefined();
+      if (createIssueCall !== undefined) {
+        const description = createIssueCall[0].description;
+        expect(description).not.toContain(longBody);
+        expect(description).toContain('...');
+      }
     });
   });
 });
