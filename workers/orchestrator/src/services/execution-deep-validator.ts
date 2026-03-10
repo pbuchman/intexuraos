@@ -397,7 +397,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       '### Deep Validation Report (raw — schema parse failed)',
       '',
       '```json',
-      rawResponse.slice(0, 3000),
+      stripCodeFences(rawResponse).slice(0, 3000),
       '```',
     ].join('\n');
     try {
@@ -450,6 +450,13 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       usageSink: new StructuredLogUsageSink({ logger: this.logger }),
     });
   }
+}
+
+export function stripCodeFences(content: string): string {
+  const trimmed = content.trim();
+  const fencePattern = /^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/;
+  const match = fencePattern.exec(trimmed);
+  return match?.[1] ?? trimmed;
 }
 
 function extractJson(content: string): unknown {
