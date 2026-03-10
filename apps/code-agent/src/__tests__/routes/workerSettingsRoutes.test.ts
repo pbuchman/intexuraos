@@ -168,6 +168,8 @@ describe('Worker Settings Routes', () => {
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      unifiedEvaluator: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();
