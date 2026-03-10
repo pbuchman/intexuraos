@@ -187,6 +187,23 @@ describe('Crawl4AIClient', () => {
       expect(result.error.message).toBe('Could not fetch page');
     });
 
+    it('returns FETCH_FAILED with default message when success is false and error_message is absent', async () => {
+      client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
+
+      nock('https://api.crawl4ai.com')
+        .post('/v1/crawl')
+        .reply(200, {
+          success: false,
+        });
+
+      const result = await client.summarizePage('https://example.com/no-error-msg');
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('FETCH_FAILED');
+      expect(result.error.message).toBe('Crawl4AI extraction failed');
+    });
+
     it('returns NO_CONTENT when extracted_content is empty', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 

@@ -18,7 +18,6 @@ const DEFAULT_MAX_SENTENCES = 20;
 const DEFAULT_MAX_READING_MINUTES = 3;
 const WORDS_PER_MINUTE = 200;
 
-/* v8 ignore start -- test-infra: test mock for crawl4ai api responses always returns succe... @preserve */
 interface Crawl4AIResponse {
   success: boolean;
   url?: string;
@@ -33,7 +32,6 @@ interface Crawl4AIResponse {
   duration_ms?: number;
   crawl_strategy?: string;
 }
-/* v8 ignore stop @preserve */
 
 function countWords(text: string): number {
   return text.split(/\s+/).filter((word) => word.length > 0).length;
@@ -143,9 +141,7 @@ export class Crawl4AIClient implements PageSummaryServicePort {
         this.logger.warn({ url, error: data.error_message }, 'Crawl4AI extraction failed');
         return err({
           code: 'FETCH_FAILED',
-          /* v8 ignore start -- ts-type: API always includes error_message on failure @preserve */
           message: data.error_message ?? 'Crawl4AI extraction failed',
-          /* v8 ignore stop @preserve */
         });
       }
 
