@@ -62,6 +62,17 @@ export interface GitHubPRClient {
   ): Promise<Result<PullRequestCommit[], GitHubPRClientError>>;
 
   /**
+   * Get the base branch of a pull request.
+   * Uses a per-call token (user OAuth token).
+   */
+  getPullRequestBaseBranch(
+    token: string,
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<Result<string, GitHubPRClientError>>;
+
+  /**
    * Post a comment on a pull request (via the issues API).
    * Uses a per-call token (user OAuth token).
    */

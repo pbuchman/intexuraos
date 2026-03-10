@@ -26,6 +26,7 @@ function createCommentEvent(overrides: {
   return {
     id: `event-${String(overrides.commentId)}`,
     githubEventId: overrides.commentId,
+    deliveryId: null,
     repository: 'intexuraos/test-repo',
     repositoryId: 123,
     pullRequestNumber: 42,
@@ -38,6 +39,7 @@ function createCommentEvent(overrides: {
     title: null,
     body: overrides.body,
     state: 'open',
+    baseBranch: null,
     mergedAt: null,
     createdAt: new Date('2024-01-01T00:00:00Z'),
     processedAt: new Date('2024-01-01T00:00:00Z'),
@@ -203,6 +205,7 @@ describe('enrichReviewWithComments', () => {
     const badEvent: GitHubPREvent = {
       id: 'event-bad',
       githubEventId: 999,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 123,
       pullRequestNumber: 42,
@@ -215,6 +218,7 @@ describe('enrichReviewWithComments', () => {
       title: null,
       body: null,
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date(),
       processedAt: new Date(),
@@ -238,6 +242,7 @@ describe('enrichReviewWithComments', () => {
     const nullPayloadEvent: GitHubPREvent = {
       id: 'event-null',
       githubEventId: 998,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 123,
       pullRequestNumber: 42,
@@ -250,6 +255,7 @@ describe('enrichReviewWithComments', () => {
       title: null,
       body: null,
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date(),
       processedAt: new Date(),
@@ -273,6 +279,7 @@ describe('enrichReviewWithComments', () => {
     const malformedEvent: GitHubPREvent = {
       id: 'event-malformed',
       githubEventId: 997,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 123,
       pullRequestNumber: 42,
@@ -285,6 +292,7 @@ describe('enrichReviewWithComments', () => {
       title: null,
       body: null,
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date(),
       processedAt: new Date(),

@@ -36,6 +36,8 @@ import { RepositoryScopeRule, ActionableEventRule, SenderWhitelistRule, SkipPref
 import { createWebhookDispatchService } from '../../domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from '../../domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS } from '../../routes/webhooks/github.js';
+import { createFirestoreEventDecisionRepository } from '../../infra/firestore/eventDecisionRepository.js';
+import { createUnifiedEvaluator } from '../../domain/services/unifiedEvaluator.js';
 
 /**
  * Mock UserServiceClient that returns empty results.
@@ -118,6 +120,43 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     logger,
   });
 
+  const webhookRules = createWebhookRulesService([
+    new RepositoryScopeRule(new Set(['intexuraos/*'])),
+    new ActionableEventRule(ALLOWED_BOTS),
+    new SenderWhitelistRule(ALLOWED_BOTS),
+    new SkipPrefixRule(['@claude', '@codex', '@ignore']),
+    new BotReviewEditRule(ALLOWED_BOTS),
+  ]);
+
+  const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
+
+  const dispatchService = createWebhookDispatchService({
+    gitHubPREventRepo,
+    codeTaskRepo: createFirestoreCodeTaskRepository({ firestore: fakeFirestore, logger }),
+    logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore, logger }),
+    userLookupService: createUserLookupService({
+      gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient: mockUserServiceClient, logger }),
+      workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore, logger }),
+      logger,
+    }),
+    linearIssueService,
+    taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
+    whatsappNotifier: createWhatsAppNotifier({
+      whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
+    }),
+    workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore, logger }),
+    statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
+    gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
+    userServiceClient: mockUserServiceClient,
+    firestore: fakeFirestore,
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
+    allowedBots: ALLOWED_BOTS,
+    orchestratorSecret: 'test-secret',
+    serviceUrl: 'http://localhost:8080',
+  });
+
+  const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
+
   const container: ServiceContainer = {
     firestore: fakeFirestore,
     logger,
@@ -185,9 +224,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
     }),
     workerHealthProbe: mockWorkerHealthProbe,
-    gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
-      logger,
-    }),
+    gitHubPREventRepo,
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({
       logger,
     }),
@@ -198,35 +235,16 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     userServiceClient: mockUserServiceClient,
     gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
     toolCallingClient: undefined,
-    webhookRules: createWebhookRulesService([
-      new RepositoryScopeRule(new Set(['intexuraos/*'])),
-      new ActionableEventRule(ALLOWED_BOTS),
-      new SenderWhitelistRule(ALLOWED_BOTS),
-      new SkipPrefixRule(['@claude', '@codex', '@ignore']),
-      new BotReviewEditRule(ALLOWED_BOTS),
-    ]),
-    dispatchService: createWebhookDispatchService({
-      codeTaskRepo: createFirestoreCodeTaskRepository({ firestore: fakeFirestore, logger }),
-      logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore, logger }),
-      userLookupService: createUserLookupService({
-        gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient: mockUserServiceClient, logger }),
-        workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore, logger }),
-        logger,
-      }),
-      linearIssueService,
-      taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
-      whatsappNotifier: createWhatsAppNotifier({
-        whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
-      }),
-      workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore, logger }),
-      statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
-      gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
-      userServiceClient: mockUserServiceClient,
-      firestore: fakeFirestore,
-      messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
+    webhookRules: webhookRules,
+    dispatchService: dispatchService,
+    eventDecisionRepo: eventDecisionRepo,
+    unifiedEvaluator: createUnifiedEvaluator({
+      webhookRules,
+      dispatchService,
+      eventDecisionRepo,
+      evaluateEvent: undefined,
+      createReviewTask: async () => ({ ok: true as const, value: { taskId: 'mock-task' } }),
       allowedBots: ALLOWED_BOTS,
-      orchestratorSecret: 'test-secret',
-      serviceUrl: 'http://localhost:8080',
     }),
   };
 

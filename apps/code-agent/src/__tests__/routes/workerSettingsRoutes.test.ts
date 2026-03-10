@@ -41,7 +41,7 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ServiceContainer } from '../../services.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
@@ -168,6 +168,8 @@ describe('Worker Settings Routes', () => {
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      unifiedEvaluator: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();
@@ -192,6 +194,25 @@ describe('Worker Settings Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: { workers: unknown[] } };
       expect(body.success).toBe(true);
       expect(body.data.workers).toEqual([]);
+    });
+
+    it('should return 500 when repo returns error', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'getSettings').mockResolvedValueOnce(
+        err({ code: 'internal_error' as const, message: 'Firestore error: connection lost' })
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toContain('connection lost');
     });
 
     it('should return masked secrets for configured workers', async () => {
@@ -292,6 +313,133 @@ describe('Worker Settings Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('should reject duplicate worker name with CONFLICT', async () => {
+      // First add a worker
+      await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://my-mac.example.com',
+          cfAccessClientId: 'my-client-id',
+          cfAccessClientSecret: 'my-secret',
+          dispatchSigningSecret: 'my-signing-secret',
+        },
+      });
+
+      // Try to add again with same name
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://different.example.com',
+          cfAccessClientId: 'different-id',
+          cfAccessClientSecret: 'different-secret',
+          dispatchSigningSecret: 'different-signing',
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toContain('already exists');
+    });
+
+    it('should fallback to INTERNAL_ERROR for unmapped error codes on add', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'addWorker').mockResolvedValueOnce(
+        err({ code: 'unknown_error_code' as never, message: 'Unexpected error' })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'test-worker',
+          url: 'https://example.com',
+          cfAccessClientId: 'real-id',
+          cfAccessClientSecret: 'real-secret',
+          dispatchSigningSecret: 'real-signing',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('should use fallback userId when JWT sub is null', async () => {
+      mockedJwtVerify.mockResolvedValueOnce({
+        payload: { sub: null, email: 'test@example.com' },
+        protectedHeader: new Uint8Array(),
+      } as never);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'test-worker',
+          url: 'https://example.com',
+          cfAccessClientId: 'real-id',
+          cfAccessClientSecret: 'real-secret',
+          dispatchSigningSecret: 'real-signing',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { added: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.added).toBe(true);
+    });
+
+    it('should return 500 when repo returns internal error on add', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'addWorker').mockResolvedValueOnce(
+        err({ code: 'internal_error' as const, message: 'Firestore error: write failed' })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://my-mac.example.com',
+          cfAccessClientId: 'my-client-id',
+          cfAccessClientSecret: 'my-secret',
+          dispatchSigningSecret: 'my-signing-secret',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toContain('write failed');
     });
 
     it('should validate worker name format', async () => {
@@ -493,6 +641,88 @@ describe('Worker Settings Routes', () => {
       expect(body.error.message).toContain('masked');
     });
 
+    it('should fallback to INTERNAL_ERROR for unmapped error codes on update', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'updateWorker').mockResolvedValueOnce(
+        err({ code: 'unknown_error_code' as never, message: 'Unexpected error' })
+      );
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://new-url.example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('should use fallback userId when JWT sub is null', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('unknown-user', {
+        name: 'null-user-worker',
+        url: 'https://example.com',
+        cfAccessClientId: 'id',
+        cfAccessClientSecret: 'secret',
+        dispatchSigningSecret: 'signing',
+      });
+
+      mockedJwtVerify.mockResolvedValueOnce({
+        payload: { sub: null, email: 'test@example.com' },
+        protectedHeader: new Uint8Array(),
+      } as never);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/null-user-worker',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://updated.example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { updated: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.updated).toBe(true);
+    });
+
+    it('should return 500 when repo returns internal error on update', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'updateWorker').mockResolvedValueOnce(
+        err({ code: 'internal_error' as const, message: 'Firestore error: update failed' })
+      );
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://new-url.example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toContain('update failed');
+    });
+
     it('should allow partial update with url only (no credentials)', async () => {
       const response = await app.inject({
         method: 'PATCH',
@@ -559,6 +789,70 @@ describe('Worker Settings Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('NOT_FOUND');
     });
+
+    it('should fallback to INTERNAL_ERROR for unmapped error codes on delete', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'deleteWorker').mockResolvedValueOnce(
+        err({ code: 'unknown_error_code' as never, message: 'Unexpected error' })
+      );
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('should use fallback userId when JWT sub is null', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('unknown-user', {
+        name: 'null-user-worker',
+        url: 'https://example.com',
+        cfAccessClientId: 'id',
+        cfAccessClientSecret: 'secret',
+        dispatchSigningSecret: 'signing',
+      });
+
+      mockedJwtVerify.mockResolvedValueOnce({
+        payload: { sub: null, email: 'test@example.com' },
+        protectedHeader: new Uint8Array(),
+      } as never);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/code/worker-settings/workers/null-user-worker',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { deleted: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.deleted).toBe(true);
+    });
+
+    it('should return 500 when repo returns internal error on delete', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'deleteWorker').mockResolvedValueOnce(
+        err({ code: 'internal_error' as const, message: 'Firestore error: delete failed' })
+      );
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toContain('delete failed');
+    });
   });
 
   describe('POST /code/worker-settings/workers/:name/test', () => {
@@ -610,6 +904,84 @@ describe('Worker Settings Routes', () => {
       expect(body.data.testStatus).toBe('success');
       expect(body.data.testMessage).toBe('Connection successful');
       expect(body.data.lastTestedAt).toBeDefined();
+    });
+
+    it('should use fallback userId when JWT sub is null', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('unknown-user', {
+        name: 'null-user-worker',
+        url: 'https://null-worker.example.com',
+        cfAccessClientId: 'id',
+        cfAccessClientSecret: 'secret',
+        dispatchSigningSecret: 'signing',
+      });
+
+      nock('https://null-worker.example.com')
+        .get('/health')
+        .reply(200, { status: 'ok' });
+
+      mockedJwtVerify.mockResolvedValueOnce({
+        payload: { sub: null, email: 'test@example.com' },
+        protectedHeader: new Uint8Array(),
+      } as never);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers/null-user-worker/test',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { testStatus: string; testMessage: string; lastTestedAt: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.testStatus).toBe('success');
+    });
+
+    it('should return 500 when repo returns error on getWorkerByName', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'getWorkerByName').mockResolvedValueOnce(
+        err({ code: 'internal_error' as const, message: 'Firestore error: read failed' })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers/home-mac/test',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toContain('read failed');
+    });
+
+    it('should record failure when fetch throws network error', async () => {
+      nock('https://mac-worker.example.com')
+        .get('/health')
+        .replyWithError('ECONNREFUSED');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers/home-mac/test',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          testStatus: string;
+          testMessage: string;
+          lastTestedAt: string;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.testStatus).toBe('failure');
+      expect(body.data.testMessage).toContain('Connection failed');
     });
 
     it('should record failure when health check fails', async () => {
@@ -705,6 +1077,71 @@ describe('Worker Settings Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('should use fallback userId when JWT sub is null', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('unknown-user', {
+        name: 'worker-aaa',
+        url: 'https://aaa.example.com',
+        cfAccessClientId: 'id1',
+        cfAccessClientSecret: 'secret1',
+        dispatchSigningSecret: 'signing1',
+      });
+      await workerSettingsRepo.addWorker('unknown-user', {
+        name: 'worker-bbb',
+        url: 'https://bbb.example.com',
+        cfAccessClientId: 'id2',
+        cfAccessClientSecret: 'secret2',
+        dispatchSigningSecret: 'signing2',
+      });
+
+      mockedJwtVerify.mockResolvedValueOnce({
+        payload: { sub: null, email: 'test@example.com' },
+        protectedHeader: new Uint8Array(),
+      } as never);
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/code/worker-settings/priority',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          workerNames: ['worker-bbb', 'worker-aaa'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { reordered: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.reordered).toBe(true);
+    });
+
+    it('should return 400 when repo returns error on reorder', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      vi.spyOn(workerSettingsRepo, 'reorderWorkers').mockResolvedValueOnce(
+        err({ code: 'internal_error' as const, message: 'Reorder must contain exactly all existing worker names' })
+      );
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/code/worker-settings/priority',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          workerNames: ['home-mac', 'office-pc'],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('Reorder must contain');
     });
   });
 
