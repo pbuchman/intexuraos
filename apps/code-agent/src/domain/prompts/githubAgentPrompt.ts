@@ -29,7 +29,7 @@ export interface GitHubAgentPromptInput {
 export const githubAgentPrompt: PromptBuilder<GitHubAgentPromptInput> = {
   name: 'github-agent',
   description: 'System prompt for GitHub Agent that evaluates PR and comment events',
-  version: '2.0.0',
+  version: '3.0.0',
   build(input: GitHubAgentPromptInput): string {
     const sections: string[] = [
       'You are a GitHub webhook evaluation agent for the IntexuraOS project.',
@@ -90,6 +90,12 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
     '',
     'You may request multiple review types for a single PR if appropriate.',
     'Always call at least one tool (either `request_review` or `skip`).',
+    '',
+    '## HARD RULES',
+    '',
+    '- You must NEVER call the same tool with the same arguments more than once. Each tool call must be unique.',
+    '- If you need `code_quality` review, call `request_review({"review_type":"code_quality"})` exactly ONCE.',
+    '- Duplicate tool calls are a critical error. One call per review type, maximum.',
   ];
 }
 

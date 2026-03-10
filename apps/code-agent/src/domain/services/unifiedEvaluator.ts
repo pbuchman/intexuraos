@@ -44,13 +44,24 @@ export function buildTriageCommentBody(
   reasoning: string,
 ): string {
   const reviewTypesStr = reviewTypes.map((t) => `\`${t}\``).join(', ');
-  const toolCallLines = toolCalls
+
+  // Deduplicate identical tool calls
+  const seen = new Set<string>();
+  const uniqueToolCalls = toolCalls.filter((tc) => {
+    const key = `${tc.tool}:${JSON.stringify(tc.args)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const toolCallLines = uniqueToolCalls
     .map((tc) => `- \`${tc.tool}(${JSON.stringify(tc.args)})\``)
     .join('\n');
   const costStr = `$${String(costUsd)}`;
 
   return [
-    '### Triage Decision',
+    '@ignore',
+    '### Automated Code Review Triage Decision',
     '',
     '**Action:** Dispatching review',
     `**Review types:** ${reviewTypesStr}`,
@@ -177,6 +188,33 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             { eventId: event.id, error: reviewResult.error },
             'Failed to create review task'
           );
+
+          // Post error comment (best-effort)
+          if (deps.postTriageComment !== undefined) {
+            try {
+              const errorBody = [
+                '@ignore',
+                '### Automated Code Review Triage Decision',
+                '',
+                '**Action:** Review task creation failed',
+                `**Error code:** ${reviewResult.error.code}`,
+                '',
+                'The triage agent decided to request a review but the review task could not be created.',
+              ].join('\n');
+              await deps.postTriageComment(
+                resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
+                event.repository,
+                event.pullRequestNumber,
+                errorBody,
+              );
+            } catch (commentError: unknown) {
+              logger.warn(
+                { eventId: event.id, error: commentError },
+                'Failed to post error comment for review task failure (best-effort)'
+              );
+            }
+          }
+
           await recordDecision(deps, event, {
             decidedBy: 'github_agent',
             decision: 'skip',
