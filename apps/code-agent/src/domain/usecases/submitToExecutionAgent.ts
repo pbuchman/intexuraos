@@ -287,7 +287,6 @@ export async function submitToExecutionAgent(
 
   const createResult = await codeTaskRepo.create(createInput);
 
-  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!createResult.ok) {
     // Rollback the optimistic lock
     logger.error({ error: createResult.error }, 'Failed to create Execution Agent task, rolling back optimistic lock');
@@ -303,7 +302,6 @@ export async function submitToExecutionAgent(
       message: 'Failed to create Execution Agent task',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const executionTask = createResult.value;
 
@@ -440,14 +438,12 @@ export async function submitToExecutionAgent(
         queuedAt: new Date(),
       });
 
-      /* v8 ignore start -- upstream: Firestore write failure within queue path @preserve */
       if (!queueResult.ok) {
         logger.error(
           { executionTaskId, error: queueResult.error },
           'Failed to update execution task to queued status'
         );
       }
-      /* v8 ignore stop @preserve */
 
       const queuedTask = queueResult.ok ? queueResult.value : executionTask;
 

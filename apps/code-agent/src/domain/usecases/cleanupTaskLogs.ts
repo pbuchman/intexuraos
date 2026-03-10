@@ -85,11 +85,9 @@ export function createCleanupTaskLogsUseCase(
         }
       }
 
-      /* v8 ignore start -- test-infra: pagination termination depends on fixture count @preserve */
       if (tasks.length < tasksPerRun) {
         hasMoreTasks = false;
       }
-      /* v8 ignore stop @preserve */
     }
 
     const durationMs = Date.now() - startTime;
