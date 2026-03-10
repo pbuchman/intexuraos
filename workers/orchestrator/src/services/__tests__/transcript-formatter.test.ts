@@ -332,6 +332,71 @@ describe('formatTranscript', () => {
     expect(result).toContain('timeout: "5000"');
   });
 
+  it('skips thinking blocks without crashing', () => {
+    const entries: SessionJsonlEntry[] = [
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        parentUuid: 'root',
+        timestamp: '2026-03-08T23:10:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'Let me analyze this...' } as unknown as SessionJsonlEntry['message']['content'][0],
+          ],
+        },
+      },
+    ];
+    const result = formatTranscript(entries);
+    // Should produce a message line but skip the unknown block content
+    expect(result).not.toContain('TypeError');
+    expect(result).not.toContain('thinking');
+  });
+
+  it('skips unknown block types without crashing', () => {
+    const entries: SessionJsonlEntry[] = [
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        parentUuid: 'root',
+        timestamp: '2026-03-08T23:10:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'server_tool_use', id: 'srv_1', name: 'some_tool' } as unknown as SessionJsonlEntry['message']['content'][0],
+          ],
+        },
+      },
+    ];
+    const result = formatTranscript(entries);
+    expect(result).not.toContain('tool_result');
+    expect(result).toBe('');
+  });
+
+  it('handles mix of known and unknown block types in same message', () => {
+    const entries: SessionJsonlEntry[] = [
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        parentUuid: 'root',
+        timestamp: '2026-03-08T23:10:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'hmm' } as unknown as SessionJsonlEntry['message']['content'][0],
+            { type: 'text', text: 'Here is my answer.' },
+            { type: 'tool_use', id: 'toolu_abc', name: 'Bash', input: { command: 'ls' } },
+          ],
+        },
+      },
+    ];
+    const result = formatTranscript(entries);
+    expect(result).toContain('[MSG-001] ASSISTANT text:');
+    expect(result).toContain('Here is my answer.');
+    expect(result).toContain('[MSG-001] ASSISTANT tool_use: Bash');
+    expect(result).not.toContain('thinking');
+  });
+
   it('handles tool_result with nested content array', () => {
     const entries: SessionJsonlEntry[] = [
       {
