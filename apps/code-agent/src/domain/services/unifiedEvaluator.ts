@@ -24,11 +24,44 @@ export interface UnifiedEvaluatorDeps {
   evaluateEvent?: ((event: GitHubPREvent) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
   /** Pre-bound review task creator. Logger is injected at call time; all other deps are closed over at wiring. */
   createReviewTask: (logger: Logger, request: CreateReviewTaskRequest) => Promise<Result<{ taskId: string }, CreateReviewTaskError>>;
+  postTriageComment?: ((
+    senderLogin: string,
+    repository: string,
+    prNumber: number,
+    body: string,
+  ) => Promise<Result<{ commentId: number }, { code: string; message: string }>>) | undefined;
   allowedBots: Set<string>;
 }
 
 export interface UnifiedEvaluator {
   evaluate(event: GitHubPREvent, logger: Logger): Promise<void>;
+}
+
+export function buildTriageCommentBody(
+  reviewTypes: string[],
+  costUsd: number,
+  toolCalls: { tool: string; args: Record<string, unknown> }[],
+  reasoning: string,
+): string {
+  const reviewTypesStr = reviewTypes.map((t) => `\`${t}\``).join(', ');
+  const toolCallLines = toolCalls
+    .map((tc) => `- \`${tc.tool}(${JSON.stringify(tc.args)})\``)
+    .join('\n');
+  const costStr = `$${String(costUsd)}`;
+
+  return [
+    '### Triage Decision',
+    '',
+    '**Action:** Dispatching review',
+    `**Review types:** ${reviewTypesStr}`,
+    `**Cost:** ${costStr}`,
+    '',
+    '**Tool calls:**',
+    toolCallLines,
+    '',
+    '**Reasoning:**',
+    reasoning.split('\n').map((line) => `> ${line}`).join('\n'),
+  ].join('\n');
 }
 
 export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvaluator {
@@ -76,7 +109,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         return;
       }
 
-      const { triage, usage } = llmResult.value; // @allow-result-access -- narrowed by !llmResult.ok
+      const { triage, usage, reasoning } = llmResult.value; // @allow-result-access -- narrowed by !llmResult.ok
 
       if (triage.action === 'dispatch') {
         await deps.dispatchService.dispatch({
@@ -93,11 +126,36 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           ...(usage.model !== undefined && { llmModel: usage.model }),
           /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
+          llmReasoning: reasoning,
         }, startTime);
         return;
       }
 
       if (triage.action === 'request_review') {
+        // Post informational triage comment (non-fatal — must not block review task creation)
+        if (deps.postTriageComment !== undefined) {
+          try {
+            const commentBody = buildTriageCommentBody(triage.reviewTypes, usage.costUsd, usage.toolCalls, reasoning);
+            const commentResult = await deps.postTriageComment(
+              resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
+              event.repository,
+              event.pullRequestNumber,
+              commentBody,
+            );
+            if (!commentResult.ok) {
+              logger.warn(
+                { eventId: event.id, error: commentResult.error },
+                'Failed to post triage comment, continuing with review task creation'
+              );
+            }
+          } catch (commentError: unknown) {
+            logger.warn(
+              { eventId: event.id, error: commentError },
+              'Unexpected error posting triage comment, continuing with review task creation'
+            );
+          }
+        }
+
         const reviewResult = await deps.createReviewTask(
           logger,
           {
@@ -127,6 +185,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             ...(usage.model !== undefined && { llmModel: usage.model }),
             /* v8 ignore stop @preserve */
             llmToolCalls: usage.toolCalls,
+            llmReasoning: reasoning,
           }, startTime);
           return;
         }
@@ -142,6 +201,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           ...(usage.model !== undefined && { llmModel: usage.model }),
           /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
+          llmReasoning: reasoning,
         }, startTime);
         return;
       }
@@ -156,6 +216,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         ...(usage.model !== undefined && { llmModel: usage.model }),
         /* v8 ignore stop @preserve */
         llmToolCalls: usage.toolCalls,
+        llmReasoning: reasoning,
       }, startTime);
     },
   };
@@ -221,6 +282,7 @@ async function recordDecision(
     llmCostUsd?: number;
     llmModel?: string;
     llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
+    llmReasoning?: string;
   },
   startTime: number,
 ): Promise<void> {
@@ -243,6 +305,7 @@ async function recordDecision(
     ...(fields.llmModel !== undefined && { llmModel: fields.llmModel }),
     /* v8 ignore stop @preserve */
     ...(fields.llmToolCalls !== undefined && { llmToolCalls: fields.llmToolCalls }),
+    ...(fields.llmReasoning !== undefined && { llmReasoning: fields.llmReasoning }),
     decisionLatencyMs: Date.now() - startTime,
   };
 
