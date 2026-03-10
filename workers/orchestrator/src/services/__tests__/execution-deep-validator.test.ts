@@ -225,7 +225,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       planVsReality: { planFound: false, requirements: [] },
       anomalies: [],
     });
-    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
+    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: { costUsd: 0.05 } } });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
@@ -242,7 +242,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
         '--repo',
         'pbuchman/intexuraos',
         '--body',
-        expect.stringContaining('Deep Validation Report'),
+        expect.stringContaining('**Cost:** $0.05'),
       ],
       {},
       expect.any(Function)
@@ -266,7 +266,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
   });
 
   it('returns undefined when LLM returns non-JSON', async () => {
-    generateMock.mockResolvedValue({ ok: true, value: { content: 'Not JSON at all', usage: {} } });
+    generateMock.mockResolvedValue({ ok: true, value: { content: 'Not JSON at all', usage: { costUsd: 0.042 } } });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
@@ -277,7 +277,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
   it('posts raw comment when Zod validation fails', async () => {
     // Valid JSON but wrong schema
     const invalidSchema = JSON.stringify({ unexpected: 'data' });
-    generateMock.mockResolvedValue({ ok: true, value: { content: invalidSchema, usage: {} } });
+    generateMock.mockResolvedValue({ ok: true, value: { content: invalidSchema, usage: { costUsd: 0.042 } } });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
@@ -296,7 +296,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       planVsReality: { planFound: false, requirements: [] },
       anomalies: [],
     });
-    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
+    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: { costUsd: 0.042 } } });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const onProgress = vi.fn();
@@ -325,7 +325,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
   });
 
   it('calls onProgress on JSON parse failure', async () => {
-    generateMock.mockResolvedValue({ ok: true, value: { content: 'Not JSON at all', usage: {} } });
+    generateMock.mockResolvedValue({ ok: true, value: { content: 'Not JSON at all', usage: { costUsd: 0.042 } } });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const onProgress = vi.fn();
@@ -339,7 +339,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
 
   it('calls onProgress on Zod schema failure', async () => {
     const invalidSchema = JSON.stringify({ unexpected: 'data' });
-    generateMock.mockResolvedValue({ ok: true, value: { content: invalidSchema, usage: {} } });
+    generateMock.mockResolvedValue({ ok: true, value: { content: invalidSchema, usage: { costUsd: 0.042 } } });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const onProgress = vi.fn();
@@ -358,7 +358,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       planVsReality: { planFound: false, requirements: [] },
       anomalies: [],
     });
-    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
+    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: { costUsd: 0.042 } } });
     execFileMock.mockImplementation(
       (
         _cmd: string,
@@ -390,7 +390,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       planVsReality: { planFound: false, requirements: [] },
       anomalies: [],
     });
-    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
+    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: { costUsd: 0.042 } } });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     // Should not throw when onProgress is not provided
@@ -405,7 +405,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
       planVsReality: { planFound: false, requirements: [] },
       anomalies: [],
     })}\nEnd.`;
-    generateMock.mockResolvedValue({ ok: true, value: { content: embeddedJson, usage: {} } });
+    generateMock.mockResolvedValue({ ok: true, value: { content: embeddedJson, usage: { costUsd: 0.042 } } });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
@@ -471,8 +471,9 @@ describe('formatPrComment', () => {
       ],
     };
 
-    const comment = formatPrComment(result);
+    const comment = formatPrComment(result, 0.042);
     expect(comment).toContain('### Deep Validation Report');
+    expect(comment).toContain('**Cost:** $0.042');
     expect(comment).toContain('Claim Verification');
     expect(comment).toContain('✅ verified');
     expect(comment).toContain('❌ contradicted');
@@ -491,7 +492,7 @@ describe('formatPrComment', () => {
       anomalies: [],
     };
 
-    const comment = formatPrComment(result);
+    const comment = formatPrComment(result, 0.042);
     expect(comment).toContain('No claims verified.');
     expect(comment).toContain('No contracts verified.');
     expect(comment).toContain('❌ No plan file found on branch');
@@ -528,7 +529,7 @@ describe('formatPrComment', () => {
       ],
     };
 
-    const comment = formatPrComment(result);
+    const comment = formatPrComment(result, 0.042);
     expect(comment).toContain('❓ unverifiable');
     expect(comment).toContain('❓ not_applicable');
     expect(comment).toContain('⚠️ partially');
