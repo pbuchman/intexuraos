@@ -269,7 +269,10 @@ export interface DeepValidationInput {
 }
 
 export interface ExecutionDeepValidator {
-  validate(input: DeepValidationInput): Promise<DeepValidationResult | undefined>;
+  validate(
+    input: DeepValidationInput,
+    onProgress?: (message: string) => void
+  ): Promise<DeepValidationResult | undefined>;
 }
 
 export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidator {
@@ -284,7 +287,10 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
     this.llmClient = this.createLlmClient(config);
   }
 
-  async validate(input: DeepValidationInput): Promise<DeepValidationResult | undefined> {
+  async validate(
+    input: DeepValidationInput,
+    onProgress?: (message: string) => void
+  ): Promise<DeepValidationResult | undefined> {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: input.formattedTranscript,
       agentClaims: input.agentClaims,
@@ -297,6 +303,8 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       'Deep validation LLM request'
     );
 
+    onProgress?.('calling Gemini for analysis...');
+
     const generated = await this.llmClient.generate(prompt);
     if (!generated.ok) {
       this.logger.error(
@@ -307,6 +315,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         },
         'Deep validation LLM call failed'
       );
+      onProgress?.(`LLM call failed: ${generated.error.message}`);
       return undefined;
     }
 
@@ -314,6 +323,8 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       { taskId: input.taskId, responseChars: generated.value.content.length },
       'Deep validation LLM response received'
     );
+
+    onProgress?.('validation response received');
 
     let rawJson: unknown;
     try {
@@ -323,6 +334,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, error: getErrorMessage(error), response: generated.value.content },
         'Deep validation JSON parse failed'
       );
+      onProgress?.(`JSON parse failed: ${getErrorMessage(error)}`);
       return undefined;
     }
 
@@ -332,6 +344,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, zodErrors: parseResult.error.issues },
         'Deep validation Zod validation failed — posting raw response as fallback'
       );
+      onProgress?.('schema parse failed, posting raw response as fallback');
       // Fallback: post raw LLM response when schema parse fails
       await this.postRawComment(input, generated.value.content);
       return undefined;
@@ -340,7 +353,9 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
     const result = parseResult.data;
 
     // Post PR comment
-    await this.postPrComment(input, result);
+    onProgress?.('posting PR comment...');
+    const posted = await this.postPrComment(input, result);
+    onProgress?.(posted ? 'PR comment posted' : 'PR comment failed (see server logs)');
 
     return result;
   }
@@ -348,7 +363,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
   private async postPrComment(
     input: DeepValidationInput,
     result: DeepValidationResult
-  ): Promise<void> {
+  ): Promise<boolean> {
     const comment = formatPrComment(result);
     try {
       await execFileAsync(
@@ -360,6 +375,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, prNumber: input.prNumber },
         'Deep validation PR comment posted'
       );
+      return true;
     } catch (error) {
       /* v8 ignore start -- upstream: stderr property only exists on execFile errors, not testable with promisify mock @preserve */
       const stderr =
@@ -371,6 +387,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, error: getErrorMessage(error), stderr },
         'Failed to post deep validation PR comment'
       );
+      return false;
     }
   }
 

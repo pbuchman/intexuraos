@@ -17,7 +17,8 @@ type ContentBlock =
       type: 'tool_result';
       tool_use_id: string;
       content: string | { type: 'text'; text: string }[];
-    };
+    }
+  | { type: string };
 
 const MAX_RESULT_LENGTH = 500;
 
@@ -66,25 +67,37 @@ export function formatTranscript(entries: SessionJsonlEntry[]): string {
 
     for (const block of blocks) {
       if (block.type === 'text') {
+        const textBlock = block as { type: 'text'; text: string };
         if (entry.isMeta === true) {
           lines.push(`${prefix} USER (meta/skill-content):`);
         } else {
           lines.push(`${prefix} ${entry.type.toUpperCase()} text:`);
         }
         const text =
-          block.text.length > MAX_RESULT_LENGTH
-            ? block.text.slice(0, MAX_RESULT_LENGTH) + ' [truncated]'
-            : block.text;
+          textBlock.text.length > MAX_RESULT_LENGTH
+            ? textBlock.text.slice(0, MAX_RESULT_LENGTH) + ' [truncated]'
+            : textBlock.text;
         lines.push(`  ${text}`);
       } else if (block.type === 'tool_use') {
-        const toolName = formatToolName(block);
+        const toolBlock = block as {
+          type: 'tool_use';
+          id: string;
+          name: string;
+          input: Record<string, unknown>;
+        };
+        const toolName = formatToolName(toolBlock);
         lines.push(`${prefix} ASSISTANT tool_use: ${toolName}`);
-        lines.push(`  ${formatInput(block.input)}`);
-      } else {
-        const text = extractToolResultText(block.content);
+        lines.push(`  ${formatInput(toolBlock.input)}`);
+      } else if (block.type === 'tool_result') {
+        const toolResult = block as {
+          type: 'tool_result';
+          tool_use_id: string;
+          content: string | { type: 'text'; text: string }[];
+        };
+        const text = extractToolResultText(toolResult.content);
         const hasError = isErrorResult(text);
         lines.push(
-          `${prefix} USER tool_result${hasError ? ' ERROR' : ''} (for ${block.tool_use_id}):`
+          `${prefix} USER tool_result${hasError ? ' ERROR' : ''} (for ${toolResult.tool_use_id}):`
         );
         if (hasError || text.length <= MAX_RESULT_LENGTH) {
           lines.push(`  ${text}`);
