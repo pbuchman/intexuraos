@@ -222,6 +222,20 @@ describe('OAuth Connection Routes', () => {
       return Buffer.from(JSON.stringify(statePayload)).toString('base64url');
     }
 
+    it('uses localhost:5173 fallback when INTEXURAOS_WEB_APP_URL is not set', async () => {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/oauth/connections/google/callback?error=access_denied',
+      });
+
+      expect(response.statusCode).toBe(302);
+      expect(response.headers.location).toContain('http://localhost:5173');
+      expect(response.headers.location).toContain('/#/settings/calendar');
+    });
+
     it('redirects with error when error parameter is present', async () => {
       app = await buildServer();
 
