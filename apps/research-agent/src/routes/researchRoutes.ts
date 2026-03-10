@@ -195,13 +195,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       /* v8 ignore start -- ts-type: ?? fallback chain for synthesis model selection @preserve */
       const synthesisModel = body.synthesisModel ?? body.selectedModels[0] ?? LlmModels.Gemini25Pro;
       /* v8 ignore stop @preserve */
-      /* v8 ignore start -- test-infra: skip synthesis check requires test with skipSynthesis=true @preserve */
       if (body.skipSynthesis !== true) {
-      /* v8 ignore stop @preserve */
         const synthesisProvider = getProviderForModel(synthesisModel);
-        /* v8 ignore start -- test-infra: missing API key branch requires test setup without keys @preserve */
         if (apiKeys[synthesisProvider] === undefined) {
-        /* v8 ignore stop @preserve */
           return await reply.fail(
             'MISCONFIGURED',
             `API key required for synthesis with ${synthesisModel}`
@@ -349,19 +345,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       /* v8 ignore start -- ts-type: conditional object property assignment based on undefined check @preserve */
       if (generatedBy !== undefined) {
       /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: conditional property assignment requires name in generatedBy @preserve */
         if (generatedBy.name !== undefined) {
-        /* v8 ignore stop @preserve */
-          /* v8 ignore start -- test-infra: conditional property assignment requires name in generatedBy @preserve */
           draftParams.userName = generatedBy.name;
-          /* v8 ignore stop @preserve */
         }
-        /* v8 ignore start -- test-infra: conditional property assignment requires email in generatedBy @preserve */
         if (generatedBy.email !== undefined) {
-        /* v8 ignore stop @preserve */
-          /* v8 ignore start -- test-infra: conditional property assignment requires email in generatedBy @preserve */
           draftParams.userEmail = generatedBy.email;
-          /* v8 ignore stop @preserve */
         }
       }
       const draft = createDraftResearch(draftParams);
@@ -405,12 +393,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Get existing research
       const existingResult = await researchRepo.findById(id);
-      /* v8 ignore start -- test-infra: repository error branch requires error condition mock @preserve */
       if (!existingResult.ok) {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: repository error branch requires error condition mock @preserve */
         return await reply.fail('INTERNAL_ERROR', existingResult.error.message);
-        /* v8 ignore stop @preserve */
       }
       if (existingResult.value === null) {
         return await reply.fail('NOT_FOUND', 'Research not found');
@@ -531,9 +515,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Get Google API key
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
-      /* v8 ignore start -- test-infra: API key fetch failure branch requires service mock @preserve */
       if (!apiKeysResult.ok) {
-      /* v8 ignore stop @preserve */
         request.log.error({ requestId }, 'Failed to fetch API keys');
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
@@ -741,14 +723,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      /* v8 ignore start -- test-infra: not found branch requires missing research document @preserve */
+      /* v8 ignore start -- upstream: getResearch returns null only when Firestore doc missing; route test always seeds the document @preserve */
       if (result.value === null) {
       /* v8 ignore stop @preserve */
         return await reply.fail('NOT_FOUND', 'Research not found');
       }
 
       // Check ownership
-      /* v8 ignore start -- test-infra: access denied branch requires different user context @preserve */
+      /* v8 ignore start -- upstream: result.value === null check above ensures value exists; ownership mismatch requires multi-user test setup @preserve */
       if (result.value.userId !== user.userId) {
       /* v8 ignore stop @preserve */
         return await reply.fail('FORBIDDEN', 'Access denied');
@@ -1213,9 +1195,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       } = getServices();
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
-      /* v8 ignore start -- test-infra: API key fetch failure branch requires service mock @preserve */
       if (!apiKeysResult.ok) {
-      /* v8 ignore stop @preserve */
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
       const apiKeys = apiKeysResult.value;
@@ -1225,7 +1205,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!sourceResult.ok) {
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch source research');
       }
-      /* v8 ignore start -- test-infra: not found branch requires missing research document @preserve */
+      /* v8 ignore start -- upstream: sourceResult.ok check above ensures result is valid; null branch requires Firestore doc to not exist @preserve */
       if (sourceResult.value === null) {
       /* v8 ignore stop @preserve */
         return await reply.fail('NOT_FOUND', 'Source research not found');
@@ -1287,33 +1267,21 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         logger: request.log as unknown as Logger,
       });
 
-      /* v8 ignore start -- test-infra: error handling branch requires repository error condition mock @preserve */
       if (!result.ok) {
-      /* v8 ignore stop @preserve */
         switch (result.error.type) {
-          /* v8 ignore start -- test-infra: error handling branch requires repository error condition mock @preserve */
           case 'NOT_FOUND':
-          /* v8 ignore stop @preserve */
             return await reply.fail('NOT_FOUND', 'Research not found');
-          /* v8 ignore start -- test-infra: FORBIDDEN switch case @preserve */
           case 'FORBIDDEN':
             return await reply.fail('FORBIDDEN', 'Access denied');
-          /* v8 ignore stop @preserve */
-          /* v8 ignore start -- test-infra: INVALID_STATUS case @preserve */
           case 'INVALID_STATUS':
             return await reply.fail(
               'CONFLICT',
               `Cannot enhance research in ${result.error.status} status`
             );
-          /* v8 ignore stop @preserve */
-          /* v8 ignore start -- test-infra: NO_CHANGES case @preserve */
           case 'NO_CHANGES':
             return await reply.fail('CONFLICT', 'At least one change is required');
-          /* v8 ignore stop @preserve */
-          /* v8 ignore start -- test-infra: REPO_ERROR case @preserve */
           case 'REPO_ERROR':
             return await reply.fail('INTERNAL_ERROR', result.error.error.message);
-          /* v8 ignore stop @preserve */
         }
       }
 
@@ -1508,82 +1476,52 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Fetch research
       const existingResult = await researchRepo.findById(id);
-      /* v8 ignore start -- test-infra: repository error branch requires error condition mock @preserve */
       if (!existingResult.ok) {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: repository error branch requires error condition mock @preserve */
         return await reply.fail('INTERNAL_ERROR', existingResult.error.message);
-        /* v8 ignore stop @preserve */
       }
-      /* v8 ignore start -- test-infra: not found branch requires missing research document @preserve */
       if (existingResult.value === null) {
-      /* v8 ignore stop @preserve */
         return await reply.fail('NOT_FOUND', 'Research not found');
       }
       const research = existingResult.value;
 
       // Check ownership
-      /* v8 ignore start -- test-infra: access denied branch requires different user context @preserve */
       if (research.userId !== user.userId) {
-      /* v8 ignore stop @preserve */
         return await reply.fail('FORBIDDEN', 'Access denied');
       }
 
       // Check if research is completed
-      /* v8 ignore start -- test-infra: status check requires non-completed research document @preserve */
       if (research.status !== 'completed') {
-      /* v8 ignore stop @preserve */
         return await reply.fail('RESEARCH_NOT_COMPLETED', 'Research must be completed before exporting to Notion');
       }
 
       // Check if synthesis exists
-      /* v8 ignore start -- test-infra: missing synthesis requires research without synthesis @preserve */
       if (research.synthesizedResult === undefined || research.synthesizedResult === '') {
-      /* v8 ignore stop @preserve */
         return await reply.fail('NO_SYNTHESIS', 'Research has no synthesis to export');
       }
 
       // Check if already exported
-      /* v8 ignore start -- test-infra: already exported branch requires exported research document @preserve */
       if (research.notionExportInfo !== undefined) {
-      /* v8 ignore stop @preserve */
         return await reply.fail('ALREADY_EXPORTED', 'Research has already been exported to Notion');
       }
 
       // Get user's Notion token
       const tokenResult = await notionServiceClient.getNotionToken(user.userId);
-      /* v8 ignore start -- test-infra: Notion token fetch failure requires service mock @preserve */
       if (!tokenResult.ok) {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: Notion token fetch failure requires service mock @preserve */
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch Notion token');
-        /* v8 ignore stop @preserve */
       }
       const tokenContext = tokenResult.value;
-      /* v8 ignore start -- test-infra: null token check requires Notion not connected setup @preserve */
       if (tokenContext.token === null || tokenContext.token === '') {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: null token check requires Notion not connected setup @preserve */
         return await reply.fail('NOTION_NOT_CONNECTED', 'Notion is not connected. Please connect your Notion account first.');
-        /* v8 ignore stop @preserve */
       }
 
       // Get user's Notion page ID configuration
       const pageIdResult = await researchExportSettings.getResearchPageId(user.userId);
-      /* v8 ignore start -- test-infra: page ID fetch failure requires service mock @preserve */
       if (!pageIdResult.ok) {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: page ID fetch failure requires service mock @preserve */
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch Notion page configuration');
-        /* v8 ignore stop @preserve */
       }
       const targetPageId = pageIdResult.value;
-      /* v8 ignore start -- test-infra: null page ID requires unconfigured settings setup @preserve */
       if (targetPageId === null || targetPageId === '') {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: null page ID requires unconfigured settings setup @preserve */
         return await reply.fail('PAGE_NOT_CONFIGURED', 'Notion research page is not configured. Please configure it in settings.');
-        /* v8 ignore stop @preserve */
       }
 
       // Export to Notion
@@ -1643,12 +1581,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Return updated research with notionExportInfo populated
       const updatedResearchResult = await researchRepo.findById(id);
-      /* v8 ignore start -- test-infra: repository error branch requires error condition mock @preserve */
       if (!updatedResearchResult.ok || updatedResearchResult.value === null) {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: repository error branch requires error condition mock @preserve */
         request.log.warn({ researchId: id }, 'Failed to fetch updated research after Notion export');
-        /* v8 ignore stop @preserve */
         // Return the original research with notionExportInfo manually added
         return await reply.ok({ ...research, notionExportInfo });
       }
