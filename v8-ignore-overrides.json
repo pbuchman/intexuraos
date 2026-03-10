@@ -193,7 +193,7 @@
       "description": "Write tests for tightened v8 ignore blocks in workers/orchestrator"
     },
     "PENDING-workers-transcription": {
-      "files": ["workers/transcription/src/providers/speechmatics/adapter.ts"],
+      "files": [],
       "description": "Write tests for tightened v8 ignore blocks in workers/transcription"
     }
   }
