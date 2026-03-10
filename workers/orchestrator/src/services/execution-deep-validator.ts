@@ -176,8 +176,8 @@ function severityEmoji(severity: 'critical' | 'warning' | 'info'): string {
   return '🔵';
 }
 
-export function formatPrComment(result: DeepValidationResult): string {
-  const lines: string[] = ['### Deep Validation Report', ''];
+export function formatPrComment(result: DeepValidationResult, costUsd: number): string {
+  const lines: string[] = ['### Deep Validation Report', '', `**Cost:** $${String(costUsd)}`, ''];
 
   // Section 1
   lines.push('#### Claim Verification');
@@ -354,7 +354,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
 
     // Post PR comment
     onProgress?.('posting PR comment...');
-    const posted = await this.postPrComment(input, result);
+    const posted = await this.postPrComment(input, result, generated.value.usage.costUsd);
     onProgress?.(posted ? 'PR comment posted' : 'PR comment failed (see server logs)');
 
     return result;
@@ -362,9 +362,10 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
 
   private async postPrComment(
     input: DeepValidationInput,
-    result: DeepValidationResult
+    result: DeepValidationResult,
+    costUsd: number
   ): Promise<boolean> {
-    const comment = formatPrComment(result);
+    const comment = formatPrComment(result, costUsd);
     try {
       await execFileAsync(
         'gh',
