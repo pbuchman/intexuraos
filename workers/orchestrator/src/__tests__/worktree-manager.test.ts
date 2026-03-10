@@ -640,6 +640,148 @@ describe('WorktreeManager - git stderr error handling', () => {
     );
   });
 
+  it('should handle non-Error thrown during createWorktree', async () => {
+    mockExecAsyncImpl = async (
+      command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      if (command.includes('git worktree add')) {
+        throw 'string-thrown-not-an-error';
+      }
+      return { stdout: '', stderr: '' };
+    };
+
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLogger);
+
+    await expect(manager.createWorktree('task-non-error-create', 'feature-branch')).rejects.toThrow(
+      'Failed to create worktree: Unknown error'
+    );
+  });
+
+  it('should handle non-Error thrown during removeWorktree', async () => {
+    // Create worktree directory first
+    mkdirSync(join(worktreeBasePath, 'task-non-error-remove'), { recursive: true });
+
+    mockExecAsyncImpl = async (
+      command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      if (command.includes('git worktree remove')) {
+        throw 42;
+      }
+      return { stdout: '', stderr: 'Preparing worktree' };
+    };
+
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLogger);
+
+    await expect(manager.removeWorktree('task-non-error-remove')).rejects.toThrow(
+      'Failed to remove worktree: Unknown error'
+    );
+  });
+
+  it('should filter worktrees by base path from porcelain output', async () => {
+    const porcelainOutput = [
+      `worktree /repo`,
+      'HEAD abc123',
+      'branch refs/heads/main',
+      '',
+      `worktree ${worktreeBasePath}/task-a`,
+      'HEAD def456',
+      'branch refs/heads/task-a',
+      '',
+      `worktree /other/path/task-b`,
+      'HEAD ghi789',
+      'branch refs/heads/task-b',
+      '',
+      `worktree ${worktreeBasePath}/task-c`,
+      'HEAD jkl012',
+      'branch refs/heads/task-c',
+    ].join('\n');
+
+    mockExecAsyncImpl = async (
+      command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      if (command.includes('git worktree list')) {
+        return { stdout: porcelainOutput, stderr: '' };
+      }
+      return { stdout: '', stderr: 'Preparing worktree' };
+    };
+
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLogger);
+
+    const worktrees = await manager.listWorktrees();
+
+    expect(worktrees).toEqual([`${worktreeBasePath}/task-a`, `${worktreeBasePath}/task-c`]);
+  });
+
+  it('should handle non-Error thrown during copyMcpConfig', async () => {
+    // We need to make readFile throw a non-Error inside copyMcpConfig
+    // The easiest way is to make the template file unreadable by corrupting the mock
+    mockExecAsyncImpl = async (
+      command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      if (command.includes('git worktree add')) {
+        return { stdout: '', stderr: 'Preparing worktree' };
+      }
+      return { stdout: '', stderr: '' };
+    };
+
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+
+    // Point to a template that exists but will cause copyMcpConfig to fail
+    // We'll use a template path that triggers an error during processing
+    const badTemplatePath = join(tempDir, 'bad-template.json');
+    // Create a directory at the template path so readFile fails with EISDIR
+    mkdirSync(badTemplatePath, { recursive: true });
+
+    const manager = new WM({ ...mockConfig, mcpConfigTemplatePath: badTemplatePath }, mockLogger);
+
+    await expect(manager.createWorktree('task-mcp-error', 'feature-branch')).rejects.toThrow(
+      'Failed to create worktree'
+    );
+  });
+
+  it('should handle non-Error thrown during copySettingsLocal', async () => {
+    mockExecAsyncImpl = async (
+      command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      if (command.includes('git worktree add')) {
+        return { stdout: '', stderr: 'Preparing worktree' };
+      }
+      return { stdout: '', stderr: '' };
+    };
+
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+
+    // Point settings template to a directory so readFile fails with EISDIR
+    const badSettingsPath = join(tempDir, 'bad-settings-dir');
+    mkdirSync(badSettingsPath, { recursive: true });
+
+    const manager = new WM(
+      {
+        ...mockConfig,
+        mcpConfigTemplatePath: join(tempDir, 'non-existent-mcp.json'), // skip MCP config
+        settingsLocalTemplatePath: badSettingsPath,
+      },
+      mockLogger
+    );
+
+    await expect(manager.createWorktree('task-settings-error', 'feature-branch')).rejects.toThrow(
+      'Failed to create worktree'
+    );
+  });
+
   it('should not throw when git worktree remove returns empty stderr', async () => {
     // Create worktree directory first
     mkdirSync(join(worktreeBasePath, 'task-remove-empty'), { recursive: true });
