@@ -726,6 +726,38 @@ describe('submitToExecutionAgent', () => {
       );
     });
 
+    it('logs error when queuedAt update fails and falls back to original task', async () => {
+      const mockTask = setupHappyPathMocks();
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: 'All workers at capacity' })
+      );
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(2));
+      // First update = optimistic lock (succeeds), second = queuedAt (fails)
+      mockCodeTaskRepo.update
+        .mockResolvedValueOnce(ok({ ...mockTask, implementationTaskId: 'task_exec' }))
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'update failed' }));
+      mockWhatsAppNotifier.notifyTaskQueued.mockResolvedValue(ok(undefined));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      // Should still succeed despite update failure
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('queued');
+      }
+
+      // Should log the queuedAt update failure
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        }),
+        'Failed to update execution task with queuedAt timestamp'
+      );
+    });
+
     it('logs warning when queued notification fails', async () => {
       setupHappyPathMocks();
       mockTaskDispatcher.dispatch.mockResolvedValue(
@@ -749,14 +781,6 @@ describe('submitToExecutionAgent', () => {
       if (result.ok) {
         expect(result.value.workerLocation).toBe('queued');
       }
-
-      // Should log queue update failure
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
-        }),
-        'Failed to update execution task to queued status'
-      );
 
       // Should log notification failure
       expect(mockLogger.warn).toHaveBeenCalledWith(
