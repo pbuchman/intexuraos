@@ -50,11 +50,12 @@ export interface GitHubAgentUsage {
 }
 
 /**
- * Full result including triage decision and usage data.
+ * Full result including triage decision, usage data, and LLM reasoning.
  */
 export interface GitHubAgentEvalResult {
   triage: GitHubAgentTriageResult;
   usage: GitHubAgentUsage;
+  reasoning: string;
 }
 
 /**
@@ -229,19 +230,21 @@ async function evaluatePREventInternal(
   }
 
   const result = agentResult.value; // @allow-result-access -- narrowed by !agentResult.ok
+  const reasoning = result.content;
 
   logger.info(
-    { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade, reviewsRequested, skipped: state.skipped, costUsd: result.usage.costUsd },
+    { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade, reviewsRequested, skipped: state.skipped, costUsd: result.usage.costUsd, reasoning },
     'GitHub Agent evaluation complete'
   );
 
   /* v8 ignore start -- ts-type: null coalescing for optional skip reason @preserve */
   const skipReason = state.skipReason ?? '(no reason)';
   /* v8 ignore stop @preserve */
+  const dedupedReviewTypes = [...new Set(reviewsRequested)];
   const triage: GitHubAgentTriageResult = state.skipped
     ? { action: 'skip', reason: skipReason }
-    : reviewsRequested.length > 0
-      ? { action: 'request_review', reviewTypes: reviewsRequested }
+    : dedupedReviewTypes.length > 0
+      ? { action: 'request_review', reviewTypes: dedupedReviewTypes }
       : { action: 'skip', reason: 'No tool called' };
 
   return {
@@ -249,6 +252,7 @@ async function evaluatePREventInternal(
     value: {
       triage,
       usage: { costUsd: result.usage.costUsd, toolCalls },
+      reasoning,
     },
   };
 }
@@ -351,9 +355,10 @@ async function evaluateCommentEventInternal(
   }
 
   const result = agentResult.value; // @allow-result-access -- narrowed by !agentResult.ok
+  const reasoning = result.content;
 
   logger.info(
-    { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade, skipped: state.skipped, costUsd: result.usage.costUsd },
+    { repository: event.repository, prNumber: event.pullRequestNumber, toolCallsMade: result.toolCallsMade, skipped: state.skipped, costUsd: result.usage.costUsd, reasoning },
     'GitHub Agent comment evaluation complete'
   );
 
@@ -371,6 +376,7 @@ async function evaluateCommentEventInternal(
     value: {
       triage,
       usage: { costUsd: result.usage.costUsd, toolCalls },
+      reasoning,
     },
   };
 }
