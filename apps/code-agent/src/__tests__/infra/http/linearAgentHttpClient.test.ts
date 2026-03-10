@@ -467,6 +467,30 @@ describe('linearAgentHttpClient', () => {
       }
     });
 
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123/validate')
+        .query({ userId: 'test-user-123' })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.validateIssue({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({ error: expect.any(Error) }),
+          'linear-agent validateIssue request failed'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
     it('should log info before validating issue', async () => {
       nock(baseUrl)
         .get('/internal/linear/issues/INT-456/validate')
@@ -623,6 +647,29 @@ describe('linearAgentHttpClient', () => {
         expect.fail('Expected error result');
       }
     });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/generate-title')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.generateTitle({
+        userId: 'test-user-123',
+        description: 'Test description',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({ error: expect.any(Error) }),
+          'linear-agent generateTitle request failed'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
   });
 
   describe('fetchIssueForDisplay', () => {
@@ -742,6 +789,30 @@ describe('linearAgentHttpClient', () => {
         expect(mockLogger.error).toHaveBeenCalledWith(
           { timeoutMs: 5000 },
           'linear-agent request timed out'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-789')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.fetchIssueForDisplay({
+        userId: 'test-user-123',
+        identifier: 'INT-789',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({ error: expect.any(Error) }),
+          'linear-agent fetchIssueForDisplay request failed'
         );
       } else {
         expect.fail('Expected error result');
