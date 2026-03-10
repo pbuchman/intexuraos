@@ -351,6 +351,38 @@ describe('OrchestratorExecutionDeepValidator', () => {
     expect(calls).toContain('schema parse failed, posting raw response as fallback');
   });
 
+  it('calls onProgress with failure message when PR comment posting fails', async () => {
+    const validResponse = JSON.stringify({
+      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [],
+    });
+    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
+    execFileMock.mockImplementation(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: unknown,
+        cb: (err: Error | null) => void
+      ) => {
+        cb(new Error('gh CLI not found'));
+      }
+    );
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('PR comment failed (see server logs)');
+    expect(result).toBeDefined();
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_abc' }),
+      'Failed to post deep validation PR comment'
+    );
+  });
+
   it('works without onProgress callback', async () => {
     const validResponse = JSON.stringify({
       claimVerification: [],
