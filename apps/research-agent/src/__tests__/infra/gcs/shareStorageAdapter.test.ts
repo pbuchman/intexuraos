@@ -75,7 +75,7 @@ describe('GcsShareStorageAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('UPLOAD_FAILED');
-        expect(result.error.message).toBe('Unknown upload error');
+        expect(result.error.message).toBe('string error');
       }
     });
   });
@@ -112,7 +112,7 @@ describe('GcsShareStorageAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('DELETE_FAILED');
-        expect(result.error.message).toBe('Unknown delete error');
+        expect(result.error.message).toBe('string error');
       }
     });
   });

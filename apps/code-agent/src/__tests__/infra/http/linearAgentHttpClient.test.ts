@@ -324,6 +324,31 @@ describe('linearAgentHttpClient', () => {
         'Updating Linear issue state'
       );
     });
+
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .patch('/internal/issues/issue-abc/state')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: false });
+
+      const result = await client.updateIssueState({
+        userId: 'test-user-123',
+        issueId: 'issue-abc',
+        state: 'in_progress',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { body: { success: false } },
+          'Invalid response from linear-agent'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
   });
 
   describe('validateIssue', () => {
@@ -491,6 +516,50 @@ describe('linearAgentHttpClient', () => {
       }
     });
 
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123/validate')
+        .query({ userId: 'test-user-123' })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, { success: false });
+
+      const result = await client.validateIssue({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { body: { success: false } },
+          'Invalid response from linear-agent'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on response with success true but missing data', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123/validate')
+        .query({ userId: 'test-user-123' })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, { success: true });
+
+      const result = await client.validateIssue({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
     it('should log info before validating issue', async () => {
       nock(baseUrl)
         .get('/internal/linear/issues/INT-456/validate')
@@ -624,6 +693,29 @@ describe('linearAgentHttpClient', () => {
       );
     });
 
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/generate-title')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, { success: false });
+
+      const result = await client.generateTitle({
+        userId: 'test-user-123',
+        description: 'Test description',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { body: { success: false } },
+          'Invalid response from linear-agent'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
     it('should return UNAVAILABLE on request timeout', async () => {
       nock(baseUrl)
         .post('/internal/linear/issues/generate-title')
@@ -669,6 +761,419 @@ describe('linearAgentHttpClient', () => {
       } else {
         expect.fail('Expected error result');
       }
+    });
+  });
+
+  describe('addComment', () => {
+    it('should add comment successfully', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/issue-123/comments', { body: 'Test comment' })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: true, data: { id: 'comment-456' } });
+
+      const result = await client.addComment({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        body: 'Test comment',
+      });
+
+      if (result.ok) {
+        expect(result.value.commentId).toBe('comment-456');
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          { issueId: 'issue-123', commentId: 'comment-456' },
+          'Comment added to Linear issue'
+        );
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('should return RATE_LIMITED on 429 error', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/issue-123/comments')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(429, 'Too Many Requests');
+
+      const result = await client.addComment({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        body: 'Test comment',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+        expect(result.error.message).toBe('Linear API rate limited');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { status: 429, error: 'Too Many Requests' },
+          'linear-agent addComment failed'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNAVAILABLE on 500 error', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/issue-123/comments')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(500, 'Internal Server Error');
+
+      const result = await client.addComment({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        body: 'Test comment',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('linear-agent unavailable');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return INVALID_REQUEST on 400 error', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/issue-123/comments')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(400, 'Bad Request');
+
+      const result = await client.addComment({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        body: 'Test comment',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_REQUEST');
+        expect(result.error.message).toBe('Bad Request');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/issue-123/comments')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: false });
+
+      const result = await client.addComment({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        body: 'Test comment',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { body: { success: false } },
+          'Invalid response from linear-agent'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNAVAILABLE on request timeout', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/issue-123/comments')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .delay(6000)
+        .reply(200, {});
+
+      const result = await client.addComment({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        body: 'Test comment',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Request timed out');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { timeoutMs: 5000 },
+          'linear-agent request timed out'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/issue-123/comments')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.addComment({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        body: 'Test comment',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+  });
+
+  describe('fetchIssueTree', () => {
+    it('should fetch issue tree successfully', async () => {
+      const mockResponse = {
+        success: true,
+        data: {
+          root: {
+            id: 'issue-123',
+            identifier: 'INT-123',
+            url: 'https://linear.app/intexuraos/issue/INT-123',
+            parentId: null,
+            labels: ['backend'],
+            assigneeId: 'user-123',
+            state: 'in_progress',
+          },
+          descendants: [],
+        },
+      };
+
+      nock(baseUrl)
+        .get('/internal/issues/issue-123/tree')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, mockResponse);
+
+      const result = await client.fetchIssueTree({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+      });
+
+      if (result.ok) {
+        expect(result.value.root.id).toBe('issue-123');
+        expect(result.value.root.identifier).toBe('INT-123');
+        expect(result.value.descendants).toEqual([]);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('should return NOT_FOUND on 404 error', async () => {
+      nock(baseUrl)
+        .get('/internal/issues/issue-999/tree')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(404, 'Issue not found');
+
+      const result = await client.fetchIssueTree({
+        userId: 'test-user-123',
+        issueId: 'issue-999',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+        expect(result.error.message).toBe('Issue not found');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNAVAILABLE on 500 error', async () => {
+      nock(baseUrl)
+        .get('/internal/issues/issue-123/tree')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(500, 'Internal Server Error');
+
+      const result = await client.fetchIssueTree({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Internal Server Error');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .get('/internal/issues/issue-123/tree')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: false });
+
+      const result = await client.fetchIssueTree({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .get('/internal/issues/issue-123/tree')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.fetchIssueTree({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+  });
+
+  describe('updateIssueMetadata', () => {
+    it('should update metadata successfully', async () => {
+      nock(baseUrl)
+        .patch('/internal/linear/issues/issue-123/metadata')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: true });
+
+      const result = await client.updateIssueMetadata({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        assigneeId: 'user-456',
+        addLabels: ['bug'],
+        removeLabels: ['feature'],
+      });
+
+      if (result.ok) {
+        expect(result.value).toBeUndefined();
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('should return NOT_FOUND on 404 error', async () => {
+      nock(baseUrl)
+        .patch('/internal/linear/issues/issue-999/metadata')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(404, 'Issue not found');
+
+      const result = await client.updateIssueMetadata({
+        userId: 'test-user-123',
+        issueId: 'issue-999',
+        addLabels: ['bug'],
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+        expect(result.error.message).toBe('Issue not found');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNAVAILABLE on 500 error', async () => {
+      nock(baseUrl)
+        .patch('/internal/linear/issues/issue-123/metadata')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(500, 'Internal Server Error');
+
+      const result = await client.updateIssueMetadata({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        addLabels: ['bug'],
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Internal Server Error');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .patch('/internal/linear/issues/issue-123/metadata')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: false });
+
+      const result = await client.updateIssueMetadata({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        addLabels: ['bug'],
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .patch('/internal/linear/issues/issue-123/metadata')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.updateIssueMetadata({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        addLabels: ['bug'],
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should send only provided metadata fields', async () => {
+      let capturedBody: unknown;
+
+      nock(baseUrl)
+        .patch('/internal/linear/issues/issue-123/metadata')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, function (_uri, requestBody) {
+          capturedBody = requestBody;
+          return { success: true };
+        });
+
+      await client.updateIssueMetadata({
+        userId: 'test-user-123',
+        issueId: 'issue-123',
+        assigneeId: 'user-456',
+      });
+
+      expect(capturedBody).toEqual({ assigneeId: 'user-456' });
     });
   });
 
@@ -719,6 +1224,30 @@ describe('linearAgentHttpClient', () => {
         );
       } else {
         expect.fail('Expected successful result');
+      }
+    });
+
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: false });
+
+      const result = await client.fetchIssueForDisplay({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Invalid response from linear-agent');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { body: { success: false } },
+          'Invalid response from linear-agent'
+        );
+      } else {
+        expect.fail('Expected error result');
       }
     });
 
@@ -913,6 +1442,105 @@ describe('linearAgentHttpClient', () => {
         { status: 503, error: 'linear-agent unavailable' },
         'linear-agent fetchIssuesForDisplay failed'
       );
+    });
+
+    it('should return UNKNOWN on invalid response with success false', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/display-batch', {
+          identifiers: ['INT-123'],
+        })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, { success: false });
+
+      const result = await (client as unknown as {
+        fetchIssuesForDisplay: (request: {
+          userId: string;
+          identifiers: string[];
+        }) => Promise<{
+          ok: boolean;
+          value?: { identifier: string; title: string }[];
+          error?: { code: string; message: string };
+        }>;
+      }).fetchIssuesForDisplay({
+        userId: 'test-user-123',
+        identifiers: ['INT-123'],
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok === false) {
+        expect(result.error?.code).toBe('UNKNOWN');
+        expect(result.error?.message).toBe('Invalid response from linear-agent');
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        { body: { success: false } },
+        'Invalid response from linear-agent'
+      );
+    });
+
+    it('should return UNAVAILABLE on request timeout', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/display-batch', {
+          identifiers: ['INT-123'],
+        })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .delay(6000)
+        .reply(200, {});
+
+      const result = await (client as unknown as {
+        fetchIssuesForDisplay: (request: {
+          userId: string;
+          identifiers: string[];
+        }) => Promise<{
+          ok: boolean;
+          value?: { identifier: string; title: string }[];
+          error?: { code: string; message: string };
+        }>;
+      }).fetchIssuesForDisplay({
+        userId: 'test-user-123',
+        identifiers: ['INT-123'],
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok === false) {
+        expect(result.error?.code).toBe('UNAVAILABLE');
+        expect(result.error?.message).toBe('Request timed out');
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        { timeoutMs: 5000 },
+        'linear-agent request timed out'
+      );
+    });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .post('/internal/linear/issues/display-batch', {
+          identifiers: ['INT-123'],
+        })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .replyWithError('ECONNREFUSED');
+
+      const result = await (client as unknown as {
+        fetchIssuesForDisplay: (request: {
+          userId: string;
+          identifiers: string[];
+        }) => Promise<{
+          ok: boolean;
+          value?: { identifier: string; title: string }[];
+          error?: { code: string; message: string };
+        }>;
+      }).fetchIssuesForDisplay({
+        userId: 'test-user-123',
+        identifiers: ['INT-123'],
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok === false) {
+        expect(result.error?.code).toBe('UNKNOWN');
+        expect(result.error?.message).toContain('ECONNREFUSED');
+      }
     });
   });
 });

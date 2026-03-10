@@ -2,7 +2,6 @@ import type { CodeTask, CodeTaskStatus } from '@/types';
 
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type StepState = 'completed' | 'running' | 'failed' | 'waiting' | 'actionable';
-export type SortKey = 'linearId' | 'pr' | 'finished' | 'startedAt';
 
 export interface PipelineState {
   planning: StepState | null;
@@ -21,6 +20,8 @@ export interface IssueGroup {
   latestTask: CodeTask;
   aggregateStatus: GroupStatus;
 }
+
+export type SortOption = 'linear-id' | 'pr-number' | 'finished-time' | 'started-time';
 
 const PR_URL_REGEX = /\/pull\/(\d+)/;
 const LINEAR_ID_REGEX = /\w+-(\d+)/;
@@ -234,154 +235,79 @@ export function groupByLinearIssue(tasks: CodeTask[]): IssueGroup[] {
   return groups;
 }
 
-/**
- * Get the most recent dispatchedAt timestamp from any task in the group.
- * Returns undefined if no task has been dispatched yet.
- */
-function getGroupDispatchedAt(group: IssueGroup): string | undefined {
-  for (const task of group.tasks) {
-    if (task.dispatchedAt !== undefined) {
-      return task.dispatchedAt;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Get the finished timestamp from the latest completed/reviewed task.
- * Returns undefined if no task is completed yet.
- */
-function getGroupFinishedAt(group: IssueGroup): string | undefined {
-  // Find the most recent completed/reviewed task
-  const completedStatuses: CodeTaskStatus[] = ['planned', 'implemented', 'reviewed'];
-  for (const task of group.tasks) {
-    if (completedStatuses.includes(task.status)) {
-      return task.updatedAt;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Get the PR number from the group (if any).
- * Returns 0 if no PR exists.
- */
-function getGroupPrNumber(group: IssueGroup): number {
-  if (group.pipeline.pr !== null) {
-    return Number(group.pipeline.pr.number);
-  }
-  return 0;
-}
-
-/**
- * Sort groups by the specified sort key.
- * - linearId: Sort by Linear issue number desc (default)
- * - pr: Sort by PR number desc (groups with PRs first, then by issue number)
- * - finished: Sort by finished date desc (groups with completed tasks first, then by issue number)
- * - startedAt: Sort by most recent dispatchedAt desc (groups with dispatchedAt first, then by issue number)
- */
-export function sortGroups(groups: IssueGroup[], sortKey: SortKey): IssueGroup[] {
+export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): IssueGroup[] {
   const sorted = [...groups];
 
-  sorted.sort((a, b) => {
-    switch (sortKey) {
-      case 'startedAt': {
-        // Sort by most recent dispatchedAt desc, groups without dispatchedAt sort last
-        const aDispatched = getGroupDispatchedAt(a);
-        const bDispatched = getGroupDispatchedAt(b);
+  if (sortBy === 'linear-id') {
+    // Sort by Linear issue number descending; standalone (null linearIssueId) groups sort first.
+    // This mirrors the sort already applied inside groupByLinearIssue(), making the function
+    // correct regardless of the caller's input order.
+    sorted.sort((a, b) => {
+      const aNum = a.linearIssueId !== null ? parseLinearIssueNumber(a.linearIssueId) : null;
+      const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
 
-        // Both have dispatchedAt: sort by date desc
-        if (aDispatched !== undefined && bDispatched !== undefined) {
-          return bDispatched.localeCompare(aDispatched);
-        }
-        // Only a has dispatchedAt: a comes first
-        if (aDispatched !== undefined) return -1;
-        // Only b has dispatchedAt: b comes first
-        if (bDispatched !== undefined) return 1;
-
-        // Neither has dispatchedAt: fall back to linearId sort
-        const aNum = a.linearIssueId !== null ? parseLinearIssueNumber(a.linearIssueId) : null;
-        const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
-        if (aNum === null && bNum === null) {
-          return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
-        }
-        if (aNum === null) return -1;
-        if (bNum === null) return 1;
-        return bNum - aNum;
-      }
-
-      case 'finished': {
-        // Sort by finished date desc, groups without finished date sort last
-        const aFinished = getGroupFinishedAt(a);
-        const bFinished = getGroupFinishedAt(b);
-
-        // Both have finishedAt: sort by date desc
-        if (aFinished !== undefined && bFinished !== undefined) {
-          return bFinished.localeCompare(aFinished);
-        }
-        // Only a has finishedAt: a comes first
-        if (aFinished !== undefined) return -1;
-        // Only b has finishedAt: b comes first
-        if (bFinished !== undefined) return 1;
-
-        // Neither has finishedAt: fall back to linearId sort
-        const aNum = a.linearIssueId !== null ? parseLinearIssueNumber(a.linearIssueId) : null;
-        const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
-        if (aNum === null && bNum === null) {
-          return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
-        }
-        if (aNum === null) return -1;
-        if (bNum === null) return 1;
-        return bNum - aNum;
-      }
-
-      case 'pr': {
-        // Sort by PR number desc, groups with PRs first
-        const aPr = getGroupPrNumber(a);
-        const bPr = getGroupPrNumber(b);
-
-        // Both have PRs: sort by PR number desc
-        if (aPr > 0 && bPr > 0) {
-          return bPr - aPr;
-        }
-        // Only a has PR: a comes first
-        if (aPr > 0) return -1;
-        // Only b has PR: b comes first
-        if (bPr > 0) return 1;
-
-        // Neither has PR: fall back to linearId sort
-        const aNum = a.linearIssueId !== null ? parseLinearIssueNumber(a.linearIssueId) : null;
-        const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
-        if (aNum === null && bNum === null) {
-          return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
-        }
-        if (aNum === null) return -1;
-        if (bNum === null) return 1;
-        return bNum - aNum;
-      }
-
-      case 'linearId':
-      default: {
-        // Default: sort by Linear issue number desc
-        const aNum = a.linearIssueId !== null ? parseLinearIssueNumber(a.linearIssueId) : null;
-        const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
-
-        // Both standalone: sort by updatedAt desc
-        if (aNum === null && bNum === null) {
-          return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
-        }
-        // Standalone sorts before linked
-        if (aNum === null) return -1;
-        if (bNum === null) return 1;
-
-        // Both linked: sort by issue number desc, then updatedAt desc
-        if (aNum !== bNum) {
-          return bNum - aNum;
-        }
+      if (aNum === null && bNum === null) {
         return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
       }
-    }
-  });
+      if (aNum === null) return -1;
+      if (bNum === null) return 1;
+      if (aNum !== bNum) return bNum - aNum;
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
+    return sorted;
+  }
+
+  if (sortBy === 'pr-number') {
+    sorted.sort((a, b) => {
+      const aNum = a.pipeline.pr !== null ? Number(a.pipeline.pr.number) : null;
+      const bNum = b.pipeline.pr !== null ? Number(b.pipeline.pr.number) : null;
+
+      // Both have PR: sort desc
+      if (aNum !== null && bNum !== null) return bNum - aNum;
+      // Only one has PR: the one with PR sorts first
+      if (aNum !== null) return -1;
+      if (bNum !== null) return 1;
+      // Neither has PR: fall back to updatedAt desc
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
+    return sorted;
+  }
+
+  // finished-time
+  if (sortBy === 'finished-time') {
+    sorted.sort((a, b) => {
+      const aDone = a.aggregateStatus === 'done';
+      const bDone = b.aggregateStatus === 'done';
+
+      // Done groups sort first, by updatedAt desc
+      if (aDone && bDone) return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+      if (aDone) return -1;
+      if (bDone) return 1;
+      // Non-done: fall back to updatedAt desc
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
+    return sorted;
+  }
+
+  // started-time: sort by most recent dispatchedAt desc (groups with dispatchedAt first, then by issue number)
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (sortBy === 'started-time') {
+    sorted.sort((a, b) => {
+      const aDispatched = a.latestTask.dispatchedAt;
+      const bDispatched = b.latestTask.dispatchedAt;
+
+      // Both have dispatchedAt: sort desc
+      if (aDispatched !== undefined && bDispatched !== undefined) {
+        return bDispatched.localeCompare(aDispatched);
+      }
+      // Only one has dispatchedAt: the one with dispatchedAt sorts first
+      if (aDispatched !== undefined) return -1;
+      if (bDispatched !== undefined) return 1;
+      // Neither has dispatchedAt: fall back to updatedAt desc
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
+    return sorted;
+  }
 
   return sorted;
 }

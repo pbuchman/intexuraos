@@ -12,7 +12,7 @@
  * - Builds task prompt with PR context and resume-style preamble
  */
 
-import { err, ok, getErrorMessage, type Result, type Logger } from '@intexuraos/common-core';
+import { err, ok, getErrorMessage, serializeError, type Result, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTaskRepository.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
@@ -194,7 +194,7 @@ export async function createTaskForPR(
   const lockDocPath = buildLockDocPath(repository, prNumber);
   const lockRef = firestore.doc(lockDocPath);
 
-  type TransactionResult = { taskId: string; isNew: false } | { taskId: string; isNew: true; webhookSecret: string; linearResult: Awaited<ReturnType<LinearIssueService['ensureIssueExists']>> };
+  type TransactionResult = { taskId: string; isNew: false } | { taskId: string; isNew: true; webhookSecret: string };
   let transactionResult: Result<TransactionResult, CreateTaskForPRError>;
 
   // Extract Linear issue ID from PR title BEFORE transaction
@@ -202,6 +202,42 @@ export async function createTaskForPR(
   const existingLinearIssueId = linearIssueMatch !== null && linearIssueMatch !== undefined
     ? `INT-${String(linearIssueMatch[1])}`
     : undefined;
+
+  // Build instruction-style context for Linear issue creation
+  const taskContext = [
+    `Investigate and address a comment on PR #${String(prNumber)} in ${repository}.`,
+    '',
+    request.prTitle !== undefined ? `PR title: "${request.prTitle}"` : '',
+    `Comment by @${senderLogin}:`,
+    request.comment.slice(0, 500),
+  ].filter((line) => line !== '').join('\n');
+
+  // Create or validate Linear issue BEFORE the transaction
+  // (HTTP call to Linear must not be inside a Firestore transaction — retries would replay it)
+  let linearResult: Awaited<ReturnType<LinearIssueService['ensureIssueExists']>>;
+  try {
+    linearResult = await linearIssueService.ensureIssueExists({
+      userId,
+      ...(existingLinearIssueId !== undefined
+        ? { linearIssueId: existingLinearIssueId }
+        : {}),
+      taskPrompt: taskContext,
+    });
+  } catch (error) {
+    const message = getErrorMessage(error, 'Unknown error');
+    logger.error({ error: serializeError(error), repository, prNumber }, 'Linear issue creation failed');
+    return err({
+      code: 'linear_issue_failed',
+      message,
+    });
+  }
+
+  if (linearResult.linearFallback) {
+    logger.warn(
+      { userId },
+      'Linear issue creation failed, using fallback mode'
+    );
+  }
 
   try {
     transactionResult = await firestore.runTransaction(async (transaction) => {
@@ -221,31 +257,6 @@ export async function createTaskForPR(
         }
         logger.info({ repository, prNumber, existingTaskId }, 'Task already exists for PR (lock document found)');
         return ok({ taskId: existingTaskId, isNew: false });
-      }
-
-      // Build instruction-style context for Linear issue creation
-      const taskContext = [
-        `Investigate and address a comment on PR #${String(prNumber)} in ${repository}.`,
-        '',
-        request.prTitle !== undefined ? `PR title: "${request.prTitle}"` : '',
-        `Comment by @${senderLogin}:`,
-        request.comment.slice(0, 500),
-      ].filter((line) => line !== '').join('\n');
-
-      // Create or validate Linear issue
-      const linearResult = await linearIssueService.ensureIssueExists({
-        userId,
-        ...(existingLinearIssueId !== undefined
-          ? { linearIssueId: existingLinearIssueId }
-          : {}),
-        taskPrompt: taskContext,
-      });
-
-      if (linearResult.linearFallback) {
-        logger.warn(
-          { userId },
-          'Linear issue creation failed, using fallback mode'
-        );
       }
 
       // Step 4: Create the task
@@ -272,7 +283,8 @@ export async function createTaskForPR(
         /* v8 ignore stop @preserve */
       };
 
-      const createResult = await codeTaskRepo.create(createInput);
+      // Pass the outer transaction to avoid nested transactions
+      const createResult = await codeTaskRepo.create(createInput, { transaction });
 
       if (!createResult.ok) {
         logger.error(
@@ -294,11 +306,11 @@ export async function createTaskForPR(
         'Created new task from PR comment'
       );
 
-      return ok({ taskId, isNew: true, webhookSecret, linearResult });
+      return ok({ taskId, isNew: true, webhookSecret });
     });
   } catch (error) {
     const message = getErrorMessage(error, 'Unknown error');
-    logger.error({ error, repository, prNumber }, 'Transaction failed');
+    logger.error({ error: serializeError(error), repository, prNumber }, 'Transaction failed');
     return err({
       code: 'internal_error',
       message,
@@ -317,8 +329,8 @@ export async function createTaskForPR(
     return ok({ taskId: txValue.taskId });
   }
 
-  // For new tasks, we have webhookSecret and linearResult
-  const { taskId, webhookSecret, linearResult } = txValue;
+  // For new tasks, we have webhookSecret; linearResult is already in outer scope
+  const { taskId, webhookSecret } = txValue;
 
   // Best-effort: post task-created comment and update PR title
   await notifyPROfTaskCreation(

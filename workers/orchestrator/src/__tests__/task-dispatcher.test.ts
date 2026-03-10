@@ -2166,6 +2166,180 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('stream result completion signal', () => {
+    let streamDispatcher: TaskDispatcher;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      streamDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('successful type:result triggers completion when onComplete never fires', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-success',
+        workerType: 'auto',
+        prompt: 'Test stream result success',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      onLog?.('{"type":"result","is_error":false,"result":"done"}\n');
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await streamDispatcher.getTask('stream-result-success');
+      expect(task?.status).toBe('completed');
+    });
+
+    it('error type:result triggers completion when onComplete never fires', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-error',
+        workerType: 'auto',
+        prompt: 'Test stream result error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed"}\n');
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await streamDispatcher.getTask('stream-result-error');
+      expect(task?.status).toBe('failed');
+    });
+
+    it('type:result with no trailing newline triggers eager remainder parsing', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-no-newline',
+        workerType: 'auto',
+        prompt: 'Test stream result no newline',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      // Send without trailing newline — stays in remainder buffer
+      onLog?.('{"type":"result","is_error":false,"result":"done"}');
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await streamDispatcher.getTask('stream-result-no-newline');
+      expect(task?.status).toBe('completed');
+    });
+
+    it('normal flow: onComplete fires before monitor tick, task completes with real exit code', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-with-oncomplete',
+        workerType: 'auto',
+        prompt: 'Test stream result with onComplete',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      onLog?.('{"type":"result","is_error":false,"result":"done"}\n');
+      onComplete?.(0);
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await streamDispatcher.getTask('stream-result-with-oncomplete');
+      expect(task?.status).toBe('completed');
+    });
+
+    it('guard: onComplete fires first, then type:result arrives, real exit code is retained', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-oncomplete-first',
+        workerType: 'auto',
+        prompt: 'Test onComplete before type:result',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      // onComplete fires first with real exit code 0
+      onComplete?.(0);
+      // Then type:result arrives — should NOT overwrite exit code
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed"}\n');
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      // Task should complete (exit code 0 from onComplete wins, verifier passes)
+      const task = await streamDispatcher.getTask('stream-result-oncomplete-first');
+      expect(task?.status).toBe('completed');
+    });
+  });
+
   describe('completion loop behavior', () => {
     it('applies completion control maxAttempts to created tasks', async () => {
       const defaultControlDispatcher = new TaskDispatcher(
@@ -4912,6 +5086,163 @@ describe('TaskDispatcher', () => {
         expect(result.error.message).toBe('Task at max attempts');
       }
       expect(dispatcher.getRunningCount()).toBe(0);
+    });
+  });
+
+  describe('prompt truncation in task log', () => {
+    it('should truncate prompt longer than 500 characters in the log', async () => {
+      const longPrompt = 'A'.repeat(600);
+      const request: CreateTaskRequest = {
+        taskId: 'truncate-long-prompt',
+        workerType: 'auto',
+        prompt: longPrompt,
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const appendCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const promptLogCall = appendCalls.find(
+        ([id, msg]) =>
+          id === 'truncate-long-prompt' && typeof msg === 'string' && msg.includes('[prompt]')
+      );
+      expect(promptLogCall).toBeDefined();
+      const promptLogMessage = promptLogCall?.[1] ?? '';
+      // Should contain exactly 500 A's followed by ellipsis, NOT the full 600
+      expect(promptLogMessage).toContain('A'.repeat(500) + '\u2026');
+      expect(promptLogMessage).not.toContain('A'.repeat(501));
+    });
+
+    it('should use full prompt when 500 characters or shorter in the log', async () => {
+      const shortPrompt = 'B'.repeat(500);
+      const request: CreateTaskRequest = {
+        taskId: 'truncate-short-prompt',
+        workerType: 'auto',
+        prompt: shortPrompt,
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const appendCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const promptLogCall = appendCalls.find(
+        ([id, msg]) =>
+          id === 'truncate-short-prompt' && typeof msg === 'string' && msg.includes('[prompt]')
+      );
+      expect(promptLogCall).toBeDefined();
+      const promptLogMessage = promptLogCall?.[1] ?? '';
+      // Should contain the full 500-char prompt without ellipsis
+      expect(promptLogMessage).toContain(shortPrompt);
+      expect(promptLogMessage).not.toContain('\u2026');
+    });
+  });
+
+  describe('createWorker failure error logging', () => {
+    it('should log error with Error message when createWorker rejects with Error', async () => {
+      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
+        new Error('Docker daemon not responding')
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'worker-fail-error',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'worker-fail-error',
+          errorMessage: 'Docker daemon not responding',
+        }),
+        'Failed to create worker container'
+      );
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('should log error with stringified message when createWorker rejects with non-Error', async () => {
+      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce('raw string rejection');
+
+      const request: CreateTaskRequest = {
+        taskId: 'worker-fail-string',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'worker-fail-string',
+          errorMessage: 'raw string rejection',
+        }),
+        'Failed to create worker container'
+      );
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+  });
+
+  describe('clearTaskTimers', () => {
+    it('should handle clearing timers when no timers are registered for the task', async () => {
+      // Submit a task so it's in state, then cancel it (which calls clearTaskTimers internally)
+      const request: CreateTaskRequest = {
+        taskId: 'clear-timers-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      // Cancel calls clearTaskTimers internally — first cancel clears timers
+      const result1 = await dispatcher.cancelTask('clear-timers-test');
+      expect(result1.ok).toBe(true);
+
+      // Access the private activeTasks map to verify keys were removed
+      const internal = dispatcher as unknown as { activeTasks: Map<string, NodeJS.Timeout> };
+      expect(internal.activeTasks.has('clear-timers-test-warning')).toBe(false);
+      expect(internal.activeTasks.has('clear-timers-test-kill')).toBe(false);
+      expect(internal.activeTasks.has('clear-timers-test-monitor')).toBe(false);
+    });
+
+    it('should not throw when activeTasks.get returns undefined for timer keys', async () => {
+      // Directly call clearTaskTimers on a task that was never started (no timers registered)
+      const internal = dispatcher as unknown as {
+        clearTaskTimers: (taskId: string) => void;
+        activeTasks: Map<string, NodeJS.Timeout>;
+      };
+
+      // Ensure no timers exist for this task
+      expect(internal.activeTasks.has('nonexistent-task-warning')).toBe(false);
+      expect(internal.activeTasks.has('nonexistent-task-kill')).toBe(false);
+      expect(internal.activeTasks.has('nonexistent-task-monitor')).toBe(false);
+
+      // Should not throw
+      expect(() => {
+        internal.clearTaskTimers('nonexistent-task');
+      }).not.toThrow();
     });
   });
 });

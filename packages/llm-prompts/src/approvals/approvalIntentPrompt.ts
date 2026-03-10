@@ -103,7 +103,7 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
 
     const parsed = JSON.parse(jsonMatch[0]) as unknown;
 
-    /* v8 ignore start -- test-infra: block coverage @preserve */
+    /* v8 ignore start -- upstream: JSON.parse guaranteed to return object for {...} input, primitive branch unreachable @preserve */
     if (typeof parsed !== 'object' || parsed === null) {
       return null;
     }

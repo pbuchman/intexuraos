@@ -32,10 +32,10 @@ import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js'
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubPRHttpClient } from '../../infra/http/gitHubPRHttpClient.js';
-import { RepositoryScopeRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, BotReviewEditRule, createWebhookRulesService } from '../../domain/services/gitHubWebhookRules.js';
+import { CodeWorkerOutputRule, RepositoryScopeRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, BotReviewEditRule, createWebhookRulesService } from '../../domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService } from '../../domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from '../../domain/services/gitHubMessageBuilder.js';
-import { ALLOWED_BOTS } from '../../routes/webhooks/github.js';
+import { ALLOWED_BOTS, CODE_WORKER_BOTS } from '../../routes/webhooks/github.js';
 import { createFirestoreEventDecisionRepository } from '../../infra/firestore/eventDecisionRepository.js';
 import { createUnifiedEvaluator } from '../../domain/services/unifiedEvaluator.js';
 
@@ -121,6 +121,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
   });
 
   const webhookRules = createWebhookRulesService([
+    new CodeWorkerOutputRule(CODE_WORKER_BOTS),
     new RepositoryScopeRule(new Set(['intexuraos/*'])),
     new ActionableEventRule(ALLOWED_BOTS),
     new ProtectedBaseBranchRule(),

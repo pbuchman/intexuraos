@@ -8,9 +8,8 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 
-import type { Firestore } from '@google-cloud/firestore';
+import type { Firestore, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Result } from '@intexuraos/common-core';
@@ -71,172 +70,180 @@ export const createFirestoreCodeTaskRepository = (deps: {
   const collection = firestore.collection('code_tasks');
 
   return {
-    create: async (input: CreateTaskInput): Promise<Result<CodeTask, RepositoryError>> => {
+    create: async (input: CreateTaskInput, options?: { transaction?: FirebaseFirestore.Transaction }): Promise<Result<CodeTask, RepositoryError>> => {
       const taskId = input.id ?? `task_${randomUUID()}`;
       const dedupKey = generateDedupKey(input.userId, input.prompt, input.linearIssueId);
       const now = new Date();
       const dedupWindowStart = new Date(now.getTime() - DEDUP_WINDOW_MS);
 
+      const executeInTransaction = async (transaction: FirestoreTransaction): Promise<Result<CodeTask, RepositoryError>> => {
+        // Layer 0: Check approvalEventId (design lines 1532-1536)
+        if (input.approvalEventId !== undefined) {
+          const approvalQuery = collection
+            .where('approvalEventId', '==', input.approvalEventId)
+            .limit(1);
+          const approvalSnapshot = await transaction.get(approvalQuery);
+
+          if (!approvalSnapshot.empty) {
+            const existingTask = approvalSnapshot.docs[0]!;
+            logger.info({
+              dedupLayer: 0,
+              dedupType: 'DUPLICATE_APPROVAL',
+              existingTaskId: existingTask.id,
+              approvalEventId: input.approvalEventId,
+            }, 'Dedup triggered: duplicate approval event');
+            return err({
+              code: 'DUPLICATE_APPROVAL',
+              message: 'Duplicate approval event',
+              existingTaskId: existingTask.id,
+            } as const);
+          }
+        }
+
+        // Layer 1: Check actionId (design lines 1538-1541)
+        if (input.actionId !== undefined) {
+          const actionQuery = collection.where('actionId', '==', input.actionId).limit(1);
+          const actionSnapshot = await transaction.get(actionQuery);
+
+          if (!actionSnapshot.empty) {
+            const existingTask = actionSnapshot.docs[0]!;
+            logger.info({
+              dedupLayer: 1,
+              dedupType: 'DUPLICATE_ACTION',
+              existingTaskId: existingTask.id,
+              actionId: input.actionId,
+            }, 'Dedup triggered: duplicate action');
+            return err({
+              code: 'DUPLICATE_ACTION',
+              message: 'Duplicate action',
+              existingTaskId: existingTask.id,
+            } as const);
+          }
+        }
+
+        // Layer 2: Check dedupKey within 5-minute window (design lines 1543-1554)
+        // Skip dedup for retried tasks — same prompt is intentional
+        // Skip dedup for execution follow-up tasks — implementation reuses planning prompt by design
+        if (
+          input.retriedFrom === undefined &&
+          input.followUpReason !== 'execution_implement'
+        ) {
+          const dedupQuery = collection
+            .where('dedupKey', '==', dedupKey)
+            .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
+            .limit(1);
+          const dedupSnapshot = await transaction.get(dedupQuery);
+
+          if (!dedupSnapshot.empty) {
+            const existingTask = dedupSnapshot.docs[0]!;
+            logger.info({
+              dedupLayer: 2,
+              dedupType: 'DUPLICATE_PROMPT',
+              existingTaskId: existingTask.id,
+              dedupKey,
+            }, 'Dedup triggered: duplicate prompt within 5 minutes');
+            return err({
+              code: 'DUPLICATE_PROMPT',
+              message: 'Duplicate prompt within 5 minutes',
+              existingTaskId: existingTask.id,
+            } as const);
+          }
+        }
+
+        // Layer 3: Check active task for Linear issue (design lines 448-458)
+        if (input.linearIssueId !== undefined) {
+          const activeStatuses = ['queued', 'dispatched', 'running'] as const;
+          const linearQuery = collection
+            .where('linearIssueId', '==', input.linearIssueId)
+            .where('status', 'in', activeStatuses)
+            .limit(1);
+          const linearSnapshot = await transaction.get(linearQuery);
+
+          if (!linearSnapshot.empty) {
+            const existingTask = linearSnapshot.docs[0]!;
+            logger.info({
+              dedupLayer: 3,
+              dedupType: 'ACTIVE_TASK_EXISTS',
+              existingTaskId: existingTask.id,
+              linearIssueId: input.linearIssueId,
+            }, 'Dedup triggered: active task exists for Linear issue');
+            return err({
+              code: 'ACTIVE_TASK_EXISTS',
+              message: 'Active task exists for Linear issue',
+              existingTaskId: existingTask.id,
+            } as const);
+          }
+        }
+
+        // All checks passed - create the task
+        const taskTimestamp = Timestamp.fromDate(now);
+        const taskData: CodeTask = {
+          id: taskId,
+          userId: input.userId,
+          prompt: input.prompt,
+          sanitizedPrompt: input.sanitizedPrompt,
+          systemPromptHash: input.systemPromptHash,
+          workerType: input.workerType,
+          workerLocation: input.workerLocation,
+          repository: input.repository,
+          baseBranch: input.baseBranch,
+          traceId: input.traceId,
+          status: input.initialStatus ?? 'queued',
+          dedupKey,
+          callbackReceived: false,
+          createdAt: taskTimestamp,
+          updatedAt: taskTimestamp,
+        };
+
+        // Add optional fields only if defined
+        if (input.actionId !== undefined) {
+          taskData.actionId = input.actionId;
+        }
+        if (input.approvalEventId !== undefined) {
+          taskData.approvalEventId = input.approvalEventId;
+        }
+        if (input.linearIssueId !== undefined) {
+          taskData.linearIssueId = input.linearIssueId;
+        }
+        if (input.webhookSecret !== undefined) {
+          taskData.webhookSecret = input.webhookSecret;
+        }
+        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
+        if (input.retriedFrom !== undefined) {
+          taskData.retriedFrom = input.retriedFrom;
+        }
+        if (input.prNumber !== undefined) {
+          taskData.prNumber = input.prNumber;
+        }
+        if (input.prBranch !== undefined) {
+          taskData.prBranch = input.prBranch;
+        }
+        if (input.parentTaskId !== undefined) {
+          taskData.parentTaskId = input.parentTaskId;
+        }
+        if (input.followUpReason !== undefined) {
+          taskData.followUpReason = input.followUpReason;
+        }
+        if (input.agentType !== undefined) {
+          taskData.agentType = input.agentType;
+        }
+        /* v8 ignore stop @preserve */
+
+        const docRef = collection.doc(taskId);
+        transaction.set(docRef, taskData);
+
+        return ok(taskData);
+      };
+
       try {
-        // Use transaction for atomic deduplication (design lines 1558-1563)
-         
-        const result = await firestore.runTransaction(async (transaction: any) => {
-          // Layer 0: Check approvalEventId (design lines 1532-1536)
-          if (input.approvalEventId !== undefined) {
-            const approvalQuery = collection
-              .where('approvalEventId', '==', input.approvalEventId)
-              .limit(1);
-            const approvalSnapshot = await transaction.get(approvalQuery);
+        // If a transaction is provided (e.g., from createTaskForPR's outer transaction),
+        // reuse it to avoid nested transactions. Otherwise, create our own.
+        if (options?.transaction !== undefined) {
+          return await executeInTransaction(options.transaction);
+        }
 
-            if (!approvalSnapshot.empty) {
-              const existingTask = approvalSnapshot.docs[0]!;
-              logger.info({
-                dedupLayer: 0,
-                dedupType: 'DUPLICATE_APPROVAL',
-                existingTaskId: existingTask.id,
-                approvalEventId: input.approvalEventId,
-              }, 'Dedup triggered: duplicate approval event');
-              return err({
-                code: 'DUPLICATE_APPROVAL',
-                message: 'Duplicate approval event',
-                existingTaskId: existingTask.id,
-              } as const);
-            }
-          }
-
-          // Layer 1: Check actionId (design lines 1538-1541)
-          if (input.actionId !== undefined) {
-            const actionQuery = collection.where('actionId', '==', input.actionId).limit(1);
-            const actionSnapshot = await transaction.get(actionQuery);
-
-            if (!actionSnapshot.empty) {
-              const existingTask = actionSnapshot.docs[0]!;
-              logger.info({
-                dedupLayer: 1,
-                dedupType: 'DUPLICATE_ACTION',
-                existingTaskId: existingTask.id,
-                actionId: input.actionId,
-              }, 'Dedup triggered: duplicate action');
-              return err({
-                code: 'DUPLICATE_ACTION',
-                message: 'Duplicate action',
-                existingTaskId: existingTask.id,
-              } as const);
-            }
-          }
-
-          // Layer 2: Check dedupKey within 5-minute window (design lines 1543-1554)
-          // Skip dedup for retried tasks — same prompt is intentional
-          // Skip dedup for execution follow-up tasks — implementation reuses planning prompt by design
-          if (
-            input.retriedFrom === undefined &&
-            input.followUpReason !== 'execution_implement'
-          ) {
-            const dedupQuery = collection
-              .where('dedupKey', '==', dedupKey)
-              .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
-              .limit(1);
-            const dedupSnapshot = await transaction.get(dedupQuery);
-
-            if (!dedupSnapshot.empty) {
-              const existingTask = dedupSnapshot.docs[0]!;
-              logger.info({
-                dedupLayer: 2,
-                dedupType: 'DUPLICATE_PROMPT',
-                existingTaskId: existingTask.id,
-                dedupKey,
-              }, 'Dedup triggered: duplicate prompt within 5 minutes');
-              return err({
-                code: 'DUPLICATE_PROMPT',
-                message: 'Duplicate prompt within 5 minutes',
-                existingTaskId: existingTask.id,
-              } as const);
-            }
-          }
-
-          // Layer 3: Check active task for Linear issue (design lines 448-458)
-          if (input.linearIssueId !== undefined) {
-            const activeStatuses = ['queued', 'dispatched', 'running'] as const;
-            const linearQuery = collection
-              .where('linearIssueId', '==', input.linearIssueId)
-              .where('status', 'in', activeStatuses)
-              .limit(1);
-            const linearSnapshot = await transaction.get(linearQuery);
-
-            if (!linearSnapshot.empty) {
-              const existingTask = linearSnapshot.docs[0]!;
-              logger.info({
-                dedupLayer: 3,
-                dedupType: 'ACTIVE_TASK_EXISTS',
-                existingTaskId: existingTask.id,
-                linearIssueId: input.linearIssueId,
-              }, 'Dedup triggered: active task exists for Linear issue');
-              return err({
-                code: 'ACTIVE_TASK_EXISTS',
-                message: 'Active task exists for Linear issue',
-                existingTaskId: existingTask.id,
-              } as const);
-            }
-          }
-
-          // All checks passed - create the task
-          const taskTimestamp = Timestamp.fromDate(now);
-          const taskData: CodeTask = {
-            id: taskId,
-            userId: input.userId,
-            prompt: input.prompt,
-            sanitizedPrompt: input.sanitizedPrompt,
-            systemPromptHash: input.systemPromptHash,
-            workerType: input.workerType,
-            workerLocation: input.workerLocation,
-            repository: input.repository,
-            baseBranch: input.baseBranch,
-            traceId: input.traceId,
-            status: input.initialStatus ?? 'queued',
-            dedupKey,
-            callbackReceived: false,
-            createdAt: taskTimestamp,
-            updatedAt: taskTimestamp,
-          };
-
-          // Add optional fields only if defined
-          if (input.actionId !== undefined) {
-            taskData.actionId = input.actionId;
-          }
-          if (input.approvalEventId !== undefined) {
-            taskData.approvalEventId = input.approvalEventId;
-          }
-          if (input.linearIssueId !== undefined) {
-            taskData.linearIssueId = input.linearIssueId;
-          }
-          if (input.webhookSecret !== undefined) {
-            taskData.webhookSecret = input.webhookSecret;
-          }
-          /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-          if (input.retriedFrom !== undefined) {
-            taskData.retriedFrom = input.retriedFrom;
-          }
-          if (input.prNumber !== undefined) {
-            taskData.prNumber = input.prNumber;
-          }
-          if (input.prBranch !== undefined) {
-            taskData.prBranch = input.prBranch;
-          }
-          if (input.parentTaskId !== undefined) {
-            taskData.parentTaskId = input.parentTaskId;
-          }
-          if (input.followUpReason !== undefined) {
-            taskData.followUpReason = input.followUpReason;
-          }
-          if (input.agentType !== undefined) {
-            taskData.agentType = input.agentType;
-          }
-          /* v8 ignore stop @preserve */
-
-          const docRef = collection.doc(taskId);
-          transaction.set(docRef, taskData);
-
-          return ok(taskData);
+        const result = await firestore.runTransaction(async (transaction: FirestoreTransaction) => {
+          return executeInTransaction(transaction);
         });
 
         return result;
