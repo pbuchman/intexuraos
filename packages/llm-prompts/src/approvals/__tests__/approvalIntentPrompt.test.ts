@@ -94,7 +94,7 @@ describe('approvalIntentPrompt', () => {
 
   it('has PromptBuilder metadata', () => {
     expect(approvalIntentPrompt.name).toBe('approval-intent');
-    expect(approvalIntentPrompt.version).toBe('1.2.0');
+    expect(approvalIntentPrompt.version).toBe('1.2.1');
     expect(approvalIntentPrompt.description).toBeTruthy();
   });
 

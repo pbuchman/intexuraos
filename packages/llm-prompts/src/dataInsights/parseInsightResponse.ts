@@ -131,9 +131,7 @@ function parseNoInsightsLine(line: string, lineNumber: number): string {
     );
   }
 
-  const reason = match[1].trim();
-
-  return reason;
+  return match[1].trim();
 }
 
 /**
