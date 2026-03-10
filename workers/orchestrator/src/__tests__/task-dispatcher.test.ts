@@ -3489,21 +3489,25 @@ describe('TaskDispatcher', () => {
         claimVerification: [{ claim: 'CI', verdict: 'verified', evidence: 'MSG-001' }],
         contractVerification: [],
         planVsReality: { planFound: false, requirements: [] },
-        anomalies: [{ type: 'laziness', severity: 'warning', evidence: 'MSG-002', detail: 'skipped' }],
+        anomalies: [
+          { type: 'laziness', severity: 'warning', evidence: 'MSG-002', detail: 'skipped' },
+        ],
       };
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockImplementation(
-          async (
-            _input: import('../services/execution-deep-validator.js').DeepValidationInput,
-            onProgress?: (message: string) => void
-          ) => {
-            onProgress?.('calling Gemini for analysis...');
-            onProgress?.('validation response received');
-            onProgress?.('posting PR comment...');
-            onProgress?.('PR comment posted');
-            return mockResult;
-          }
-        ),
+        validate: vi
+          .fn()
+          .mockImplementation(
+            async (
+              _input: import('../services/execution-deep-validator.js').DeepValidationInput,
+              onProgress?: (message: string) => void
+            ) => {
+              onProgress?.('calling Gemini for analysis...');
+              onProgress?.('validation response received');
+              onProgress?.('posting PR comment...');
+              onProgress?.('PR comment posted');
+              return mockResult;
+            }
+          ),
       };
 
       const deepValDispatcher = new TaskDispatcher(
@@ -3544,8 +3548,9 @@ describe('TaskDispatcher', () => {
 
       expect(mockValidator.validate).toHaveBeenCalledWith(testInput, expect.any(Function));
       // Progress messages should flow through appendChunk
-      const appendCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls
-        .filter((c) => c[0] === 'deep-val-test')
+      const appendCalls = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter((c) => c[0] === 'deep-val-test')
         .map((c) => c[1]);
       expect(appendCalls.some((c) => c.includes('Deep validation starting'))).toBe(true);
       expect(appendCalls.some((c) => c.includes('calling Gemini for analysis...'))).toBe(true);
@@ -3597,8 +3602,9 @@ describe('TaskDispatcher', () => {
 
       await internal.executeDeepValidation('undef-val-test', testInput);
 
-      const appendCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls
-        .filter((c) => c[0] === 'undef-val-test')
+      const appendCalls = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter((c) => c[0] === 'undef-val-test')
         .map((c) => c[1]);
       expect(appendCalls.some((c) => c.includes('Deep validation starting'))).toBe(true);
       expect(appendCalls.some((c) => c.includes('claims'))).toBe(false);
@@ -3832,8 +3838,9 @@ describe('TaskDispatcher', () => {
         'Deep validation failed (non-fatal, task finalization continues)'
       );
       // Error should also flow through appendChunk for visibility in web app
-      const appendCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls
-        .filter((c) => c[0] === 'error-val-test')
+      const appendCalls = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter((c) => c[0] === 'error-val-test')
         .map((c) => c[1]);
       expect(appendCalls.some((c) => c.includes('Deep validation error: LLM timeout'))).toBe(true);
     });
