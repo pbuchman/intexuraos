@@ -115,6 +115,14 @@ function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Elem
     );
   }
 
+  // Review step
+  if (pipeline.review !== null) {
+    if (steps.length > 0) {
+      steps.push(<PipelineConnector key="conn-review" />);
+    }
+    steps.push(<PipelineStep key="review" name="Review" state={pipeline.review} />);
+  }
+
   // PR step
   if (pipeline.pr !== null) {
     if (steps.length > 0) {
@@ -265,7 +273,9 @@ const IssueGroupRow = memo(function IssueGroupRow({
                 Retry
               </button>
             ) : aggregateStatus === 'active' ? (
-              <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+              <span className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
+                <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+              </span>
             ) : null}
             <button
               onClick={(e): void => {
@@ -322,7 +332,9 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   Implement
                 </button>
               ) : aggregateStatus === 'active' ? (
-                <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                <span className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+                </span>
               ) : null}
               <button
                 onClick={(e): void => {
@@ -396,6 +408,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.group.tasks.length === next.group.tasks.length &&
   prev.group.pipeline.planning === next.group.pipeline.planning &&
   prev.group.pipeline.execution === next.group.pipeline.execution &&
+  prev.group.pipeline.review === next.group.pipeline.review &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
   prev.onAction === next.onAction,
