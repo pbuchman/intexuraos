@@ -362,7 +362,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.logChunksDropped !== undefined) {
           updateData['logChunksDropped'] = input.logChunksDropped;
         }
-        /* v8 ignore stop @preserve */
         /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (input.lastHeartbeat !== undefined) {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
