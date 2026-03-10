@@ -61,6 +61,16 @@ const getStatusDisplay = (worker: WorkerStatus): {
   };
 };
 
+/**
+ * Get the Tailwind dot-color class for the aggregate worker health indicator.
+ */
+const getWorkersDotColor = (workers: WorkerStatus[]): string =>
+  workers.length === 0
+    ? 'bg-gray-400'
+    : workers.some((w) => w.healthy)
+      ? 'bg-green-500'
+      : 'bg-red-500';
+
 export function Header(): React.JSX.Element {
   const { user, logout, isAuthenticated } = useAuth();
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
@@ -155,7 +165,7 @@ export function Header(): React.JSX.Element {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
-        {/* Worker Status Indicator - only shown in non-PWA mode */}
+        {/* Worker Status Indicator - desktop only, non-PWA mode */}
         {isAuthenticated && workersStatus !== null && !isInstalled && (
           <div className="relative hidden md:block" data-testid="workers-status-header" ref={workersRef}>
             <button
@@ -167,13 +177,7 @@ export function Header(): React.JSX.Element {
             >
               <Server className="h-4 w-4 text-slate-500" />
               <span
-                className={`h-2 w-2 rounded-full ${
-                  workersStatus.workers.length === 0
-                    ? 'bg-gray-400'
-                    : workersStatus.workers.some((w) => w.healthy)
-                      ? 'bg-green-500'
-                      : 'bg-red-500'
-                }`}
+                className={`h-2 w-2 rounded-full ${getWorkersDotColor(workersStatus.workers)}`}
               />
             </button>
 
@@ -185,6 +189,7 @@ export function Header(): React.JSX.Element {
                   </div>
                   {workersStatus.workers.length > 0 && (
                     <button
+                      // Prevent mousedown from reaching the document-level outside-click handler
                       onMouseDown={(e): void => {
                         e.stopPropagation();
                       }}
@@ -312,9 +317,7 @@ export function Header(): React.JSX.Element {
               )}
               {workersStatus !== null && !isInstalled && (
                 <span
-                  className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white md:hidden dark:border-slate-800 ${
-                    workersStatus.workers.some((w) => w.healthy) ? 'bg-green-500' : 'bg-red-500'
-                  }`}
+                  className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white md:hidden dark:border-slate-800 ${getWorkersDotColor(workersStatus.workers)}`}
                 />
               )}
             </span>
@@ -342,13 +345,7 @@ export function Header(): React.JSX.Element {
                     <Server className="h-4 w-4 text-slate-500" />
                     <span>Workers</span>
                     <span
-                      className={`ml-auto h-2 w-2 rounded-full ${
-                        workersStatus.workers.length === 0
-                          ? 'bg-gray-400'
-                          : workersStatus.workers.some((w) => w.healthy)
-                            ? 'bg-green-500'
-                            : 'bg-red-500'
-                      }`}
+                      className={`ml-auto h-2 w-2 rounded-full ${getWorkersDotColor(workersStatus.workers)}`}
                     />
                   </button>
 
@@ -360,6 +357,7 @@ export function Header(): React.JSX.Element {
                         </div>
                         {workersStatus.workers.length > 0 && (
                           <button
+                            // Prevent mousedown from reaching the document-level outside-click handler
                             onMouseDown={(e): void => {
                               e.stopPropagation();
                             }}
