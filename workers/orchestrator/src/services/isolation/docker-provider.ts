@@ -129,11 +129,9 @@ export class DockerProvider implements IsolationProvider {
     ];
 
     for (const candidate of candidates) {
-      /* v8 ignore start -- test-infra: profile path resolution branches vary by cwd/runtime packaging @preserve */
       if (fs.existsSync(candidate)) {
         return candidate;
       }
-      /* v8 ignore stop @preserve */
     }
 
     this.logger.warn(
@@ -145,17 +143,14 @@ export class DockerProvider implements IsolationProvider {
 
   private resolveForensicsSeccompSecurityOpt(): string | null {
     const profilePath = this.resolveForensicsSeccompProfilePath();
-    /* v8 ignore start -- test-infra: profile may be absent in runtime packaging variants, fallback intentionally uses default seccomp @preserve */
     if (profilePath === null) {
       return null;
     }
-    /* v8 ignore stop @preserve */
 
     try {
       const profileRaw = fs.readFileSync(profilePath, 'utf-8');
       const profileJson: unknown = JSON.parse(profileRaw);
       return `seccomp=${JSON.stringify(profileJson)}`;
-      /* v8 ignore start -- test-infra: invalid/missing seccomp profile requires filesystem fault injection @preserve */
     } catch (error) {
       this.logger.warn(
         { profilePath, error },
@@ -163,7 +158,6 @@ export class DockerProvider implements IsolationProvider {
       );
       return null;
     }
-    /* v8 ignore stop @preserve */
   }
 
   private async writeJsonArtifact(filePath: string, value: unknown): Promise<void> {
@@ -402,11 +396,9 @@ export class DockerProvider implements IsolationProvider {
 
     const existingWorker = this.workers.get(taskId);
     if (existingWorker !== undefined) {
-      /* v8 ignore start -- test-infra: orchestrator only re-enters createWorker with continueSession=true for existing workers @preserve */
       if (config.continueSession !== true) {
         throw new Error(`Worker already exists for task ${taskId}`);
       }
-      /* v8 ignore stop @preserve */
 
       await this.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
       this.ensureTaskForensicsPath(taskId);

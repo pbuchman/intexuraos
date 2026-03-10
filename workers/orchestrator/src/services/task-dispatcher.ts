@@ -309,7 +309,6 @@ export class TaskDispatcher {
         /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
         if (this.runningCount > 0) this.runningCount--;
         /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: ternary type narrowing for error message extraction @preserve */
         this.logger.error(
           {
             taskId,
@@ -321,7 +320,6 @@ export class TaskDispatcher {
           },
           'Failed to create worker container'
         );
-        /* v8 ignore stop @preserve */
         this.isolation.tokenRefresher.unregisterTask(taskId);
         this.logForwarder.unregisterTask(taskId);
         await this.isolation.provider.cleanupTaskSession?.(taskId);
@@ -356,10 +354,8 @@ export class TaskDispatcher {
           `Linear issue: ${task.linearIssueId}${task.linearIssueTitle !== undefined ? ` — ${task.linearIssueTitle}` : ''}`
         );
       }
-      /* v8 ignore start -- test-infra: short prompts don't hit truncation branch in integration tests @preserve */
       const promptPreview =
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
-      /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
       const isPRComment = task.linearIssueLabels.some(
         (l) => l.trim().toLowerCase() === 'pr-comment'
@@ -1951,9 +1947,7 @@ export class TaskDispatcher {
   private clearTaskTimers(taskId: string): void {
     const keys = [`${taskId}-warning`, `${taskId}-kill`, `${taskId}-monitor`];
     for (const key of keys) {
-      /* v8 ignore start -- test-infra: timer is always set before clearTaskTimers is called, else branch unreachable @preserve */
       const timer = this.activeTasks.get(key);
-      /* v8 ignore stop @preserve */
       if (timer !== undefined) {
         clearTimeout(timer);
         clearInterval(timer);
