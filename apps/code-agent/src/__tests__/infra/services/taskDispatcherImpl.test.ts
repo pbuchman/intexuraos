@@ -5,62 +5,13 @@
  * non-OK responses in sendMessageToWorker, and non-OK responses in cancelOnWorker.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
 import type { TaskDispatcherDeps } from '../../../domain/services/taskDispatcher.js';
-import type { WorkerHealthProbe } from '../../../domain/ports/workerHealthProbe.js';
 import type { Logger } from '@intexuraos/common-core';
 
 const WORKER_URL = 'https://test-worker.example.com';
-
-function createFakeLogger(): Logger {
-  const noop = (): void => {
-    /* no-op logger for tests */
-  };
-  return {
-    info: noop,
-    warn: noop,
-    error: noop,
-    debug: noop,
-    child: () => createFakeLogger(),
-    fatal: noop,
-    trace: noop,
-    silent: noop,
-    level: 'silent',
-  } as unknown as Logger;
-}
-
-function createFakeHealthProbe(): WorkerHealthProbe {
-  return {
-    probeWorker: async () => ({
-      _tag: 'healthy' as const,
-      healthy: true as const,
-      capacity: 2,
-      running: 0,
-      available: 2,
-      responseTimeMs: 50,
-    }),
-    probeAllWorkers: async () => ({
-      'test-worker': {
-        _tag: 'healthy' as const,
-        healthy: true as const,
-        capacity: 2,
-        running: 0,
-        available: 2,
-        responseTimeMs: 50,
-      },
-    }),
-  };
-}
-
-function createDeps(overrides?: Partial<TaskDispatcherDeps>): TaskDispatcherDeps {
-  return {
-    logger: createFakeLogger(),
-    workerHealthProbe: createFakeHealthProbe(),
-    ...overrides,
-  };
-}
 
 const workerCredentials = {
   url: WORKER_URL,
@@ -70,8 +21,26 @@ const workerCredentials = {
 };
 
 describe('taskDispatcherImpl', () => {
+  let logger: Logger;
+  let deps: TaskDispatcherDeps;
+
   beforeEach(() => {
     nock.cleanAll();
+
+    logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    } as unknown as Logger;
+
+    deps = {
+      logger,
+      workerHealthProbe: {
+        probeWorker: vi.fn(),
+        probeAllWorkers: vi.fn(),
+      },
+    };
   });
 
   afterEach(() => {
@@ -80,9 +49,8 @@ describe('taskDispatcherImpl', () => {
 
   describe('extractErrorMessage (via sendMessageToWorker non-OK response)', () => {
     it('extracts error from JSON response body', async () => {
-      const service = createTaskDispatcherService(createDeps());
+      const service = createTaskDispatcherService(deps);
 
-      // Mock the message endpoint to return a non-OK response with JSON error body
       nock(WORKER_URL)
         .post('/tasks/task-123/message')
         .reply(400, { error: 'Invalid task state' });
@@ -102,7 +70,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('uses plain text when response body is not JSON', async () => {
-      const service = createTaskDispatcherService(createDeps());
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .post('/tasks/task-456/message')
@@ -122,8 +90,8 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
-    it('uses plain text when JSON lacks error field', async () => {
-      const service = createTaskDispatcherService(createDeps());
+    it('uses raw text when JSON has no error field', async () => {
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .post('/tasks/task-789/message')
@@ -138,7 +106,7 @@ describe('taskDispatcherImpl', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('worker_error');
-        // Should contain the raw JSON string since parsed.error is not a string
+        // parsed.error is undefined (key absent), so extractErrorMessage falls through to raw text
         expect(result.error.message).toContain('422');
       }
     });
@@ -146,7 +114,7 @@ describe('taskDispatcherImpl', () => {
 
   describe('sendMessageToWorker HMAC signing failure', () => {
     it('returns signing_failed when dispatchSigningSecret is empty', async () => {
-      const service = createTaskDispatcherService(createDeps());
+      const service = createTaskDispatcherService(deps);
 
       const result = await service.sendMessageToWorker(
         'task-signing-fail',
@@ -167,7 +135,7 @@ describe('taskDispatcherImpl', () => {
 
   describe('sendMessageToWorker success path', () => {
     it('returns action data when worker responds with OK status', async () => {
-      const service = createTaskDispatcherService(createDeps());
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .post('/tasks/task-success/message')
@@ -188,7 +156,7 @@ describe('taskDispatcherImpl', () => {
 
   describe('sendMessageToWorker non-OK response handling', () => {
     it('returns worker_unavailable for retryable infrastructure status 503', async () => {
-      const service = createTaskDispatcherService(createDeps());
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .post('/tasks/task-503/message')
@@ -208,7 +176,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('returns worker_unavailable for retryable infrastructure status 502', async () => {
-      const service = createTaskDispatcherService(createDeps());
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .post('/tasks/task-502/message')
@@ -228,7 +196,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('returns worker_unavailable for Cloudflare status 520', async () => {
-      const service = createTaskDispatcherService(createDeps());
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .post('/tasks/task-520/message')
@@ -248,7 +216,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('returns worker_error for non-retryable status 400', async () => {
-      const service = createTaskDispatcherService(createDeps());
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .post('/tasks/task-400/message')
@@ -271,13 +239,7 @@ describe('taskDispatcherImpl', () => {
 
   describe('cancelOnWorker success path', () => {
     it('completes successfully when worker returns OK status', async () => {
-      const infoCalls: unknown[] = [];
-      const logger = createFakeLogger();
-      logger.info = ((...args: unknown[]) => {
-        infoCalls.push(args);
-      }) as unknown as Logger['info'];
-
-      const service = createTaskDispatcherService(createDeps({ logger }));
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .delete('/tasks/task-cancel-ok')
@@ -293,23 +255,16 @@ describe('taskDispatcherImpl', () => {
         }
       );
 
-      const successLog = infoCalls.find((call) => {
-        const args = call as unknown[];
-        return typeof args[1] === 'string' && args[1].includes('cancellation request successful');
-      });
-      expect(successLog).toBeDefined();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-cancel-ok', location: 'test-worker' }),
+        'Worker cancellation request successful'
+      );
     });
   });
 
   describe('cancelOnWorker non-OK response', () => {
     it('logs warning and returns when worker returns non-OK status', async () => {
-      const warnCalls: unknown[] = [];
-      const logger = createFakeLogger();
-      logger.warn = ((...args: unknown[]) => {
-        warnCalls.push(args);
-      }) as unknown as Logger['warn'];
-
-      const service = createTaskDispatcherService(createDeps({ logger }));
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .delete('/tasks/task-cancel-fail')
@@ -325,28 +280,19 @@ describe('taskDispatcherImpl', () => {
         }
       );
 
-      // Should have logged a warning about the failed cancellation
-      const cancellationWarning = warnCalls.find((call) => {
-        const args = call as unknown[];
-        return typeof args[1] === 'string' && args[1].includes('cancellation request failed');
-      });
-      expect(cancellationWarning).toBeDefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-cancel-fail', location: 'test-worker', status: 500 }),
+        'Worker cancellation request failed'
+      );
     });
 
     it('completes without throwing when worker returns 404', async () => {
-      const warnCalls: unknown[] = [];
-      const logger = createFakeLogger();
-      logger.warn = ((...args: unknown[]) => {
-        warnCalls.push(args);
-      }) as unknown as Logger['warn'];
-
-      const service = createTaskDispatcherService(createDeps({ logger }));
+      const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .delete('/tasks/task-not-found')
         .reply(404, 'Not Found');
 
-      // Should not throw
       await service.cancelOnWorker(
         'task-not-found',
         'test-worker',
@@ -357,12 +303,10 @@ describe('taskDispatcherImpl', () => {
         }
       );
 
-      // Should have logged a warning
-      const cancellationWarning = warnCalls.find((call) => {
-        const args = call as unknown[];
-        return typeof args[1] === 'string' && args[1].includes('cancellation request failed');
-      });
-      expect(cancellationWarning).toBeDefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-not-found', location: 'test-worker', status: 404 }),
+        'Worker cancellation request failed'
+      );
     });
   });
 });
