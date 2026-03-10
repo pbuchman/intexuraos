@@ -2380,46 +2380,6 @@ describe('HandleApprovalReplyUseCase', () => {
     });
   });
 
-  describe('view-task button (INT-379)', () => {
-    it('sends task URL message on view-task button', async () => {
-      const result = await useCase({
-        replyToWamid: 'wamid-123',
-        replyText: '',
-        userId: 'user-1',
-        buttonId: 'view-task:task-abc',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.matched).toBe(true);
-      }
-
-      const messages = whatsappPublisher.getSentMessages();
-      expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/code-tasks/task-abc');
-    });
-  });
-
-  describe('view-task button edge cases', () => {
-    it('should handle empty taskId in view-task button', async () => {
-      const result = await useCase({
-        replyToWamid: 'wamid-123',
-        replyText: '',
-        userId: 'user-1',
-        buttonId: 'view-task:',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.matched).toBe(true);
-      }
-
-      const messages = whatsappPublisher.getSentMessages();
-      expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/code-tasks/');
-    });
-  });
-
   describe('cancel-task button edge cases', () => {
     it('should handle when nonce parsing results in undefined', async () => {
       const { FakeCodeAgentClient } = await import('../fakes.js');
@@ -2501,23 +2461,6 @@ describe('HandleApprovalReplyUseCase', () => {
       }
     });
 
-    it('should handle view-task button with empty taskId', async () => {
-      const result = await useCase({
-        replyToWamid: 'wamid-123',
-        replyText: '',
-        userId: 'user-1',
-        buttonId: 'view-task:',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.matched).toBe(true);
-      }
-
-      const messages = whatsappPublisher.getSentMessages();
-      expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/code-tasks/');
-    });
   });
 
   describe('handleButtonResponse - action null edge case', () => {

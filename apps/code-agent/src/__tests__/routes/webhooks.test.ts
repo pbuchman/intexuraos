@@ -4813,7 +4813,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('completed');
+    expect(params?.message).toContain('✅');
   });
 
   it('sends WhatsApp notification on task completion', async () => {
@@ -4865,7 +4865,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string; ctaUrl?: { displayText: string; url: string } } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('completed');
+    expect(params?.message).toContain('✅');
     expect(params?.message).toContain('fix/login-bug');
     expect(params?.message).not.toContain('PR:');
     expect(params?.ctaUrl).toEqual({
@@ -4922,7 +4922,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('failed');
+    expect(params?.message).toContain('❌');
   });
 
   it('sends WhatsApp notification on interrupted status', async () => {
@@ -4968,7 +4968,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('failed');
+    expect(params?.message).toContain('❌');
     expect(params?.message).toContain('interrupted');
   });
 
@@ -5072,7 +5072,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const params = publishCall?.[0] as { userId: string; message: string };
     expect(params.userId).toBe('user-123');
     expect(params.message).toContain('🔁');
-    expect(params.message).toContain('Session continued');
     expect(params.message).not.toContain('✅');
   });
 
