@@ -220,7 +220,28 @@ describe('Error utilities', () => {
       expect(result.code).toBeUndefined();
     });
 
-    it('truncates long stack traces', () => {
+    it('omits stack when error.stack is undefined', () => {
+      const error = new Error('No stack');
+      Object.defineProperty(error, 'stack', { value: undefined });
+      const result = serializeError(error);
+
+      expect(result.stack).toBeUndefined();
+      expect(result.message).toBe('No stack');
+      expect(result.name).toBe('Error');
+    });
+
+    it('truncates stack traces longer than 2000 characters', () => {
+      const error = new Error('Test error');
+      const longStack = 'x'.repeat(3000);
+      Object.defineProperty(error, 'stack', { value: longStack });
+      const result = serializeError(error);
+
+      expect(result.stack).toBeDefined();
+      expect(result.stack?.length).toBe(2000);
+      expect(result.stack).toBe(longStack.substring(0, 2000));
+    });
+
+    it('preserves stack traces shorter than 2000 characters', () => {
       const error = new Error('Test error');
       const result = serializeError(error);
 
