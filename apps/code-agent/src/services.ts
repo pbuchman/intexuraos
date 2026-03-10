@@ -375,6 +375,29 @@ export function initServices(config: ServiceConfig): void {
       { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl },
       request,
     ),
+    postTriageComment: async (senderLogin, repository, prNumber, body) => {
+      const userResult = await userServiceClient.resolveGitHubUsername(senderLogin);
+      if (!userResult.ok) {
+        return { ok: false, error: { code: 'USER_NOT_FOUND', message: `Failed to resolve user: ${senderLogin}` } };
+      }
+      const resolvedUser = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
+      if (resolvedUser === null) {
+        return { ok: false, error: { code: 'USER_NOT_FOUND', message: `No linked account for: ${senderLogin}` } };
+      }
+      const tokenResult = await userServiceClient.getOAuthToken(resolvedUser.userId, 'github');
+      if (!tokenResult.ok) {
+        return { ok: false, error: { code: 'TOKEN_NOT_AVAILABLE', message: `OAuth token unavailable for: ${resolvedUser.userId}` } };
+      }
+      const [owner, repo] = repository.split('/');
+      if (owner === undefined || repo === undefined) {
+        return { ok: false, error: { code: 'INVALID_REPO', message: `Invalid repository: ${repository}` } };
+      }
+      const commentResult = await gitHubPRClient.postPRComment(tokenResult.value.accessToken, owner, repo, prNumber, body); // @allow-result-access -- narrowed by !tokenResult.ok
+      if (!commentResult.ok) {
+        return { ok: false, error: { code: commentResult.error.code, message: commentResult.error.message } };
+      }
+      return { ok: true, value: { commentId: commentResult.value.commentId } }; // @allow-result-access -- narrowed by !commentResult.ok
+    },
     allowedBots: ALLOWED_BOTS,
   });
 
