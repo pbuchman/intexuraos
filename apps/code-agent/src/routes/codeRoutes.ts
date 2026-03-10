@@ -1415,8 +1415,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (!dispatchResult.ok) {
         request.log.error({ error: dispatchResult.error, taskId: task.id }, 'Failed to dispatch code task');
 
-        // Update task with error
+        // Update task with error and failed status
         await codeTaskRepo.update(task.id, {
+          status: 'failed',
           error: {
             code: dispatchResult.error.code,
             message: dispatchResult.error.message,
@@ -1429,6 +1430,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Save the actual worker location returned by the dispatcher
       const actualWorkerLocation = dispatchResult.value.workerLocation;
       await codeTaskRepo.update(task.id, {
+        status: 'dispatched',
         workerLocation: actualWorkerLocation,
         dispatchedAt: new Date(),
       });

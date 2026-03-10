@@ -385,9 +385,9 @@ export async function submitToExecutionAgent(
         logger.error({ error: countResult.error }, 'Failed to count queued tasks, treating as queue full');
       }
 
-      const queuedCount = countResult.ok ? countResult.value : config.queue.maxSize;
+      const queuedCount = countResult.ok ? countResult.value : config.queue.maxSize + 1;
 
-      if (queuedCount >= config.queue.maxSize) {
+      if (queuedCount > config.queue.maxSize) {
         // Queue is full — rollback and fail
         logger.warn(
           { taskId: executionTaskId, queuedCount, maxSize: config.queue.maxSize },
@@ -426,8 +426,8 @@ export async function submitToExecutionAgent(
         });
       }
 
-      // Queue has room — enqueue the task (do NOT rollback)
-      const position = queuedCount + 1;
+      // Queue has room — task is already in 'queued' status from creation
+      const position = queuedCount;
       const estimatedWaitMinutes = position * 5;
 
       logger.info(
@@ -435,21 +435,7 @@ export async function submitToExecutionAgent(
         'Enqueueing execution task — workers at capacity'
       );
 
-      const queueResult = await codeTaskRepo.update(executionTaskId, {
-        status: 'queued',
-        queuedAt: new Date(),
-      });
-
-      /* v8 ignore start -- upstream: Firestore write failure within queue path @preserve */
-      if (!queueResult.ok) {
-        logger.error(
-          { executionTaskId, error: queueResult.error },
-          'Failed to update execution task to queued status'
-        );
-      }
-      /* v8 ignore stop @preserve */
-
-      const queuedTask = queueResult.ok ? queueResult.value : executionTask;
+      const queuedTask = executionTask;
 
       // Best-effort WhatsApp notification
       const notifyResult = await whatsappNotifier.notifyTaskQueued(userId, queuedTask, position, estimatedWaitMinutes);
@@ -515,6 +501,7 @@ export async function submitToExecutionAgent(
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(executionTaskId, {
+    status: 'dispatched',
     workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,

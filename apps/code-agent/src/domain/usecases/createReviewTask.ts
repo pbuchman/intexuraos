@@ -148,8 +148,14 @@ export async function createReviewTask(
 
   if (!dispatchResult.ok) {
     logger.error({ taskId: task.id, error: dispatchResult.error }, 'Failed to dispatch review task');
+    await codeTaskRepo.update(task.id, {
+      status: 'failed',
+      error: { code: 'dispatch_failed', message: dispatchResult.error.message },
+    });
     return err({ code: 'dispatch_failed', message: dispatchResult.error.message });
   }
+
+  await codeTaskRepo.update(task.id, { status: 'dispatched' });
 
   logger.info(
     { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner },

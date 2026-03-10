@@ -241,7 +241,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -271,7 +271,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -308,8 +308,9 @@ describe('processCodeAction', () => {
       })
     );
 
-    // Verify worker location and cancel nonce were set
+    // Verify worker location, status, and cancel nonce were set
     expect(codeTaskRepo.update).toHaveBeenCalledWith('new-task-123', {
+      status: 'dispatched',
       workerLocation: 'mac',
       cancelNonce: expect.any(String),
       cancelNonceExpiresAt: expect.any(String),
@@ -334,7 +335,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -391,7 +392,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -422,7 +423,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -475,7 +476,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -503,7 +504,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -569,7 +570,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -599,7 +600,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -643,7 +644,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -710,7 +711,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -740,7 +741,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -787,7 +788,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -816,7 +817,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -867,7 +868,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -893,7 +894,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -955,7 +956,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -981,7 +982,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1035,7 +1036,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1061,7 +1062,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1115,7 +1116,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1141,7 +1142,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1187,7 +1188,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-1',
         approvalEventId: 'approval-new-queue',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1216,61 +1217,7 @@ describe('processCodeAction', () => {
     if (result.ok) {
       expect(result.value.codeTaskId).toBe('new-task-queued');
     }
-    expect(codeTaskRepo.update).toHaveBeenCalledWith(
-      'new-task-queued',
-      expect.objectContaining({ status: 'queued', queuedAt: expect.any(Date) })
-    );
     expect(whatsappNotifier.notifyTaskQueued).toHaveBeenCalled();
-  });
-
-  it('returns internal_error when queue status update fails', async () => {
-    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-queue-fail',
-        userId: 'user-789',
-        prompt: 'Queue fail test',
-        sanitizedPrompt: 'Queue fail test',
-        systemPromptHash: 'hash-123',
-        workerType: 'opus',
-        workerLocation: 'home-mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-1',
-        approvalEventId: 'approval-queue-fail',
-        status: 'dispatched',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      })
-    );
-
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      err({ code: 'at_capacity', message: 'All workers busy' })
-    );
-    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(5));
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      err({ code: 'FIRESTORE_ERROR', message: 'Firestore write failed' })
-    );
-
-    const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
-      {
-        actionId: 'action-1',
-        approvalEventId: 'approval-queue-fail',
-        userId: 'user-789',
-        prompt: 'Queue fail test',
-        workerType: 'opus',
-      }
-    );
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('internal_error');
-      expect(result.error.message).toBe('Failed to queue task');
-    }
-    expect(whatsappNotifier.notifyTaskQueued).not.toHaveBeenCalled();
   });
 
   it('returns queue_full when dispatch returns at_capacity and queue is full', async () => {
@@ -1288,7 +1235,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-2',
         approvalEventId: 'approval-new-full',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1299,8 +1246,7 @@ describe('processCodeAction', () => {
     vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
       err({ code: 'at_capacity', message: 'All workers busy' })
     );
-    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(10));
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok({} as unknown as CodeTask));
+    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(11));
 
     const result = await processCodeAction(
       { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
@@ -1334,7 +1280,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-count-err',
         approvalEventId: 'approval-count-err',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1456,7 +1402,7 @@ describe('processCodeAction', () => {
           traceId: 'trace-123',
           actionId: 'action-123',
           approvalEventId: 'approval-456',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
@@ -1483,7 +1429,7 @@ describe('processCodeAction', () => {
           repository: 'pbuchman/intexuraos',
           baseBranch: 'development',
           traceId: 'trace-123',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
@@ -1616,7 +1562,7 @@ describe('processCodeAction', () => {
           repository: 'pbuchman/intexuraos',
           baseBranch: 'development',
           traceId: 'trace-123',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
@@ -1663,7 +1609,7 @@ describe('processCodeAction', () => {
           traceId: 'trace-123',
           actionId: 'action-123',
           approvalEventId: 'approval-456',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
@@ -1689,7 +1635,7 @@ describe('processCodeAction', () => {
           repository: 'pbuchman/intexuraos',
           baseBranch: 'development',
           traceId: 'trace-123',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
