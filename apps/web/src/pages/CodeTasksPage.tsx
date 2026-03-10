@@ -9,8 +9,8 @@ import type { IssueGroup, GroupStatus } from '@/utils/issueGroups';
 import type { CodeTaskStatus } from '@/types';
 
 // Statuses shown by default (all except archived — INT-711)
-const DEFAULT_VISIBLE_STATUSES: CodeTaskStatus[] = [
-  'queued', 'dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled',
+export const DEFAULT_VISIBLE_STATUSES: CodeTaskStatus[] = [
+  'queued', 'dispatched', 'running', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled',
 ];
 
 // All statuses including archived — used when the user enables the Archived filter
