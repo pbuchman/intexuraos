@@ -139,7 +139,7 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           healthy: false,
           reason: errorCode === 'ENOTFOUND' ? 'dns-failed' : 'connection-refused',
         };
-        /* v8 ignore start -- upstream: line 136 .includes(errorCode ?? '') guarantees errorCode is defined when this branch is reached @preserve */
+        /* v8 ignore start -- upstream: .includes(errorCode ?? '') guard above guarantees errorCode is defined when this branch is reached @preserve */
         if (errorCode !== undefined) {
           result.code = errorCode;
         }

@@ -1,5 +1,5 @@
 {
-  "$schema": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
+  "_comment": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
   "overrides": {
     "PENDING-apps-actions-agent": {
       "files": [
