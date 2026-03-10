@@ -17,11 +17,9 @@ interface ListQuerystring {
   title?: string;
 }
 
-/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
 interface DeleteParams {
   notification_id: string;
 }
-/* v8 ignore stop @preserve */
 
 export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /mobile-notifications
@@ -112,11 +110,9 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       } = {
         userId: user.userId,
       };
-      /* v8 ignore start -- test-infra: tests always pass limit param @preserve */
       if (limit !== undefined) {
         listInput.limit = limit;
       }
-      /* v8 ignore stop @preserve */
       if (cursor !== undefined) {
         listInput.cursor = cursor;
       }

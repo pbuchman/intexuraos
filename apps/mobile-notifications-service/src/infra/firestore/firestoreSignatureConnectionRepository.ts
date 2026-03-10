@@ -8,9 +8,7 @@ import type {
   CreateSignatureConnectionInput,
   RepositoryError,
   SignatureConnection,
-/* v8 ignore start -- ts-type: query is performed with a specific document id @preserve */
   SignatureConnectionRepository,
-  /* v8 ignore stop @preserve */
 } from '../../domain/notifications/index.js';
 
 const COLLECTION_NAME = 'mobile_notification_signatures';
@@ -80,11 +78,9 @@ export class FirestoreSignatureConnectionRepository implements SignatureConnecti
       }
 
       const docSnap = snapshot.docs[0];
-      /* v8 ignore start -- ts-type: snapshot.empty check guarantees docs[0] exists @preserve */
       if (docSnap === undefined) {
         return ok(null);
       }
-      /* v8 ignore stop @preserve */
 
       const data = docSnap.data() as SignatureConnectionDoc;
       const connection: SignatureConnection = {
