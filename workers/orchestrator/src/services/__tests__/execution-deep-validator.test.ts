@@ -289,6 +289,115 @@ describe('OrchestratorExecutionDeepValidator', () => {
     );
   });
 
+  it('calls onProgress callback at each stage', async () => {
+    const validResponse = JSON.stringify({
+      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [],
+    });
+    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('calling Gemini for analysis...');
+    expect(calls).toContain('validation response received');
+    expect(calls).toContain('posting PR comment...');
+    expect(calls).toContain('PR comment posted');
+  });
+
+  it('calls onProgress on LLM failure', async () => {
+    generateMock.mockResolvedValue({
+      ok: false,
+      error: { code: 'SERVICE_UNAVAILABLE', message: 'down' },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('calling Gemini for analysis...');
+    expect(calls[1]).toContain('LLM call failed');
+  });
+
+  it('calls onProgress on JSON parse failure', async () => {
+    generateMock.mockResolvedValue({ ok: true, value: { content: 'Not JSON at all', usage: {} } });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('calling Gemini for analysis...');
+    expect(calls).toContain('validation response received');
+    expect(calls.some((c) => c.includes('JSON parse failed'))).toBe(true);
+  });
+
+  it('calls onProgress on Zod schema failure', async () => {
+    const invalidSchema = JSON.stringify({ unexpected: 'data' });
+    generateMock.mockResolvedValue({ ok: true, value: { content: invalidSchema, usage: {} } });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('calling Gemini for analysis...');
+    expect(calls).toContain('validation response received');
+    expect(calls).toContain('schema parse failed, posting raw response as fallback');
+  });
+
+  it('calls onProgress with failure message when PR comment posting fails', async () => {
+    const validResponse = JSON.stringify({
+      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [],
+    });
+    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
+    execFileMock.mockImplementation(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: unknown,
+        cb: (err: Error | null) => void
+      ) => {
+        cb(new Error('gh CLI not found'));
+      }
+    );
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('PR comment failed (see server logs)');
+    expect(result).toBeDefined();
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_abc' }),
+      'Failed to post deep validation PR comment'
+    );
+  });
+
+  it('works without onProgress callback', async () => {
+    const validResponse = JSON.stringify({
+      claimVerification: [],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [],
+    });
+    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    // Should not throw when onProgress is not provided
+    const result = await validator.validate(defaultInput);
+    expect(result).toBeDefined();
+  });
+
   it('extracts JSON embedded in markdown fences', async () => {
     const embeddedJson = `Here is the result:\n${JSON.stringify({
       claimVerification: [],
