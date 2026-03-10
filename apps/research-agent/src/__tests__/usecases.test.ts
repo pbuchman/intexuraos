@@ -10,7 +10,10 @@ import {
   getResearch,
   listResearches,
   submitResearch,
+  validateSelectedModels,
+  validateSynthesisModel,
 } from '../domain/research/index.js';
+import type { AvailableModelInfo } from '@intexuraos/llm-prompts';
 import { FakeResearchRepository } from './fakes.js';
 
 function createSilentLogger(): ReturnType<typeof vi.fn> & {
@@ -310,5 +313,111 @@ describe('deleteResearch', () => {
     const result = await deleteResearch('any-id', { researchRepo: fakeRepo });
 
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('validateSelectedModels', () => {
+  it('filters out models not in the available list', () => {
+    const availableModels: AvailableModelInfo[] = [
+      {
+        id: LlmModels.Gemini25Pro,
+        provider: LlmProviders.Google,
+        displayName: 'Gemini 2.5 Pro',
+        keywords: ['gemini'],
+        isProviderDefault: true,
+      },
+    ];
+
+    // Pass a model that is NOT in availableModels
+    const result = validateSelectedModels(
+      [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
+      availableModels
+    );
+
+    expect(result).toEqual([LlmModels.Gemini25Pro]);
+    expect(result).not.toContain(LlmModels.ClaudeOpus45);
+  });
+
+  it('keeps only one model per provider', () => {
+    const availableModels: AvailableModelInfo[] = [
+      {
+        id: LlmModels.Gemini25Pro,
+        provider: LlmProviders.Google,
+        displayName: 'Gemini 2.5 Pro',
+        keywords: ['gemini'],
+        isProviderDefault: true,
+      },
+      {
+        id: LlmModels.Gemini25Flash,
+        provider: LlmProviders.Google,
+        displayName: 'Gemini 2.5 Flash',
+        keywords: ['flash'],
+        isProviderDefault: false,
+      },
+    ];
+
+    const result = validateSelectedModels(
+      [LlmModels.Gemini25Pro, LlmModels.Gemini25Flash],
+      availableModels
+    );
+
+    expect(result).toEqual([LlmModels.Gemini25Pro]);
+  });
+});
+
+describe('validateSynthesisModel', () => {
+  it('filters out synthesis model not in the available list', () => {
+    // GPT52 is a valid synthesis model, but not in the available list
+    const availableModels: AvailableModelInfo[] = [
+      {
+        id: LlmModels.Gemini25Pro,
+        provider: LlmProviders.Google,
+        displayName: 'Gemini 2.5 Pro',
+        keywords: ['gemini'],
+        isProviderDefault: true,
+      },
+    ];
+
+    const result = validateSynthesisModel(LlmModels.GPT52, availableModels);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for null model', () => {
+    const result = validateSynthesisModel(null, []);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('returns model when it is a valid synthesis model and available', () => {
+    const availableModels: AvailableModelInfo[] = [
+      {
+        id: LlmModels.Gemini25Pro,
+        provider: LlmProviders.Google,
+        displayName: 'Gemini 2.5 Pro',
+        keywords: ['gemini'],
+        isProviderDefault: true,
+      },
+    ];
+
+    const result = validateSynthesisModel(LlmModels.Gemini25Pro, availableModels);
+
+    expect(result).toBe(LlmModels.Gemini25Pro);
+  });
+
+  it('returns undefined for model that does not support synthesis', () => {
+    const availableModels: AvailableModelInfo[] = [
+      {
+        id: LlmModels.ClaudeOpus45,
+        provider: LlmProviders.Anthropic,
+        displayName: 'Claude Opus 4.5',
+        keywords: ['claude'],
+        isProviderDefault: true,
+      },
+    ];
+
+    const result = validateSynthesisModel(LlmModels.ClaudeOpus45, availableModels);
+
+    expect(result).toBeUndefined();
   });
 });

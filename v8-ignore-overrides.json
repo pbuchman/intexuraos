@@ -106,19 +106,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/notion-service"
     },
-    "PENDING-apps-research-agent": {
-      "files": [
-        "apps/research-agent/src/domain/research/usecases/extractModelPreferences.ts",
-        "apps/research-agent/src/domain/research/usecases/runSynthesis.ts",
-        "apps/research-agent/src/infra/llm/ContextInferenceAdapter.ts",
-        "apps/research-agent/src/infra/notion/exportResearchToNotionUseCase.ts",
-        "apps/research-agent/src/infra/notion/markdownToNotionBlocks.ts",
-        "apps/research-agent/src/infra/research/FirestoreResearchRepository.ts",
-        "apps/research-agent/src/routes/internalRoutes.ts",
-        "apps/research-agent/src/routes/researchRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/research-agent"
-    },
     "PENDING-apps-todos-agent": {
       "files": [
         "apps/todos-agent/src/domain/usecases/reorderTodoItems.ts",

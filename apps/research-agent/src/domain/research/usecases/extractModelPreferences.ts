@@ -116,7 +116,7 @@ function buildAvailableModels(keys: ApiKeyStore): AvailableModelInfo[] {
  * 1. Only one model per provider
  * 2. Models must be in the available list
  */
-function validateSelectedModels(
+export function validateSelectedModels(
   models: ResearchModel[],
   availableModels: AvailableModelInfo[]
 ): ResearchModel[] {
@@ -125,9 +125,7 @@ function validateSelectedModels(
   const valid: ResearchModel[] = [];
 
   for (const model of models) {
-    /* v8 ignore start -- test-infra: filtering invalid models requires test setup with unavailable models @preserve */
     if (!availableIds.has(model)) {
-    /* v8 ignore stop @preserve */
       continue;
     }
 
@@ -147,7 +145,7 @@ function validateSelectedModels(
  * Validate synthesis model.
  * Must be in SYNTHESIS_MODELS list and user must have API key for it.
  */
-function validateSynthesisModel(
+export function validateSynthesisModel(
   model: ResearchModel | null,
   availableModels: AvailableModelInfo[]
 ): ResearchModel | undefined {
@@ -163,9 +161,7 @@ function validateSynthesisModel(
   }
 
   // Check if user has API key for this model
-  /* v8 ignore start -- test-infra: filtering models without API keys requires specific test setup @preserve */
   if (!availableIds.has(model)) {
-  /* v8 ignore stop @preserve */
     return undefined;
   }
 

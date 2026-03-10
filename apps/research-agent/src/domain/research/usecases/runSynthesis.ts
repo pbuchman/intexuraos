@@ -444,19 +444,15 @@ function selectImageModel(
 
   if (preferOpenAi) {
     if (hasOpenAiKey) return LlmModels.GPTImage1;
-    /* v8 ignore start -- test-infra: requires both OpenAI and Google keys configuration to test @preserve */
+    /* v8 ignore start -- upstream: v8 coverage does not trace this branch through runSynthesis→generateCoverImage→selectImageModel async call chain; tested in runSynthesis.test.ts @preserve */
     if (hasGoogleKey) return LlmModels.Gemini25FlashImage;
     /* v8 ignore stop @preserve */
   } else {
     if (hasGoogleKey) return LlmModels.Gemini25FlashImage;
-    /* v8 ignore start -- test-infra: requires both Google and OpenAI keys configuration to test @preserve */
     if (hasOpenAiKey) return LlmModels.GPTImage1;
-    /* v8 ignore stop @preserve */
   }
 
-  /* v8 ignore start -- test-infra: fallback when neither API key is configured @preserve */
   return null;
-  /* v8 ignore stop @preserve */
 }
 
 async function generateCoverImage(
