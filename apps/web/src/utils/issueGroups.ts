@@ -239,7 +239,21 @@ export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): Issue
   const sorted = [...groups];
 
   if (sortBy === 'linear-id') {
-    // This is the existing default sort — already applied by groupByLinearIssue()
+    // Sort by Linear issue number descending; standalone (null linearIssueId) groups sort first.
+    // This mirrors the sort already applied inside groupByLinearIssue(), making the function
+    // correct regardless of the caller's input order.
+    sorted.sort((a, b) => {
+      const aNum = a.linearIssueId !== null ? parseLinearIssueNumber(a.linearIssueId) : null;
+      const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
+
+      if (aNum === null && bNum === null) {
+        return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+      }
+      if (aNum === null) return -1;
+      if (bNum === null) return 1;
+      if (aNum !== bNum) return bNum - aNum;
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
     return sorted;
   }
 
