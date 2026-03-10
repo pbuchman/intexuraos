@@ -2166,6 +2166,180 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('stream result completion signal', () => {
+    let streamDispatcher: TaskDispatcher;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      streamDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('successful type:result triggers completion when onComplete never fires', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-success',
+        workerType: 'auto',
+        prompt: 'Test stream result success',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      onLog?.('{"type":"result","is_error":false,"result":"done"}\n');
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await streamDispatcher.getTask('stream-result-success');
+      expect(task?.status).toBe('completed');
+    });
+
+    it('error type:result triggers completion when onComplete never fires', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-error',
+        workerType: 'auto',
+        prompt: 'Test stream result error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed"}\n');
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await streamDispatcher.getTask('stream-result-error');
+      expect(task?.status).toBe('failed');
+    });
+
+    it('type:result with no trailing newline triggers eager remainder parsing', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-no-newline',
+        workerType: 'auto',
+        prompt: 'Test stream result no newline',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      // Send without trailing newline — stays in remainder buffer
+      onLog?.('{"type":"result","is_error":false,"result":"done"}');
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await streamDispatcher.getTask('stream-result-no-newline');
+      expect(task?.status).toBe('completed');
+    });
+
+    it('normal flow: onComplete fires before monitor tick, task completes with real exit code', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-with-oncomplete',
+        workerType: 'auto',
+        prompt: 'Test stream result with onComplete',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      onLog?.('{"type":"result","is_error":false,"result":"done"}\n');
+      onComplete?.(0);
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await streamDispatcher.getTask('stream-result-with-oncomplete');
+      expect(task?.status).toBe('completed');
+    });
+
+    it('guard: onComplete fires first, then type:result arrives, real exit code is retained', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'stream-result-oncomplete-first',
+        workerType: 'auto',
+        prompt: 'Test onComplete before type:result',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await streamDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      // onComplete fires first with real exit code 0
+      onComplete?.(0);
+      // Then type:result arrives — should NOT overwrite exit code
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed"}\n');
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      // Task should complete (exit code 0 from onComplete wins, verifier passes)
+      const task = await streamDispatcher.getTask('stream-result-oncomplete-first');
+      expect(task?.status).toBe('completed');
+    });
+  });
+
   describe('completion loop behavior', () => {
     it('applies completion control maxAttempts to created tasks', async () => {
       const defaultControlDispatcher = new TaskDispatcher(
