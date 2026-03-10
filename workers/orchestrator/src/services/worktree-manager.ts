@@ -25,8 +25,7 @@ export class WorktreeManager {
   ) {}
 
   private async withGitLock<T>(fn: () => Promise<T>): Promise<T> {
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    let releaseLock = (): void => {};
+    let releaseLock: () => void = () => undefined;
     const nextLock = new Promise<void>((resolve) => {
       releaseLock = resolve;
     });
@@ -34,17 +33,18 @@ export class WorktreeManager {
     const previousLock = this.gitLock;
     this.gitLock = nextLock;
 
-    const timeout = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error('Timed out waiting for git lock after 10s'));
-      }, LOCK_TIMEOUT_MS);
-    });
-
-    await Promise.race([previousLock, timeout]);
-
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('Timed out waiting for git lock after 10s'));
+        }, LOCK_TIMEOUT_MS);
+      });
+
+      await Promise.race([previousLock, timeout]);
       return await fn();
     } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
       releaseLock();
     }
   }
