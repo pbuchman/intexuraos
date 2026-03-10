@@ -69,12 +69,14 @@ describe('Pub/Sub Routes', () => {
   let mediaStorage: FakeMediaStorage;
   let messageRepository: FakeWhatsAppMessageRepository;
   let userMappingRepository: FakeWhatsAppUserMappingRepository;
+  let outboundMessageRepository: FakeOutboundMessageRepository;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
     mediaStorage = new FakeMediaStorage();
     messageRepository = new FakeWhatsAppMessageRepository();
     userMappingRepository = new FakeWhatsAppUserMappingRepository();
+    outboundMessageRepository = new FakeOutboundMessageRepository();
 
     setServices({
       webhookEventRepository: new FakeWhatsAppWebhookEventRepository(),
@@ -86,7 +88,7 @@ describe('Pub/Sub Routes', () => {
       whatsappCloudApi: new FakeWhatsAppCloudApiPort(),
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
-      outboundMessageRepository: new FakeOutboundMessageRepository(),
+      outboundMessageRepository,
       phoneVerificationRepository: new FakePhoneVerificationRepository(),
     });
 
@@ -572,6 +574,38 @@ describe('Pub/Sub Routes', () => {
       // ctaUrl takes priority over buttons
       expect(sentMessages[0]?.ctaUrl).toEqual(ctaUrl);
       expect(sentMessages[0]?.buttons).toBeUndefined();
+    });
+
+    it('returns 200 when outbound message save fails (non-fatal)', async () => {
+      await userMappingRepository.saveMapping('user-save-fail', ['+48123456789']);
+      outboundMessageRepository.setFail(true);
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-save-fail',
+        message: 'Hello with save failure',
+        correlationId: 'corr-save-fail',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      // Should still return 200 (save failure is non-fatal)
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      // Message should still have been sent
+      const sentMessages = messageSender.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+
+      // But outbound message should not be stored
+      expect(outboundMessageRepository.getMessages()).toHaveLength(0);
     });
   });
 

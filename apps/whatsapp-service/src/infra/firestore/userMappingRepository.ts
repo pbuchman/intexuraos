@@ -115,10 +115,8 @@ export async function findUserByPhoneNumber(
     if (snapshot.empty) return ok(null);
     const doc = snapshot.docs[0];
     
-    /* v8 ignore start -- ts-type: doc existence check @preserve */
+    /* v8 ignore start -- upstream: snapshot.empty check above guarantees docs[0] exists @preserve */
     if (!doc) return ok(null);
-    /* v8 ignore stop @preserve */
-/* v8 ignore start -- test-infra: Test infrastructure cannot produce required state @preserve */
     return ok((doc.data() as WhatsAppUserMappingDoc).userId);
     /* v8 ignore stop @preserve */
   } catch (error) {
