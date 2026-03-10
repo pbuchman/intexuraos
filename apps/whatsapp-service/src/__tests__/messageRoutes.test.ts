@@ -342,6 +342,26 @@ describe('WhatsApp Message Routes', () => {
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
       expect(body.error.message).toBe('Simulated getMessagesByUser failure');
     });
+
+    it('returns messages with null fromNumber when getMapping fails', async () => {
+      const userId = 'user-mapping-fail';
+      const token = await createToken({ sub: userId });
+      ctx.userMappingRepository.setFailGetMapping(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/whatsapp/messages',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { messages: unknown[]; fromNumber: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.fromNumber).toBeNull();
+    });
   });
 
   describe('GET /whatsapp/messages/:message_id/media', () => {
