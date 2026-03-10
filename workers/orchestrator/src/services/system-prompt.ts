@@ -583,10 +583,10 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 };
 
 export function buildSystemPrompt(params: SystemPromptParams): string {
-  const isPRComment = params.linearIssueLabels.some(
-    (label) => label.trim().toLowerCase() === 'pr-comment'
-  );
-  if (isPRComment) {
+  const isPullRequestTask =
+    params.agentType === 'pull_request' ||
+    params.linearIssueLabels.some((label) => label.trim().toLowerCase() === 'pr-comment');
+  if (isPullRequestTask) {
     return pullRequestPrompt.build(params);
   }
 

@@ -17,8 +17,8 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomUUID } from 'node:crypto';
-import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
+import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 
 /**
@@ -211,9 +211,8 @@ ${feedback.trim()}
     }
   }
 
-  const agentType: 'planning' | 'execution' | 'pull_request' = originalTask.agentType === 'pull_request'
-    ? 'pull_request'
-    : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'planning';
+  const agentType = resolveTaskAgentType(originalTask, linearIssueLabelsForDispatch);
+  const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabelsForDispatch, agentType);
 
   // Step 8: Create follow-up task with parentTaskId
   const createInput = {
@@ -334,7 +333,7 @@ ${feedback.trim()}
     webhookSecret,
     workerCredentials,
     parentTaskId: originalTask.id,
-    linearIssueLabels: linearIssueLabelsForDispatch,
+    linearIssueLabels: dispatchLabels,
     hasChildren: hasChildrenForDispatch,
     agentType: followUpTask.agentType ?? 'planning',
   };

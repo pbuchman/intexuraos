@@ -357,11 +357,11 @@ export class TaskDispatcher {
       const promptPreview =
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
       this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const isPRComment = task.linearIssueLabels.some(
-        (l) => l.trim().toLowerCase() === 'pr-comment'
-      );
+      const isPullRequestTask =
+        task.agentType === 'pull_request' ||
+        task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
       /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all agents @preserve */
-      const agentLabel = isPRComment
+      const agentLabel = isPullRequestTask
         ? 'Pull Request Agent'
         : task.agentType === 'review'
           ? 'Review Agent'
@@ -760,8 +760,10 @@ export class TaskDispatcher {
 
     const attempt = task.attemptCount ?? 1;
     const maxAttempts = task.maxAttempts ?? 5;
-    const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-    const completionAgentType: CompletionAgentType = isPRComment
+    const isPullRequestTask =
+      task.agentType === 'pull_request' ||
+      task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
+    const completionAgentType: CompletionAgentType = isPullRequestTask
       ? 'pull_request'
       : task.agentType === 'review'
         ? 'review'
