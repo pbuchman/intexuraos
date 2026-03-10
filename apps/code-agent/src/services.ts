@@ -372,7 +372,7 @@ export function initServices(config: ServiceConfig): void {
         )
       : undefined,
     createReviewTask: (taskLogger, request) => createReviewTask(
-      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl },
+      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl },
       request,
     ),
     postTriageComment: async (senderLogin, repository, prNumber, body) => {
