@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowUpDown, Plus } from 'lucide-react';
-import { Button, Layout } from '@/components';
+import { Button, CodeTaskLogsModal, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useCodeTasks } from '@/hooks';
 import { groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
@@ -214,6 +214,7 @@ export function CodeTasksPage(): React.JSX.Element {
 
   const [activeFilters, setActiveFilters] = useState<Set<GroupStatus>>(loadFiltersFromStorage);
   const [activeSort, setActiveSort] = useState<SortOption>(loadSortFromStorage);
+  const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
 
   // When the Archived filter is active, include 'archived' in the API status filter
   // so the backend returns archived tasks. Otherwise use default (non-archived) statuses.
@@ -344,6 +345,7 @@ export function CodeTasksPage(): React.JSX.Element {
                 key={group.linearIssueId ?? group.latestTask.id}
                 group={group}
                 onAction={handleAction}
+                onOpenLogs={setPreviewTaskId}
               />
             ))}
           </div>
@@ -370,6 +372,13 @@ export function CodeTasksPage(): React.JSX.Element {
           ) : null}
         </div>
       )}
+
+      {previewTaskId !== null ? (
+        <CodeTaskLogsModal
+          taskId={previewTaskId}
+          onClose={(): void => { setPreviewTaskId(null); }}
+        />
+      ) : null}
     </Layout>
   );
 }
