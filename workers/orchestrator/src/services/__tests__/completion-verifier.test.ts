@@ -188,6 +188,7 @@ describe('PULL_REQUEST_SCHEMA', () => {
     const result = PULL_REQUEST_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
       comments_replied: 'yes',
+      tracking_comment_id: '12345678',
       summary: 'Addressed review comments.',
     });
     expect(result.success).toBe(true);
@@ -197,7 +198,27 @@ describe('PULL_REQUEST_SCHEMA', () => {
     const result = PULL_REQUEST_SCHEMA.safeParse({
       gh_pr_url: '',
       comments_replied: 'maybe',
+      tracking_comment_id: '12345678',
       summary: 'x',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty tracking_comment_id', () => {
+    const result = PULL_REQUEST_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      comments_replied: 'yes',
+      tracking_comment_id: '',
+      summary: 'Addressed review comments.',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing tracking_comment_id', () => {
+    const result = PULL_REQUEST_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      comments_replied: 'yes',
+      summary: 'Addressed review comments.',
     });
     expect(result.success).toBe(false);
   });
@@ -277,6 +298,7 @@ describe('buildPullRequestPrompt', () => {
     expect(prompt).toContain('Pull Request Agent');
     expect(prompt).toContain('gh_pr_url');
     expect(prompt).toContain('comments_replied');
+    expect(prompt).toContain('tracking_comment_id');
     expect(prompt).toContain('pr-log');
   });
 
@@ -509,6 +531,7 @@ describe('OrchestratorCompletionVerifier', () => {
     const validPRResponse = JSON.stringify({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
       comments_replied: 'yes',
+      tracking_comment_id: '2345678',
       summary: 'Addressed review comments.',
     });
 
@@ -533,6 +556,7 @@ describe('OrchestratorCompletionVerifier', () => {
         agentType: 'pull_request',
         gh_pr_url: 'https://github.com/org/repo/pull/42',
         comments_replied: 'yes',
+        tracking_comment_id: '2345678',
         summary: 'Addressed review comments.',
       });
       expect(result.trace).toEqual({
@@ -657,6 +681,7 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.verifierFailure).toBe(false);
       expect(result.missingFields.length).toBeGreaterThan(0);
       expect(result.missingFields).toContain('comments_replied');
+      expect(result.missingFields).toContain('tracking_comment_id');
       expect(result.trace).toEqual({
         transcript: expect.any(String),
         prompt: expect.any(String),

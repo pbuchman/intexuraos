@@ -55,6 +55,7 @@ export interface PullRequestAgentData {
   agentType: 'pull_request';
   gh_pr_url: string;
   comments_replied: 'yes' | 'no';
+  tracking_comment_id: string;
   summary: string;
 }
 
@@ -99,6 +100,7 @@ export const EXECUTION_SCHEMA = z.object({
 export const PULL_REQUEST_SCHEMA = z.object({
   gh_pr_url: z.string(),
   comments_replied: z.enum(['yes', 'no']),
+  tracking_comment_id: z.string().min(1),
   summary: z.string(),
 });
 
@@ -197,10 +199,11 @@ export function buildPullRequestPrompt(transcript: string): string {
     'Fields:',
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
     '- comments_replied: "yes" if the agent replied to PR comments, "no" otherwise',
+    '- tracking_comment_id: the numeric GitHub comment ID from the tracking comment POST response (string, must not be empty)',
     '- summary: 3-5 sentence summary of what was done — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid response:',
-    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","comments_replied":"yes","summary":"The pull request agent addressed 3 review comments on PR #901. Code changes were pushed and CI passed. All reviewer feedback was resolved."}',
+    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","comments_replied":"yes","tracking_comment_id":"2345678","summary":"The pull request agent addressed 3 review comments on PR #901. Code changes were pushed and CI passed. All reviewer feedback was resolved."}',
     '',
     'Transcript (last 50 lines):',
     transcript,
