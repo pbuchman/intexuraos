@@ -33,18 +33,19 @@ export class WorktreeManager {
     const previousLock = this.gitLock;
     this.gitLock = nextLock;
 
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const timeout = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          reject(new Error('Timed out waiting for git lock after 10s'));
-        }, LOCK_TIMEOUT_MS);
-      });
+    let rejectTimeout: (reason: Error) => void = () => undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      rejectTimeout = reject;
+    });
+    const timeoutId = setTimeout(() => {
+      rejectTimeout(new Error('Timed out waiting for git lock after 10s'));
+    }, LOCK_TIMEOUT_MS);
 
+    try {
       await Promise.race([previousLock, timeout]);
       return await fn();
     } finally {
-      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
       releaseLock();
     }
   }
