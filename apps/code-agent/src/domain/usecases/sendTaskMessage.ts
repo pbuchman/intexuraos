@@ -120,12 +120,10 @@ export async function sendTaskMessage(
   // Step 4: Look up worker credentials
   const settingsResult = await workerSettingsRepo.getSettings(userId);
 
-  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!settingsResult.ok) {
     logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings for message');
     return err({ code: 'internal_error', message: 'Failed to fetch worker settings' });
   }
-  /* v8 ignore stop @preserve */
 
   const settings = settingsResult.value;
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
@@ -156,9 +154,7 @@ export async function sendTaskMessage(
   });
 
   if (!forwardResult.ok) {
-    /* v8 ignore start -- test-infra: requires worker to return specific error codes for each branch @preserve */
     const errorCode = forwardResult.error.code === 'worker_unavailable' ? 'worker_unavailable' : 'worker_error';
-    /* v8 ignore stop @preserve */
     logger.error({ taskId, error: forwardResult.error }, 'Failed to forward message to worker');
     return err({
       code: errorCode,
