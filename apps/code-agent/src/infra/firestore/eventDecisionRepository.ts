@@ -48,6 +48,7 @@ export function createFirestoreEventDecisionRepository(deps: {
           ...(input.llmModel !== undefined && { llmModel: input.llmModel }),
           ...(input.llmCostUsd !== undefined && { llmCostUsd: input.llmCostUsd }),
           ...(input.llmToolCalls !== undefined && { llmToolCalls: input.llmToolCalls }),
+          ...(input.llmReasoning !== undefined && { llmReasoning: input.llmReasoning }),
           createdAt: now,
           decisionLatencyMs: input.decisionLatencyMs,
         };
