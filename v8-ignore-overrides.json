@@ -127,15 +127,11 @@
     },
     "PENDING-apps-whatsapp-service": {
       "files": [
-        "apps/whatsapp-service/src/infra/firestore/outboundMessageRepository.ts",
         "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
         "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
-        "apps/whatsapp-service/src/infra/whatsapp/sender.ts",
-        "apps/whatsapp-service/src/routes/messageRoutes.ts",
-        "apps/whatsapp-service/src/routes/pubsubRoutes.ts",
-        "apps/whatsapp-service/src/routes/webhookRoutes.ts"
+        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
       ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/whatsapp-service"
+      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
     },
     "PENDING-packages-internal-clients": {
       "files": ["packages/internal-clients/src/user-service/client.ts"],
