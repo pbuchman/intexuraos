@@ -15,6 +15,7 @@ import {
 import * as repairAttributionModule from '../../../../domain/research/usecases/repairAttribution.js';
 import type { Research } from '../../../../domain/research/models/index.js';
 import type { ShareStoragePort } from '../../../../domain/research/ports/index.js';
+import type { ImageServiceClient } from '../../../../services.js';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -1597,6 +1598,81 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(finalUpdate?.[1].attributionStatus).toBe('repaired');
       expect(finalUpdate?.[1].synthesizedResult).toContain(repairedContent);
       expect(finalUpdate?.[1].totalCostUsd).toBeCloseTo(0.015, 6);
+    });
+  });
+
+  describe('selectImageModel (via generateCoverImage)', () => {
+    function createFakeImageServiceClient(): ImageServiceClient {
+      return {
+        generatePrompt: vi.fn().mockResolvedValue(
+          ok({ prompt: 'test prompt', title: 'Test Image' })
+        ),
+        generateImage: vi.fn().mockResolvedValue(
+          ok({ id: 'img-1', thumbnailUrl: 'https://img/thumb.png', fullSizeUrl: 'https://img/full.png' })
+        ),
+        deleteImage: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+    }
+
+    it('falls back to Gemini25FlashImage when OpenAI preferred but only Google key available', async () => {
+      const research = createTestResearch({ synthesisModel: LlmModels.GPT52 });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const fakeImageClient = createFakeImageServiceClient();
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        imageServiceClient: fakeImageClient,
+        imageApiKeys: { google: 'google-key-123' },
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
+        'test prompt',
+        LlmModels.Gemini25FlashImage,
+        'user-1',
+        { title: 'Test Image' }
+      );
+    });
+
+    it('falls back to GPTImage1 when Google preferred but only OpenAI key available', async () => {
+      const research = createTestResearch({ synthesisModel: LlmModels.Gemini25Pro });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const fakeImageClient = createFakeImageServiceClient();
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        imageServiceClient: fakeImageClient,
+        imageApiKeys: { openai: 'openai-key-123' },
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
+        'test prompt',
+        LlmModels.GPTImage1,
+        'user-1',
+        { title: 'Test Image' }
+      );
+    });
+
+    it('returns null when no API keys are available', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const fakeImageClient = createFakeImageServiceClient();
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        imageServiceClient: fakeImageClient,
+        imageApiKeys: {},
+      });
+
+      expect(result).toEqual({ ok: true });
+      // When selectImageModel returns null, generateCoverImage returns null early
+      // and neither generatePrompt nor generateImage are called
+      expect(fakeImageClient.generatePrompt).not.toHaveBeenCalled();
+      expect(fakeImageClient.generateImage).not.toHaveBeenCalled();
     });
   });
 });

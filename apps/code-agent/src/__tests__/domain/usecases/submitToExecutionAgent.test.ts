@@ -529,6 +529,61 @@ describe('submitToExecutionAgent', () => {
         expect.objectContaining({ implementationTaskId: null })
       );
     });
+
+    it('logs error when create fails and rollback of optimistic lock also fails', async () => {
+      const mockTask = createMockTask();
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({ workers: [enabledWorker] })
+      );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'My Feature',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      // First update = optimistic lock (succeeds), second update = rollback (fails)
+      let updateCallCount = 0;
+      mockCodeTaskRepo.update.mockImplementation(() => {
+        updateCallCount++;
+        if (updateCallCount <= 1) {
+          return Promise.resolve(ok(mockTask));
+        }
+        // Rollback fails
+        return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Rollback write failed' }));
+      });
+      // Create fails, triggering the rollback
+      mockCodeTaskRepo.create.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Create failed' })
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Failed to create Execution Agent task');
+      }
+      // Should log the rollback failure
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: originalTaskId,
+          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        }),
+        'Failed to rollback implementationTaskId after create failure'
+      );
+    });
   });
 
   describe('dispatch failure with rollback', () => {
@@ -694,6 +749,14 @@ describe('submitToExecutionAgent', () => {
       if (result.ok) {
         expect(result.value.workerLocation).toBe('queued');
       }
+
+      // Should log queue update failure
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        }),
+        'Failed to update execution task to queued status'
+      );
 
       // Should log notification failure
       expect(mockLogger.warn).toHaveBeenCalledWith(

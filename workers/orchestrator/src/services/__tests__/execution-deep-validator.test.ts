@@ -20,6 +20,7 @@ const {
   DEEP_VALIDATION_PROMPT_VERSION,
   OrchestratorExecutionDeepValidator,
   formatPrComment,
+  stripCodeFences,
 } = await import('../execution-deep-validator.js');
 
 describe('buildDeepValidationPrompt', () => {
@@ -225,7 +226,10 @@ describe('OrchestratorExecutionDeepValidator', () => {
       planVsReality: { planFound: false, requirements: [] },
       anomalies: [],
     });
-    generateMock.mockResolvedValue({ ok: true, value: { content: validResponse, usage: {} } });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: validResponse, usage: { costUsd: 0.05 } },
+    });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
@@ -242,7 +246,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
         '--repo',
         'pbuchman/intexuraos',
         '--body',
-        expect.stringContaining('Deep Validation Report'),
+        expect.stringContaining('**Cost:** $0.05'),
       ],
       {},
       expect.any(Function)
@@ -266,7 +270,10 @@ describe('OrchestratorExecutionDeepValidator', () => {
   });
 
   it('returns undefined when LLM returns non-JSON', async () => {
-    generateMock.mockResolvedValue({ ok: true, value: { content: 'Not JSON at all', usage: {} } });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: 'Not JSON at all', usage: { costUsd: 0.042 } },
+    });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
@@ -277,7 +284,10 @@ describe('OrchestratorExecutionDeepValidator', () => {
   it('posts raw comment when Zod validation fails', async () => {
     // Valid JSON but wrong schema
     const invalidSchema = JSON.stringify({ unexpected: 'data' });
-    generateMock.mockResolvedValue({ ok: true, value: { content: invalidSchema, usage: {} } });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: invalidSchema, usage: { costUsd: 0.042 } },
+    });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
@@ -289,6 +299,125 @@ describe('OrchestratorExecutionDeepValidator', () => {
     );
   });
 
+  it('calls onProgress callback at each stage', async () => {
+    const validResponse = JSON.stringify({
+      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [],
+    });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: validResponse, usage: { costUsd: 0.042 } },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('calling Gemini for analysis...');
+    expect(calls).toContain('validation response received');
+    expect(calls).toContain('posting PR comment...');
+    expect(calls).toContain('PR comment posted');
+  });
+
+  it('calls onProgress on LLM failure', async () => {
+    generateMock.mockResolvedValue({
+      ok: false,
+      error: { code: 'SERVICE_UNAVAILABLE', message: 'down' },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('calling Gemini for analysis...');
+    expect(calls[1]).toContain('LLM call failed');
+  });
+
+  it('calls onProgress on JSON parse failure', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: 'Not JSON at all', usage: { costUsd: 0.042 } },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('calling Gemini for analysis...');
+    expect(calls).toContain('validation response received');
+    expect(calls.some((c) => c.includes('JSON parse failed'))).toBe(true);
+  });
+
+  it('calls onProgress on Zod schema failure', async () => {
+    const invalidSchema = JSON.stringify({ unexpected: 'data' });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: invalidSchema, usage: { costUsd: 0.042 } },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('calling Gemini for analysis...');
+    expect(calls).toContain('validation response received');
+    expect(calls).toContain('schema parse failed, posting raw response as fallback');
+  });
+
+  it('calls onProgress with failure message when PR comment posting fails', async () => {
+    const validResponse = JSON.stringify({
+      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [],
+    });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: validResponse, usage: { costUsd: 0.042 } },
+    });
+    execFileMock.mockImplementation(
+      (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+        cb(new Error('gh CLI not found'));
+      }
+    );
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
+
+    const calls = onProgress.mock.calls.map((c) => String(c[0]));
+    expect(calls).toContain('PR comment failed (see server logs)');
+    expect(result).toBeDefined();
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_abc' }),
+      'Failed to post deep validation PR comment'
+    );
+  });
+
+  it('works without onProgress callback', async () => {
+    const validResponse = JSON.stringify({
+      claimVerification: [],
+      contractVerification: [],
+      planVsReality: { planFound: false, requirements: [] },
+      anomalies: [],
+    });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: validResponse, usage: { costUsd: 0.042 } },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    // Should not throw when onProgress is not provided
+    const result = await validator.validate(defaultInput);
+    expect(result).toBeDefined();
+  });
+
   it('extracts JSON embedded in markdown fences', async () => {
     const embeddedJson = `Here is the result:\n${JSON.stringify({
       claimVerification: [],
@@ -296,7 +425,10 @@ describe('OrchestratorExecutionDeepValidator', () => {
       planVsReality: { planFound: false, requirements: [] },
       anomalies: [],
     })}\nEnd.`;
-    generateMock.mockResolvedValue({ ok: true, value: { content: embeddedJson, usage: {} } });
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: embeddedJson, usage: { costUsd: 0.042 } },
+    });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
@@ -362,8 +494,9 @@ describe('formatPrComment', () => {
       ],
     };
 
-    const comment = formatPrComment(result);
+    const comment = formatPrComment(result, 0.042);
     expect(comment).toContain('### Deep Validation Report');
+    expect(comment).toContain('**Cost:** $0.042');
     expect(comment).toContain('Claim Verification');
     expect(comment).toContain('✅ verified');
     expect(comment).toContain('❌ contradicted');
@@ -382,7 +515,7 @@ describe('formatPrComment', () => {
       anomalies: [],
     };
 
-    const comment = formatPrComment(result);
+    const comment = formatPrComment(result, 0.042);
     expect(comment).toContain('No claims verified.');
     expect(comment).toContain('No contracts verified.');
     expect(comment).toContain('❌ No plan file found on branch');
@@ -419,12 +552,57 @@ describe('formatPrComment', () => {
       ],
     };
 
-    const comment = formatPrComment(result);
+    const comment = formatPrComment(result, 0.042);
     expect(comment).toContain('❓ unverifiable');
     expect(comment).toContain('❓ not_applicable');
     expect(comment).toContain('⚠️ partially');
     expect(comment).toContain('🟡 warning');
     expect(comment).toContain('🔵 info');
+  });
+});
+
+describe('stripCodeFences', () => {
+  it('removes ```json fences', () => {
+    const input = '```json\n{"key": "value"}\n```';
+    expect(stripCodeFences(input)).toBe('{"key": "value"}');
+  });
+
+  it('removes plain ``` fences', () => {
+    const input = '```\n{"key": "value"}\n```';
+    expect(stripCodeFences(input)).toBe('{"key": "value"}');
+  });
+
+  it('passes through content without fences', () => {
+    const input = '{"key": "value"}';
+    expect(stripCodeFences(input)).toBe('{"key": "value"}');
+  });
+
+  it('trims whitespace around fenced content', () => {
+    const input = '  ```json\n{"a": 1}\n```  ';
+    expect(stripCodeFences(input)).toBe('{"a": 1}');
+  });
+});
+
+describe('postRawComment strips double fences', () => {
+  it('produces single ```json wrapper when LLM response has markdown fences', async () => {
+    const fencedJson = '```json\n{"unexpected": "data"}\n```';
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: fencedJson, usage: { costUsd: 0.042 } },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    await validator.validate(defaultInput);
+
+    const bodyArg = String(execFileMock.mock.calls[0]?.[1]?.[6] ?? '');
+    // Should contain exactly one ```json opener and one ``` closer
+    const jsonFenceCount = (bodyArg.match(/```json/g) ?? []).length;
+    const closeFenceCount = (bodyArg.match(/```/g) ?? []).length;
+    expect(jsonFenceCount).toBe(1);
+    // One opening ```json + one closing ``` = 2 total occurrences of ```
+    expect(closeFenceCount).toBe(2);
+    expect(bodyArg).toContain('{"unexpected": "data"}');
+    expect(bodyArg).not.toContain('```json\n```json');
   });
 });
 

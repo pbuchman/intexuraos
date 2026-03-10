@@ -964,10 +964,13 @@ export class TaskDispatcher {
         deepValInput = await this.prepareDeepValidationInput(task, finalResult, verification);
       }
 
-      await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
+      const keepLogOpen = deepValInput !== undefined;
+      await this.finalizeTaskWithResult(task, completionAgentType, finalResult, keepLogOpen);
 
       if (deepValInput !== undefined) {
-        void this.executeDeepValidation(task.taskId, deepValInput);
+        void this.executeDeepValidation(task.taskId, deepValInput).finally(() => {
+          void this.flushAndCloseLogForwarder(task.taskId);
+        });
       }
       return;
     }
@@ -1145,20 +1148,27 @@ export class TaskDispatcher {
   private async finalizeTaskWithResult(
     task: Task,
     agentType: CompletionAgentType,
-    finalResult: TaskResult
+    finalResult: TaskResult,
+    keepLogForwarderOpen = false
   ): Promise<void> {
     if (agentType === 'planning' && finalResult.planning_outcome_label === 'unclear') {
-      await this.finalizeTask(task, 'failed', {
-        result: finalResult,
-        error: {
-          code: 'PLANNING_AGENT_UNCLEAR',
-          message:
-            finalResult.planning_unclear_clarification ?? 'Planning agent reported unclear outcome',
+      await this.finalizeTask(
+        task,
+        'failed',
+        {
+          result: finalResult,
+          error: {
+            code: 'PLANNING_AGENT_UNCLEAR',
+            message:
+              finalResult.planning_unclear_clarification ??
+              'Planning agent reported unclear outcome',
+          },
         },
-      });
+        keepLogForwarderOpen
+      );
       return;
     }
-    await this.finalizeTask(task, 'completed', { result: finalResult });
+    await this.finalizeTask(task, 'completed', { result: finalResult }, keepLogForwarderOpen);
 
     if (agentType === 'execution' && task.planningPrUrl !== undefined) {
       await this.closePlanningPr(task.planningPrUrl, task.taskId);
@@ -1489,7 +1499,8 @@ export class TaskDispatcher {
   private async finalizeTask(
     task: Task,
     statusParam: TaskStatus,
-    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean }
+    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
+    keepLogForwarderOpen = false
   ): Promise<void> {
     const finalStatus = statusParam;
     const shouldPreserve =
@@ -1516,7 +1527,9 @@ export class TaskDispatcher {
     }
 
     this.appendOrchestratorTaskLog(task.taskId, `Finalizing: flushed logs`);
-    this.logForwarder.close(task.taskId);
+    if (!keepLogForwarderOpen) {
+      this.logForwarder.close(task.taskId);
+    }
 
     if (shouldPreserve) {
       await this.isolation.provider.preserveWorker?.(task.taskId);
@@ -1887,14 +1900,41 @@ export class TaskDispatcher {
   }
 
   private async executeDeepValidation(taskId: string, input: DeepValidationInput): Promise<void> {
+    this.appendOrchestratorTaskLog(
+      taskId,
+      `Deep validation starting (transcript: ${String(input.formattedTranscript.length)} chars)`
+    );
     try {
-      await this.executionDeepValidator?.validate(input);
-      this.logger.info({ taskId }, 'Deep validation completed');
+      const result = await this.executionDeepValidator?.validate(input, (message: string) => {
+        this.appendOrchestratorTaskLog(taskId, `Deep validation: ${message}`);
+      });
+      if (result !== undefined) {
+        this.appendOrchestratorTaskLog(
+          taskId,
+          `Deep validation complete: ${String(result.claimVerification.length)} claims, ${String(result.anomalies.length)} anomalies`
+        );
+        this.logger.info({ taskId }, 'Deep validation completed with result');
+      } else {
+        this.logger.warn(
+          { taskId },
+          'Deep validation completed without result (check onProgress messages for details)'
+        );
+      }
     } catch (error) {
+      this.appendOrchestratorTaskLog(taskId, `Deep validation error: ${getErrorMessage(error)}`);
       this.logger.error(
         { taskId, error: getErrorMessage(error) },
         'Deep validation failed (non-fatal, task finalization continues)'
       );
+    }
+  }
+
+  private async flushAndCloseLogForwarder(taskId: string): Promise<void> {
+    await this.flushTaskLogs(taskId);
+    try {
+      this.logForwarder.close(taskId);
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to close log forwarder after deep validation');
     }
   }
 

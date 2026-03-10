@@ -105,6 +105,7 @@ describe('createFirestoreEventDecisionRepository', () => {
           { tool: 'request_review', args: { review_type: 'code_quality' } },
           { tool: 'request_review', args: { review_type: 'security' } },
         ],
+        llmReasoning: 'This PR modifies auth logic across multiple services.',
         dispatchAction: 'create_review_task',
         dispatchParams: {
           reviewTypes: ['code_quality', 'security'],
@@ -120,6 +121,7 @@ describe('createFirestoreEventDecisionRepository', () => {
         expect(result.value.llmModel).toBe(LlmModels.Gemini25Flash);
         expect(result.value.llmCostUsd).toBe(0.0012);
         expect(result.value.llmToolCalls).toHaveLength(2);
+        expect(result.value.llmReasoning).toBe('This PR modifies auth logic across multiple services.');
         expect(result.value.dispatchAction).toBe('create_review_task');
         expect(result.value.dispatchParams?.reviewTypes).toEqual(['code_quality', 'security']);
       }

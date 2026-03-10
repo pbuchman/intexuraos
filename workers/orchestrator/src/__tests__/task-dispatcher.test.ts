@@ -3484,9 +3484,30 @@ describe('TaskDispatcher', () => {
       expect(input?.linearIssueBody).toContain('Description:\n## Requirements\n1. Fix bug');
     });
 
-    it('executeDeepValidation calls validate() and logs completion', async () => {
+    it('executeDeepValidation calls validate with onProgress and logs completion', async () => {
+      const mockResult = {
+        claimVerification: [{ claim: 'CI', verdict: 'verified', evidence: 'MSG-001' }],
+        contractVerification: [],
+        planVsReality: { planFound: false, requirements: [] },
+        anomalies: [
+          { type: 'laziness', severity: 'warning', evidence: 'MSG-002', detail: 'skipped' },
+        ],
+      };
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi
+          .fn()
+          .mockImplementation(
+            async (
+              _input: import('../services/execution-deep-validator.js').DeepValidationInput,
+              onProgress?: (message: string) => void
+            ) => {
+              onProgress?.('calling Gemini for analysis...');
+              onProgress?.('validation response received');
+              onProgress?.('posting PR comment...');
+              onProgress?.('PR comment posted');
+              return mockResult;
+            }
+          ),
       };
 
       const deepValDispatcher = new TaskDispatcher(
@@ -3525,12 +3546,72 @@ describe('TaskDispatcher', () => {
 
       await internal.executeDeepValidation('deep-val-test', testInput);
 
-      expect(mockValidator.validate).toHaveBeenCalledWith(testInput);
+      expect(mockValidator.validate).toHaveBeenCalledWith(testInput, expect.any(Function));
+      // Progress messages should flow through appendChunk
+      const appendCalls = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter((c) => c[0] === 'deep-val-test')
+        .map((c) => c[1]);
+      expect(appendCalls.some((c) => c.includes('Deep validation starting'))).toBe(true);
+      expect(appendCalls.some((c) => c.includes('calling Gemini for analysis...'))).toBe(true);
+      expect(appendCalls.some((c) => c.includes('1 claims, 1 anomalies'))).toBe(true);
       expect(mockLogger.info).toHaveBeenCalledWith(
         { taskId: 'deep-val-test' },
-        'Deep validation completed'
+        'Deep validation completed with result'
       );
-      expect(mockLogForwarder.appendChunk).not.toHaveBeenCalled();
+    });
+
+    it('executeDeepValidation does not log summary when validate returns undefined', async () => {
+      const mockValidator: ExecutionDeepValidator = {
+        validate: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const deepValDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        undefined,
+        mockValidator
+      );
+
+      const internal = deepValDispatcher as unknown as {
+        executeDeepValidation: ExecuteDeepValidation;
+      };
+      const testInput = {
+        taskId: 'undef-val-test',
+        prNumber: 123,
+        repository: 'pbuchman/intexuraos',
+        formattedTranscript: '[MSG-001] test',
+        agentClaims: {
+          superpowers_executing_plans: 'used',
+          superpowers_requesting_code_review: 'used',
+          gh_pr_url: '',
+          summary: 'Done.',
+        },
+        linearIssueBody: 'Fix bug',
+        planContent: undefined,
+      } as import('../services/execution-deep-validator.js').DeepValidationInput;
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
+      await internal.executeDeepValidation('undef-val-test', testInput);
+
+      const appendCalls = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter((c) => c[0] === 'undef-val-test')
+        .map((c) => c[1]);
+      expect(appendCalls.some((c) => c.includes('Deep validation starting'))).toBe(true);
+      expect(appendCalls.some((c) => c.includes('claims'))).toBe(false);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { taskId: 'undef-val-test' },
+        'Deep validation completed without result (check onProgress messages for details)'
+      );
     });
 
     it('prepareDeepValidationInput returns undefined when validator not provided', async () => {
@@ -3711,7 +3792,7 @@ describe('TaskDispatcher', () => {
       );
     });
 
-    it('executeDeepValidation handles validation error gracefully', async () => {
+    it('executeDeepValidation handles validation error gracefully and logs via appendChunk', async () => {
       const mockValidator: ExecutionDeepValidator = {
         validate: vi.fn().mockRejectedValue(new Error('LLM timeout')),
       };
@@ -3748,12 +3829,98 @@ describe('TaskDispatcher', () => {
         planContent: undefined,
       } as import('../services/execution-deep-validator.js').DeepValidationInput;
 
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
       await internal.executeDeepValidation('error-val-test', testInput);
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'error-val-test', error: 'LLM timeout' }),
         'Deep validation failed (non-fatal, task finalization continues)'
       );
+      // Error should also flow through appendChunk for visibility in web app
+      const appendCalls = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter((c) => c[0] === 'error-val-test')
+        .map((c) => c[1]);
+      expect(appendCalls.some((c) => c.includes('Deep validation error: LLM timeout'))).toBe(true);
+    });
+  });
+
+  describe('finalizeTask keepLogForwarderOpen', () => {
+    const testTask = {
+      taskId: 'finalize-test',
+      repository: 'pbuchman/intexuraos',
+      worktreePath: '/tmp/worktrees/finalize-test',
+      linearIssueLabels: [],
+    } as unknown as Task;
+
+    it('skips logForwarder.close when keepLogForwarderOpen is true', async () => {
+      const internal = dispatcher as unknown as {
+        finalizeTask: (
+          task: Task,
+          status: string,
+          payload: { result?: unknown; error?: unknown },
+          keepLogForwarderOpen?: boolean
+        ) => Promise<void>;
+      };
+
+      vi.mocked(mockLogForwarder.close).mockClear();
+      vi.mocked(mockLogForwarder.flush).mockClear();
+
+      await internal.finalizeTask(testTask, 'completed', { result: {} }, true);
+
+      expect(mockLogForwarder.flush).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.close).not.toHaveBeenCalledWith(testTask.taskId);
+    });
+
+    it('calls logForwarder.close when keepLogForwarderOpen is false', async () => {
+      const internal = dispatcher as unknown as {
+        finalizeTask: (
+          task: Task,
+          status: string,
+          payload: { result?: unknown; error?: unknown },
+          keepLogForwarderOpen?: boolean
+        ) => Promise<void>;
+      };
+
+      vi.mocked(mockLogForwarder.close).mockClear();
+
+      await internal.finalizeTask(testTask, 'completed', { result: {} }, false);
+
+      expect(mockLogForwarder.close).toHaveBeenCalledWith(testTask.taskId);
+    });
+
+    it('calls logForwarder.close when keepLogForwarderOpen is omitted (default)', async () => {
+      const internal = dispatcher as unknown as {
+        finalizeTask: (
+          task: Task,
+          status: string,
+          payload: { result?: unknown; error?: unknown },
+          keepLogForwarderOpen?: boolean
+        ) => Promise<void>;
+      };
+
+      vi.mocked(mockLogForwarder.close).mockClear();
+
+      await internal.finalizeTask(testTask, 'completed', { result: {} });
+
+      expect(mockLogForwarder.close).toHaveBeenCalledWith(testTask.taskId);
+    });
+  });
+
+  describe('flushAndCloseLogForwarder', () => {
+    it('flushes and closes log forwarder for a task', async () => {
+      const internal = dispatcher as unknown as {
+        flushAndCloseLogForwarder: (taskId: string) => Promise<void>;
+      };
+
+      vi.mocked(mockLogForwarder.flush).mockClear();
+      vi.mocked(mockLogForwarder.close).mockClear();
+
+      await internal.flushAndCloseLogForwarder('flush-close-test');
+
+      expect(mockLogForwarder.flush).toHaveBeenCalledWith('flush-close-test');
+      expect(mockLogForwarder.close).toHaveBeenCalledWith('flush-close-test');
     });
   });
 

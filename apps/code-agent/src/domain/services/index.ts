@@ -3,6 +3,7 @@ export {
   GitHubWebhookRules,
   RepositoryScopeRule,
   ActionableEventRule,
+  ProtectedBaseBranchRule,
   SenderWhitelistRule,
   SkipPrefixRule,
   BotReviewEditRule,

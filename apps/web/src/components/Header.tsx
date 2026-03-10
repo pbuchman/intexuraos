@@ -61,6 +61,16 @@ const getStatusDisplay = (worker: WorkerStatus): {
   };
 };
 
+/**
+ * Get the Tailwind dot-color class for the aggregate worker health indicator.
+ */
+const getWorkersDotColor = (workers: WorkerStatus[]): string =>
+  workers.length === 0
+    ? 'bg-gray-400'
+    : workers.some((w) => w.healthy)
+      ? 'bg-green-500'
+      : 'bg-red-500';
+
 export function Header(): React.JSX.Element {
   const { user, logout, isAuthenticated } = useAuth();
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
@@ -155,9 +165,9 @@ export function Header(): React.JSX.Element {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
-        {/* Worker Status Indicator - only shown in non-PWA mode */}
+        {/* Worker Status Indicator - desktop only, non-PWA mode */}
         {isAuthenticated && workersStatus !== null && !isInstalled && (
-          <div className="relative" data-testid="workers-status-header" ref={workersRef}>
+          <div className="relative hidden md:block" data-testid="workers-status-header" ref={workersRef}>
             <button
               onClick={(): void => {
                 setIsWorkersOpen(!isWorkersOpen);
@@ -167,13 +177,7 @@ export function Header(): React.JSX.Element {
             >
               <Server className="h-4 w-4 text-slate-500" />
               <span
-                className={`h-2 w-2 rounded-full ${
-                  workersStatus.workers.length === 0
-                    ? 'bg-gray-400'
-                    : workersStatus.workers.some((w) => w.healthy)
-                      ? 'bg-green-500'
-                      : 'bg-red-500'
-                }`}
+                className={`h-2 w-2 rounded-full ${getWorkersDotColor(workersStatus.workers)}`}
               />
             </button>
 
@@ -185,6 +189,10 @@ export function Header(): React.JSX.Element {
                   </div>
                   {workersStatus.workers.length > 0 && (
                     <button
+                      // Prevent mousedown from reaching the document-level outside-click handler
+                      onMouseDown={(e): void => {
+                        e.stopPropagation();
+                      }}
                       onClick={(): void => {
                         void refreshWorkersStatus();
                       }}
@@ -301,11 +309,18 @@ export function Header(): React.JSX.Element {
             }}
             className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700 md:px-3"
           >
-            {userPicture !== undefined && userPicture !== '' ? (
-              <img src={userPicture} alt="" className="h-6 w-6 rounded-full" />
-            ) : (
-              <User className="h-5 w-5 text-slate-400" />
-            )}
+            <span className="relative">
+              {userPicture !== undefined && userPicture !== '' ? (
+                <img src={userPicture} alt="" className="h-6 w-6 rounded-full" />
+              ) : (
+                <User className="h-5 w-5 text-slate-400" />
+              )}
+              {workersStatus !== null && !isInstalled && (
+                <span
+                  className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white md:hidden dark:border-slate-800 ${getWorkersDotColor(workersStatus.workers)}`}
+                />
+              )}
+            </span>
             <span className="hidden max-w-32 truncate sm:inline md:max-w-48">{userName}</span>
             <ChevronDown
               className={`h-4 w-4 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}
@@ -313,14 +328,14 @@ export function Header(): React.JSX.Element {
           </button>
 
           {isMenuOpen ? (
-            <div className={`absolute right-0 top-full mt-1 ${isInstalled && workersStatus !== null ? 'w-72' : 'w-48'} rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800`}>
+            <div className={`absolute right-0 top-full mt-1 ${workersStatus !== null ? (isInstalled ? 'w-72' : 'w-72 md:w-48') : 'w-48'} rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800`}>
               <div className="border-b border-slate-100 px-4 py-2 sm:hidden dark:border-slate-700">
                 <span className="text-sm text-slate-600 dark:text-slate-300">{userName}</span>
               </div>
 
-              {/* Workers status menu item - only shown in PWA mode */}
-              {isInstalled && isAuthenticated && workersStatus !== null && (
-                <div data-testid="workers-status-menu">
+              {/* Workers status menu item - shown in PWA mode or on mobile */}
+              {isAuthenticated && workersStatus !== null && (
+                <div data-testid="workers-status-menu" className={isInstalled ? '' : 'md:hidden'}>
                   <button
                     onClick={(): void => {
                       setIsWorkersOpen(!isWorkersOpen);
@@ -330,13 +345,7 @@ export function Header(): React.JSX.Element {
                     <Server className="h-4 w-4 text-slate-500" />
                     <span>Workers</span>
                     <span
-                      className={`ml-auto h-2 w-2 rounded-full ${
-                        workersStatus.workers.length === 0
-                          ? 'bg-gray-400'
-                          : workersStatus.workers.some((w) => w.healthy)
-                            ? 'bg-green-500'
-                            : 'bg-red-500'
-                      }`}
+                      className={`ml-auto h-2 w-2 rounded-full ${getWorkersDotColor(workersStatus.workers)}`}
                     />
                   </button>
 
@@ -348,6 +357,10 @@ export function Header(): React.JSX.Element {
                         </div>
                         {workersStatus.workers.length > 0 && (
                           <button
+                            // Prevent mousedown from reaching the document-level outside-click handler
+                            onMouseDown={(e): void => {
+                              e.stopPropagation();
+                            }}
                             onClick={(): void => {
                               void refreshWorkersStatus();
                             }}

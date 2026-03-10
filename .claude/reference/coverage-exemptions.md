@@ -30,6 +30,26 @@
 
 **NEVER** add v8 ignore comments without a valid category. CI will fail.
 
+## Explanation Quality (CI + Hook enforced)
+
+The `--` explanation must name WHY testing is impossible, not WHAT the code does.
+
+| BAD (describes code)                          | GOOD (names blocker)                                                   |
+| --------------------------------------------- | ---------------------------------------------------------------------- |
+| error handling for failed request             | FakeHttpClient cannot simulate AbortError                              |
+| optional field check for linearIssueId        | noUncheckedIndexedAccess requires fallback despite prior .length check |
+| conditional requires specific webhook payload | test mock always returns status='completed', no 'failed' path          |
+| creates type narrowing branch                 | TypeScript cannot narrow string union after switch exhaustiveness      |
+| auth validation branch                        | FakeAuthPlugin always returns valid user, cannot simulate null         |
+
+Rule: If you can write a mock/fake to trigger the branch, it's not a valid v8 ignore.
+
+**Blocker keywords** — explanation should contain at least one: `cannot`, `unable`, `impossible`, `always returns`, `always succeeds`, `no support`, `not mockable`, `not reachable`, `never triggered`, `no way to`, `does not expose`.
+
+## Override Mechanism
+
+Blocks that fail tightened validation but have planned fixes are tracked in `v8-ignore-overrides.json` at repo root, keyed by Linear task ID. The CI script skips validation for files listed under an override entry. Run `pnpm run verify:v8-ignore -- --no-overrides` for strict auditing.
+
 **Reference:** `.claude/skills/coverage/reference/canonical-categories.md`
 
 Rationalizing? See `.claude/reference/rationalization-traps.md` > V8 Ignore Traps.

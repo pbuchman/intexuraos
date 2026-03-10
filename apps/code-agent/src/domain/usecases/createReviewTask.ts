@@ -5,7 +5,7 @@
  * Key differences:
  * - No pr-comment label (would route to wrong prompt)
  * - No PR task lock (review tasks don't conflict with comment tasks)
- * - No LinearIssueService (review tasks are ephemeral)
+ * - Best-effort Linear issue linking for UI grouping
  * - Sets agentType: 'review' on dispatch
  * - systemPromptHash: 'review-auto'
  */
@@ -14,6 +14,10 @@ import { err, ok, type Result, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTaskRepository.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
+import type { LinearAgentClient } from '../ports/linearAgentClient.js';
+import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+import { notifyPROfTaskCreation } from '../utils/prTaskNotification.js';
 import { createHmac } from 'node:crypto';
 
 export interface CreateReviewTaskRequest {
@@ -23,6 +27,7 @@ export interface CreateReviewTaskRequest {
   reviewTypes: string[];
   eventId: string;
   prTitle?: string;
+  prBody?: string;
   baseBranch?: string;
 }
 
@@ -36,8 +41,77 @@ export interface CreateReviewTaskDeps {
   codeTaskRepo: CodeTaskRepository;
   userLookupService: UserLookupService;
   taskDispatcher: TaskDispatcherService;
+  linearAgentClient?: LinearAgentClient;
+  gitHubPRClient: GitHubPRClient;
+  userServiceClient: UserServiceClient;
   orchestratorSecret: string;
   serviceUrl: string;
+}
+
+async function resolveLinearIssueId(
+  deps: Pick<CreateReviewTaskDeps, 'logger' | 'codeTaskRepo'> & { linearAgentClient: LinearAgentClient },
+  request: CreateReviewTaskRequest,
+  userId: string,
+): Promise<string | undefined> {
+  const { logger, codeTaskRepo, linearAgentClient } = deps;
+  const { repository, prNumber, prTitle } = request;
+
+  // Tier 1: Find existing task for this PR
+  const existingResult = await codeTaskRepo.findByPR(repository, prNumber);
+  if (existingResult.ok) {
+    const existingTask = existingResult.value; // @allow-result-access -- narrowed by existingResult.ok
+    if (existingTask?.linearIssueId !== undefined) {
+      logger.info({ linearIssueId: existingTask.linearIssueId, prNumber }, 'Copied linearIssueId from existing PR task');
+      return existingTask.linearIssueId;
+    }
+  } else {
+    logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing PR task for Linear linking');
+  }
+
+  // Tier 2: Extract INT-XXX from PR title
+  const linearIssueMatch = prTitle?.match(/\bINT-(\d+)\b/i);
+  if (linearIssueMatch !== null && linearIssueMatch !== undefined) {
+    const issueId = `INT-${String(linearIssueMatch[1])}`;
+    logger.info({ linearIssueId: issueId, prNumber }, 'Extracted linearIssueId from PR title');
+    return issueId;
+  }
+
+  // Tier 3: Create new Linear issue
+  const title = prTitle !== undefined
+    ? `[Review] PR #${String(prNumber)}: ${prTitle}`
+    : `[Review] PR #${String(prNumber)} in ${repository}`;
+  const description = buildLinearIssueDescription(request);
+  const createResult = await linearAgentClient.createIssue({ userId, title, description });
+  if (createResult.ok) {
+    const created = createResult.value; // @allow-result-access -- narrowed by createResult.ok
+    logger.info({ linearIssueId: created.issueIdentifier, prNumber }, 'Created new Linear issue for review task');
+    return created.issueIdentifier;
+  }
+
+  logger.warn({ error: createResult.error, prNumber }, 'Failed to create Linear issue for review task');
+  return undefined;
+}
+
+const PR_BODY_MAX_LENGTH = 500;
+
+function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
+  const { repository, prNumber, prBody, reviewTypes } = request;
+  const lines: string[] = [
+    'Automated PR review created by GitHub Agent triage system.',
+    '',
+    `**Pull Request:** #${String(prNumber)} in ${repository}`,
+  ];
+
+  if (prBody !== undefined) {
+    const truncated = prBody.length > PR_BODY_MAX_LENGTH
+      ? `${prBody.slice(0, PR_BODY_MAX_LENGTH)}...`
+      : prBody;
+    lines.push('', '**PR Description:**', truncated);
+  }
+
+  lines.push('', `**Review types:** ${reviewTypes.join(', ')}`);
+
+  return lines.join('\n');
 }
 
 function buildReviewPrompt(request: CreateReviewTaskRequest): string {
@@ -68,7 +142,7 @@ export async function createReviewTask(
   deps: CreateReviewTaskDeps,
   request: CreateReviewTaskRequest
 ): Promise<Result<{ taskId: string }, CreateReviewTaskError>> {
-  const { logger, codeTaskRepo, userLookupService, taskDispatcher, orchestratorSecret, serviceUrl } = deps;
+  const { logger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, orchestratorSecret, serviceUrl } = deps;
   const { repository, prNumber, senderLogin, eventId } = request;
 
   logger.info(
@@ -88,6 +162,16 @@ export async function createReviewTask(
   }
 
   const { userId, worker } = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
+
+  // Best-effort Linear issue linking for UI grouping
+  let linearIssueId: string | undefined;
+  if (linearAgentClient !== undefined) {
+    try {
+      linearIssueId = await resolveLinearIssueId({ logger, codeTaskRepo, linearAgentClient }, request, userId);
+    } catch (error: unknown) {
+      logger.warn({ error, prNumber }, 'Unexpected error resolving Linear issue for review task');
+    }
+  }
 
   // Create task
   const prompt = buildReviewPrompt(request);
@@ -109,6 +193,7 @@ export async function createReviewTask(
     webhookSecret,
     prNumber,
     agentType: 'review',
+    ...(linearIssueId !== undefined && { linearIssueId }),
   };
 
   const createResult = await codeTaskRepo.create(taskInput);
@@ -120,7 +205,7 @@ export async function createReviewTask(
   const task = createResult.value; // @allow-result-access -- narrowed by !createResult.ok
 
   // Dispatch
-  const webhookUrl = `${serviceUrl}/internal/tasks/${task.id}/callback`;
+  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
 
   const dispatchResult = await taskDispatcher.dispatch({
     taskId: task.id,
@@ -160,6 +245,22 @@ export async function createReviewTask(
   logger.info(
     { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner },
     'Review task created and dispatched'
+  );
+
+  // Best-effort: post task-created comment and update PR title
+  const titleAlreadyTagged = request.prTitle !== undefined && /\bINT-\d+\b/i.test(request.prTitle);
+  await notifyPROfTaskCreation(
+    { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+    {
+      taskId: task.id,
+      repository,
+      prNumber,
+      userId,
+      ...(linearIssueId !== undefined && { linearIssueId }),
+      ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+      titleAlreadyTagged,
+      reviewTypes: request.reviewTypes,
+    },
   );
 
   return ok({ taskId: task.id });

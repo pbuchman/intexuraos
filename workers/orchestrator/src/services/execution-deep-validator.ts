@@ -176,8 +176,8 @@ function severityEmoji(severity: 'critical' | 'warning' | 'info'): string {
   return '🔵';
 }
 
-export function formatPrComment(result: DeepValidationResult): string {
-  const lines: string[] = ['### Deep Validation Report', ''];
+export function formatPrComment(result: DeepValidationResult, costUsd: number): string {
+  const lines: string[] = ['### Deep Validation Report', '', `**Cost:** $${String(costUsd)}`, ''];
 
   // Section 1
   lines.push('#### Claim Verification');
@@ -269,7 +269,10 @@ export interface DeepValidationInput {
 }
 
 export interface ExecutionDeepValidator {
-  validate(input: DeepValidationInput): Promise<DeepValidationResult | undefined>;
+  validate(
+    input: DeepValidationInput,
+    onProgress?: (message: string) => void
+  ): Promise<DeepValidationResult | undefined>;
 }
 
 export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidator {
@@ -284,7 +287,10 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
     this.llmClient = this.createLlmClient(config);
   }
 
-  async validate(input: DeepValidationInput): Promise<DeepValidationResult | undefined> {
+  async validate(
+    input: DeepValidationInput,
+    onProgress?: (message: string) => void
+  ): Promise<DeepValidationResult | undefined> {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: input.formattedTranscript,
       agentClaims: input.agentClaims,
@@ -297,6 +303,8 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       'Deep validation LLM request'
     );
 
+    onProgress?.('calling Gemini for analysis...');
+
     const generated = await this.llmClient.generate(prompt);
     if (!generated.ok) {
       this.logger.error(
@@ -307,6 +315,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         },
         'Deep validation LLM call failed'
       );
+      onProgress?.(`LLM call failed: ${generated.error.message}`);
       return undefined;
     }
 
@@ -314,6 +323,8 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       { taskId: input.taskId, responseChars: generated.value.content.length },
       'Deep validation LLM response received'
     );
+
+    onProgress?.('validation response received');
 
     let rawJson: unknown;
     try {
@@ -323,6 +334,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, error: getErrorMessage(error), response: generated.value.content },
         'Deep validation JSON parse failed'
       );
+      onProgress?.(`JSON parse failed: ${getErrorMessage(error)}`);
       return undefined;
     }
 
@@ -332,6 +344,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, zodErrors: parseResult.error.issues },
         'Deep validation Zod validation failed — posting raw response as fallback'
       );
+      onProgress?.('schema parse failed, posting raw response as fallback');
       // Fallback: post raw LLM response when schema parse fails
       await this.postRawComment(input, generated.value.content);
       return undefined;
@@ -340,16 +353,19 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
     const result = parseResult.data;
 
     // Post PR comment
-    await this.postPrComment(input, result);
+    onProgress?.('posting PR comment...');
+    const posted = await this.postPrComment(input, result, generated.value.usage.costUsd);
+    onProgress?.(posted ? 'PR comment posted' : 'PR comment failed (see server logs)');
 
     return result;
   }
 
   private async postPrComment(
     input: DeepValidationInput,
-    result: DeepValidationResult
-  ): Promise<void> {
-    const comment = formatPrComment(result);
+    result: DeepValidationResult,
+    costUsd: number
+  ): Promise<boolean> {
+    const comment = formatPrComment(result, costUsd);
     try {
       await execFileAsync(
         'gh',
@@ -360,6 +376,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, prNumber: input.prNumber },
         'Deep validation PR comment posted'
       );
+      return true;
     } catch (error) {
       /* v8 ignore start -- upstream: stderr property only exists on execFile errors, not testable with promisify mock @preserve */
       const stderr =
@@ -371,6 +388,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, error: getErrorMessage(error), stderr },
         'Failed to post deep validation PR comment'
       );
+      return false;
     }
   }
 
@@ -379,7 +397,7 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       '### Deep Validation Report (raw — schema parse failed)',
       '',
       '```json',
-      rawResponse.slice(0, 3000),
+      stripCodeFences(rawResponse).slice(0, 3000),
       '```',
     ].join('\n');
     try {
@@ -432,6 +450,13 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       usageSink: new StructuredLogUsageSink({ logger: this.logger }),
     });
   }
+}
+
+export function stripCodeFences(content: string): string {
+  const trimmed = content.trim();
+  const fencePattern = /^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/;
+  const match = fencePattern.exec(trimmed);
+  return match?.[1] ?? trimmed;
 }
 
 function extractJson(content: string): unknown {
