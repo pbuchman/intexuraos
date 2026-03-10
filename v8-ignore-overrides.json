@@ -129,14 +129,6 @@
       "files": ["packages/internal-clients/src/user-service/client.ts"],
       "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
     },
-    "PENDING-packages-llm-prompts": {
-      "files": [
-        "packages/llm-prompts/src/approvals/approvalIntentPrompt.ts",
-        "packages/llm-prompts/src/calendar/contextSchemas.ts",
-        "packages/llm-prompts/src/dataInsights/parseInsightResponse.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in packages/llm-prompts"
-    },
     "PENDING-workers-orchestrator": {
       "files": [
         "workers/orchestrator/src/github/token-service.ts",
