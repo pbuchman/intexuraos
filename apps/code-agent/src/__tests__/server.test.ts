@@ -159,6 +159,8 @@ describe('server configuration', () => {
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -186,6 +188,8 @@ describe('server configuration', () => {
       webhookRules: import('../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      eventDecisionRepo: import('../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      unifiedEvaluator: import('../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
 

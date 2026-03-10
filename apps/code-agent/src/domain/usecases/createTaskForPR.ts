@@ -39,6 +39,7 @@ export interface CreateTaskForPRRequest {
   comment: string;
   /** GitHub webhook event ID for deduplication */
   eventId: string;
+  baseBranch?: string;
 }
 
 export type CreateTaskForPRErrorCode =
@@ -189,6 +190,27 @@ export async function createTaskForPR(
   const { userId, worker } = userResult.value; // @allow-result-access -- narrowed by !userResult.ok above
   logger.debug({ userId, senderLogin }, 'Resolved GitHub username to user');
 
+  // Fetch baseBranch from GitHub API when not provided (e.g. issue_comment events
+  // where no prior pull_request event was stored)
+  let resolvedBaseBranch = request.baseBranch;
+  if (resolvedBaseBranch === undefined) {
+    const [owner, repo] = repository.split('/');
+    if (owner !== undefined && repo !== undefined) {
+      const githubToken = await fetchGitHubToken(deps.userServiceClient, userId, logger);
+      if (githubToken !== null) {
+        const branchResult = await deps.gitHubPRClient.getPullRequestBaseBranch(
+          githubToken, owner, repo, prNumber
+        );
+        if (branchResult.ok) {
+          resolvedBaseBranch = branchResult.value; // @allow-result-access -- narrowed by branchResult.ok
+          logger.info({ baseBranch: resolvedBaseBranch, prNumber }, 'Fetched baseBranch from GitHub API');
+        } else {
+          logger.warn({ error: branchResult.error, prNumber }, 'Failed to fetch baseBranch from GitHub API'); // @allow-result-access -- narrowed by !branchResult.ok
+        }
+      }
+    }
+  }
+
   // Step 2: Use transaction with document-level lock to prevent race conditions
   const lockDocPath = buildLockDocPath(repository, prNumber);
   const lockRef = firestore.doc(lockDocPath);
@@ -260,7 +282,7 @@ export async function createTaskForPR(
         workerType: 'auto',
         workerLocation: worker.name,
         repository,
-        baseBranch: 'main',
+        baseBranch: resolvedBaseBranch ?? 'main',
         traceId: eventId,
         actionId: `pr-comment/${repository}/${String(prNumber)}/${eventId}`,
         approvalEventId: eventId,
@@ -370,7 +392,7 @@ export async function createTaskForPR(
     prompt: buildTaskPrompt(request),
     systemPromptHash: 'pr-comment-auto',
     repository,
-    baseBranch: 'main',
+    baseBranch: resolvedBaseBranch ?? 'main',
     workerType: 'auto',
     webhookUrl,
     webhookSecret,

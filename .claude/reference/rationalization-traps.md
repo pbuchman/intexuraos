@@ -53,3 +53,5 @@ Common thought patterns that precede rule violations. When you catch yourself th
 | "The validation branch is obvious"                    | Obvious branches still need test coverage.          |
 | "It's just a default case in a switch"                | Pass an unmatched value. One line of test code.     |
 | "upstream: a prior check makes this unreachable"      | Unreachable code should be deleted, not exempted.   |
+| "The explanation is just for documentation"           | Explanation is for VALIDATION. CI checks it.        |
+| "This path requires a specific payload"               | Then create that payload in the test.               |

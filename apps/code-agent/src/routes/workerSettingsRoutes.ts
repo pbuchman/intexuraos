@@ -226,7 +226,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to GET /code/worker-settings',
@@ -241,10 +240,12 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
 
       const result = await workerSettingsRepo.getSettings(userId);
 
+      /* v8 ignore start -- test-infra: FakeWorkerSettingsRepo.getSettings cannot simulate internal failure @preserve */
       if (!result.ok) {
         request.log.error({ error: result.error }, 'Failed to get worker settings');
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
+      /* v8 ignore stop @preserve */
 
       const settings = result.value;
 
@@ -254,7 +255,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
 
       return await reply.ok(response);
     }
-    /* v8 ignore stop @preserve */
   );
 
   // POST /code/worker-settings/workers - Add new worker
@@ -354,15 +354,15 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest<{ Body: WorkerConfigInput }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/worker-settings/workers',
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
       const { name } = request.body;
 
       // Validate worker name
@@ -390,7 +390,9 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
           already_exists: 'CONFLICT',
           internal_error: 'INTERNAL_ERROR',
         };
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes codeMap lookup possibly undefined despite exhaustive keys @preserve */
         return await reply.fail(codeMap[result.error.code] ?? 'INTERNAL_ERROR', result.error.message);
+        /* v8 ignore stop @preserve */
       }
 
       request.log.info({ userId, name }, 'Worker added successfully');
@@ -488,7 +490,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (
       request: FastifyRequest<{ Params: { name: string }; Body: WorkerConfigUpdateInput }>,
       reply: FastifyReply
@@ -499,8 +500,9 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
       const { name } = request.params;
 
       // Validate credentials are not masked values (security: prevent storing display-only data)
@@ -519,7 +521,9 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
           not_found: 'NOT_FOUND',
           internal_error: 'INTERNAL_ERROR',
         };
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes codeMap lookup possibly undefined despite exhaustive keys @preserve */
         return await reply.fail(codeMap[result.error.code] ?? 'INTERNAL_ERROR', result.error.message);
+        /* v8 ignore stop @preserve */
       }
 
       request.log.info({ userId, name }, 'Worker updated successfully');
@@ -615,7 +619,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest<{ Params: { name: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to DELETE /code/worker-settings/workers/:name',
@@ -623,8 +626,9 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
       const { name } = request.params;
 
       request.log.info({ userId, name }, 'Deleting worker');
@@ -637,7 +641,9 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
           not_found: 'NOT_FOUND',
           internal_error: 'INTERNAL_ERROR',
         };
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes codeMap lookup possibly undefined despite exhaustive keys @preserve */
         return await reply.fail(codeMap[result.error.code] ?? 'INTERNAL_ERROR', result.error.message);
+        /* v8 ignore stop @preserve */
       }
 
       request.log.info({ userId, name }, 'Worker deleted successfully');
@@ -751,7 +757,6 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest<{ Params: { name: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/worker-settings/workers/:name/test',
@@ -759,18 +764,21 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
       const { name } = request.params;
 
       request.log.info({ userId, name }, 'Testing worker connectivity');
 
       const configResult = await workerSettingsRepo.getWorkerByName(userId, name);
 
+      /* v8 ignore start -- test-infra: FakeWorkerSettingsRepo.getWorkerByName cannot simulate internal failure @preserve */
       if (!configResult.ok) {
         request.log.error({ error: configResult.error }, 'Failed to get worker config for test');
         return await reply.fail('INTERNAL_ERROR', configResult.error.message);
       }
+      /* v8 ignore stop @preserve */
 
       const config = configResult.value;
 
@@ -900,15 +908,15 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         },
       },
     },
-    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (request: FastifyRequest<{ Body: { workerNames: string[] } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to PUT /code/worker-settings/priority',
       });
 
       const { workerSettingsRepo } = getServices();
-      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
       const { workerNames } = request.body;
 
       request.log.info({ userId, workerNames }, 'Reordering workers');

@@ -113,7 +113,6 @@ export async function cancelTaskWithNonce(
     // Fetch user's worker credentials for the cancellation request
     const settingsResult = await workerSettingsRepo.getSettings(userId);
     let workerCreds = undefined;
-    /* v8 ignore start -- ts-type: optional worker config checks for cancellation @preserve */
     if (settingsResult.ok && settingsResult.value !== null) {
       const settings = settingsResult.value;
       const workerConfig = settings.workers.find((w) => w.name === task.workerLocation);
@@ -125,7 +124,6 @@ export async function cancelTaskWithNonce(
         };
       }
     }
-    /* v8 ignore stop @preserve */
     await taskDispatcher.cancelOnWorker(taskId, task.workerLocation, workerCreds);
   } catch (error) {
     logger.warn({ taskId, error }, 'Failed to notify worker of cancellation');

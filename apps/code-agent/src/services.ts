@@ -6,7 +6,7 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
-import { ok } from '@intexuraos/common-core';
+import { ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
@@ -56,6 +56,12 @@ import { ALLOWED_BOTS } from './routes/webhooks/github.js';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
 import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
+import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
+import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
+import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services/unifiedEvaluator.js';
+import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
+import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
+import { createReviewTask } from './domain/usecases/createReviewTask.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -86,6 +92,9 @@ export interface ServiceContainer {
   dispatchService: WebhookDispatchService;
   // GitHub Agent (INT-743)
   toolCallingClient: ToolCallingClient | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  // INT-744: Unified Webhook Evaluator
+  eventDecisionRepo: EventDecisionRepository;
+  unifiedEvaluator: UnifiedEvaluator;
 }
 
 // Configuration required to initialize services
@@ -306,6 +315,92 @@ export function initServices(config: ServiceConfig): void {
     logger,
   });
 
+  const webhookRules = createWebhookRulesService([
+    // Note: RepositoryScopeRule is NOT included here because the route handler
+    // already filters via shouldProcessRepository() which correctly handles
+    // both intexuraos/* and */intexuraos patterns. Adding it here would be
+    // redundant and risks scope mismatch (see PR #997 review).
+    new ActionableEventRule(ALLOWED_BOTS),
+    new SenderWhitelistRule(ALLOWED_BOTS),
+    new SkipPrefixRule(['@claude', '@codex', '@ignore']),
+    // Note: BotReviewEditRule is NOT included here because it introduces
+    // new "meaningful changes" filtering not present in the original code.
+    // The original dispatched all edited bot comments without payload inspection.
+  ]);
+
+  const toolCallingClient = config.geminiAppApiKey !== ''
+    ? createToolCallingClient({
+        apiKey: config.geminiAppApiKey,
+        model: LlmModels.Gemini25Flash,
+        userId: 'system:github-agent',
+        pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
+        logger,
+      })
+    : undefined;
+
+  const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
+
+  const dispatchService = createWebhookDispatchService({
+    gitHubPREventRepo,
+    codeTaskRepo,
+    logLineRepo,
+    userLookupService,
+    linearIssueService,
+    taskDispatcher,
+    whatsappNotifier,
+    workerSettingsRepo,
+    statusMirrorService,
+    gitHubPRClient,
+    userServiceClient,
+    firestore,
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
+    allowedBots: ALLOWED_BOTS,
+    orchestratorSecret: config.orchestratorSecret,
+    serviceUrl: config.serviceUrl,
+  });
+
+  const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
+
+  const unifiedEvaluator = createUnifiedEvaluator({
+    webhookRules,
+    dispatchService,
+    eventDecisionRepo,
+    evaluateEvent: toolCallingClient !== undefined
+      ? (event: GitHubPREvent): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
+          { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS },
+          event,
+        )
+      : undefined,
+    createReviewTask: (taskLogger, request) => createReviewTask(
+      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl },
+      request,
+    ),
+    postTriageComment: async (senderLogin, repository, prNumber, body) => {
+      const userResult = await userServiceClient.resolveGitHubUsername(senderLogin);
+      if (!userResult.ok) {
+        return { ok: false, error: { code: 'USER_NOT_FOUND', message: `Failed to resolve user: ${senderLogin}` } };
+      }
+      const resolvedUser = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
+      if (resolvedUser === null) {
+        return { ok: false, error: { code: 'USER_NOT_FOUND', message: `No linked account for: ${senderLogin}` } };
+      }
+      const tokenResult = await userServiceClient.getOAuthToken(resolvedUser.userId, 'github');
+      if (!tokenResult.ok) {
+        return { ok: false, error: { code: 'TOKEN_NOT_AVAILABLE', message: `OAuth token unavailable for: ${resolvedUser.userId}` } };
+      }
+      const [owner, repo] = repository.split('/');
+      if (owner === undefined || repo === undefined) {
+        return { ok: false, error: { code: 'INVALID_REPO', message: `Invalid repository: ${repository}` } };
+      }
+      const commentResult = await gitHubPRClient.postPRComment(tokenResult.value.accessToken, owner, repo, prNumber, body); // @allow-result-access -- narrowed by !tokenResult.ok
+      if (!commentResult.ok) {
+        return { ok: false, error: { code: commentResult.error.code, message: commentResult.error.message } };
+      }
+      return { ok: true, value: { commentId: commentResult.value.commentId } }; // @allow-result-access -- narrowed by !commentResult.ok
+    },
+    allowedBots: ALLOWED_BOTS,
+  });
+
   container = {
     firestore,
     logger,
@@ -337,51 +432,17 @@ export function initServices(config: ServiceConfig): void {
     metricsClient,
     workerSettingsRepo,
     workerHealthProbe,
-    gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+    gitHubPREventRepo,
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
     userServiceClient,
     gitHubPRClient,
     userLookupService,
-    webhookRules: createWebhookRulesService([
-      // Note: RepositoryScopeRule is NOT included here because the route handler
-      // already filters via shouldProcessRepository() which correctly handles
-      // both intexuraos/* and */intexuraos patterns. Adding it here would be
-      // redundant and risks scope mismatch (see PR #997 review).
-      new ActionableEventRule(ALLOWED_BOTS),
-      new SenderWhitelistRule(ALLOWED_BOTS),
-      new SkipPrefixRule(['@claude', '@codex', '@ignore']),
-      // Note: BotReviewEditRule is NOT included here because it introduces
-      // new "meaningful changes" filtering not present in the original code.
-      // The original dispatched all edited bot comments without payload inspection.
-    ]),
-    // GitHub Agent — optional: only initialized when Gemini API key is available
-    toolCallingClient: config.geminiAppApiKey !== ''
-      ? createToolCallingClient({
-          apiKey: config.geminiAppApiKey,
-          model: LlmModels.Gemini25Flash,
-          userId: 'system:github-agent',
-          pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
-          logger,
-        })
-      : undefined,
-    dispatchService: createWebhookDispatchService({
-      codeTaskRepo,
-      logLineRepo,
-      userLookupService,
-      linearIssueService,
-      taskDispatcher,
-      whatsappNotifier,
-      workerSettingsRepo,
-      statusMirrorService,
-      gitHubPRClient,
-      userServiceClient,
-      firestore,
-      messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
-      allowedBots: ALLOWED_BOTS,
-      orchestratorSecret: config.orchestratorSecret,
-      serviceUrl: config.serviceUrl,
-    }),
+    webhookRules,
+    toolCallingClient,
+    dispatchService,
+    eventDecisionRepo,
+    unifiedEvaluator,
   };
 }
 

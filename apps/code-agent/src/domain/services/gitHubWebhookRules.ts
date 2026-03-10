@@ -1,35 +1,22 @@
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 
 /**
- * Represents the result of evaluating a webhook rule.
+ * Three-outcome rule result. Replaces the old boolean `RuleResult`.
+ *
+ * - `dispatch`: event passes this rule, continue to next rule
+ * - `skip`: event should NOT be dispatched (short-circuits chain)
+ * - `needs_triage`: rule can't decide — escalate to LLM triage
  */
-export interface RuleResult {
-  /**
-   * Whether the webhook event should be dispatched (is actionable).
-   */
-  shouldDispatch: boolean;
-
-  /**
-   * A human-readable reason for the decision.
-   */
-  reason: string;
-
-  /**
-   * Optional context information about the evaluation.
-   */
-  context?: Record<string, unknown>;
-}
+export type RuleOutcome =
+  | { action: 'dispatch'; reason: string; context?: Record<string, unknown> }
+  | { action: 'skip'; reason: string; context?: Record<string, unknown> }
+  | { action: 'needs_triage'; reason: string; context?: Record<string, unknown> };
 
 /**
  * Interface for webhook rules that determine if a GitHub PR event is actionable.
  */
 export interface WebhookRule {
-  /**
-   * Evaluates whether the given GitHub PR event is actionable according to this rule.
-   * @param event The GitHub PR event to evaluate
-   * @returns A RuleResult indicating whether the event is actionable and why
-   */
-  evaluate(event: GitHubPREvent): RuleResult;
+  evaluate(event: GitHubPREvent): RuleOutcome;
 }
 
 /**
@@ -40,7 +27,7 @@ export class RepositoryScopeRule implements WebhookRule {
     private readonly allowedRepositories: Set<string>
   ) {}
 
-  evaluate(event: GitHubPREvent): RuleResult {
+  evaluate(event: GitHubPREvent): RuleOutcome {
     const repoFullName = event.repository;
 
     for (const pattern of this.allowedRepositories) {
@@ -48,14 +35,14 @@ export class RepositoryScopeRule implements WebhookRule {
         const prefix = pattern.slice(0, -1);
         if (repoFullName.startsWith(prefix)) {
           return {
-            shouldDispatch: true,
+            action: 'dispatch',
             reason: 'REPOSITORY_IN_SCOPE',
             context: { repository: repoFullName }
           };
         }
       } else if (repoFullName === pattern) {
         return {
-          shouldDispatch: true,
+          action: 'dispatch',
           reason: 'REPOSITORY_IN_SCOPE',
           context: { repository: repoFullName }
         };
@@ -63,7 +50,7 @@ export class RepositoryScopeRule implements WebhookRule {
     }
 
     return {
-      shouldDispatch: false,
+      action: 'skip',
       reason: 'REPOSITORY_NOT_IN_SCOPE',
       context: {
         repository: repoFullName,
@@ -76,18 +63,34 @@ export class RepositoryScopeRule implements WebhookRule {
 export class ActionableEventRule implements WebhookRule {
   constructor(private readonly allowedBots: Set<string>) {}
 
-  evaluate(event: GitHubPREvent): RuleResult {
+  evaluate(event: GitHubPREvent): RuleOutcome {
+    // issue_comment created → needs_triage (LLM decides if actionable)
     if (event.eventType === 'issue_comment' && event.action === 'created') {
-      return { shouldDispatch: true, reason: 'ACTIONABLE_ISSUE_COMMENT' };
+      return { action: 'needs_triage', reason: 'ISSUE_COMMENT_NEEDS_TRIAGE' };
     }
+    // pull_request_review submitted → hard dispatch (no LLM)
     if (event.eventType === 'pull_request_review' && event.action === 'submitted') {
-      return { shouldDispatch: true, reason: 'ACTIONABLE_PR_REVIEW' };
+      return { action: 'dispatch', reason: 'ACTIONABLE_PR_REVIEW' };
     }
+    // issue_comment edited by allowed bot → needs_triage
     if (event.eventType === 'issue_comment' && event.action === 'edited' && this.allowedBots.has(event.senderLogin)) {
-      return { shouldDispatch: true, reason: 'ACTIONABLE_BOT_EDIT' };
+      return { action: 'needs_triage', reason: 'BOT_EDIT_NEEDS_TRIAGE' };
     }
+    // issue_comment edited by non-bot → skip (unchanged)
+    if (event.eventType === 'issue_comment' && event.action === 'edited') {
+      return {
+        action: 'skip',
+        reason: 'EVENT_NOT_ACTIONABLE',
+        context: { eventType: event.eventType, action: event.action },
+      };
+    }
+    // pull_request opened/synchronize → needs_triage
+    if (event.eventType === 'pull_request' && (event.action === 'opened' || event.action === 'synchronize')) {
+      return { action: 'needs_triage', reason: 'PR_NEEDS_TRIAGE' };
+    }
+    // Everything else → skip
     return {
-      shouldDispatch: false,
+      action: 'skip',
       reason: 'EVENT_NOT_ACTIONABLE',
       context: { eventType: event.eventType, action: event.action },
     };
@@ -96,36 +99,40 @@ export class ActionableEventRule implements WebhookRule {
 
 /**
  * Rule that checks if the sender is in the allowed bots list or is the repository owner.
+ * Pass-through for pull_request events (sender filtering doesn't apply to PRs).
  */
 export class SenderWhitelistRule implements WebhookRule {
   constructor(
     private readonly allowedBots: Set<string>
   ) {}
 
-  evaluate(event: GitHubPREvent): RuleResult {
+  evaluate(event: GitHubPREvent): RuleOutcome {
+    // Pass-through for pull_request events — sender filtering doesn't apply
+    if (event.eventType === 'pull_request') {
+      return { action: 'dispatch', reason: 'PR_EVENT_PASS_THROUGH' };
+    }
+
     const sender = event.senderLogin;
     const repoOwner = event.repository.split('/')[0];
 
-    // Allow if sender is the repository owner
     if (sender === repoOwner) {
       return {
-        shouldDispatch: true,
+        action: 'dispatch',
         reason: 'SENDER_IS_REPO_OWNER',
         context: { sender, repoOwner }
       };
     }
 
-    // Allow if sender is in the allowed bots list
     if (this.allowedBots.has(sender)) {
       return {
-        shouldDispatch: true,
+        action: 'dispatch',
         reason: 'SENDER_IS_ALLOWED_BOT',
         context: { sender, allowedBots: Array.from(this.allowedBots) }
       };
     }
 
     return {
-      shouldDispatch: false,
+      action: 'skip',
       reason: 'SENDER_NOT_WHITELISTED',
       context: {
         sender,
@@ -138,36 +145,43 @@ export class SenderWhitelistRule implements WebhookRule {
 
 /**
  * Rule that checks if a comment body starts with skip prefixes.
+ * Only applies to issue_comment events (checks eventType, NOT body === null).
  */
 export class SkipPrefixRule implements WebhookRule {
   constructor(
     private readonly skipPrefixes: string[] = ['/', '!']
   ) {}
 
-  evaluate(event: GitHubPREvent): RuleResult {
-    // Only apply this rule to comment events
+  evaluate(event: GitHubPREvent): RuleOutcome {
+    // Pass-through for non-issue_comment events
+    if (event.eventType !== 'issue_comment') {
+      return {
+        action: 'dispatch',
+        reason: 'NOT_A_COMMENT_EVENT'
+      };
+    }
+
+    // Null body on issue_comment is treated as empty (actionable)
     if (event.body === null) {
       return {
-        shouldDispatch: true,
-        reason: 'NOT_A_COMMENT_EVENT'
+        action: 'dispatch',
+        reason: 'EMPTY_COMMENT'
       };
     }
 
     const commentBody = event.body.trim().toLowerCase();
 
-    // If comment is empty, it's actionable
     if (commentBody === '') {
       return {
-        shouldDispatch: true,
+        action: 'dispatch',
         reason: 'EMPTY_COMMENT'
       };
     }
 
-    // Check if comment starts with any skip prefix (case-insensitive)
     for (const prefix of this.skipPrefixes) {
       if (commentBody.startsWith(prefix.toLowerCase())) {
         return {
-          shouldDispatch: false,
+          action: 'skip',
           reason: 'COMMENT_HAS_SKIP_PREFIX',
           context: {
             prefix,
@@ -178,7 +192,7 @@ export class SkipPrefixRule implements WebhookRule {
     }
 
     return {
-      shouldDispatch: true,
+      action: 'dispatch',
       reason: 'COMMENT_DOES_NOT_HAVE_SKIP_PREFIX',
       context: { commentBody }
     };
@@ -193,29 +207,24 @@ export class BotReviewEditRule implements WebhookRule {
     private readonly botUsernames: Set<string>
   ) {}
 
-  evaluate(event: GitHubPREvent): RuleResult {
-    // Only apply this rule to review events
+  evaluate(event: GitHubPREvent): RuleOutcome {
     if (event.payload === null || event.payload === undefined || typeof event.payload !== 'object' || !('changes' in event.payload)) {
       return {
-        shouldDispatch: true,
+        action: 'dispatch',
         reason: 'NOT_A_REVIEW_EDIT_EVENT'
       };
     }
 
     const reviewer = event.senderLogin;
 
-    // If there's no reviewer info, treat as actionable
     if (!reviewer) {
       return {
-        shouldDispatch: true,
+        action: 'dispatch',
         reason: 'REVIEWER_INFO_MISSING'
       };
     }
 
-    // Check if the reviewer is a bot
     if (this.botUsernames.has(reviewer)) {
-      // For bot reviews, check if the edit is meaningful
-      // (i.e., not just timestamp updates or minor metadata changes)
       const payload = event.payload as Record<string, unknown>;
       const changes = payload['changes'] as Record<string, unknown> | undefined;
       const hasBodyChange = changes !== undefined && 'body' in changes;
@@ -223,7 +232,7 @@ export class BotReviewEditRule implements WebhookRule {
 
       if (!hasBodyChange && !hasStateChange) {
         return {
-          shouldDispatch: false,
+          action: 'skip',
           reason: 'BOT_REVIEW_EDIT_NO_MEANINGFUL_CHANGES',
           context: { reviewer, changes }
         };
@@ -231,7 +240,7 @@ export class BotReviewEditRule implements WebhookRule {
     }
 
     return {
-      shouldDispatch: true,
+      action: 'dispatch',
       reason: 'REVIEW_EDIT_IS_ACTIONABLE',
       context: {
         reviewer,
@@ -243,31 +252,36 @@ export class BotReviewEditRule implements WebhookRule {
 }
 
 export interface WebhookRulesService {
-  evaluate(event: GitHubPREvent): RuleResult;
+  evaluate(event: GitHubPREvent): RuleOutcome;
 }
 
 /**
- * Service that evaluates GitHub PR webhook events against a set of rules
- * to determine if they are actionable.
+ * Service that evaluates GitHub PR webhook events against a set of rules.
+ *
+ * Chain propagation semantics:
+ * - `skip` → short-circuit return (any rule can veto)
+ * - `dispatch` → continue to next rule
+ * - `needs_triage` → propagate through remaining rules; skip still wins
  */
 export class GitHubWebhookRules implements WebhookRulesService {
   constructor(
     private readonly rules: WebhookRule[]
   ) {}
 
-  evaluate(event: GitHubPREvent): RuleResult {
+  evaluate(event: GitHubPREvent): RuleOutcome {
+    let pendingTriage = false;
+
     for (const rule of this.rules) {
       const result = rule.evaluate(event);
 
-      if (!result.shouldDispatch) {
-        return result;
-      }
+      if (result.action === 'skip') return result;
+      if (result.action === 'needs_triage') pendingTriage = true;
+      // 'dispatch' → continue
     }
 
-    return {
-      shouldDispatch: true,
-      reason: 'ALL_RULES_PASSED'
-    };
+    return pendingTriage
+      ? { action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }
+      : { action: 'dispatch', reason: 'ALL_RULES_PASSED' };
   }
 }
 

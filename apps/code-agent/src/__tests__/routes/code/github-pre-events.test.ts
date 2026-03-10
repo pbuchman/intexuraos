@@ -204,6 +204,8 @@ describe('GET /code/github-pr-events', () => {
       webhookRules: {} as never,
       dispatchService: {} as never,
       toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -231,6 +233,8 @@ describe('GET /code/github-pr-events', () => {
       webhookRules: import('../../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      eventDecisionRepo: import('../../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      unifiedEvaluator: import('../../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
 
@@ -262,6 +266,7 @@ describe('GET /code/github-pr-events', () => {
 
     await repo.save({
       githubEventId: 11111,
+      deliveryId: null,
       repository: 'intexuraos/repo-a',
       repositoryId: 111111,
       pullRequestNumber: 1,
@@ -274,6 +279,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR in repo A',
       body: 'Body',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
       payload: {},
@@ -281,6 +287,7 @@ describe('GET /code/github-pr-events', () => {
 
     await repo.save({
       githubEventId: 22222,
+      deliveryId: null,
       repository: 'intexuraos/repo-b',
       repositoryId: 222222,
       pullRequestNumber: 2,
@@ -293,6 +300,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR in repo B',
       body: 'Body',
       state: 'closed',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
       payload: {},
@@ -350,6 +358,7 @@ describe('GET /code/github-pr-events', () => {
     const mockEvent: GitHubPREvent = {
       id: 'event-1',
       githubEventId: 12345678,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 987654321,
       pullRequestNumber: 42,
@@ -362,6 +371,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'Test PR',
       body: 'Test body',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
       processedAt: new Date('2024-01-01T00:05:00Z'),
@@ -395,6 +405,7 @@ describe('GET /code/github-pr-events', () => {
 
     await repo.save({
       githubEventId: 30001,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 10,
@@ -407,6 +418,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: null,
       state: null,
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-02-01T00:00:00Z'),
       payload: { comment: { html_url: commentUrl } },
@@ -478,6 +490,7 @@ describe('GET /code/github-pr-events', () => {
 
     await repo.save({
       githubEventId: 10001,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 5,
@@ -490,6 +503,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 5',
       body: null,
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
       payload: {},
@@ -497,6 +511,7 @@ describe('GET /code/github-pr-events', () => {
 
     await repo.save({
       githubEventId: 10002,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 5,
@@ -509,6 +524,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: null,
       state: null,
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
       payload: {},
@@ -548,6 +564,7 @@ describe('GET /code/github-pr-events', () => {
     // PR opened
     await repo.save({
       githubEventId: 20001,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 7,
@@ -560,6 +577,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 7',
       body: 'PR description',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
       payload: { pull_request: { html_url: 'https://github.com/intexuraos/test-repo/pull/7' } },
@@ -568,6 +586,7 @@ describe('GET /code/github-pr-events', () => {
     // Comment created
     await repo.save({
       githubEventId: 20002,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 7,
@@ -580,6 +599,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Original comment text',
       state: null,
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
       payload: { comment: { id: 555, html_url: 'https://github.com/intexuraos/test-repo/pull/7#issuecomment-555' } },
@@ -588,6 +608,7 @@ describe('GET /code/github-pr-events', () => {
     // Same comment edited (same comment.id, later timestamp)
     await repo.save({
       githubEventId: 20003,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 7,
@@ -600,6 +621,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Updated comment text',
       state: null,
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-03T00:00:00Z'),
       payload: { comment: { id: 555, html_url: 'https://github.com/intexuraos/test-repo/pull/7#issuecomment-555' } },
@@ -608,6 +630,7 @@ describe('GET /code/github-pr-events', () => {
     // Push event after (should not be affected by dedup)
     await repo.save({
       githubEventId: 20004,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 7,
@@ -620,6 +643,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'Push to feature-branch',
       body: null,
       state: null,
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-04T00:00:00Z'),
       payload: { ref: 'refs/heads/feature-branch' },
@@ -658,6 +682,7 @@ describe('GET /code/github-pr-events', () => {
     // Review submitted
     await repo.save({
       githubEventId: 30001,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 8,
@@ -670,6 +695,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Original review',
       state: null,
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
       payload: { review: { id: 777, html_url: 'https://github.com/intexuraos/test-repo/pull/8#pullrequestreview-777' } },
@@ -678,6 +704,7 @@ describe('GET /code/github-pr-events', () => {
     // Review edited
     await repo.save({
       githubEventId: 30002,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 8,
@@ -690,6 +717,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Updated review',
       state: null,
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
       payload: { review: { id: 777, html_url: 'https://github.com/intexuraos/test-repo/pull/8#pullrequestreview-777' } },
@@ -717,6 +745,7 @@ describe('GET /code/github-pr-events', () => {
     // PR opened
     await repo.save({
       githubEventId: 40001,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 10,
@@ -729,6 +758,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
       payload: {},
@@ -737,6 +767,7 @@ describe('GET /code/github-pr-events', () => {
     // synchronize 1
     await repo.save({
       githubEventId: 40002,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 10,
@@ -749,6 +780,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
       payload: {},
@@ -757,6 +789,7 @@ describe('GET /code/github-pr-events', () => {
     // synchronize 2
     await repo.save({
       githubEventId: 40003,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 10,
@@ -769,6 +802,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-03T00:00:00Z'),
       payload: {},
@@ -777,6 +811,7 @@ describe('GET /code/github-pr-events', () => {
     // synchronize 3 (most recent)
     await repo.save({
       githubEventId: 40004,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 10,
@@ -789,6 +824,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-04T00:00:00Z'),
       payload: {},
@@ -821,6 +857,7 @@ describe('GET /code/github-pr-events', () => {
     // PR opened with original body
     await repo.save({
       githubEventId: 50001,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 11,
@@ -833,6 +870,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 11',
       body: 'Version 1 of description',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
       payload: {},
@@ -841,6 +879,7 @@ describe('GET /code/github-pr-events', () => {
     // synchronize with updated body
     await repo.save({
       githubEventId: 50002,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 11,
@@ -853,6 +892,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 11',
       body: 'Version 2 of description',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
       payload: {},
@@ -881,6 +921,7 @@ describe('GET /code/github-pr-events', () => {
 
     await repo.save({
       githubEventId: 60001,
+      deliveryId: null,
       repository: 'intexuraos/test-repo',
       repositoryId: 1,
       pullRequestNumber: 12,
@@ -893,6 +934,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 12',
       body: 'Single event body',
       state: 'open',
+      baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
       payload: {},

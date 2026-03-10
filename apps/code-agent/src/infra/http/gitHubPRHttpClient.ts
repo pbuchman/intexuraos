@@ -161,6 +161,37 @@ export function createGitHubPRHttpClient(
       }
     },
 
+    async getPullRequestBaseBranch(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number
+    ): Promise<Result<string, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+        }
+
+        const data = (await response.json()) as { base?: { ref?: string } };
+        const baseRef = data.base?.ref;
+        if (typeof baseRef !== 'string') {
+          return err({ code: 'API_ERROR', message: 'PR response missing base.ref' });
+        }
+        return ok(baseRef);
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
     async postPRComment(
       token: string,
       owner: string,
