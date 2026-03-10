@@ -15,7 +15,6 @@ export interface ParsedSummary {
   wordCount: number;
 }
 
-/* v8 ignore start -- test-infra: test mock for openai api responses always returns valid json @preserve */
 /**
  * Error from parsing summary response.
  */
@@ -23,7 +22,6 @@ export interface ParseError {
   code: 'EMPTY' | 'JSON_FORMAT';
   message: string;
 }
-/* v8 ignore stop @preserve */
 
 /**
  * Error class for parse failures with code.
@@ -92,11 +90,9 @@ function stripUnwantedPrefixes(content: string): string {
         return ''; // Prefix covers entire content
       }
       const nextChar = content.charAt(prefixLength);
-      /* v8 ignore start -- test-infra: test inputs don't cover all prefix format variations @preserve */
       if (/^[\s:\n]/.test(nextChar)) {
         return content.slice(prefixLength).trim();
       }
-      /* v8 ignore stop @preserve */
     }
   }
 

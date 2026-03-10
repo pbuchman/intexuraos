@@ -407,5 +407,26 @@ describe('OpenGraphFetcher', () => {
         expect(result.value.favicon).toBeDefined();
       }
     });
+
+    it('returns undefined image when og:image content is empty string', async () => {
+      const html = `
+        <html>
+        <head>
+          <meta property="og:image" content="">
+          <title>Empty Image</title>
+        </head>
+        </html>
+      `;
+
+      nock('https://example.com').get('/empty-image').reply(200, html);
+
+      const result = await fetcher.fetchPreview('https://example.com/empty-image');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.image).toBeUndefined();
+        expect(result.value.title).toBe('Empty Image');
+      }
+    });
   });
 });

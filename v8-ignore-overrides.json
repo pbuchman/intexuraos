@@ -138,15 +138,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/user-service"
     },
-    "PENDING-apps-web-agent": {
-      "files": [
-        "apps/web-agent/src/infra/linkpreview/openGraphFetcher.ts",
-        "apps/web-agent/src/infra/pagesummary/crawl4aiClient.ts",
-        "apps/web-agent/src/infra/pagesummary/pageContentFetcher.ts",
-        "apps/web-agent/src/infra/pagesummary/parseSummaryResponse.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/web-agent"
-    },
     "PENDING-apps-whatsapp-service": {
       "files": [
         "apps/whatsapp-service/src/infra/firestore/outboundMessageRepository.ts",
