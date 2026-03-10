@@ -342,7 +342,10 @@ describe('formatTranscript', () => {
         message: {
           role: 'assistant',
           content: [
-            { type: 'thinking', thinking: 'Let me analyze this...' } as unknown as SessionJsonlEntry['message']['content'][0],
+            {
+              type: 'thinking',
+              thinking: 'Let me analyze this...',
+            } as unknown as SessionJsonlEntry['message']['content'][0],
           ],
         },
       },
@@ -363,7 +366,11 @@ describe('formatTranscript', () => {
         message: {
           role: 'assistant',
           content: [
-            { type: 'server_tool_use', id: 'srv_1', name: 'some_tool' } as unknown as SessionJsonlEntry['message']['content'][0],
+            {
+              type: 'server_tool_use',
+              id: 'srv_1',
+              name: 'some_tool',
+            } as unknown as SessionJsonlEntry['message']['content'][0],
           ],
         },
       },
@@ -383,7 +390,10 @@ describe('formatTranscript', () => {
         message: {
           role: 'assistant',
           content: [
-            { type: 'thinking', thinking: 'hmm' } as unknown as SessionJsonlEntry['message']['content'][0],
+            {
+              type: 'thinking',
+              thinking: 'hmm',
+            } as unknown as SessionJsonlEntry['message']['content'][0],
             { type: 'text', text: 'Here is my answer.' },
             { type: 'tool_use', id: 'toolu_abc', name: 'Bash', input: { command: 'ls' } },
           ],
