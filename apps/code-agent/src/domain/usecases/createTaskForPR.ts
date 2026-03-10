@@ -25,6 +25,7 @@ import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
 import { buildLockDocPath, deletePRTaskLock } from '../utils/prTaskLock.js';
+import { fetchGitHubToken, notifyPROfTaskCreation } from '../utils/prTaskNotification.js';
 
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
@@ -121,28 +122,6 @@ function buildTaskPrompt(request: CreateTaskForPRRequest): string {
  */
 function generateWebhookSecret(sharedSecret: string, taskId: string): string {
   return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
-}
-
-/**
- * Fetch per-user GitHub OAuth token for PR title update.
- * Returns null if token is not available (best-effort).
- */
-async function fetchGitHubToken(
-  userServiceClient: UserServiceClient,
-  userId: string,
-  logger: Logger
-): Promise<string | null> {
-  const tokenResult = await userServiceClient.getOAuthToken(userId, 'github');
-
-  if (!tokenResult.ok) {
-    logger.debug(
-      { userId, errorCode: tokenResult.error.code },
-      'GitHub OAuth token not available for user (best-effort)'
-    );
-    return null;
-  }
-
-  return tokenResult.value.accessToken; // @allow-result-access -- narrowed by !tokenResult.ok above
 }
 
 /**
@@ -341,28 +320,19 @@ export async function createTaskForPR(
   // For new tasks, we have webhookSecret and linearResult
   const { taskId, webhookSecret, linearResult } = txValue;
 
-  // Best-effort: prepend [INT-XXX] to PR title for Linear auto-linking
-  // Uses per-user GitHub OAuth token instead of static API token
-  if (
-    existingLinearIssueId === undefined &&
-    linearResult.linearIssueId !== undefined &&
-    request.prTitle !== undefined
-  ) {
-    const [owner, repo] = repository.split('/');
-    if (owner !== undefined && repo !== undefined) {
-      const githubToken = await fetchGitHubToken(deps.userServiceClient, userId, logger);
-      if (githubToken !== null) {
-        const newTitle = `[${linearResult.linearIssueId}] ${request.prTitle}`;
-        const titleResult = await deps.gitHubPRClient.updatePRTitle(githubToken, owner, repo, prNumber, newTitle);
-        if (!titleResult.ok) {
-          logger.warn(
-            { error: titleResult.error, prNumber, linearIssueId: linearResult.linearIssueId },
-            'Failed to update PR title with Linear issue ID (best-effort)'
-          );
-        }
-      }
-    }
-  }
+  // Best-effort: post task-created comment and update PR title
+  await notifyPROfTaskCreation(
+    { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+    {
+      taskId,
+      repository,
+      prNumber,
+      userId,
+      ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
+      ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+      titleAlreadyTagged: existingLinearIssueId !== undefined,
+    },
+  );
 
   // Always include pr-comment for PR-comment-originated tasks so the orchestrator
   // routes to buildPRCommentPrompt. When INT-XXX exists, merge the issue's real

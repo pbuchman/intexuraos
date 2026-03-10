@@ -385,6 +385,36 @@ describe('UnifiedEvaluator', () => {
       expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
       expect(logger.warn).toHaveBeenCalled();
     });
+
+    it('falls back to dispatch for pull_request_review when evaluateEvent is undefined', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: undefined,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request_review' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+    });
+
+    it('falls back to dispatch for pull_request_review_comment when evaluateEvent is undefined', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: undefined,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request_review_comment' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+    });
   });
 
   describe('LLM failure fallback', () => {
@@ -577,7 +607,7 @@ describe('UnifiedEvaluator', () => {
       expect(callOrder).toEqual(['postTriageComment', 'createReviewTask']);
     });
 
-    it('comment body includes review types, cost, tool calls, and reasoning', async () => {
+    it('comment body starts with @ignore and includes review types, cost, tool calls, and reasoning', async () => {
       const postTriageComment = vi.fn().mockResolvedValue(ok({ commentId: 99 }));
       const deps = createFakeDeps({
         webhookRules: {
@@ -608,6 +638,7 @@ describe('UnifiedEvaluator', () => {
         expect.stringContaining('code_quality')
       );
       const body = postTriageComment.mock.calls[0]?.[3] as string;
+      expect(body).toMatch(/^@ignore\n/);
       expect(body).toContain('architecture');
       expect(body).toContain('$0.003');
       expect(body).toContain('request_review');
@@ -763,6 +794,66 @@ describe('UnifiedEvaluator', () => {
     });
   });
 
+  describe('error comment on review task failure', () => {
+    it('posts error comment when createReviewTask fails', async () => {
+      const postTriageComment = vi.fn().mockResolvedValue(ok({ commentId: 99 }));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, toolCalls: [] },
+          reasoning: 'Review needed.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(
+          err({ code: 'dispatch_failed' as const, message: 'Worker unavailable' })
+        ),
+        postTriageComment,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+      await evaluator.evaluate(event, logger);
+
+      // First call is triage comment, second is error comment
+      expect(postTriageComment).toHaveBeenCalledTimes(2);
+      const errorCommentBody = postTriageComment.mock.calls[1]?.[3] as string;
+      expect(errorCommentBody).toContain('@ignore');
+      expect(errorCommentBody).toContain('Automated Code Review Triage Decision');
+      expect(errorCommentBody).toContain('Review task creation failed');
+      expect(errorCommentBody).toContain('dispatch_failed');
+      expect(errorCommentBody).not.toContain('Worker unavailable');
+    });
+
+    it('does not post error comment when postTriageComment is undefined', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, toolCalls: [] },
+          reasoning: 'Review needed.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(
+          err({ code: 'dispatch_failed' as const, message: 'Worker unavailable' })
+        ),
+        postTriageComment: undefined,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+      // Should not throw
+      await evaluator.evaluate(event, logger);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: 'evt-1' }),
+        'Failed to create review task'
+      );
+    });
+  });
+
   describe('triage comment error resilience', () => {
     it('continues dispatching when postTriageComment throws an exception', async () => {
       const postTriageComment = vi.fn().mockRejectedValue(new Error('Network timeout'));
@@ -826,6 +917,19 @@ describe('UnifiedEvaluator', () => {
 });
 
 describe('buildTriageCommentBody', () => {
+  it('starts with @ignore prefix and renamed heading', () => {
+    const body = buildTriageCommentBody(
+      ['code_quality'],
+      0.001,
+      [{ tool: 'request_review', args: { review_type: 'code_quality' } }],
+      'Review needed.',
+    );
+
+    expect(body).toMatch(/^@ignore\n/);
+    expect(body).toContain('### Automated Code Review Triage Decision');
+    expect(body).not.toMatch(/^### Triage Decision$/m);
+  });
+
   it('formats review types, cost, tool calls, and reasoning', () => {
     const body = buildTriageCommentBody(
       ['code_quality', 'architecture'],
@@ -837,7 +941,7 @@ describe('buildTriageCommentBody', () => {
       'This PR modifies auth logic.',
     );
 
-    expect(body).toContain('### Triage Decision');
+    expect(body).toContain('### Automated Code Review Triage Decision');
     expect(body).toContain('`code_quality`');
     expect(body).toContain('`architecture`');
     expect(body).toContain('$0.003');
@@ -880,5 +984,39 @@ describe('buildTriageCommentBody', () => {
 
     expect(body).toContain('`code_quality`');
     expect(body).not.toContain(',');
+  });
+
+  it('deduplicates identical tool calls', () => {
+    const body = buildTriageCommentBody(
+      ['code_quality'],
+      0.002,
+      [
+        { tool: 'request_review', args: { review_type: 'code_quality' } },
+        { tool: 'request_review', args: { review_type: 'code_quality' } },
+        { tool: 'request_review', args: { review_type: 'code_quality' } },
+        { tool: 'request_review', args: { review_type: 'code_quality' } },
+        { tool: 'request_review', args: { review_type: 'code_quality' } },
+      ],
+      'Review needed.',
+    );
+
+    const toolCallMatches = body.match(/`request_review\(/g);
+    expect(toolCallMatches).toHaveLength(1);
+  });
+
+  it('keeps distinct tool calls when deduplicating', () => {
+    const body = buildTriageCommentBody(
+      ['code_quality', 'security'],
+      0.002,
+      [
+        { tool: 'request_review', args: { review_type: 'code_quality' } },
+        { tool: 'request_review', args: { review_type: 'security' } },
+        { tool: 'request_review', args: { review_type: 'code_quality' } },
+      ],
+      'Review needed.',
+    );
+
+    const toolCallMatches = body.match(/`request_review\(/g);
+    expect(toolCallMatches).toHaveLength(2);
   });
 });

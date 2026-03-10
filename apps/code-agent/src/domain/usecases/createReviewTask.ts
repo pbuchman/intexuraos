@@ -15,6 +15,9 @@ import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTa
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
+import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+import { notifyPROfTaskCreation } from '../utils/prTaskNotification.js';
 import { createHmac } from 'node:crypto';
 
 export interface CreateReviewTaskRequest {
@@ -39,6 +42,8 @@ export interface CreateReviewTaskDeps {
   userLookupService: UserLookupService;
   taskDispatcher: TaskDispatcherService;
   linearAgentClient?: LinearAgentClient;
+  gitHubPRClient: GitHubPRClient;
+  userServiceClient: UserServiceClient;
   orchestratorSecret: string;
   serviceUrl: string;
 }
@@ -234,6 +239,22 @@ export async function createReviewTask(
   logger.info(
     { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner },
     'Review task created and dispatched'
+  );
+
+  // Best-effort: post task-created comment and update PR title
+  const titleAlreadyTagged = request.prTitle !== undefined && /\bINT-\d+\b/i.test(request.prTitle);
+  await notifyPROfTaskCreation(
+    { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+    {
+      taskId: task.id,
+      repository,
+      prNumber,
+      userId,
+      ...(linearIssueId !== undefined && { linearIssueId }),
+      ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+      titleAlreadyTagged,
+      reviewTypes: request.reviewTypes,
+    },
   );
 
   return ok({ taskId: task.id });
