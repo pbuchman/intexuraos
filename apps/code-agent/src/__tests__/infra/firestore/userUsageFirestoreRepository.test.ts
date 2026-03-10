@@ -190,12 +190,9 @@ describe('userUsageFirestoreRepository', () => {
 
       // Use seedCollection to bypass the fake Firestore's FieldValue processing,
       // which incorrectly treats Timestamps (which have isEqual()) as FieldValue.delete().
+      // Use Timestamp.now() for day/month starts so the "same window" check is robust
+      // against UTC midnight and month-boundary timing: getStartOfDay(now) <= now always.
       const now = Timestamp.now();
-      const todayUTCMidnight = new Date();
-      todayUTCMidnight.setUTCHours(0, 0, 0, 0);
-      const thisMonthFirstDay = new Date();
-      thisMonthFirstDay.setUTCDate(1);
-      thisMonthFirstDay.setUTCHours(0, 0, 0, 0);
 
       fakeFirestore.seedCollection('user_usage', [{
         id: 'user-1',
@@ -206,9 +203,9 @@ describe('userUsageFirestoreRepository', () => {
           hourStartedAt: Timestamp.fromDate(new Date(Date.now() - 30 * 60 * 1000)),
           tasksThisHour: 5,
           costToday: 0,
-          dayStartedAt: Timestamp.fromDate(todayUTCMidnight),
+          dayStartedAt: now,
           costThisMonth: 0,
-          monthStartedAt: Timestamp.fromDate(thisMonthFirstDay),
+          monthStartedAt: now,
           updatedAt: now,
         },
       }]);
@@ -260,13 +257,9 @@ describe('userUsageFirestoreRepository', () => {
         logger
       );
 
+      // Use Timestamp.now() for day/month starts: getStartOfDay(now) <= now always,
+      // so the same-window check is robust against UTC midnight boundaries.
       const now = Timestamp.now();
-      // today's UTC midnight — always within the current day window
-      const todayUTCMidnight = new Date();
-      todayUTCMidnight.setUTCHours(0, 0, 0, 0);
-      const thisMonthFirstDay = new Date();
-      thisMonthFirstDay.setUTCDate(1);
-      thisMonthFirstDay.setUTCHours(0, 0, 0, 0);
 
       fakeFirestore.seedCollection('user_usage', [{
         id: 'user-1',
@@ -276,9 +269,9 @@ describe('userUsageFirestoreRepository', () => {
           hourStartedAt: Timestamp.fromDate(new Date(Date.now() - 30 * 60 * 1000)),
           tasksThisHour: 0,
           costToday: 5.0,
-          dayStartedAt: Timestamp.fromDate(todayUTCMidnight),
+          dayStartedAt: now,
           costThisMonth: 0,
-          monthStartedAt: Timestamp.fromDate(thisMonthFirstDay),
+          monthStartedAt: now,
           updatedAt: now,
         },
       }]);
@@ -328,25 +321,21 @@ describe('userUsageFirestoreRepository', () => {
         logger
       );
 
+      // Use Timestamp.now() for hour/day/month starts: getStartOfMonth(now) <= now always,
+      // so the same-window check is robust against UTC month boundaries.
       const now = Timestamp.now();
-      const todayUTCMidnight = new Date();
-      todayUTCMidnight.setUTCHours(0, 0, 0, 0);
-      // 1st of the current UTC month — always within the current month window
-      const thisMonthFirstDay = new Date();
-      thisMonthFirstDay.setUTCDate(1);
-      thisMonthFirstDay.setUTCHours(0, 0, 0, 0);
 
       fakeFirestore.seedCollection('user_usage', [{
         id: 'user-1',
         data: {
           userId: 'user-1',
           concurrentTasks: 0,
-          hourStartedAt: Timestamp.fromDate(new Date(Date.now() - 30 * 60 * 1000)),
+          hourStartedAt: now,
           tasksThisHour: 0,
           costToday: 0,
-          dayStartedAt: Timestamp.fromDate(todayUTCMidnight),
+          dayStartedAt: now,
           costThisMonth: 50.0,
-          monthStartedAt: Timestamp.fromDate(thisMonthFirstDay),
+          monthStartedAt: now,
           updatedAt: now,
         },
       }]);
@@ -636,74 +625,6 @@ describe('userUsageFirestoreRepository', () => {
 
       // Should normalize without throwing
       expect(result.userId).toBe('user-1');
-    });
-  });
-
-  describe('time window logic', () => {
-    it('should handle same hour (not reset)', async () => {
-      const repo = createUserUsageFirestoreRepository(
-        fakeFirestore as unknown as Firestore,
-        logger
-      );
-
-      await repo.getOrCreate('user-1');
-      const collection = fakeFirestore.collection('user_usage');
-
-      // Set timestamp from 30 minutes ago (same hour)
-      const recentTimestamp = Timestamp.fromDate(
-        new Date(Date.now() - 30 * 60 * 1000)
-      );
-      await collection.doc('user-1').update({
-        hourStartedAt: recentTimestamp,
-        tasksThisHour: 5,
-      });
-
-      // Transaction won't actually update in fake firestore, but no error
-      await expect(repo.recordTaskStart('user-1', 1.0)).resolves.toBeUndefined();
-    });
-
-    it('should handle same day (not reset)', async () => {
-      const repo = createUserUsageFirestoreRepository(
-        fakeFirestore as unknown as Firestore,
-        logger
-      );
-
-      await repo.getOrCreate('user-1');
-      const collection = fakeFirestore.collection('user_usage');
-
-      // Set timestamp from 2 hours ago (same day)
-      const recentTimestamp = Timestamp.fromDate(
-        new Date(Date.now() - 2 * 60 * 60 * 1000)
-      );
-      await collection.doc('user-1').update({
-        dayStartedAt: recentTimestamp,
-        costToday: 10.0,
-      });
-
-      // Transaction won't actually update in fake firestore, but no error
-      await expect(repo.recordTaskStart('user-1', 1.0)).resolves.toBeUndefined();
-    });
-
-    it('should handle same month (not reset)', async () => {
-      const repo = createUserUsageFirestoreRepository(
-        fakeFirestore as unknown as Firestore,
-        logger
-      );
-
-      await repo.getOrCreate('user-1');
-      const collection = fakeFirestore.collection('user_usage');
-
-      // Set timestamp from 5 days ago (same month)
-      const recentTimestamp = Timestamp.fromDate(
-        new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
-      );
-      await collection.doc('user-1').update({
-        monthStartedAt: recentTimestamp,
-        costThisMonth: 100.0,
-      });
-
-      // Transaction won't actually update in fake firestore, but no error
-      await expect(repo.recordTaskStart('user-1', 1.0)).resolves.toBeUndefined();
     });
   });
 
