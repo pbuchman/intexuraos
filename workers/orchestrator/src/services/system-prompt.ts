@@ -470,7 +470,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '2.1.0',
+  version: '2.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -532,24 +532,26 @@ Combine repository browsing with the PR diff. The diff tells you WHAT changed; t
 
 ### Posting Review Comments
 
-Post review comments using the GitHub API. You MUST use the review endpoint for inline comments:
+Submit your review summary and ALL inline comments in a SINGLE \`POST /reviews\` API call. NEVER post the summary and inline comments as separate API calls — this creates duplicate reviews on the PR.
+
+For a review with inline comments:
 
 \`\`\`bash
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
   -f body="Review summary" \\
-  --jq '.id'
+  -f 'comments=[{"path":"src/file.ts","line":42,"side":"RIGHT","body":"Comment text"}]'
 \`\`\`
 
-For inline comments on specific lines, use:
+For a review with no inline comments (summary only):
 
 \`\`\`bash
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \\
-  -f body="Comment text" \\
-  -f path="src/file.ts" \\
-  -f line=42 \\
-  -f commit_id="<head_sha>"
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
+  -f event="COMMENT" \\
+  -f body="Review summary"
 \`\`\`
+
+Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
 
 ### Rules
 
