@@ -15,10 +15,12 @@ const {
   PLANNING_SCHEMA,
   EXECUTION_SCHEMA,
   PULL_REQUEST_SCHEMA,
+  REVIEW_SCHEMA,
   RESUME_SUMMARY_SCHEMA,
   buildPlanningPrompt,
   buildExecutionPrompt,
   buildPullRequestPrompt,
+  buildReviewPrompt,
   buildResumeSummaryPrompt,
   getLast50Lines,
   getLast20Lines,
@@ -201,6 +203,25 @@ describe('PULL_REQUEST_SCHEMA', () => {
   });
 });
 
+describe('REVIEW_SCHEMA', () => {
+  it('accepts valid review data', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Reviewed the PR for code quality and security issues.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing fields', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Prompt Builders
 // ---------------------------------------------------------------------------
@@ -261,6 +282,25 @@ describe('buildPullRequestPrompt', () => {
 
   it('includes shared preamble instructions', () => {
     const prompt = buildPullRequestPrompt('transcript');
+    expect(prompt).toContain('Analyze the transcript from the END toward the beginning');
+    expect(prompt).toContain(
+      'LLM agent delivers its summary in one of the last assistant messages'
+    );
+  });
+});
+
+describe('buildReviewPrompt', () => {
+  it('includes transcript and review-specific fields', () => {
+    const prompt = buildReviewPrompt('review-log');
+    expect(prompt).toContain('Review Agent');
+    expect(prompt).toContain('gh_pr_url');
+    expect(prompt).toContain('review_comments_posted');
+    expect(prompt).toContain('review_types');
+    expect(prompt).toContain('review-log');
+  });
+
+  it('includes shared preamble instructions', () => {
+    const prompt = buildReviewPrompt('transcript');
     expect(prompt).toContain('Analyze the transcript from the END toward the beginning');
     expect(prompt).toContain(
       'LLM agent delivers its summary in one of the last assistant messages'
@@ -499,6 +539,41 @@ describe('OrchestratorCompletionVerifier', () => {
         transcript: expect.any(String),
         prompt: expect.any(String),
         response: validPRResponse,
+      });
+    });
+  });
+
+  describe('verify — review agent', () => {
+    const validReviewResponse = JSON.stringify({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      summary: 'Reviewed and posted 3 comments.',
+    });
+
+    it('returns passed with review agentData (not pull_request)', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validReviewResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-4',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'review',
+        rawLogs: 'review logs',
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData).toEqual({
+        agentType: 'review',
+        gh_pr_url: 'https://github.com/org/repo/pull/42',
+        review_comments_posted: '3',
+        review_types: 'code_quality,security',
+        summary: 'Reviewed and posted 3 comments.',
       });
     });
   });

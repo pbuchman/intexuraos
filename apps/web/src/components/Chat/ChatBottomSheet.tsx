@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { GripVertical, Trash2, Loader2, Minimize2, AlertCircle } from 'lucide-react';
+import { GripVertical, Trash2, Loader2, Minimize2, Maximize2, X, AlertCircle } from 'lucide-react';
 import { ChatMessage } from './ChatMessage.js';
 import { ChatInput } from './ChatInput.js';
 import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat.js';
@@ -156,7 +156,7 @@ export function ChatBottomSheet({
       className={`fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white dark:bg-gray-900 shadow-2xl md:hidden ${isDragging ? '' : 'transition-[height] duration-300 ease-out'} ${isExpanded ? 'h-[100vh] max-h-[100vh]' : 'h-[60vh] max-h-[60vh]'}`}
     >
       <div
-        className="flex shrink-0 cursor-grab select-none flex items-center justify-between border-b border-gray-200 px-4 py-2 active:cursor-grabbing dark:border-gray-700"
+        className="flex shrink-0 cursor-grab select-none items-center justify-between border-b border-gray-200 px-4 py-2 active:cursor-grabbing dark:border-gray-700"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -182,7 +182,7 @@ export function ChatBottomSheet({
             className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             aria-label={isExpanded ? 'Collapse' : 'Expand'}
           >
-            <Minimize2 className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+            {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
           <button
             onClick={onClear}
@@ -196,7 +196,7 @@ export function ChatBottomSheet({
             className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             aria-label="Close chat"
           >
-            <Minimize2 className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -253,7 +253,7 @@ export function ChatBottomSheet({
         </div>
       )}
 
-      <div className="shrink-0 border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+      <div className="shrink-0 px-4 py-3">
         <ChatInput onSend={onSendMessage} disabled={isLoading} {...(pendingAction?.awaitingConfirmation ? { placeholder: 'Say "yes" to confirm...' } : {})} />
       </div>
 
