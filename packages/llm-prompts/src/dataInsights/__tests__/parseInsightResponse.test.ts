@@ -161,8 +161,8 @@ EXTRA_LINE`;
   it('throws on NO_INSIGHTS with whitespace-only reason', () => {
     const response = 'NO_INSIGHTS: Reason=   ';
 
-    // The regex requires at least one non-whitespace character after trim
-    expect(() => parseInsightResponse(response)).toThrow();
+    // Line is trimmed to 'NO_INSIGHTS: Reason=' so regex (.+) fails to match
+    expect(() => parseInsightResponse(response)).toThrow('Invalid NO_INSIGHTS format');
   });
 
   it('throws on NO_INSIGHTS with spaces and letters as reason (trimmed)', () => {
@@ -368,6 +368,29 @@ INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=C1
     const response = 'NO_INSIGHTS: Reason Test';
 
     expect(() => parseInsightResponse(response)).toThrow('Invalid NO_INSIGHTS format');
+  });
+
+  it('throws on Title with whitespace-only value', () => {
+    const response =
+      'INSIGHT_1: Title=   ; Description=Test description; Trackable=Test metric; ChartType=C1';
+
+    // Part trim strips trailing whitespace so 'Title=   ' becomes 'Title=', regex (.+) fails
+    expect(() => parseInsightResponse(response)).toThrow('Title field missing or malformed');
+  });
+
+  it('throws on Description with whitespace-only value', () => {
+    const response = 'INSIGHT_1: Title=Test; Description=   ; Trackable=Test metric; ChartType=C1';
+
+    // Part trim strips trailing whitespace so 'Description=   ' becomes 'Description=', regex (.+) fails
+    expect(() => parseInsightResponse(response)).toThrow('Description field missing or malformed');
+  });
+
+  it('throws on Trackable with whitespace-only value', () => {
+    const response =
+      'INSIGHT_1: Title=Test; Description=Test description; Trackable=   ; ChartType=C1';
+
+    // Part trim strips trailing whitespace so 'Trackable=   ' becomes 'Trackable=', regex (.+) fails
+    expect(() => parseInsightResponse(response)).toThrow('Trackable field missing or malformed');
   });
 
   describe('chart ID contract unification', () => {

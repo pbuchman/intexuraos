@@ -1,7 +1,7 @@
 /**
  * Tests for approval intent prompt and response parsing.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Logger } from 'pino';
 import {
   approvalIntentPrompt,
@@ -293,6 +293,26 @@ describe('parseApprovalIntentResponse', () => {
     const result = parseApprovalIntentResponse(response);
 
     expect(result).toBeNull();
+  });
+
+  describe('when JSON.parse returns a non-object', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('returns null when JSON.parse returns a number', () => {
+      vi.spyOn(JSON, 'parse').mockReturnValue(42);
+      const result = parseApprovalIntentResponse('{"some": "json"}');
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when JSON.parse returns null', () => {
+      vi.spyOn(JSON, 'parse').mockReturnValue(null);
+      const result = parseApprovalIntentResponse('{"some": "json"}');
+
+      expect(result).toBeNull();
+    });
   });
 });
 

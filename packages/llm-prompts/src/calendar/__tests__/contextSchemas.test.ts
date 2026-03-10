@@ -1,5 +1,51 @@
 import { describe, expect, it } from 'vitest';
-import { CalendarEventSchema } from '../contextSchemas.js';
+import { CalendarEventSchema, isValidDateString } from '../contextSchemas.js';
+
+describe('isValidDateString', () => {
+  it('returns true for valid date-only string', () => {
+    expect(isValidDateString('2026-01-25')).toBe(true);
+  });
+
+  it('returns true for valid date-time string', () => {
+    expect(isValidDateString('2026-01-25T10:00:00')).toBe(true);
+  });
+
+  it('returns true for valid date-time with Z timezone', () => {
+    expect(isValidDateString('2026-01-25T10:00:00Z')).toBe(true);
+  });
+
+  it('returns true for valid date-time with offset', () => {
+    expect(isValidDateString('2026-01-25T10:00:00+05:00')).toBe(true);
+  });
+
+  it('returns false for completely invalid date string', () => {
+    expect(isValidDateString('not-a-date')).toBe(false);
+  });
+
+  it('returns false for empty string', () => {
+    expect(isValidDateString('')).toBe(false);
+  });
+
+  it('returns false for date with invalid month (13)', () => {
+    expect(isValidDateString('2026-13-25')).toBe(false);
+  });
+
+  it('returns false for date with invalid day (Feb 30)', () => {
+    expect(isValidDateString('2026-02-30')).toBe(false);
+  });
+
+  it('returns false for date with rolled-over day (Jan 32 becomes Feb 1)', () => {
+    expect(isValidDateString('2026-01-32')).toBe(false);
+  });
+
+  it('returns false for NaN date', () => {
+    expect(isValidDateString('invalid')).toBe(false);
+  });
+
+  it('returns false for date-time with invalid hour', () => {
+    expect(isValidDateString('2026-01-25T25:00:00')).toBe(false);
+  });
+});
 
 describe('CalendarEventSchema', () => {
   describe('valid events', () => {
