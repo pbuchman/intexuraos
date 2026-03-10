@@ -139,7 +139,9 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           healthy: false,
           reason: errorCode === 'ENOTFOUND' ? 'dns-failed' : 'connection-refused',
         };
+        /* v8 ignore start -- ts-type: errorCode is always defined when includes() matches a non-empty string @preserve */
         if (errorCode !== undefined) {
+        /* v8 ignore stop @preserve */
           result.code = errorCode;
         }
         return result;
