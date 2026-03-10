@@ -316,6 +316,65 @@ describe('groupByLinearIssue', () => {
     expect(groups).toHaveLength(0);
   });
 
+  it('derives review step as completed for reviewed status', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented' }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-100', agentType: 'review', status: 'reviewed', updatedAt: '2026-03-07T16:00:00Z' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.pipeline.review).toBe('completed');
+  });
+
+  it('derives review step as running', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented' }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-100', agentType: 'review', status: 'running', updatedAt: '2026-03-07T16:00:00Z' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.pipeline.review).toBe('running');
+  });
+
+  it('derives review step as null when no review task exists', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.pipeline.review).toBeNull();
+  });
+
+  it('excludes archived review tasks from review step', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'review', status: 'archived' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.pipeline.review).toBeNull();
+  });
+
+  it('review tasks do not affect planning/execution steps', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'review', status: 'reviewed' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.pipeline.planning).toBeNull();
+    expect(groups[0]?.pipeline.execution).toBeNull();
+    expect(groups[0]?.pipeline.review).toBe('completed');
+  });
+
   it('tasks with agentType pull_request do not affect planning/execution steps', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'pull_request', status: 'implemented' }),

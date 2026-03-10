@@ -6,6 +6,7 @@ export type StepState = 'completed' | 'running' | 'failed' | 'waiting' | 'action
 export interface PipelineState {
   planning: StepState | null;
   execution: StepState | null;
+  review: StepState | null;
   pr: { url: string; number: string } | null;
   failedAttempts: number;
   archivedCount: number;
@@ -42,7 +43,7 @@ const ACTIVE_STATUSES: ReadonlySet<CodeTaskStatus> = new Set<CodeTaskStatus>([
 ]);
 
 function deriveStepState(status: CodeTaskStatus): StepState {
-  if (status === 'planned' || status === 'implemented') {
+  if (status === 'planned' || status === 'implemented' || status === 'reviewed') {
     return 'completed';
   }
   if (status === 'running' || status === 'dispatched' || status === 'queued') {
@@ -78,6 +79,12 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
     execution = 'actionable';
   }
 
+  // Review step
+  const reviewTask = tasks.find(
+    (t) => t.agentType === 'review' && t.status !== 'archived',
+  );
+  const review = reviewTask !== undefined ? deriveStepState(reviewTask.status) : null;
+
   // PR step — extract from any task's result.prUrl
   let pr: PipelineState['pr'] = null;
   for (const task of tasks) {
@@ -102,7 +109,7 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
   // archivedCount: count of tasks with status === 'archived'
   const archivedCount = tasks.filter((t) => t.status === 'archived').length;
 
-  return { planning, execution, pr, failedAttempts, archivedCount };
+  return { planning, execution, review, pr, failedAttempts, archivedCount };
 }
 
 function deriveAggregateStatus(tasks: CodeTask[], pipeline: PipelineState): GroupStatus {
