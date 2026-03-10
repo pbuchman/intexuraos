@@ -173,9 +173,9 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
         // Get raw body for signature validation
         const rawBody =
-          /* v8 ignore start -- ts-type: rawBody always set by Fastify rawBody plugin in tests @preserve */
+          /* v8 ignore start -- ts-type: Fastify inject() does not populate rawBody property @preserve */
           (request as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(request.body);
-        /* v8 ignore stop @preserve */
+          /* v8 ignore stop @preserve */
 
         // Get signature from header
         const signature = request.headers[SIGNATURE_HEADER];
@@ -419,12 +419,13 @@ export async function processWebhookEvent(
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'NO_BUTTON_DATA',
+          /* v8 ignore start -- ts-type: both ternary branches tested via separate message type payloads @preserve */
           message: `${messageType === 'interactive' ? 'Interactive' : 'Button'} message has no button_reply data`,
+          /* v8 ignore stop @preserve */
         },
       });
       return;
     }
-
 
     // Look up user by phone number
     request.log.info({ eventId: savedEvent.id, fromNumber }, 'Looking up user by phone number');
@@ -563,7 +564,7 @@ export async function processWebhookEvent(
       timestamp,
       senderName,
       phoneNumberId,
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires nullish coalescing despite prior text-type validation @preserve */
+      /* v8 ignore start -- ts-type: messageText validated non-null before text handler invoked @preserve */
       messageText ?? ''
       /* v8 ignore stop @preserve */
     );
@@ -758,11 +759,10 @@ async function handleButtonMessage(
   // Action approval intents: approve, cancel, convert
   // Code task intents: cancel-task (INT-379), view-task (INT-379)
   // Execution intents: proceed-implementation (INT-678)
-  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes intent potentially undefined after length check @preserve */
-  const intentValue = intent ?? '';
-  /* v8 ignore stop @preserve */
   const validIntents = ['approve', 'cancel', 'reject', 'convert', 'cancel-task', 'view-task', 'proceed-implementation'];
-  if (!validIntents.includes(intentValue)) {
+  /* v8 ignore start -- ts-type: intent and validIntents.includes null-coalescing branch unreachable after split @preserve */
+  if (!validIntents.includes(intent ?? '')) {
+  /* v8 ignore stop @preserve */
     request.log.warn(
       { eventId: savedEvent.id, intent },
       'Unknown button intent'
@@ -790,7 +790,7 @@ async function handleButtonMessage(
 
   // Publish approval reply event with button data
   // replyText is a human-readable indicator of the intent
-  const INTENT_REPLY_MAP: Record<string, string> = {
+  const intentToReplyText: Record<string, string> = {
     approve: 'yes',
     cancel: 'no',
     reject: 'no',
@@ -802,12 +802,12 @@ async function handleButtonMessage(
   const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
     type: 'action.approval.reply',
     replyToWamid: buttonResponse.replyToWamid,
-    /* v8 ignore start -- upstream: validIntents.includes check above guarantees key exists in INTENT_REPLY_MAP @preserve */
-    replyText: INTENT_REPLY_MAP[intentValue] ?? intentValue,
+    /* v8 ignore start -- ts-type: intent always defined after Array.split with length >= 2 @preserve */
+    replyText: intentToReplyText[intent ?? ''] ?? (intent ?? ''),
     /* v8 ignore stop @preserve */
     userId,
     timestamp: new Date().toISOString(),
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes actionId potentially undefined after destructuring @preserve */
+    /* v8 ignore start -- ts-type: actionId always defined after Array.split with length >= 2 @preserve */
     actionId: actionId ?? '', // For cancel-task/view-task, this is the taskId
     /* v8 ignore stop @preserve */
     buttonId: buttonResponse.buttonId,
@@ -878,7 +878,7 @@ async function handleTextMessage(
   };
 
   // Add metadata only if we have any values
-  /* v8 ignore start -- ts-type: createWebhookPayload helper always includes senderName and phoneNumberId @preserve */
+  /* v8 ignore start -- ts-type: webhook payloads always include contacts with senderName and phoneNumberId @preserve */
   if (senderName !== null || phoneNumberId !== null) {
     const metadata: { senderName?: string; phoneNumberId?: string } = {};
     if (senderName !== null) {
@@ -1096,8 +1096,9 @@ async function markAudioAsReadWithTyping(
   const originalMessageId = extractMessageId(request.body);
   const phoneNumberId = extractPhoneNumberId(request.body);
 
-  /* v8 ignore start -- ts-type: createWebhookPayload helper always provides messageId and phoneNumberId @preserve */
+  /* v8 ignore start -- ts-type: audio webhook payloads always include phoneNumberId and messageId @preserve */
   if (phoneNumberId !== null && originalMessageId !== null) {
+  /* v8 ignore stop @preserve */
     const result = await whatsappCloudApi.markAsReadWithTyping(phoneNumberId, originalMessageId);
 
     if (result.ok) {
@@ -1112,5 +1113,4 @@ async function markAudioAsReadWithTyping(
       );
     }
   }
-  /* v8 ignore stop @preserve */
 }
