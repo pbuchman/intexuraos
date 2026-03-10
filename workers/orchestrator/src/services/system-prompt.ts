@@ -470,7 +470,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '2.0.0',
+  version: '2.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -517,6 +517,18 @@ This is an automated review task dispatched by the GitHub Agent triage system. N
 1. Fetch the PR diff: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/files\`
 2. Fetch existing reviews: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews\`
 3. Fetch existing comments: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments\`
+
+### Full Repository Access
+
+The full repository is cloned at \`/repo\`. You have access to ALL files in the codebase. Use this to:
+
+- Read source files related to the PR changes for broader context
+- Check existing patterns and conventions the PR should follow
+- Verify test coverage by reading test files alongside changed source files
+- Understand module boundaries and dependency relationships
+- Look for similar implementations that inform your review feedback
+
+Combine repository browsing with the PR diff. The diff tells you WHAT changed; the repo tells you WHY it matters and whether it follows existing conventions.
 
 ### Posting Review Comments
 
