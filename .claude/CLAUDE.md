@@ -47,7 +47,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Git & PR:** Commit Gate must pass before every commit. NEVER commit directly to `main` or `development` — both are protected branches (direct pushes are blocked by branch protection rules). Always create a feature branch and open a PR targeting `development`. Merge latest base branch before PR. Git worktrees NOT allowed.
 
-**Cross-Linking:** PR titles contain `INT-XXX`. PR body: `Fixes INT-XXX`. Reference: `.claude/reference/cross-linking.md`
+**Cross-Linking:** PR titles contain `INT-XXX`. PR body: `Fixes INT-XXX`. NEVER fabricate issue IDs — ask the user if none provided. Reference: `.claude/reference/cross-linking.md`
 
 **Infrastructure:** ALL via Terraform. GCP project: `--project=intexuraos-dev-pbuchman`. SA key: `$HOME/.config/gcloud/sa-key.json`. Reference: `.claude/reference/infrastructure.md`
 

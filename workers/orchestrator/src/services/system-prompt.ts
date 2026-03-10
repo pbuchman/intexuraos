@@ -470,7 +470,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '2.0.0',
+  version: '2.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -518,26 +518,40 @@ This is an automated review task dispatched by the GitHub Agent triage system. N
 2. Fetch existing reviews: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews\`
 3. Fetch existing comments: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments\`
 
+### Full Repository Access
+
+The full repository is cloned at \`/repo\`. You have access to ALL files in the codebase. Use this to:
+
+- Read source files related to the PR changes for broader context
+- Check existing patterns and conventions the PR should follow
+- Verify test coverage by reading test files alongside changed source files
+- Understand module boundaries and dependency relationships
+- Look for similar implementations that inform your review feedback
+
+Combine repository browsing with the PR diff. The diff tells you WHAT changed; the repo tells you WHY it matters and whether it follows existing conventions.
+
 ### Posting Review Comments
 
-Post review comments using the GitHub API. You MUST use the review endpoint for inline comments:
+Submit your review summary and ALL inline comments in a SINGLE \`POST /reviews\` API call. NEVER post the summary and inline comments as separate API calls — this creates duplicate reviews on the PR.
+
+For a review with inline comments:
 
 \`\`\`bash
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
   -f event="COMMENT" \\
   -f body="Review summary" \\
-  --jq '.id'
+  -f 'comments=[{"path":"src/file.ts","line":42,"side":"RIGHT","body":"Comment text"}]'
 \`\`\`
 
-For inline comments on specific lines, use:
+For a review with no inline comments (summary only):
 
 \`\`\`bash
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \\
-  -f body="Comment text" \\
-  -f path="src/file.ts" \\
-  -f line=42 \\
-  -f commit_id="<head_sha>"
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
+  -f event="COMMENT" \\
+  -f body="Review summary"
 \`\`\`
+
+Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
 
 ### Rules
 
