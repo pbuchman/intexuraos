@@ -146,12 +146,10 @@ export function createLinearAgentHttpClient(
           data?: unknown;
         };
 
-        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
         if (!body.success) {
           logger.error({ body }, 'Invalid response from linear-agent');
           return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.info({ issueId: request.issueId, state: request.state }, 'Linear issue state updated');
         return ok(undefined);
@@ -207,12 +205,10 @@ export function createLinearAgentHttpClient(
           };
         };
 
-        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
         if (!body.success || body.data === undefined) {
           logger.error({ body }, 'Invalid response from linear-agent');
           return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.info({ identifier: request.identifier, issueId: body.data.id }, 'Linear issue validated');
 
@@ -276,12 +272,10 @@ export function createLinearAgentHttpClient(
           };
         };
 
-        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
         if (!body.success || body.data === undefined) {
           logger.error({ body }, 'Invalid response from linear-agent');
           return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.info({ title: body.data.title, issueType: body.data.issueType }, 'Issue title generated');
 
@@ -324,7 +318,6 @@ export function createLinearAgentHttpClient(
           signal: controller.signal,
         });
 
-        /* v8 ignore start -- test-infra: HTTP error responses require mock setup @preserve */
         if (!response.ok) {
           const errorText = await response.text();
           logger.error({ status: response.status, error: errorText }, 'linear-agent addComment failed');
@@ -337,7 +330,6 @@ export function createLinearAgentHttpClient(
           }
           return err({ code: 'INVALID_REQUEST', message: errorText });
         }
-        /* v8 ignore stop @preserve */
 
         const body = await response.json() as {
           success: boolean;
@@ -346,12 +338,10 @@ export function createLinearAgentHttpClient(
           };
         };
 
-        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
         if (!body.success || body.data === undefined) {
           logger.error({ body }, 'Invalid response from linear-agent');
           return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.info({ issueId: request.issueId, commentId: body.data.id }, 'Comment added to Linear issue');
 
@@ -359,12 +349,10 @@ export function createLinearAgentHttpClient(
           commentId: body.data.id,
         });
       } catch (error) {
-        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error({ timeoutMs }, 'linear-agent request timed out');
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.error({ error }, 'linear-agent addComment request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
@@ -388,7 +376,6 @@ export function createLinearAgentHttpClient(
           },
           signal: controller.signal,
         });
-        /* v8 ignore start -- test-infra: error response branches require HTTP mock variants @preserve */
         if (!response.ok) {
           const errorText = await response.text();
           return err({ code: response.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: errorText });
@@ -400,7 +387,6 @@ export function createLinearAgentHttpClient(
         return ok(body.data);
       } catch (error) {
         return err({ code: 'UNKNOWN', message: String(error) });
-        /* v8 ignore stop @preserve */
       } finally {
         clearTimeout(timeoutId);
       }
@@ -426,16 +412,13 @@ export function createLinearAgentHttpClient(
             'X-Internal-Auth': internalAuthToken,
             'X-User-Id': request.userId,
           },
-          /* v8 ignore start -- ts-type: conditional object spreads for optional metadata fields @preserve */
           body: JSON.stringify({
             ...(request.assigneeId !== undefined && { assigneeId: request.assigneeId }),
             ...(request.addLabels !== undefined && { addLabels: request.addLabels }),
             ...(request.removeLabels !== undefined && { removeLabels: request.removeLabels }),
           }),
-          /* v8 ignore stop @preserve */
           signal: controller.signal,
         });
-        /* v8 ignore start -- test-infra: error response branches require HTTP mock variants @preserve */
         if (!response.ok) {
           const errorText = await response.text();
           return err({ code: response.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: errorText });
@@ -445,7 +428,6 @@ export function createLinearAgentHttpClient(
         return ok(undefined);
       } catch (error) {
         return err({ code: 'UNKNOWN', message: String(error) });
-        /* v8 ignore stop @preserve */
       } finally {
         clearTimeout(timeoutId);
       }
@@ -496,12 +478,10 @@ export function createLinearAgentHttpClient(
           };
         };
 
-        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
         if (!body.success || body.data === undefined) {
           logger.error({ body }, 'Invalid response from linear-agent');
           return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
         }
-        /* v8 ignore stop @preserve */
 
         return ok({
           identifier: body.data.identifier,
@@ -515,12 +495,10 @@ export function createLinearAgentHttpClient(
           lastCommentAt: body.data.lastCommentAt,
         });
       } catch (error) {
-        /* v8 ignore start -- test-infra: nock cannot simulate AbortError from native fetch AbortController @preserve */
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error({ timeoutMs }, 'linear-agent request timed out');
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.error({ error }, 'linear-agent fetchIssueForDisplay request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
@@ -569,21 +547,17 @@ export function createLinearAgentHttpClient(
           };
         };
 
-        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
         if (!body.success || body.data === undefined) {
           logger.error({ body }, 'Invalid response from linear-agent');
           return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
         }
-        /* v8 ignore stop @preserve */
 
         return ok(body.data.issues);
       } catch (error) {
-        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error({ timeoutMs }, 'linear-agent request timed out');
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.error({ error }, 'linear-agent fetchIssuesForDisplay request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
