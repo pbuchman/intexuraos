@@ -318,7 +318,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       );
 
-      /* v8 ignore start -- test-infra: fake extraction service always succeeds @preserve */
       if (!result.ok) {
         request.log.error(
           { messageId: message.messageId, actionId, error: result.error },
@@ -326,10 +325,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       request.log.info(
-        { messageId: message.messageId, actionId, status: result.value.preview.status }, // @allow-result-access -- guarded by !result.ok at line 319
+        { messageId: message.messageId, actionId, status: result.value.preview.status }, // @allow-result-access -- guarded by !result.ok check above
         'internal/generateCalendarPreview: complete'
       );
 
@@ -555,7 +553,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       );
 
-      /* v8 ignore start -- test-infra: fake extraction service always succeeds @preserve */
       if (!result.ok) {
         request.log.error(
           { actionId, error: result.error },
@@ -563,7 +560,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       request.log.info(
         { actionId, status: result.value.preview.status }, // @allow-result-access -- guarded by !result.ok check above
