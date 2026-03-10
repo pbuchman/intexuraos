@@ -301,9 +301,7 @@ async function storeRefreshToken(
   try {
     // Extract userId from access token JWT (without verification, just for storage key)
     const tokenParts = data.access_token.split('.');
-    /* v8 ignore start -- test-infra: test tokens are always valid JWTs @preserve */
     if (tokenParts.length !== 3) return;
-    /* v8 ignore stop @preserve */
 
     const payloadPart = tokenParts[1];
     /* v8 ignore start -- ts-type: JWT payload undefined check @preserve */
