@@ -8,6 +8,8 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import type { UserLookupService } from '../../domain/ports/userLookupService.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
+import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createReviewTask, type CreateReviewTaskDeps } from '../../domain/usecases/createReviewTask.js';
 
 function createFakeLogger(): Logger {
@@ -34,6 +36,26 @@ function createFakeLinearAgentClient(): LinearAgentClient {
     getIssueTree: vi.fn().mockResolvedValue(ok({ root: { id: '1', identifier: 'INT-1', url: '', parentId: null, labels: [], assigneeId: null, state: 'backlog' }, descendants: [] })),
     getIssueForDisplay: vi.fn().mockResolvedValue(ok(null)),
   } as unknown as LinearAgentClient;
+}
+
+function createFakeGitHubPRClient(): GitHubPRClient {
+  return {
+    updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
+    getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
+    getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
+    getPullRequestBaseBranch: vi.fn().mockResolvedValue(ok('main')),
+    postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 42 })),
+  } as unknown as GitHubPRClient;
+}
+
+function createFakeUserServiceClient(): UserServiceClient {
+  return {
+    getApiKeys: vi.fn().mockResolvedValue(ok({})),
+    getLlmClient: vi.fn().mockResolvedValue(err({ code: 'NO_API_KEY', message: 'mock' })),
+    reportLlmSuccess: vi.fn().mockResolvedValue(undefined),
+    getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'ghp_test_token', email: 'test@example.com' })),
+    resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+  } as unknown as UserServiceClient;
 }
 
 function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateReviewTaskDeps {
@@ -67,6 +89,8 @@ function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateRe
       })),
     } as unknown as TaskDispatcherService,
     linearAgentClient: createFakeLinearAgentClient(),
+    gitHubPRClient: createFakeGitHubPRClient(),
+    userServiceClient: createFakeUserServiceClient(),
     orchestratorSecret: 'test-secret',
     serviceUrl: 'https://code-agent.example.com',
     ...overrides,
@@ -250,6 +274,86 @@ describe('createReviewTask', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('dispatch_failed');
     }
+  });
+
+  describe('PR notification after dispatch', () => {
+    it('posts task-created comment after successful dispatch', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-notify-1',
+        prTitle: 'Fix bug',
+      });
+
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'pbuchman',
+        'intexuraos',
+        42,
+        expect.stringContaining('@ignore')
+      );
+    });
+
+    it('updates PR title with Linear issue ID when not already tagged', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-notify-2',
+        prTitle: 'Fix bug',
+      });
+
+      // Linear issue INT-300 is created by the fake linear agent client
+      expect(gitHubPRClient.updatePRTitle).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'pbuchman',
+        'intexuraos',
+        42,
+        '[INT-300] Fix bug'
+      );
+    });
+
+    it('skips PR title update when title already has INT-XXX tag', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-notify-3',
+        prTitle: '[INT-200] Fix bug',
+      });
+
+      expect(gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+    });
+
+    it('does not block task creation when notification fails', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.postPRComment).mockRejectedValue(new Error('Network crash'));
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-notify-4',
+        prTitle: 'Fix bug',
+      });
+
+      expect(result.ok).toBe(true);
+    });
   });
 
   describe('Linear issue linking', () => {
