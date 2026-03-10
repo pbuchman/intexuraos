@@ -629,7 +629,7 @@ describe('submitToExecutionAgent', () => {
         err({ code: 'at_capacity', message: 'All workers at capacity' })
       );
       mockCodeTaskRepo.countQueued.mockResolvedValue(ok(2));
-      // update needs to succeed for queue status update
+      // update needs to succeed for optimistic lock
       mockCodeTaskRepo.update.mockResolvedValue(ok({ id: 'task_queued', status: 'queued' }));
 
       const result = await submitToExecutionAgent(createDeps(), {
@@ -643,15 +643,6 @@ describe('submitToExecutionAgent', () => {
         expect(result.value.implementationOf).toBe(originalTaskId);
       }
 
-      // Should update execution task to queued status
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
-        expect.stringContaining('task_'),
-        expect.objectContaining({
-          status: 'queued',
-          queuedAt: expect.any(Date),
-        })
-      );
-
       // Should NOT rollback implementationTaskId (task is valid, just waiting)
       const rollbackCalls = mockCodeTaskRepo.update.mock.calls.filter(
         (call: unknown[]) => (call[1] as Record<string, unknown>)['implementationTaskId'] === null
@@ -662,8 +653,8 @@ describe('submitToExecutionAgent', () => {
       expect(mockWhatsAppNotifier.notifyTaskQueued).toHaveBeenCalledWith(
         userId,
         expect.anything(),
-        3, // position = queuedCount(2) + 1
-        15 // estimatedWaitMinutes = position(3) * 5
+        2, // position = queuedCount(2)
+        10 // estimatedWaitMinutes = position(2) * 5
       );
     });
 
@@ -673,7 +664,7 @@ describe('submitToExecutionAgent', () => {
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'at_capacity', message: 'All workers at capacity' })
       );
-      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(10)); // maxSize default is 10
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(11)); // maxSize default is 10, condition is > not >=
       // update needs to succeed for rollback + fail mark
       mockCodeTaskRepo.update.mockResolvedValue(ok({}));
 
@@ -735,26 +726,15 @@ describe('submitToExecutionAgent', () => {
       );
     });
 
-    it('uses original executionTask when queue update fails and logs warning for notification failure', async () => {
+    it('logs warning when queued notification fails', async () => {
       setupHappyPathMocks();
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'at_capacity', message: 'All workers at capacity' })
       );
       mockCodeTaskRepo.countQueued.mockResolvedValue(ok(2));
+      mockCodeTaskRepo.update.mockResolvedValue(ok({ id: originalTaskId }));
 
-      // First update call = optimistic lock (succeeds), second = queue status update (fails)
-      let updateCallCount = 0;
-      mockCodeTaskRepo.update.mockImplementation(() => {
-        updateCallCount++;
-        if (updateCallCount <= 1) {
-          // First call: optimistic lock
-          return Promise.resolve(ok({ id: originalTaskId }));
-        }
-        // Second call: queue status update fails
-        return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }));
-      });
-
-      // Notification also fails to cover line 459
+      // Notification fails
       mockWhatsAppNotifier.notifyTaskQueued.mockResolvedValue(
         err({ code: 'notification_failed', message: 'WhatsApp unavailable' })
       );
@@ -764,7 +744,7 @@ describe('submitToExecutionAgent', () => {
         userId,
       });
 
-      // Should still succeed (best-effort queue + notification)
+      // Should still succeed (best-effort notification)
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.workerLocation).toBe('queued');

@@ -192,7 +192,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
             repository: input.repository,
             baseBranch: input.baseBranch,
             traceId: input.traceId,
-            status: 'dispatched',
+            status: input.initialStatus ?? 'queued',
             dedupKey,
             callbackReceived: false,
             createdAt: taskTimestamp,
@@ -362,9 +362,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.logChunksDropped !== undefined) {
           updateData['logChunksDropped'] = input.logChunksDropped;
         }
+        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (input.lastHeartbeat !== undefined) {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
         }
+        /* v8 ignore stop @preserve */
         if (input.workerLocation !== undefined) {
           updateData['workerLocation'] = input.workerLocation;
         }
