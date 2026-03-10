@@ -49,7 +49,7 @@ import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS } from './routes/webhooks/github.js';
@@ -321,6 +321,7 @@ export function initServices(config: ServiceConfig): void {
     // both intexuraos/* and */intexuraos patterns. Adding it here would be
     // redundant and risks scope mismatch (see PR #997 review).
     new ActionableEventRule(ALLOWED_BOTS),
+    new ProtectedBaseBranchRule(),
     new SenderWhitelistRule(ALLOWED_BOTS),
     new SkipPrefixRule(['@claude', '@codex', '@ignore']),
     // Note: BotReviewEditRule is NOT included here because it introduces
@@ -372,9 +373,32 @@ export function initServices(config: ServiceConfig): void {
         )
       : undefined,
     createReviewTask: (taskLogger, request) => createReviewTask(
-      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl },
+      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, gitHubPRClient, userServiceClient, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl },
       request,
     ),
+    postTriageComment: async (senderLogin, repository, prNumber, body) => {
+      const userResult = await userServiceClient.resolveGitHubUsername(senderLogin);
+      if (!userResult.ok) {
+        return { ok: false, error: { code: 'USER_NOT_FOUND', message: `Failed to resolve user: ${senderLogin}` } };
+      }
+      const resolvedUser = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
+      if (resolvedUser === null) {
+        return { ok: false, error: { code: 'USER_NOT_FOUND', message: `No linked account for: ${senderLogin}` } };
+      }
+      const tokenResult = await userServiceClient.getOAuthToken(resolvedUser.userId, 'github');
+      if (!tokenResult.ok) {
+        return { ok: false, error: { code: 'TOKEN_NOT_AVAILABLE', message: `OAuth token unavailable for: ${resolvedUser.userId}` } };
+      }
+      const [owner, repo] = repository.split('/');
+      if (owner === undefined || repo === undefined) {
+        return { ok: false, error: { code: 'INVALID_REPO', message: `Invalid repository: ${repository}` } };
+      }
+      const commentResult = await gitHubPRClient.postPRComment(tokenResult.value.accessToken, owner, repo, prNumber, body); // @allow-result-access -- narrowed by !tokenResult.ok
+      if (!commentResult.ok) {
+        return { ok: false, error: { code: commentResult.error.code, message: commentResult.error.message } };
+      }
+      return { ok: true, value: { commentId: commentResult.value.commentId } }; // @allow-result-access -- narrowed by !commentResult.ok
+    },
     allowedBots: ALLOWED_BOTS,
   });
 

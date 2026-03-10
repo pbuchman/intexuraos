@@ -2,6 +2,7 @@ import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import {
   RepositoryScopeRule,
   ActionableEventRule,
+  ProtectedBaseBranchRule,
   SenderWhitelistRule,
   SkipPrefixRule,
   BotReviewEditRule,
@@ -152,6 +153,52 @@ describe('GitHubWebhookRules', () => {
         reason: 'EVENT_NOT_ACTIONABLE',
         context: { eventType: 'ping', action: null },
       });
+    });
+  });
+
+  describe('ProtectedBaseBranchRule', () => {
+    const rule = new ProtectedBaseBranchRule();
+
+    it('should skip pull_request targeting main', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, baseBranch: 'main' };
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'skip', reason: 'PROTECTED_BASE_BRANCH', context: { baseBranch: 'main' } });
+    });
+
+    it('should skip pull_request targeting master', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, baseBranch: 'master' };
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'skip', reason: 'PROTECTED_BASE_BRANCH', context: { baseBranch: 'master' } });
+    });
+
+    it('should dispatch pull_request targeting development', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, baseBranch: 'development' };
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'BASE_BRANCH_ALLOWED', context: { baseBranch: 'development' } });
+    });
+
+    it('should dispatch pull_request with null baseBranch', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, baseBranch: null };
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'BASE_BRANCH_UNKNOWN' });
+    });
+
+    it('should pass through for issue_comment events', () => {
+      const event = { ...mockEvent, eventType: 'issue_comment' as const };
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'NOT_A_PR_EVENT' });
+    });
+
+    it('should pass through for pull_request_review events', () => {
+      const event = { ...mockEvent, eventType: 'pull_request_review' as const };
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'NOT_A_PR_EVENT' });
     });
   });
 
@@ -575,6 +622,25 @@ describe('GitHubWebhookRules', () => {
 
       expect(result.action).toBe('skip');
       expect(result.reason).toBe('COMMENT_HAS_SKIP_PREFIX');
+    });
+
+    it('should let ProtectedBaseBranchRule skip override ActionableEventRule needs_triage for PR targeting main', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'pull_request' as const,
+        action: 'opened' as const,
+        baseBranch: 'main',
+      };
+      const allowedBots = new Set(['claude[bot]']);
+      const rules = [
+        new ActionableEventRule(allowedBots),
+        new ProtectedBaseBranchRule(),
+      ];
+      const service = new GitHubWebhookRules(rules);
+      const result = service.evaluate(event);
+
+      expect(result.action).toBe('skip');
+      expect(result.reason).toBe('PROTECTED_BASE_BRANCH');
     });
 
     it('should propagate needs_triage for PR opened with all dispatch after', () => {

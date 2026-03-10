@@ -827,6 +827,105 @@ describe('retryTask use case', () => {
       );
     });
 
+    it('should preserve review agentType from original task on retry', async () => {
+      // Review tasks have no Linear issue — agentType must be preserved from original
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo, agentType: 'review' });
+      const taskRecord = mockTask as unknown as Record<string, unknown>;
+      delete taskRecord['linearIssueId'];
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      let createInputAgentType: unknown;
+      mockCodeTaskRepo.create.mockImplementation((input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        const agentTypeValue = input['agentType'] as CodeTask['agentType'];
+        const newTask: CodeTask = {
+          id: retryTaskId,
+          userId: String(input['userId']),
+          traceId: String(input['traceId']),
+          prompt: String(input['prompt']),
+          sanitizedPrompt: String(input['sanitizedPrompt']),
+          systemPromptHash: String(input['systemPromptHash']),
+          workerType: input['workerType'] as CodeTask['workerType'],
+          workerLocation: String(input['workerLocation']),
+          repository: String(input['repository']),
+          baseBranch: String(input['baseBranch']),
+          status: 'dispatched',
+          dedupKey: 'new-dedup-key',
+          callbackReceived: false,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          retriedFrom: originalTaskId,
+          webhookSecret: String(input['webhookSecret'] ?? 'whsec_secret'),
+          ...(agentTypeValue !== undefined && { agentType: agentTypeValue }),
+        };
+        return Promise.resolve(ok(newTask));
+      });
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(createInputAgentType).toBe('review');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'review' })
+      );
+    });
+
+    it('should preserve execution agentType from original task instead of re-deriving from labels', async () => {
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo, agentType: 'execution' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      // Even if labels say 'unclear' (planning), execution must be preserved from original
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Retry mechanism test',
+          url: 'https://linear.app/intexuraos/issue/INT-520',
+          labels: ['unclear'],
+          childCount: 0,
+        })
+      );
+
+      let createInputAgentType: unknown;
+      mockCodeTaskRepo.create.mockImplementation((input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        const agentTypeValue = input['agentType'] as CodeTask['agentType'];
+        const newTask: CodeTask = {
+          id: retryTaskId,
+          userId: String(input['userId']),
+          traceId: String(input['traceId']),
+          prompt: String(input['prompt']),
+          sanitizedPrompt: String(input['sanitizedPrompt']),
+          systemPromptHash: String(input['systemPromptHash']),
+          workerType: input['workerType'] as CodeTask['workerType'],
+          workerLocation: String(input['workerLocation']),
+          repository: String(input['repository']),
+          baseBranch: String(input['baseBranch']),
+          status: 'dispatched',
+          dedupKey: 'new-dedup-key',
+          callbackReceived: false,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          retriedFrom: originalTaskId,
+          linearIssueId,
+          webhookSecret: String(input['webhookSecret'] ?? 'whsec_secret'),
+          ...(agentTypeValue !== undefined && { agentType: agentTypeValue }),
+        };
+        return Promise.resolve(ok(newTask));
+      });
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      // Must preserve execution from original, not re-derive as planning from 'unclear' labels
+      expect(createInputAgentType).toBe('execution');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'execution' })
+      );
+    });
+
     it('should fall back to label-based routing when original task is not pull_request', async () => {
       // agentType is undefined (legacy task) — should use labels to decide
       const mockTask = createMockTask({ completedAt: sixMinutesAgo });

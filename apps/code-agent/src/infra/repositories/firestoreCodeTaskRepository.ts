@@ -359,7 +359,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.completedAt !== undefined) {
           updateData['completedAt'] = Timestamp.fromDate(input.completedAt);
         }
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (input.logChunksDropped !== undefined) {
           updateData['logChunksDropped'] = input.logChunksDropped;
         }
@@ -425,12 +424,8 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.cursor !== undefined) {
           // For cursor-based pagination, we'd start after the cursor
           // This is simplified - full implementation would decode the cursor
-          /* v8 ignore start -- test-infra: requires non-existent cursor doc to test else branch @preserve */
           const cursorDoc = await collection.doc(input.cursor).get();
-          /* v8 ignore stop @preserve */
-          /* v8 ignore start -- test-infra: cursor doc existence check @preserve */
           if (cursorDoc.exists) {
-          /* v8 ignore stop @preserve */
             query = query.startAfter(cursorDoc);
           }
         }
@@ -589,7 +584,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const logsSnapshot = await logsRef.get();
         const logCount = logsSnapshot.docs.length;
 
-        /* v8 ignore start -- test-infra: batch delete logic depends on log count in fixture @preserve */
         if (logCount > 0) {
           let batch = firestore.batch();
           let batchCount = 0;
@@ -605,16 +599,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
+          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (batchCount > 0) {
             await batch.commit();
           }
+          /* v8 ignore stop @preserve */
         }
-        /* v8 ignore stop @preserve */
 
         const logLinesRef = taskRef.collection('log_lines');
         const logLinesSnapshot = await logLinesRef.get();
 
-        /* v8 ignore start -- test-infra: batch delete logic depends on log count in fixture @preserve */
         if (logLinesSnapshot.docs.length > 0) {
           let linesBatch = firestore.batch();
           let linesBatchCount = 0;
@@ -630,16 +624,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
+          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (linesBatchCount > 0) {
             await linesBatch.commit();
           }
+          /* v8 ignore stop @preserve */
         }
-        /* v8 ignore stop @preserve */
 
         const logEntriesRef = taskRef.collection('log_entries');
         const logEntriesSnapshot = await logEntriesRef.get();
 
-        /* v8 ignore start -- test-infra: batch delete logic for legacy log_entries subcollection @preserve */
         if (logEntriesSnapshot.docs.length > 0) {
           let entriesBatch = firestore.batch();
           let entriesBatchCount = 0;
@@ -655,16 +649,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
+          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (entriesBatchCount > 0) {
             await entriesBatch.commit();
           }
+          /* v8 ignore stop @preserve */
         }
-        /* v8 ignore stop @preserve */
 
         const turnMetricsRef = taskRef.collection('turn_metrics');
         const turnMetricsSnapshot = await turnMetricsRef.get();
 
-        /* v8 ignore start -- test-infra: batch delete logic for turn_metrics subcollection @preserve */
         if (turnMetricsSnapshot.docs.length > 0) {
           let metricsBatch = firestore.batch();
           let metricsBatchCount = 0;
@@ -680,11 +674,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
+          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (metricsBatchCount > 0) {
             await metricsBatch.commit();
           }
+          /* v8 ignore stop @preserve */
         }
-        /* v8 ignore stop @preserve */
 
         const totalLogCount = logCount + logLinesSnapshot.docs.length + logEntriesSnapshot.docs.length + turnMetricsSnapshot.docs.length;
         const archivedAt = new Date();

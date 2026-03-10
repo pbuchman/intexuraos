@@ -220,7 +220,28 @@ describe('system-prompt', () => {
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
 
-    expect(result).toContain('- Tracking comment: <updated|not_applicable>');
+    expect(result).toContain('- Tracking comment: updated');
+  });
+
+  it('contains protocol violation language for skipping tracking comment', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain('PROTOCOL VIOLATION');
+    expect(result).toContain('no changes needed');
+    expect(result).toContain('valid delivery outcome');
+  });
+
+  it('contains fixed Total PR comments posted value of 1', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain('- Total PR comments posted: 1');
+    expect(result).not.toContain('<must be exactly 1>');
   });
 
   it('uses agentType=execution over missing code-task label', () => {

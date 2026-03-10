@@ -263,7 +263,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '1.0.1',
+  version: '2.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -321,6 +321,11 @@ ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''
 
 Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.
 
+Even if you determine there are no actionable items or no code changes needed,
+you MUST still post the tracking comment. The tracking comment documents your
+analysis — "no changes needed" IS a valid delivery outcome. Skipping the
+tracking comment is a PROTOCOL VIOLATION that causes the task to FAIL verification.
+
 VIOLATION EXAMPLE — do NOT do this:
 1. POST /issues/{pr_number}/comments → creates comment (ID 123)
 2. ... do work ...
@@ -356,8 +361,8 @@ PULL_REQUEST_AGENT_FINAL:
 - Linear issue: <full Linear URL>
 - Comment replied: <yes|no>
 - Tracking comment ID: <numeric ID from initial POST response>
-- Tracking comment: <updated|not_applicable>
-- Total PR comments posted: <must be exactly 1>
+- Tracking comment: updated
+- Total PR comments posted: 1
 - Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
 \`\`\`
 
@@ -369,7 +374,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '1.0.1',
+  version: '2.0.0',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
@@ -410,6 +415,11 @@ All three are MANDATORY. Skipping any source means missing feedback.
 
 Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.
 
+Even if you determine there are no actionable items or no code changes needed,
+you MUST still post the tracking comment. The tracking comment documents your
+analysis — "no changes needed" IS a valid delivery outcome. Skipping the
+tracking comment is a PROTOCOL VIOLATION that causes the task to FAIL verification.
+
 VIOLATION EXAMPLE — do NOT do this:
 1. POST /issues/{pr_number}/comments → creates comment (ID 123)
 2. ... do work ...
@@ -447,8 +457,8 @@ PULL_REQUEST_AGENT_FINAL:
 - Linear issue: <full Linear URL>
 - Comment replied: <yes|no>
 - Tracking comment ID: <numeric ID from initial POST response>
-- Tracking comment: <updated|not_applicable>
-- Total PR comments posted: <must be exactly 1>
+- Tracking comment: updated
+- Total PR comments posted: 1
 - Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
 \`\`\`
 
@@ -460,7 +470,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '2.0.0',
+  version: '2.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -507,6 +517,18 @@ This is an automated review task dispatched by the GitHub Agent triage system. N
 1. Fetch the PR diff: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/files\`
 2. Fetch existing reviews: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews\`
 3. Fetch existing comments: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments\`
+
+### Full Repository Access
+
+The full repository is cloned at \`/repo\`. You have access to ALL files in the codebase. Use this to:
+
+- Read source files related to the PR changes for broader context
+- Check existing patterns and conventions the PR should follow
+- Verify test coverage by reading test files alongside changed source files
+- Understand module boundaries and dependency relationships
+- Look for similar implementations that inform your review feedback
+
+Combine repository browsing with the PR diff. The diff tells you WHAT changed; the repo tells you WHY it matters and whether it follows existing conventions.
 
 ### Posting Review Comments
 

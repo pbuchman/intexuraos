@@ -280,6 +280,34 @@ describe('evaluateEvent', () => {
       }
     });
 
+    it('deduplicates review types when LLM calls same type twice', async () => {
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 'code_quality' });
+            await requestReview.run({ review_type: 'code_quality' });
+            await requestReview.run({ review_type: 'security' });
+          }
+          return ok({
+            content: 'Reviewing for code quality and security.',
+            toolCallsMade: 3,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.003 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value.triage.action === 'request_review') {
+        expect(result.value.triage.reviewTypes).toEqual(['code_quality', 'security']);
+      }
+    });
+
     it('returns USER_NOT_FOUND when GitHub user has no linked account', async () => {
       const userClient = createFakeUserServiceClient();
       vi.mocked(userClient.resolveGitHubUsername).mockResolvedValue(ok(null));
@@ -371,6 +399,48 @@ describe('evaluateEvent', () => {
       const result = await evaluateEvent(deps, event);
 
       expect(result.ok).toBe(true);
+    });
+
+    it('returns reasoning from LLM content', async () => {
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 'code_quality' });
+          }
+          return ok({
+            content: 'This PR modifies authentication logic across multiple services.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.reasoning).toBe('This PR modifies authentication logic across multiple services.');
+      }
+    });
+
+    it('logs reasoning in evaluation complete message', async () => {
+      const logger = createFakeLogger();
+      const deps = createDeps({
+        logger,
+        toolCallingClient: createFakeToolCallingClient(),
+      });
+      const event = createFakePREvent();
+
+      await evaluateEvent(deps, event);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ reasoning: 'Done.' }),
+        'GitHub Agent evaluation complete'
+      );
     });
   });
 
@@ -484,6 +554,27 @@ describe('evaluateEvent', () => {
           action: 'skip',
           reason: 'No tool called',
         });
+      }
+    });
+
+    it('returns reasoning from LLM content for comment events', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'dispatch_to_task',
+          toolArgs: { message_template: 'pr_comment' },
+        }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: 'Please review the auth changes',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.reasoning).toBe('Done.');
       }
     });
 

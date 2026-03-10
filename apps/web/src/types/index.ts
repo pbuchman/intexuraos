@@ -1120,6 +1120,7 @@ export type CodeTaskStatus =
   | 'running'
   | 'planned'
   | 'implemented'
+  | 'reviewed'
   | 'failed'
   | 'interrupted'
   | 'cancelled'

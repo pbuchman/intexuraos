@@ -420,6 +420,28 @@ describe('ContextInferenceAdapter', () => {
       );
     });
 
+    it('returns error when repair attempt fails at API level', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify({ wrong: 'structure' }), usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          error: { code: 'TIMEOUT', message: 'Repair timed out' },
+        });
+
+      const result = await adapter.inferSynthesisContext({
+        originalPrompt: 'Test prompt',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Repair timed out');
+        expect(result.error.message).toContain('(repair attempt)');
+      }
+    });
+
     it('logs warning on parse failure during repair', async () => {
       mockGenerate
         .mockResolvedValueOnce({

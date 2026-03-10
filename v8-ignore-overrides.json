@@ -1,0 +1,178 @@
+{
+  "_comment": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
+  "overrides": {
+    "PENDING-apps-actions-agent": {
+      "files": [
+        "apps/actions-agent/src/domain/models/approvalMessage.ts",
+        "apps/actions-agent/src/domain/usecases/handleApprovalReply.ts",
+        "apps/actions-agent/src/infra/firestore/approvalMessageRepository.ts",
+        "apps/actions-agent/src/infra/http/calendarServiceHttpClient.ts",
+        "apps/actions-agent/src/infra/http/codeAgentHttpClient.ts",
+        "apps/actions-agent/src/infra/http/notesServiceHttpClient.ts",
+        "apps/actions-agent/src/infra/http/todosServiceHttpClient.ts",
+        "apps/actions-agent/src/routes/internalRoutes.ts",
+        "apps/actions-agent/src/routes/publicRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/actions-agent"
+    },
+    "PENDING-apps-bookmarks-agent": {
+      "files": [
+        "apps/bookmarks-agent/src/domain/usecases/summarizeBookmark.ts",
+        "apps/bookmarks-agent/src/infra/firestore/firestoreBookmarkRepository.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/bookmarks-agent"
+    },
+    "PENDING-apps-calendar-agent": {
+      "files": [
+        "apps/calendar-agent/src/domain/useCases/generateCalendarPreview.ts",
+        "apps/calendar-agent/src/domain/useCases/processCalendarAction.ts",
+        "apps/calendar-agent/src/routes/internalRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/calendar-agent"
+    },
+    "PENDING-apps-chat-agent": {
+      "files": [
+        "apps/chat-agent/src/domain/usecases/generateResponse.ts",
+        "apps/chat-agent/src/infra/llm/chatClient.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/chat-agent"
+    },
+    "PENDING-apps-code-agent": {
+      "files": [
+        "apps/code-agent/src/domain/formatters/metricsLogFormatter.ts",
+        "apps/code-agent/src/domain/services/logFormatter.ts",
+        "apps/code-agent/src/domain/usecases/processCodeAction.ts",
+        "apps/code-agent/src/domain/usecases/retryTask.ts",
+        "apps/code-agent/src/domain/usecases/sendTaskMessage.ts",
+        "apps/code-agent/src/domain/usecases/submitTaskFeedback.ts",
+        "apps/code-agent/src/domain/usecases/submitToExecutionAgent.ts",
+        "apps/code-agent/src/infra/auth/jwtValidator.ts",
+        "apps/code-agent/src/infra/firestore/encryption.ts",
+        "apps/code-agent/src/infra/firestore/gitHubPREventsRepository.ts",
+        "apps/code-agent/src/infra/firestore/gitHubPRSummariesRepository.ts",
+        "apps/code-agent/src/infra/firestore/userUsageFirestoreRepository.ts",
+        "apps/code-agent/src/infra/firestore/workerSettingsRepository.ts",
+        "apps/code-agent/src/infra/http/linearAgentHttpClient.ts",
+        "apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts",
+        "apps/code-agent/src/infra/repositories/firestoreLogLineRepository.ts",
+        "apps/code-agent/src/infra/services/taskDispatcherImpl.ts",
+        "apps/code-agent/src/routes/code/github-pr-summaries.ts",
+        "apps/code-agent/src/routes/code/github-pre-events.ts",
+        "apps/code-agent/src/routes/codeRoutes.ts",
+        "apps/code-agent/src/routes/webhookRoutes.ts",
+        "apps/code-agent/src/routes/webhooks/github.ts",
+        "apps/code-agent/src/routes/workerSettingsRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/code-agent"
+    },
+    "PENDING-apps-commands-agent": {
+      "files": ["apps/commands-agent/src/routes/internalRoutes.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in apps/commands-agent"
+    },
+    "PENDING-apps-data-insights-agent": {
+      "files": [
+        "apps/data-insights-agent/src/infra/firestore/visualizationRepository.ts",
+        "apps/data-insights-agent/src/routes/compositeFeedRoutes.ts",
+        "apps/data-insights-agent/src/routes/visualizationRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/data-insights-agent"
+    },
+    "PENDING-apps-linear-agent": {
+      "files": [
+        "apps/linear-agent/src/domain/useCases/fullSyncUseCase.ts",
+        "apps/linear-agent/src/domain/useCases/syncSingleIssueUseCase.ts",
+        "apps/linear-agent/src/infra/http/codeAgentHttpClient.ts",
+        "apps/linear-agent/src/infra/linearWebhookValidation.ts",
+        "apps/linear-agent/src/routes/internalIssuesRoutes.ts",
+        "apps/linear-agent/src/routes/internalRoutes.ts",
+        "apps/linear-agent/src/routes/linearRoutes.ts",
+        "apps/linear-agent/src/routes/linearWebhookRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/linear-agent"
+    },
+    "PENDING-apps-mobile-notifications-service": {
+      "files": [
+        "apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts",
+        "apps/mobile-notifications-service/src/infra/firestore/firestoreSignatureConnectionRepository.ts",
+        "apps/mobile-notifications-service/src/routes/notificationRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/mobile-notifications-service"
+    },
+    "PENDING-apps-notion-service": {
+      "files": [
+        "apps/notion-service/src/infra/firestore/notionConnectionRepository.ts",
+        "apps/notion-service/src/routes/integrationRoutes.ts",
+        "apps/notion-service/src/routes/internalRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/notion-service"
+    },
+    "PENDING-apps-todos-agent": {
+      "files": [
+        "apps/todos-agent/src/domain/usecases/reorderTodoItems.ts",
+        "apps/todos-agent/src/domain/usecases/updateTodoItem.ts",
+        "apps/todos-agent/src/infra/firestore/firestoreTodoRepository.ts",
+        "apps/todos-agent/src/routes/todoRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
+    },
+    "PENDING-apps-user-service": {
+      "files": [
+        "apps/user-service/src/domain/settings/formatLlmError.ts",
+        "apps/user-service/src/infra/firestore/oauthConnectionRepository.ts",
+        "apps/user-service/src/routes/deviceRoutes.ts",
+        "apps/user-service/src/routes/gitHubOAuthConnectionRoutes.ts",
+        "apps/user-service/src/routes/oauthConnectionRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/user-service"
+    },
+    "PENDING-apps-whatsapp-service": {
+      "files": [
+        "apps/whatsapp-service/src/infra/firestore/outboundMessageRepository.ts",
+        "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
+        "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
+        "apps/whatsapp-service/src/infra/whatsapp/sender.ts",
+        "apps/whatsapp-service/src/routes/messageRoutes.ts",
+        "apps/whatsapp-service/src/routes/pubsubRoutes.ts",
+        "apps/whatsapp-service/src/routes/webhookRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/whatsapp-service"
+    },
+    "PENDING-packages-common-core": {
+      "files": ["packages/common-core/src/errors.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in packages/common-core"
+    },
+    "PENDING-packages-internal-clients": {
+      "files": ["packages/internal-clients/src/user-service/client.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
+    },
+    "PENDING-packages-llm-prompts": {
+      "files": [
+        "packages/llm-prompts/src/approvals/approvalIntentPrompt.ts",
+        "packages/llm-prompts/src/calendar/contextSchemas.ts",
+        "packages/llm-prompts/src/dataInsights/parseInsightResponse.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in packages/llm-prompts"
+    },
+    "PENDING-workers-orchestrator": {
+      "files": [
+        "workers/orchestrator/src/github/token-service.ts",
+        "workers/orchestrator/src/routes.ts",
+        "workers/orchestrator/src/services/api-key-validator.ts",
+        "workers/orchestrator/src/services/execution-deep-validator.ts",
+        "workers/orchestrator/src/services/isolation/credential-refresher.ts",
+        "workers/orchestrator/src/services/isolation/docker-provider.ts",
+        "workers/orchestrator/src/services/log-forwarder.ts",
+        "workers/orchestrator/src/services/repo-manager.ts",
+        "workers/orchestrator/src/services/task-dispatcher.ts",
+        "workers/orchestrator/src/services/turn-metrics-collector.ts",
+        "workers/orchestrator/src/services/worktree-manager.ts",
+        "workers/orchestrator/src/start.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in workers/orchestrator"
+    },
+    "PENDING-workers-transcription": {
+      "files": [],
+      "description": "Write tests for tightened v8 ignore blocks in workers/transcription"
+    }
+  }
+}

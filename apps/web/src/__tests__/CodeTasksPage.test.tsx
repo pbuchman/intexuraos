@@ -5,8 +5,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import { CodeTasksPage } from '../pages/CodeTasksPage.js';
-import type { CodeTask } from '../types/index.js';
+import { CodeTasksPage, DEFAULT_VISIBLE_STATUSES } from '../pages/CodeTasksPage.js';
+import type { CodeTask, CodeTaskStatus } from '../types/index.js';
 
 const mockNavigate = vi.fn();
 const mockUseCodeTasks = vi.fn();
@@ -180,5 +180,18 @@ describe('CodeTasksPage', () => {
     render(<CodeTasksPage />);
 
     expect(screen.getAllByText('Prompt only task')).toHaveLength(2);
+  });
+
+  it('includes all non-archived CodeTaskStatus values in DEFAULT_VISIBLE_STATUSES', () => {
+    const allStatuses: CodeTaskStatus[] = [
+      'queued', 'dispatched', 'running', 'planned', 'implemented',
+      'reviewed', 'failed', 'interrupted', 'cancelled',
+    ];
+
+    for (const status of allStatuses) {
+      expect(DEFAULT_VISIBLE_STATUSES, `Missing status: ${status}`).toContain(status);
+    }
+
+    expect(DEFAULT_VISIBLE_STATUSES).not.toContain('archived');
   });
 });
