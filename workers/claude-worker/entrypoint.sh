@@ -207,7 +207,13 @@ if [ "${1:-}" = "run-attempt" ]; then
         exit 1
     fi
     run_claude_attempt
-    exit $?
+    attempt_exit=$?
+    # Terminate lingering child processes (MCP servers, background tools)
+    # that may hold Docker exec file descriptors open.
+    pkill -P $$ 2>/dev/null || true
+    sleep 0.5
+    pkill -9 -P $$ 2>/dev/null || true
+    exit $attempt_exit
 fi
 
 echo "[entrypoint] Claude worker starting at $(date)"

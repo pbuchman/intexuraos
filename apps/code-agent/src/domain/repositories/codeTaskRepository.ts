@@ -37,6 +37,8 @@ export interface CreateTaskInput {
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  /** Initial task status. Defaults to 'queued' if not specified. */
+  initialStatus?: 'queued' | 'dispatched';
 }
 
 export interface UpdateTaskInput {

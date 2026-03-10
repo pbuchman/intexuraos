@@ -258,7 +258,7 @@ describe('retryTask use case', () => {
           workerLocation: input.workerLocation,
           repository: input.repository,
           baseBranch: input.baseBranch,
-          status: 'dispatched',
+          status: 'queued',
           dedupKey: 'new-dedup-key',
           callbackReceived: false,
           createdAt: Timestamp.now(),
@@ -329,7 +329,7 @@ describe('retryTask use case', () => {
           workerLocation: input.workerLocation,
           repository: input.repository,
           baseBranch: input.baseBranch,
-          status: 'dispatched',
+          status: 'queued',
           dedupKey: 'new-dedup-key',
           callbackReceived: false,
           createdAt: Timestamp.now(),
@@ -392,7 +392,7 @@ describe('retryTask use case', () => {
           workerLocation: input.workerLocation,
           repository: input.repository,
           baseBranch: input.baseBranch,
-          status: 'dispatched',
+          status: 'queued',
           dedupKey: 'new-dedup-key',
           callbackReceived: false,
           createdAt: Timestamp.now(),
@@ -468,7 +468,7 @@ describe('retryTask use case', () => {
           workerLocation: input.workerLocation,
           repository: input.repository,
           baseBranch: input.baseBranch,
-          status: 'dispatched',
+          status: 'queued',
           dedupKey: 'new-dedup-key',
           callbackReceived: false,
           createdAt: Timestamp.now(),
@@ -558,7 +558,7 @@ describe('retryTask use case', () => {
           workerLocation: input.workerLocation,
           repository: input.repository,
           baseBranch: input.baseBranch,
-          status: 'dispatched',
+          status: 'queued',
           dedupKey: 'new-dedup-key',
           callbackReceived: false,
           createdAt: Timestamp.now(),
@@ -802,7 +802,7 @@ describe('retryTask use case', () => {
           workerLocation: String(input['workerLocation']),
           repository: String(input['repository']),
           baseBranch: String(input['baseBranch']),
-          status: 'dispatched',
+          status: 'queued',
           dedupKey: 'new-dedup-key',
           callbackReceived: false,
           createdAt: Timestamp.now(),
@@ -958,7 +958,7 @@ describe('retryTask use case', () => {
           workerLocation: String(input['workerLocation']),
           repository: String(input['repository']),
           baseBranch: String(input['baseBranch']),
-          status: 'dispatched',
+          status: 'queued',
           dedupKey: 'new-dedup-key',
           callbackReceived: false,
           createdAt: Timestamp.now(),
@@ -1514,74 +1514,19 @@ describe('retryTask use case', () => {
         expect(result.value.retriedFrom).toBe(originalTaskId);
       }
 
-      // Verify task was updated to queued status
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
-        retryTaskId,
-        expect.objectContaining({
-          status: 'queued',
-          queuedAt: expect.any(Date),
-        })
-      );
-
       // Verify WhatsApp notification was sent with queue position
       expect(mockWhatsAppNotifier.notifyTaskQueued).toHaveBeenCalledWith(
         userId,
         createdTask,
-        3, // queueCount (2) + 1
-        15 // queuePosition (3) * 5
+        2, // queueCount (2)
+        10 // queuePosition (2) * 5
       );
 
       // Verify info log
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: retryTaskId, queuePosition: 3 }),
+        expect.objectContaining({ taskId: retryTaskId, queuePosition: 2 }),
         'Retry task queued due to worker capacity'
       );
-    });
-
-    it('returns internal_error when queue status update fails', async () => {
-      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
-      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
-      const retryTaskId = 'retry-task-queue-fail';
-      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: false })
-      );
-      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
-        ok({
-          workers: [
-            {
-              name: 'home-mac',
-              url: 'http://localhost:3000',
-              enabled: true,
-              cfAccessClientId: undefined,
-              cfAccessClientSecret: undefined,
-              dispatchSigningSecret: 'secret',
-            },
-          ],
-        })
-      );
-      mockLinearAgentClient.validateIssue.mockResolvedValue(
-        ok({ labels: [], childCount: 0 })
-      );
-      const createdTask = createMockTask({ id: retryTaskId });
-      mockCodeTaskRepo.create.mockResolvedValue(ok(createdTask));
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        err({ code: 'at_capacity', message: 'All workers at capacity' })
-      );
-      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(2));
-      mockCodeTaskRepo.update.mockResolvedValue(
-        err({ code: 'FIRESTORE_ERROR', message: 'Firestore write failed' })
-      );
-
-      const deps = createDeps();
-      const result = await retryTask(deps, { originalTaskId, userId });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('internal_error');
-        expect(result.error.message).toBe('Failed to queue task');
-      }
-      expect(mockWhatsAppNotifier.notifyTaskQueued).not.toHaveBeenCalled();
     });
 
     it('returns error when dispatch returns at_capacity and queue is full', async () => {
@@ -1615,7 +1560,7 @@ describe('retryTask use case', () => {
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'at_capacity', message: 'All workers at capacity' })
       );
-      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(10)); // At max (default maxSize=10)
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(11)); // Over max (default maxSize=10, condition is >)
       mockCodeTaskRepo.update.mockResolvedValue(
         ok(createMockTask({ id: retryTaskId }))
       );
@@ -1683,7 +1628,7 @@ describe('retryTask use case', () => {
       const deps = createDeps();
       const result = await retryTask(deps, { originalTaskId, userId });
 
-      // Task should be rejected as queue_full (fallback to maxSize >= maxSize)
+      // Task should be rejected as queue_full (fallback to maxSize + 1 > maxSize)
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('queue_full');

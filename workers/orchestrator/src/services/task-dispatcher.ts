@@ -1663,6 +1663,22 @@ export class TaskDispatcher {
     for (const line of lines) {
       this.parseClaudeLogLine(taskId, line);
     }
+
+    // Eagerly parse buffered remainder if it looks like a result line,
+    // in case the exec stream stalls before delivering the trailing newline.
+    if (remainder.includes('"type":"result"')) {
+      try {
+        const jsonStart = remainder.indexOf('{');
+        if (jsonStart !== -1) {
+          JSON.parse(remainder.slice(jsonStart));
+          this.parseClaudeLogLine(taskId, remainder);
+          this.claudeLogBuffers.set(taskId, '');
+          return;
+        }
+      } catch {
+        // Incomplete JSON — keep buffering.
+      }
+    }
   }
 
   private flushClaudeErrorBuffer(taskId: string): void {
@@ -1695,10 +1711,19 @@ export class TaskDispatcher {
         result?: string;
         error?: { message?: string };
       };
-      if (obj.type === 'result' && obj.is_error === true) {
-        const message = obj.result ?? obj.error?.message ?? 'Task failed';
-        this.claudeErrors.set(taskId, message);
-        this.logger.info({ taskId }, 'Detected Claude error in stream result');
+      if (obj.type === 'result') {
+        if (!this.attemptCompletionSignals.has(taskId)) {
+          this.taskExitCodes.set(taskId, obj.is_error === true ? 1 : 0);
+          this.attemptCompletionSignals.add(taskId);
+          this.logger.info(
+            { taskId, isError: obj.is_error === true },
+            'Detected Claude stream result; signaling attempt completion'
+          );
+        }
+        if (obj.is_error === true) {
+          const message = obj.result ?? obj.error?.message ?? 'Task failed';
+          this.claudeErrors.set(taskId, message);
+        }
       }
     } catch {
       // Ignore non-JSON stream lines.
