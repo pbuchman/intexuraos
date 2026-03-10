@@ -32,7 +32,7 @@ describe('taskDispatcherImpl', () => {
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
-    } as unknown as Logger;
+    };
 
     deps = {
       logger,
@@ -108,6 +108,7 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.code).toBe('worker_error');
         // parsed.error is undefined (key absent), so extractErrorMessage falls through to raw text
         expect(result.error.message).toContain('422');
+        expect(result.error.message).toContain('not the error field');
       }
     });
   });
