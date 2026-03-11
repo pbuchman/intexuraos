@@ -1931,17 +1931,12 @@ export class TaskDispatcher {
       const result = await this.executionDeepValidator?.validate(input, (message: string) => {
         this.appendOrchestratorTaskLog(taskId, `Deep validation: ${message}`);
       });
-      if (result !== undefined) {
-        this.appendOrchestratorTaskLog(
-          taskId,
-          `Deep validation complete: ${String(result.claimVerification.length)} claims, ${String(result.anomalies.length)} anomalies`
-        );
-        this.logger.info({ taskId }, 'Deep validation completed with result');
+      if (result) {
+        this.appendOrchestratorTaskLog(taskId, 'Deep validation comment posted');
+        this.logger.info({ taskId }, 'Deep validation completed with comment posted');
       } else {
-        this.logger.warn(
-          { taskId },
-          'Deep validation completed without result (check onProgress messages for details)'
-        );
+        this.appendOrchestratorTaskLog(taskId, 'Deep validation completed without comment');
+        this.logger.warn({ taskId }, 'Deep validation completed without comment');
       }
     } catch (error) {
       this.appendOrchestratorTaskLog(taskId, `Deep validation error: ${getErrorMessage(error)}`);
