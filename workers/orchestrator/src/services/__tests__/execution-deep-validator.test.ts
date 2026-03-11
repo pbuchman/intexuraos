@@ -61,7 +61,7 @@ describe('buildDeepValidationPrompt', () => {
     expect(prompt).toContain('Move workers status to menu');
   });
 
-  it('indicates when no plan file was found', () => {
+  it('indicates when no referenced plan document was found', () => {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: '[MSG-001] ASSISTANT text:\n  Hello',
       agentClaims: {
@@ -74,7 +74,7 @@ describe('buildDeepValidationPrompt', () => {
       planContent: undefined,
     });
 
-    expect(prompt).toContain('No plan file found on branch');
+    expect(prompt).toContain('No plan document referenced in Linear issue');
   });
 
   it('includes agent claims verbatim for verification', () => {
@@ -518,7 +518,7 @@ describe('formatPrComment', () => {
     const comment = formatPrComment(result, 0.042);
     expect(comment).toContain('No claims verified.');
     expect(comment).toContain('No contracts verified.');
-    expect(comment).toContain('❌ No plan file found on branch');
+    expect(comment).toContain('❌ No plan document referenced in Linear issue');
     expect(comment).not.toContain('Anomalies');
   });
 
