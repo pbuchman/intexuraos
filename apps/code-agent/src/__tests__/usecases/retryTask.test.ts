@@ -827,6 +827,69 @@ describe('retryTask use case', () => {
       );
     });
 
+    it('should infer pull_request agentType from pr-comment-auto on legacy tasks', async () => {
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        systemPromptHash: 'pr-comment-auto',
+      });
+      const taskRecord = mockTask as unknown as Record<string, unknown>;
+      delete taskRecord['agentType'];
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Retry mechanism test',
+          url: 'https://linear.app/intexuraos/issue/INT-520',
+          labels: ['bug'],
+          childCount: 0,
+        })
+      );
+
+      let createInputAgentType: unknown;
+      let dispatchLabels: unknown;
+      mockCodeTaskRepo.create.mockImplementation((input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        const newTask: CodeTask = {
+          id: retryTaskId,
+          userId: String(input['userId']),
+          traceId: String(input['traceId']),
+          prompt: String(input['prompt']),
+          sanitizedPrompt: String(input['sanitizedPrompt']),
+          systemPromptHash: String(input['systemPromptHash']),
+          workerType: input['workerType'] as CodeTask['workerType'],
+          workerLocation: String(input['workerLocation']),
+          repository: String(input['repository']),
+          baseBranch: String(input['baseBranch']),
+          status: 'queued',
+          dedupKey: 'new-dedup-key',
+          callbackReceived: false,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          retriedFrom: originalTaskId,
+          linearIssueId,
+          webhookSecret: String(input['webhookSecret'] ?? 'whsec_secret'),
+          agentType: 'pull_request',
+        };
+        return Promise.resolve(ok(newTask));
+      });
+      mockTaskDispatcher.dispatch.mockImplementation((input: Record<string, unknown>) => {
+        dispatchLabels = input['linearIssueLabels'];
+        return Promise.resolve(ok({ dispatched: true, workerLocation: 'home-mac' }));
+      });
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(createInputAgentType).toBe('pull_request');
+      expect(dispatchLabels).toEqual(['bug', 'pr-comment']);
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'pull_request' })
+      );
+    });
+
     it('should preserve review agentType from original task on retry', async () => {
       // Review tasks have no Linear issue — agentType must be preserved from original
       const mockTask = createMockTask({ completedAt: sixMinutesAgo, agentType: 'review' });

@@ -266,6 +266,29 @@ describe('createTaskForPR', () => {
     expect(capturedCreateInput).not.toHaveProperty('linearFallback');
   });
 
+  it('persists pull_request agentType and full prompt context for queued redispatch', async () => {
+    let capturedCreateInput: Record<string, unknown> = {};
+
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      async create(input): ReturnType<CodeTaskRepository['create']> {
+        capturedCreateInput = input as unknown as Record<string, unknown>;
+        return ok({} as never);
+      },
+    };
+
+    await createTaskForPR(deps, request);
+
+    expect(capturedCreateInput['agentType']).toBe('pull_request');
+    expect(capturedCreateInput['sanitizedPrompt']).toEqual(expect.any(String));
+    expect(String(capturedCreateInput['sanitizedPrompt'])).toContain(
+      '[PR Comment Task] Comment on PR #42 in pbuchman/intexuraos'
+    );
+    expect(String(capturedCreateInput['sanitizedPrompt'])).toContain('The commenter said:');
+    expect(String(capturedCreateInput['sanitizedPrompt'])).toContain('Please review this PR');
+    expect(capturedCreateInput['sanitizedPrompt']).not.toBe('Please review this PR');
+  });
+
   it('returns user_not_found when user lookup fails with USER_NOT_FOUND', async () => {
     deps.userLookupService = {
       async resolveByGitHubUsername(): ReturnType<UserLookupService['resolveByGitHubUsername']> {
