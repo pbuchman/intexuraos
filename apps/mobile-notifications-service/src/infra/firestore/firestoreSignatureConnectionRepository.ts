@@ -78,9 +78,12 @@ export class FirestoreSignatureConnectionRepository implements SignatureConnecti
       }
 
       const docSnap = snapshot.docs[0];
+      // @allow-empty-if: v8-ignore block below for ts-type narrowing edge case
+      /* v8 ignore start -- ts-type: TypeScript narrows !snapshot.empty but array access returns T | undefined due to noUncheckedIndexedAccess @preserve */
       if (docSnap === undefined) {
         return ok(null);
       }
+      /* v8 ignore stop @preserve */
 
       const data = docSnap.data() as SignatureConnectionDoc;
       const connection: SignatureConnection = {

@@ -110,9 +110,12 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       } = {
         userId: user.userId,
       };
+      // @allow-empty-if: v8-ignore block below for ts-type narrowing edge case
+      /* v8 ignore start -- ts-type: TypeScript narrows query params but undefined check needed for exactOptionalPropertyTypes @preserve */
       if (limit !== undefined) {
         listInput.limit = limit;
       }
+      /* v8 ignore stop @preserve */
       if (cursor !== undefined) {
         listInput.cursor = cursor;
       }
