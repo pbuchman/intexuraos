@@ -16,156 +16,9 @@ vi.mock('node:child_process', () => ({
 
 const {
   buildDeepValidationPrompt,
-  DEEP_VALIDATION_SCHEMA,
   DEEP_VALIDATION_PROMPT_VERSION,
   OrchestratorExecutionDeepValidator,
-  formatPrComment,
-  stripCodeFences,
 } = await import('../execution-deep-validator.js');
-
-describe('buildDeepValidationPrompt', () => {
-  it('includes prompt version header', () => {
-    const prompt = buildDeepValidationPrompt({
-      formattedTranscript: 'test',
-      agentClaims: {
-        superpowers_executing_plans: 'used',
-        superpowers_requesting_code_review: 'used',
-        gh_pr_url: '',
-        summary: 'Done.',
-      },
-      linearIssueBody: 'task',
-      planContent: undefined,
-    });
-    expect(prompt).toContain(`[deep-validation-prompt v${DEEP_VALIDATION_PROMPT_VERSION}]`);
-  });
-
-  it('includes all three validation sections', () => {
-    const prompt = buildDeepValidationPrompt({
-      formattedTranscript: '[MSG-001] ASSISTANT tool_use: Bash\n  command: "pnpm run ci:tracked"',
-      agentClaims: {
-        superpowers_executing_plans: 'used',
-        superpowers_requesting_code_review: 'used',
-        gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1071',
-        summary: 'Implemented the fix.',
-      },
-      linearIssueBody: 'Fix the PWA header logo shift',
-      planContent: '## Plan\n1. Move workers status to menu',
-    });
-
-    expect(prompt).toContain('Section 1: Claim Verification');
-    expect(prompt).toContain('Section 2: Contract Verification');
-    expect(prompt).toContain('Section 3: Plan vs Reality');
-    expect(prompt).toContain('pnpm run ci:tracked');
-    expect(prompt).toContain('superpowers_requesting_code_review');
-    expect(prompt).toContain('Fix the PWA header logo shift');
-    expect(prompt).toContain('Move workers status to menu');
-  });
-
-  it('indicates when no plan file was found', () => {
-    const prompt = buildDeepValidationPrompt({
-      formattedTranscript: '[MSG-001] ASSISTANT text:\n  Hello',
-      agentClaims: {
-        superpowers_executing_plans: 'used',
-        superpowers_requesting_code_review: 'used',
-        gh_pr_url: '',
-        summary: 'Done.',
-      },
-      linearIssueBody: 'Some task',
-      planContent: undefined,
-    });
-
-    expect(prompt).toContain('No plan file found on branch');
-  });
-
-  it('includes agent claims verbatim for verification', () => {
-    const prompt = buildDeepValidationPrompt({
-      formattedTranscript: 'transcript here',
-      agentClaims: {
-        superpowers_executing_plans: 'not used',
-        superpowers_requesting_code_review: 'used',
-        gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/99',
-        summary: 'Fixed the bug.',
-      },
-      linearIssueBody: 'Fix bug',
-      planContent: undefined,
-    });
-
-    expect(prompt).toContain('"superpowers_executing_plans": "not used"');
-    expect(prompt).toContain('"superpowers_requesting_code_review": "used"');
-  });
-});
-
-describe('DEEP_VALIDATION_SCHEMA', () => {
-  it('accepts a valid deep validation response', () => {
-    const result = DEEP_VALIDATION_SCHEMA.safeParse({
-      claimVerification: [
-        {
-          claim: 'CI passed',
-          verdict: 'verified',
-          evidence: 'MSG-128: ci:tracked exit 0',
-        },
-      ],
-      contractVerification: [
-        {
-          obligation: 'executing-plans invoked first',
-          verdict: 'fulfilled',
-          evidence: 'MSG-012: Skill(superpowers:executing-plans)',
-        },
-      ],
-      planVsReality: {
-        planFound: true,
-        requirements: [
-          {
-            requirement: 'Move workers status',
-            verdict: 'implemented',
-            evidence: 'MSG-078: Edit(Header.tsx)',
-          },
-        ],
-      },
-      anomalies: [
-        {
-          type: 'fabrication',
-          severity: 'critical',
-          evidence: 'MSG-048: TaskOutput errored',
-          detail: 'Agent claimed review passed from clean working tree',
-        },
-      ],
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts response with empty anomalies', () => {
-    const result = DEEP_VALIDATION_SCHEMA.safeParse({
-      claimVerification: [],
-      contractVerification: [],
-      planVsReality: {
-        planFound: false,
-        requirements: [],
-      },
-      anomalies: [],
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects anomaly with invalid type value', () => {
-    const result = DEEP_VALIDATION_SCHEMA.safeParse({
-      claimVerification: [],
-      contractVerification: [],
-      planVsReality: { planFound: false, requirements: [] },
-      anomalies: [
-        {
-          type: 'unknown_type',
-          severity: 'info',
-          evidence: 'MSG-001',
-          detail: 'some detail',
-        },
-      ],
-    });
-    expect(result.success).toBe(false);
-  });
-});
-
-// --- Task 7 tests: validate() method and formatPrComment ---
 
 const loggerInfo = vi.fn();
 const loggerWarn = vi.fn();
@@ -180,22 +33,6 @@ const logger: Logger = {
 };
 
 const generateMock = vi.fn();
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  createLlmClientMock.mockReturnValue({ generate: generateMock });
-  // execFile uses callback pattern — promisify expects (err, result) callback as last arg
-  execFileMock.mockImplementation(
-    (
-      _cmd: string,
-      _args: string[],
-      _opts: unknown,
-      cb: (err: null, result: { stdout: string }) => void
-    ) => {
-      cb(null, { stdout: '' });
-    }
-  );
-});
 
 const defaultConfig = {
   model: 'gemini-2.5-flash' as const,
@@ -218,168 +55,234 @@ const defaultInput = {
   planContent: undefined,
 };
 
-describe('OrchestratorExecutionDeepValidator', () => {
-  it('returns parsed result on valid LLM response', async () => {
-    const validResponse = JSON.stringify({
-      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
-      contractVerification: [],
-      planVsReality: { planFound: false, requirements: [] },
-      anomalies: [],
+const markdownResponse = [
+  '#### Overall',
+  '- Validation completed against the transcript.',
+  '',
+  '#### Claim Verification',
+  '- CI evidence is present at MSG-001.',
+  '',
+  '#### Contract Verification',
+  '- Code review subagent usage is visible in the transcript.',
+  '',
+  '#### Plan vs Reality',
+  '- Requirements were implemented with matching edits and tests.',
+  '',
+  '#### Anomalies',
+  '- None.',
+].join('\n');
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  createLlmClientMock.mockReturnValue({ generate: generateMock });
+  execFileMock.mockImplementation(
+    (
+      _cmd: string,
+      _args: string[],
+      _opts: unknown,
+      cb: (err: null, result: { stdout: string }) => void
+    ) => {
+      cb(null, { stdout: '' });
+    }
+  );
+});
+
+describe('buildDeepValidationPrompt', () => {
+  it('includes prompt version header and markdown contract', () => {
+    const prompt = buildDeepValidationPrompt({
+      formattedTranscript: 'test',
+      agentClaims: {
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: '',
+        summary: 'Done.',
+      },
+      linearIssueBody: 'task',
+      planContent: undefined,
     });
+
+    expect(prompt).toContain(`[deep-validation-prompt v${DEEP_VALIDATION_PROMPT_VERSION}]`);
+    expect(prompt).toContain('Return ONLY markdown.');
+    expect(prompt).toContain('Do not return JSON, tables, or code fences.');
+    expect(prompt).toContain('Keep the entire response under 4000 characters.');
+    expect(prompt).toContain('#### Overall');
+    expect(prompt).toContain('#### Claim Verification');
+    expect(prompt).toContain('#### Contract Verification');
+    expect(prompt).toContain('#### Plan vs Reality');
+    expect(prompt).toContain('#### Anomalies');
+  });
+
+  it('includes all validation sections and agent claims', () => {
+    const prompt = buildDeepValidationPrompt({
+      formattedTranscript: '[MSG-001] ASSISTANT tool_use: Bash\n  command: "pnpm run ci:tracked"',
+      agentClaims: {
+        superpowers_executing_plans: 'not used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1071',
+        summary: 'Implemented the fix.',
+      },
+      linearIssueBody: 'Fix the PWA header logo shift',
+      planContent: '## Plan\n1. Update tests first',
+    });
+
+    expect(prompt).toContain('Section 1: Claim Verification');
+    expect(prompt).toContain('Section 2: Contract Verification');
+    expect(prompt).toContain('Section 3: Plan vs Reality');
+    expect(prompt).toContain('"superpowers_executing_plans": "not used"');
+    expect(prompt).toContain('Fix the PWA header logo shift');
+    expect(prompt).toContain('Update tests first');
+  });
+
+  it('indicates when no plan file was found', () => {
+    const prompt = buildDeepValidationPrompt({
+      formattedTranscript: 'transcript here',
+      agentClaims: {
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: '',
+        summary: 'Done.',
+      },
+      linearIssueBody: 'Some task',
+      planContent: undefined,
+    });
+
+    expect(prompt).toContain('No plan file found on branch.');
+  });
+
+  it('truncates transcript exceeding MAX_TRANSCRIPT_CHARS', () => {
+    const longTranscript = 'A'.repeat(250_000);
+    const prompt = buildDeepValidationPrompt({
+      formattedTranscript: longTranscript,
+      agentClaims: {
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: '',
+        summary: 'Done.',
+      },
+      linearIssueBody: 'task',
+      planContent: undefined,
+    });
+
+    expect(prompt).toContain('[TRANSCRIPT TRUNCATED at 200000 chars');
+    expect(prompt).toContain('250000 total]');
+    expect(prompt.length).toBeLessThan(longTranscript.length);
+  });
+});
+
+describe('OrchestratorExecutionDeepValidator', () => {
+  it('posts markdown comment and returns true on valid LLM response', async () => {
     generateMock.mockResolvedValue({
       ok: true,
-      value: { content: validResponse, usage: { costUsd: 0.05 } },
+      value: { content: markdownResponse, usage: { costUsd: 0.05 } },
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
-    expect(result).toBeDefined();
-    expect(result?.claimVerification).toHaveLength(1);
-    expect(result?.claimVerification[0]?.verdict).toBe('verified');
+    expect(result).toBe(true);
+    expect(execFileMock).toHaveBeenCalledTimes(1);
     expect(execFileMock).toHaveBeenCalledWith(
       'gh',
-      [
-        'pr',
-        'comment',
-        '1071',
-        '--repo',
-        'pbuchman/intexuraos',
-        '--body',
-        expect.stringContaining('**Cost:** $0.05'),
-      ],
+      ['pr', 'comment', '1071', '--repo', 'pbuchman/intexuraos', '--body', expect.any(String)],
       {},
       expect.any(Function)
     );
+
+    const bodyArg = String(execFileMock.mock.calls[0]?.[1]?.[6] ?? '');
+    expect(bodyArg).toContain('### Deep Validation Report');
+    expect(bodyArg).toContain('**Cost:** $0.05');
+    expect(bodyArg).toContain(markdownResponse);
+
+    const progressCalls = onProgress.mock.calls.map((call) => String(call[0]));
+    expect(progressCalls).toContain('calling Gemini for analysis...');
+    expect(progressCalls).toContain('validation response received');
+    expect(progressCalls).toContain('posting PR comment...');
+    expect(progressCalls).toContain('PR comment posted');
   });
 
-  it('returns undefined when LLM call fails', async () => {
+  it('returns false when LLM call fails', async () => {
     generateMock.mockResolvedValue({
       ok: false,
       error: { code: 'SERVICE_UNAVAILABLE', message: 'down' },
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
-    expect(result).toBeUndefined();
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
     expect(loggerError).toHaveBeenCalledWith(
       expect.objectContaining({ errorCode: 'SERVICE_UNAVAILABLE', errorMessage: 'down' }),
-      expect.any(String)
+      'Deep validation LLM call failed'
     );
+
+    const progressCalls = onProgress.mock.calls.map((call) => String(call[0]));
+    expect(progressCalls).toContain('calling Gemini for analysis...');
+    expect(progressCalls[1]).toContain('LLM call failed');
   });
 
-  it('returns undefined when LLM returns non-JSON', async () => {
+  it('returns false when response is empty after sanitization', async () => {
     generateMock.mockResolvedValue({
       ok: true,
-      value: { content: 'Not JSON at all', usage: { costUsd: 0.042 } },
+      value: { content: '```markdown\n   \n```', usage: { costUsd: 0.042 } },
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
+    const onProgress = vi.fn();
+    const result = await validator.validate(defaultInput, onProgress);
 
-    expect(result).toBeUndefined();
-  });
-
-  it('posts raw comment when Zod validation fails', async () => {
-    // Valid JSON but wrong schema
-    const invalidSchema = JSON.stringify({ unexpected: 'data' });
-    generateMock.mockResolvedValue({
-      ok: true,
-      value: { content: invalidSchema, usage: { costUsd: 0.042 } },
-    });
-
-    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const result = await validator.validate(defaultInput);
-
-    expect(result).toBeUndefined();
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
     expect(loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 'task_abc' }),
-      expect.stringContaining('Zod validation failed')
+      'Deep validation response empty after sanitization'
     );
+
+    const progressCalls = onProgress.mock.calls.map((call) => String(call[0]));
+    expect(progressCalls).toContain('validation response received');
+    expect(progressCalls).toContain('response empty after sanitization, skipping PR comment');
   });
 
-  it('calls onProgress callback at each stage', async () => {
-    const validResponse = JSON.stringify({
-      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
-      contractVerification: [],
-      planVsReality: { planFound: false, requirements: [] },
-      anomalies: [],
-    });
+  it('strips surrounding code fences before posting', async () => {
     generateMock.mockResolvedValue({
       ok: true,
-      value: { content: validResponse, usage: { costUsd: 0.042 } },
+      value: {
+        content: `\`\`\`markdown\n${markdownResponse}\n\`\`\``,
+        usage: { costUsd: 0.042 },
+      },
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const onProgress = vi.fn();
-    await validator.validate(defaultInput, onProgress);
+    const result = await validator.validate(defaultInput);
 
-    const calls = onProgress.mock.calls.map((c) => String(c[0]));
-    expect(calls).toContain('calling Gemini for analysis...');
-    expect(calls).toContain('validation response received');
-    expect(calls).toContain('posting PR comment...');
-    expect(calls).toContain('PR comment posted');
+    expect(result).toBe(true);
+    const bodyArg = String(execFileMock.mock.calls[0]?.[1]?.[6] ?? '');
+    expect(bodyArg).toContain(markdownResponse);
+    expect(bodyArg).not.toContain('```');
   });
 
-  it('calls onProgress on LLM failure', async () => {
+  it('truncates long responses before posting', async () => {
+    const longBody = `#### Overall\n- ${'A'.repeat(5000)}`;
     generateMock.mockResolvedValue({
-      ok: false,
-      error: { code: 'SERVICE_UNAVAILABLE', message: 'down' },
+      ok: true,
+      value: { content: longBody, usage: { costUsd: 0.042 } },
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const onProgress = vi.fn();
-    await validator.validate(defaultInput, onProgress);
+    const result = await validator.validate(defaultInput);
 
-    const calls = onProgress.mock.calls.map((c) => String(c[0]));
-    expect(calls).toContain('calling Gemini for analysis...');
-    expect(calls[1]).toContain('LLM call failed');
+    expect(result).toBe(true);
+    const bodyArg = String(execFileMock.mock.calls[0]?.[1]?.[6] ?? '');
+    expect(bodyArg).toContain('[truncated by orchestrator]');
+    expect(bodyArg).toContain('### Deep Validation Report');
   });
 
-  it('calls onProgress on JSON parse failure', async () => {
+  it('returns false when PR comment posting fails', async () => {
     generateMock.mockResolvedValue({
       ok: true,
-      value: { content: 'Not JSON at all', usage: { costUsd: 0.042 } },
-    });
-
-    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const onProgress = vi.fn();
-    await validator.validate(defaultInput, onProgress);
-
-    const calls = onProgress.mock.calls.map((c) => String(c[0]));
-    expect(calls).toContain('calling Gemini for analysis...');
-    expect(calls).toContain('validation response received');
-    expect(calls.some((c) => c.includes('JSON parse failed'))).toBe(true);
-  });
-
-  it('calls onProgress on Zod schema failure', async () => {
-    const invalidSchema = JSON.stringify({ unexpected: 'data' });
-    generateMock.mockResolvedValue({
-      ok: true,
-      value: { content: invalidSchema, usage: { costUsd: 0.042 } },
-    });
-
-    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    const onProgress = vi.fn();
-    await validator.validate(defaultInput, onProgress);
-
-    const calls = onProgress.mock.calls.map((c) => String(c[0]));
-    expect(calls).toContain('calling Gemini for analysis...');
-    expect(calls).toContain('validation response received');
-    expect(calls).toContain('schema parse failed, posting raw response as fallback');
-  });
-
-  it('calls onProgress with failure message when PR comment posting fails', async () => {
-    const validResponse = JSON.stringify({
-      claimVerification: [{ claim: 'CI passed', verdict: 'verified', evidence: 'MSG-001' }],
-      contractVerification: [],
-      planVsReality: { planFound: false, requirements: [] },
-      anomalies: [],
-    });
-    generateMock.mockResolvedValue({
-      ok: true,
-      value: { content: validResponse, usage: { costUsd: 0.042 } },
+      value: { content: markdownResponse, usage: { costUsd: 0.042 } },
     });
     execFileMock.mockImplementation(
       (_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
@@ -391,50 +294,26 @@ describe('OrchestratorExecutionDeepValidator', () => {
     const onProgress = vi.fn();
     const result = await validator.validate(defaultInput, onProgress);
 
-    const calls = onProgress.mock.calls.map((c) => String(c[0]));
-    expect(calls).toContain('PR comment failed (see server logs)');
-    expect(result).toBeDefined();
+    expect(result).toBe(false);
     expect(loggerError).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 'task_abc' }),
       'Failed to post deep validation PR comment'
     );
+
+    const progressCalls = onProgress.mock.calls.map((call) => String(call[0]));
+    expect(progressCalls).toContain('PR comment failed (see server logs)');
   });
 
   it('works without onProgress callback', async () => {
-    const validResponse = JSON.stringify({
-      claimVerification: [],
-      contractVerification: [],
-      planVsReality: { planFound: false, requirements: [] },
-      anomalies: [],
-    });
     generateMock.mockResolvedValue({
       ok: true,
-      value: { content: validResponse, usage: { costUsd: 0.042 } },
-    });
-
-    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    // Should not throw when onProgress is not provided
-    const result = await validator.validate(defaultInput);
-    expect(result).toBeDefined();
-  });
-
-  it('extracts JSON embedded in markdown fences', async () => {
-    const embeddedJson = `Here is the result:\n${JSON.stringify({
-      claimVerification: [],
-      contractVerification: [],
-      planVsReality: { planFound: false, requirements: [] },
-      anomalies: [],
-    })}\nEnd.`;
-    generateMock.mockResolvedValue({
-      ok: true,
-      value: { content: embeddedJson, usage: { costUsd: 0.042 } },
+      value: { content: markdownResponse, usage: { costUsd: 0.042 } },
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
 
-    expect(result).toBeDefined();
-    expect(result?.claimVerification).toHaveLength(0);
+    expect(result).toBe(true);
   });
 
   it('throws on wrong model', () => {
@@ -465,163 +344,5 @@ describe('OrchestratorExecutionDeepValidator', () => {
           auditLogPath: '',
         })
     ).toThrow('Deep validator auditLogPath is required');
-  });
-});
-
-describe('formatPrComment', () => {
-  it('formats all sections into markdown', () => {
-    const result = {
-      claimVerification: [
-        { claim: 'CI passed', verdict: 'verified' as const, evidence: 'MSG-128: exit 0' },
-        { claim: 'Code review', verdict: 'contradicted' as const, evidence: 'No Agent call' },
-      ],
-      contractVerification: [
-        { obligation: 'executing-plans first', verdict: 'fulfilled' as const, evidence: 'MSG-012' },
-      ],
-      planVsReality: {
-        planFound: true,
-        requirements: [
-          { requirement: 'Move workers', verdict: 'implemented' as const, evidence: 'MSG-078' },
-        ],
-      },
-      anomalies: [
-        {
-          type: 'fabrication' as const,
-          severity: 'critical' as const,
-          evidence: 'MSG-048',
-          detail: 'Lied about review',
-        },
-      ],
-    };
-
-    const comment = formatPrComment(result, 0.042);
-    expect(comment).toContain('### Deep Validation Report');
-    expect(comment).toContain('**Cost:** $0.042');
-    expect(comment).toContain('Claim Verification');
-    expect(comment).toContain('✅ verified');
-    expect(comment).toContain('❌ contradicted');
-    expect(comment).toContain('Contract Verification');
-    expect(comment).toContain('Plan vs Reality');
-    expect(comment).toContain('Plan found: ✅');
-    expect(comment).toContain('Anomalies');
-    expect(comment).toContain('🔴 critical');
-  });
-
-  it('formats empty sections', () => {
-    const result = {
-      claimVerification: [],
-      contractVerification: [],
-      planVsReality: { planFound: false, requirements: [] },
-      anomalies: [],
-    };
-
-    const comment = formatPrComment(result, 0.042);
-    expect(comment).toContain('No claims verified.');
-    expect(comment).toContain('No contracts verified.');
-    expect(comment).toContain('❌ No plan file found on branch');
-    expect(comment).not.toContain('Anomalies');
-  });
-
-  it('renders partially and unverifiable verdicts', () => {
-    const result = {
-      claimVerification: [
-        { claim: 'Something', verdict: 'unverifiable' as const, evidence: 'MSG-001' },
-      ],
-      contractVerification: [
-        { obligation: 'Unused', verdict: 'not_applicable' as const, evidence: 'N/A' },
-      ],
-      planVsReality: {
-        planFound: true,
-        requirements: [
-          { requirement: 'Partial', verdict: 'partially' as const, evidence: 'MSG-002' },
-        ],
-      },
-      anomalies: [
-        {
-          type: 'laziness' as const,
-          severity: 'warning' as const,
-          evidence: 'MSG-003',
-          detail: 'Skipped steps',
-        },
-        {
-          type: 'skipped_step' as const,
-          severity: 'info' as const,
-          evidence: 'MSG-004',
-          detail: 'FYI',
-        },
-      ],
-    };
-
-    const comment = formatPrComment(result, 0.042);
-    expect(comment).toContain('❓ unverifiable');
-    expect(comment).toContain('❓ not_applicable');
-    expect(comment).toContain('⚠️ partially');
-    expect(comment).toContain('🟡 warning');
-    expect(comment).toContain('🔵 info');
-  });
-});
-
-describe('stripCodeFences', () => {
-  it('removes ```json fences', () => {
-    const input = '```json\n{"key": "value"}\n```';
-    expect(stripCodeFences(input)).toBe('{"key": "value"}');
-  });
-
-  it('removes plain ``` fences', () => {
-    const input = '```\n{"key": "value"}\n```';
-    expect(stripCodeFences(input)).toBe('{"key": "value"}');
-  });
-
-  it('passes through content without fences', () => {
-    const input = '{"key": "value"}';
-    expect(stripCodeFences(input)).toBe('{"key": "value"}');
-  });
-
-  it('trims whitespace around fenced content', () => {
-    const input = '  ```json\n{"a": 1}\n```  ';
-    expect(stripCodeFences(input)).toBe('{"a": 1}');
-  });
-});
-
-describe('postRawComment strips double fences', () => {
-  it('produces single ```json wrapper when LLM response has markdown fences', async () => {
-    const fencedJson = '```json\n{"unexpected": "data"}\n```';
-    generateMock.mockResolvedValue({
-      ok: true,
-      value: { content: fencedJson, usage: { costUsd: 0.042 } },
-    });
-
-    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
-    await validator.validate(defaultInput);
-
-    const bodyArg = String(execFileMock.mock.calls[0]?.[1]?.[6] ?? '');
-    // Should contain exactly one ```json opener and one ``` closer
-    const jsonFenceCount = (bodyArg.match(/```json/g) ?? []).length;
-    const closeFenceCount = (bodyArg.match(/```/g) ?? []).length;
-    expect(jsonFenceCount).toBe(1);
-    // One opening ```json + one closing ``` = 2 total occurrences of ```
-    expect(closeFenceCount).toBe(2);
-    expect(bodyArg).toContain('{"unexpected": "data"}');
-    expect(bodyArg).not.toContain('```json\n```json');
-  });
-});
-
-describe('buildDeepValidationPrompt edge cases', () => {
-  it('truncates transcript exceeding MAX_TRANSCRIPT_CHARS', () => {
-    const longTranscript = 'A'.repeat(250_000);
-    const prompt = buildDeepValidationPrompt({
-      formattedTranscript: longTranscript,
-      agentClaims: {
-        superpowers_executing_plans: 'used',
-        superpowers_requesting_code_review: 'used',
-        gh_pr_url: '',
-        summary: 'Done.',
-      },
-      linearIssueBody: 'task',
-      planContent: undefined,
-    });
-    expect(prompt).toContain('[TRANSCRIPT TRUNCATED at 200000 chars');
-    expect(prompt).toContain('250000 total]');
-    expect(prompt.length).toBeLessThan(longTranscript.length);
   });
 });

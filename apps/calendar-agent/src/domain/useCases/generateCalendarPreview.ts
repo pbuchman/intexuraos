@@ -59,15 +59,11 @@ function calculateDuration(start: string | null, end: string | null): string | n
     const hours = Math.floor(diffMinutes / 60);
     const minutes = diffMinutes % 60;
 
-    /* v8 ignore start -- test-infra: test events have varied durations but not all pluralization cases @preserve */
     if (minutes === 0) {
       return `${String(hours)} hour${hours === 1 ? '' : 's'}`;
     }
-    /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- ts-type: ternary pluralization branch @preserve */
     return `${String(hours)} hour${hours === 1 ? '' : 's'} ${String(minutes)} minute${minutes === 1 ? '' : 's'}`;
-    /* v8 ignore stop @preserve */
   } catch {
     // Graceful degradation: if date parsing fails (unlikely since extraction validated),
     // return null duration rather than failing the entire preview generation.
@@ -132,11 +128,9 @@ export async function generateCalendarPreview(
       error: extractResult.error.message,
     });
 
-    /* v8 ignore start -- test-infra: fake repository update always succeeds @preserve */
     if (!updateResult.ok) {
       logger.warn({ actionId, error: updateResult.error }, 'generateCalendarPreview: failed to update preview to failed status');
     }
-    /* v8 ignore stop @preserve */
 
     // Return the failed preview
     const failedPreview: CalendarPreview = {
@@ -158,7 +152,6 @@ export async function generateCalendarPreview(
   );
 
   // If extraction is invalid, save as failed
-  /* v8 ignore start -- ts-type: extraction always returns error message when invalid @preserve */
   if (!extracted.valid) {
     const errorMessage = extracted.error ?? 'Could not extract valid calendar event';
 
@@ -172,11 +165,9 @@ export async function generateCalendarPreview(
       error: errorMessage,
       reasoning: extracted.reasoning,
     };
-    /* v8 ignore start -- test-infra: test extractions typically include start date @preserve */
     if (extracted.start !== null) {
       failedUpdate.start = extracted.start;
     }
-    /* v8 ignore stop @preserve */
 
     const updateResult = await calendarPreviewRepository.update(actionId, failedUpdate);
 
@@ -196,15 +187,12 @@ export async function generateCalendarPreview(
       reasoning: extracted.reasoning,
       generatedAt: new Date().toISOString(),
     };
-    /* v8 ignore start -- test-infra: test extractions typically include start date @preserve */
     if (extracted.start !== null) {
       failedPreview.start = extracted.start;
     }
-    /* v8 ignore stop @preserve */
 
     return ok({ preview: failedPreview });
   }
-  /* v8 ignore stop @preserve */
 
   // Calculate additional fields
   const duration = calculateDuration(extracted.start, extracted.end);

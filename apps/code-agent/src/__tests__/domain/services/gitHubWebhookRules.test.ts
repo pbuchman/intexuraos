@@ -6,6 +6,7 @@ import {
   SenderWhitelistRule,
   SkipPrefixRule,
   BotReviewEditRule,
+  CodeWorkerOutputRule,
   GitHubWebhookRules
 } from '../../../domain/services/gitHubWebhookRules.js';
 
@@ -489,6 +490,58 @@ describe('GitHubWebhookRules', () => {
     });
   });
 
+  describe('CodeWorkerOutputRule', () => {
+    const codeWorkerBots = new Set(['intexuraos-code-worker[bot]']);
+
+    it('should dispatch pull_request.opened by code worker', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, action: 'opened' as const, senderLogin: 'intexuraos-code-worker[bot]' };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_PR_EVENT' });
+    });
+
+    it('should dispatch pull_request.synchronize by code worker', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, action: 'synchronize' as const, senderLogin: 'intexuraos-code-worker[bot]' };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_PR_EVENT' });
+    });
+
+    it('should skip issue_comment.created by code worker', () => {
+      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'created' as const, senderLogin: 'intexuraos-code-worker[bot]' };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' });
+    });
+
+    it('should skip pull_request_review.submitted by code worker', () => {
+      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]' };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' });
+    });
+
+    it('should dispatch pull_request.opened by non-bot sender', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, action: 'opened' as const, senderLogin: 'test-user' };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'NOT_A_CODE_WORKER_BOT' });
+    });
+
+    it('should dispatch issue_comment.created by claude[bot] (not a code worker)', () => {
+      const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'created' as const, senderLogin: 'claude[bot]' };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'NOT_A_CODE_WORKER_BOT' });
+    });
+  });
+
   describe('GitHubWebhookRules (chain)', () => {
     it('should return dispatch when all rules pass', () => {
       const event = { ...mockEvent, senderLogin: 'test-org' };
@@ -641,6 +694,53 @@ describe('GitHubWebhookRules', () => {
 
       expect(result.action).toBe('skip');
       expect(result.reason).toBe('PROTECTED_BASE_BRANCH');
+    });
+
+    it('should block code worker issue_comment before SenderWhitelistRule runs', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'issue_comment' as const,
+        action: 'created' as const,
+        senderLogin: 'intexuraos-code-worker[bot]',
+        body: 'Some comment from code worker',
+      };
+      const codeWorkerBots = new Set(['intexuraos-code-worker[bot]']);
+      const allowedBots = new Set(['claude[bot]', 'intexuraos-code-worker[bot]']);
+      const rules = [
+        new CodeWorkerOutputRule(codeWorkerBots),
+        new ActionableEventRule(allowedBots),
+        new ProtectedBaseBranchRule(),
+        new SenderWhitelistRule(allowedBots),
+        new SkipPrefixRule(['@claude', '@codex', '@ignore']),
+      ];
+      const service = new GitHubWebhookRules(rules);
+      const result = service.evaluate(event);
+
+      expect(result.action).toBe('skip');
+      expect(result.reason).toBe('CODE_WORKER_NON_PR_EVENT');
+    });
+
+    it('should let code worker pull_request.opened reach needs_triage', () => {
+      const event = {
+        ...mockEvent,
+        eventType: 'pull_request' as const,
+        action: 'opened' as const,
+        senderLogin: 'intexuraos-code-worker[bot]',
+        baseBranch: 'development',
+      };
+      const codeWorkerBots = new Set(['intexuraos-code-worker[bot]']);
+      const allowedBots = new Set(['claude[bot]', 'intexuraos-code-worker[bot]']);
+      const rules = [
+        new CodeWorkerOutputRule(codeWorkerBots),
+        new ActionableEventRule(allowedBots),
+        new ProtectedBaseBranchRule(),
+        new SenderWhitelistRule(allowedBots),
+        new SkipPrefixRule(['@claude', '@codex', '@ignore']),
+      ];
+      const service = new GitHubWebhookRules(rules);
+      const result = service.evaluate(event);
+
+      expect(result).toEqual({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' });
     });
 
     it('should propagate needs_triage for PR opened with all dispatch after', () => {

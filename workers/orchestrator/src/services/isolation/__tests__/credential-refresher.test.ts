@@ -171,4 +171,55 @@ describe('CredentialRefresher', () => {
 
     expect(result).toBe(true);
   });
+
+  it('handles container.logs() failure gracefully', async () => {
+    mockContainer.logs.mockRejectedValue(new Error('logs not available'));
+
+    const result = await refresher.refresh();
+
+    // Should still succeed because log failure is silently caught
+    expect(result).toBe(true);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ containerId: 'refresh-container-id' }),
+      expect.stringContaining('refresh completed')
+    );
+  });
+
+  it('wraps non-Error thrown during container creation', async () => {
+    mockDocker.createContainer.mockRejectedValue('string-error-not-an-Error');
+
+    const result = await refresher.refresh();
+
+    expect(result).toBe(false);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.any(Error) }),
+      expect.stringContaining('refresh container failed')
+    );
+    // Verify the wrapped error contains the string
+    const errorArg = (mockLogger.error as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as {
+      error: Error;
+    };
+    expect(errorArg.error.message).toBe('string-error-not-an-Error');
+  });
+
+  it('handles container.remove() failure in finally block after successful run', async () => {
+    mockContainer.remove.mockRejectedValue(new Error('remove failed'));
+
+    const result = await refresher.refresh();
+
+    // Should still return true because the container exited 0
+    expect(result).toBe(true);
+    expect(mockContainer.remove).toHaveBeenCalledWith({ force: true });
+  });
+
+  it('handles container.remove() failure in finally block after failed run', async () => {
+    mockContainer.wait.mockResolvedValue({ StatusCode: 1 });
+    mockContainer.remove.mockRejectedValue(new Error('remove also failed'));
+
+    const result = await refresher.refresh();
+
+    // Should return false because exit code was non-zero
+    expect(result).toBe(false);
+    expect(mockContainer.remove).toHaveBeenCalledWith({ force: true });
+  });
 });

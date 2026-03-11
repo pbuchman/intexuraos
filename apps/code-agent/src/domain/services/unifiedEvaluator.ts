@@ -98,7 +98,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           decidedBy: 'hard_rules',
           decision: 'skip',
           reason: ruleOutcome.reason,
-        }, startTime);
+        }, startTime, logger);
         return;
       }
 
@@ -123,11 +123,14 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       const { triage, usage, reasoning } = llmResult.value; // @allow-result-access -- narrowed by !llmResult.ok
 
       if (triage.action === 'dispatch') {
-        await deps.dispatchService.dispatch({
+        const llmDispatchResult = await deps.dispatchService.dispatch({
           event,
           decision: { action: 'dispatch', reason: 'LLM_DISPATCH' },
           logger,
         });
+        if (!llmDispatchResult.success) {
+          logger.warn({ eventId: event.id, error: llmDispatchResult.error }, 'Dispatch failed for LLM decision');
+        }
         await recordDecision(deps, event, {
           decidedBy: 'github_agent',
           decision: 'dispatch',
@@ -138,7 +141,9 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
           llmReasoning: reasoning,
-        }, startTime);
+          dispatchSuccess: llmDispatchResult.success,
+          ...(llmDispatchResult.error !== undefined && { dispatchError: llmDispatchResult.error }),
+        }, startTime, logger);
         return;
       }
 
@@ -225,7 +230,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             /* v8 ignore stop @preserve */
             llmToolCalls: usage.toolCalls,
             llmReasoning: reasoning,
-          }, startTime);
+          }, startTime, logger);
           return;
         }
 
@@ -241,7 +246,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
           llmReasoning: reasoning,
-        }, startTime);
+        }, startTime, logger);
         return;
       }
 
@@ -256,7 +261,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         /* v8 ignore stop @preserve */
         llmToolCalls: usage.toolCalls,
         llmReasoning: reasoning,
-      }, startTime);
+      }, startTime, logger);
     },
   };
 }
@@ -268,12 +273,17 @@ async function dispatchAndRecord(
   startTime: number,
   logger: Logger,
 ): Promise<void> {
-  await deps.dispatchService.dispatch({ event, decision, logger });
+  const result = await deps.dispatchService.dispatch({ event, decision, logger });
+  if (!result.success) {
+    logger.warn({ eventId: event.id, error: result.error }, 'Dispatch failed for hard-rule decision');
+  }
   await recordDecision(deps, event, {
     decidedBy: 'hard_rules',
     decision: 'dispatch',
     reason: decision.reason,
-  }, startTime);
+    dispatchSuccess: result.success,
+    ...(result.error !== undefined && { dispatchError: result.error }),
+  }, startTime, logger);
 }
 
 /**
@@ -290,22 +300,27 @@ async function handleFallback(
 ): Promise<void> {
   if (event.eventType === 'issue_comment' || event.eventType === 'pull_request_review' || event.eventType === 'pull_request_review_comment') {
     logger.warn({ eventId: event.id }, 'Fallback: dispatching comment event');
-    await deps.dispatchService.dispatch({
+    const fallbackResult = await deps.dispatchService.dispatch({
       event,
       decision: { action: 'dispatch', reason: `FALLBACK_DISPATCH: ${reason}` },
       logger,
     });
+    if (!fallbackResult.success) {
+      logger.warn({ eventId: event.id, error: fallbackResult.error }, 'Dispatch failed for fallback decision');
+    }
     await recordDecision(deps, event, {
       decidedBy: 'hard_rules',
       decision: 'dispatch',
       reason: `fallback_dispatch: ${reason}`,
-    }, startTime);
+      dispatchSuccess: fallbackResult.success,
+      ...(fallbackResult.error !== undefined && { dispatchError: fallbackResult.error }),
+    }, startTime, logger);
   } else {
     await recordDecision(deps, event, {
       decidedBy: 'hard_rules',
       decision: 'skip',
       reason: `fallback_skip: ${reason}`,
-    }, startTime);
+    }, startTime, logger);
   }
 }
 
@@ -322,8 +337,11 @@ async function recordDecision(
     llmModel?: string;
     llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
     llmReasoning?: string;
+    dispatchSuccess?: boolean;
+    dispatchError?: string;
   },
   startTime: number,
+  logger: Logger,
 ): Promise<void> {
   const input: CreateEventDecisionInput = {
     eventId: event.id,
@@ -345,8 +363,17 @@ async function recordDecision(
     /* v8 ignore stop @preserve */
     ...(fields.llmToolCalls !== undefined && { llmToolCalls: fields.llmToolCalls }),
     ...(fields.llmReasoning !== undefined && { llmReasoning: fields.llmReasoning }),
+    ...(fields.dispatchSuccess !== undefined && { dispatchSuccess: fields.dispatchSuccess }),
+    ...(fields.dispatchError !== undefined && { dispatchError: fields.dispatchError }),
     decisionLatencyMs: Date.now() - startTime,
   };
 
-  await deps.eventDecisionRepo.save(input);
+  try {
+    await deps.eventDecisionRepo.save(input);
+  } catch (saveError) {
+    logger.error(
+      { eventId: event.id, error: saveError },
+      'Failed to save event decision audit record'
+    );
+  }
 }

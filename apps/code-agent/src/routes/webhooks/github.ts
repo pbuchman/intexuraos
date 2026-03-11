@@ -21,6 +21,11 @@ import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSum
 export const ALLOWED_BOTS = new Set([
   'claude[bot]',
   'chatgpt-codex-connector[bot]',
+  'intexuraos-code-worker[bot]',
+]);
+
+export const CODE_WORKER_BOTS = new Set([
+  'intexuraos-code-worker[bot]',
 ]);
 
 export interface GitHubWebhookHeaders {

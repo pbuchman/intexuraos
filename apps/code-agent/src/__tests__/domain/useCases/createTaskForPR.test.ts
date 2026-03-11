@@ -54,7 +54,7 @@ function createMockLinearIssueService(): LinearIssueService {
 
 function createMockCodeTaskRepo(): CodeTaskRepository {
   return {
-    async create(): ReturnType<CodeTaskRepository['create']> {
+    async create(_input, _options): ReturnType<CodeTaskRepository['create']> {
       return ok({} as never);
     },
     async findById(): ReturnType<CodeTaskRepository['findById']> {
@@ -264,6 +264,29 @@ describe('createTaskForPR', () => {
     expect(capturedCreateInput).not.toHaveProperty('linearIssueUrl');
     expect(capturedCreateInput).not.toHaveProperty('linearIssueLabels');
     expect(capturedCreateInput).not.toHaveProperty('linearFallback');
+  });
+
+  it('persists pull_request agentType and full prompt context for queued redispatch', async () => {
+    let capturedCreateInput: Record<string, unknown> = {};
+
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      async create(input): ReturnType<CodeTaskRepository['create']> {
+        capturedCreateInput = input as unknown as Record<string, unknown>;
+        return ok({} as never);
+      },
+    };
+
+    await createTaskForPR(deps, request);
+
+    expect(capturedCreateInput['agentType']).toBe('pull_request');
+    expect(capturedCreateInput['sanitizedPrompt']).toEqual(expect.any(String));
+    expect(String(capturedCreateInput['sanitizedPrompt'])).toContain(
+      '[PR Comment Task] Comment on PR #42 in pbuchman/intexuraos'
+    );
+    expect(String(capturedCreateInput['sanitizedPrompt'])).toContain('The commenter said:');
+    expect(String(capturedCreateInput['sanitizedPrompt'])).toContain('Please review this PR');
+    expect(capturedCreateInput['sanitizedPrompt']).not.toBe('Please review this PR');
   });
 
   it('returns user_not_found when user lookup fails with USER_NOT_FOUND', async () => {
@@ -780,6 +803,110 @@ describe('createTaskForPR', () => {
       await createTaskForPR(deps, noBranchRequest);
 
       expect(dispatchedBaseBranch).toBe('development');
+    });
+  });
+
+  describe('transaction structure (no nesting)', () => {
+    it('calls ensureIssueExists before runTransaction', async () => {
+      const callOrder: string[] = [];
+
+      deps.linearIssueService = {
+        ...createMockLinearIssueService(),
+        async ensureIssueExists(): Promise<EnsureIssueResult> {
+          callOrder.push('ensureIssueExists');
+          return {
+            linearIssueId: 'INT-100',
+            linearIssueTitle: 'Test Issue',
+            linearFallback: false,
+            linearIssueLabels: ['code-task'],
+            hasChildren: false,
+            linearIssueUrl: 'https://linear.app/intexura/issue/INT-100',
+          };
+        },
+      };
+
+      deps.firestore = {
+        async runTransaction<T>(fn: (transaction: never) => Promise<T>): Promise<T> {
+          callOrder.push('runTransaction');
+          const mockTransaction = {
+            get: async (): Promise<{ exists: boolean; data: () => null }> => ({ exists: false, data: (): null => null }),
+            set: (): void => undefined,
+          };
+          return fn(mockTransaction as never);
+        },
+        doc: mockDoc,
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(callOrder.indexOf('ensureIssueExists')).toBeLessThan(callOrder.indexOf('runTransaction'));
+    });
+
+    it('passes transaction option to codeTaskRepo.create', async () => {
+      let receivedOptions: unknown;
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(_input, options): ReturnType<CodeTaskRepository['create']> {
+          receivedOptions = options;
+          return ok({} as never);
+        },
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(receivedOptions).toBeDefined();
+      expect(receivedOptions).toHaveProperty('transaction');
+    });
+
+    it('calls runTransaction exactly once (no nesting)', async () => {
+      let transactionCallCount = 0;
+
+      deps.firestore = {
+        async runTransaction<T>(fn: (transaction: never) => Promise<T>): Promise<T> {
+          transactionCallCount++;
+          const mockTransaction = {
+            get: async (): Promise<{ exists: boolean; data: () => null }> => ({ exists: false, data: (): null => null }),
+            set: (): void => undefined,
+          };
+          return fn(mockTransaction as never);
+        },
+        doc: mockDoc,
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(transactionCallCount).toBe(1);
+    });
+
+    it('returns linear_issue_failed when ensureIssueExists fails before transaction', async () => {
+      deps.linearIssueService = {
+        ...createMockLinearIssueService(),
+        async ensureIssueExists(): Promise<EnsureIssueResult> {
+          throw new Error('Linear API timeout');
+        },
+      };
+
+      let transactionCalled = false;
+      deps.firestore = {
+        async runTransaction<T>(fn: (transaction: never) => Promise<T>): Promise<T> {
+          transactionCalled = true;
+          const mockTransaction = {
+            get: async (): Promise<{ exists: boolean; data: () => null }> => ({ exists: false, data: (): null => null }),
+            set: (): void => undefined,
+          };
+          return fn(mockTransaction as never);
+        },
+        doc: mockDoc,
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('linear_issue_failed');
+      }
+      expect(transactionCalled).toBe(false);
     });
   });
 

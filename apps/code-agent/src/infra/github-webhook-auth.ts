@@ -33,12 +33,10 @@ export function parseGitHubSignature(signature: string): Buffer | null {
     return null;
   }
 
-  /* v8 ignore start -- upstream: defensive validation for GitHub webhook signature format @preserve */
   // Validate hex characters
   if (!/^[0-9a-fA-F]+$/.test(hexDigest)) {
     return null;
   }
-  /* v8 ignore stop @preserve */
 
   try {
     return Buffer.from(hexDigest, 'hex');
