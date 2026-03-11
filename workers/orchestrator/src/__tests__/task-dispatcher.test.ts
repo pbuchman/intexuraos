@@ -3591,7 +3591,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput returns correct input shape', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(123);
@@ -3632,7 +3632,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput enriches linearIssueBody with description when available', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(123);
@@ -3680,15 +3680,7 @@ describe('TaskDispatcher', () => {
       expect(input?.linearIssueBody).toContain('Description:\n## Requirements\n1. Fix bug');
     });
 
-    it('executeDeepValidation calls validate with onProgress and logs completion', async () => {
-      const mockResult = {
-        claimVerification: [{ claim: 'CI', verdict: 'verified', evidence: 'MSG-001' }],
-        contractVerification: [],
-        planVsReality: { planFound: false, requirements: [] },
-        anomalies: [
-          { type: 'laziness', severity: 'warning', evidence: 'MSG-002', detail: 'skipped' },
-        ],
-      };
+    it('executeDeepValidation calls validate with onProgress and logs comment posted', async () => {
       const mockValidator: ExecutionDeepValidator = {
         validate: vi
           .fn()
@@ -3701,7 +3693,7 @@ describe('TaskDispatcher', () => {
               onProgress?.('validation response received');
               onProgress?.('posting PR comment...');
               onProgress?.('PR comment posted');
-              return mockResult;
+              return true;
             }
           ),
       };
@@ -3750,16 +3742,16 @@ describe('TaskDispatcher', () => {
         .map((c) => c[1]);
       expect(appendCalls.some((c) => c.includes('Deep validation starting'))).toBe(true);
       expect(appendCalls.some((c) => c.includes('calling Gemini for analysis...'))).toBe(true);
-      expect(appendCalls.some((c) => c.includes('1 claims, 1 anomalies'))).toBe(true);
+      expect(appendCalls.some((c) => c.includes('Deep validation comment posted'))).toBe(true);
       expect(mockLogger.info).toHaveBeenCalledWith(
         { taskId: 'deep-val-test' },
-        'Deep validation completed with result'
+        'Deep validation completed with comment posted'
       );
     });
 
-    it('executeDeepValidation does not log summary when validate returns undefined', async () => {
+    it('executeDeepValidation logs coarse status when validate returns false', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       const deepValDispatcher = new TaskDispatcher(
@@ -3803,10 +3795,12 @@ describe('TaskDispatcher', () => {
         .mock.calls.filter((c) => c[0] === 'undef-val-test')
         .map((c) => c[1]);
       expect(appendCalls.some((c) => c.includes('Deep validation starting'))).toBe(true);
-      expect(appendCalls.some((c) => c.includes('claims'))).toBe(false);
+      expect(appendCalls.some((c) => c.includes('Deep validation completed without comment'))).toBe(
+        true
+      );
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { taskId: 'undef-val-test' },
-        'Deep validation completed without result (check onProgress messages for details)'
+        'Deep validation completed without comment'
       );
     });
 
@@ -3827,7 +3821,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput returns undefined for non-execution agent types', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       const deepValDispatcher = new TaskDispatcher(
@@ -3877,7 +3871,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput skips and logs warning when no PR number', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(undefined);
@@ -3914,7 +3908,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput skips and logs warning when transcript is empty', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(123);
@@ -3952,7 +3946,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput failure does not block finalization', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(123);
