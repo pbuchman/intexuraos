@@ -68,6 +68,14 @@ export interface Task {
    * Cleared before persisting in finalizeTask().
    */
   resumedAfterSuccess?: boolean;
+  /**
+   * Result from the most recent successful completion.
+   * Used as fallback when a resumed-after-success attempt completes
+   * but checkForResult() returns undefined (e.g., planning tasks with no PR).
+   * Updated on successful completion with a result; cleared on failure or
+   * successful completion without a result.
+   */
+  lastSuccessResult?: TaskResult;
 }
 
 export interface TaskResult {
