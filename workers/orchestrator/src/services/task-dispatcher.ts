@@ -594,9 +594,9 @@ export class TaskDispatcher {
     this.runningCount++;
     // `ok: true` here means startup recovery took ownership of the accepted resume.
     // Worker startup may still fail, in which case resumeTaskWithUserMessage finalizes the task.
+    this.logger.info({ taskId: task.taskId }, 'Recovering pending accepted resume after restart');
     await this.resumeTaskWithUserMessage(task);
 
-    this.logger.info({ taskId: task.taskId }, 'Recovering pending accepted resume after restart');
     return { ok: true, value: undefined };
   }
 
