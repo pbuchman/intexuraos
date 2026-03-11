@@ -13,6 +13,7 @@ import type {
   GitHubPullRequestListItem,
   PullRequestFile,
   PullRequestCommit,
+  PullRequestStatus,
 } from '../../domain/ports/gitHubPRClient.js';
 
 export interface GitHubPRHttpClientConfig {
@@ -197,6 +198,55 @@ export function createGitHubPRHttpClient(
           return err({ code: 'API_ERROR', message: 'PR response missing base.ref' });
         }
         return ok(baseRef);
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async getPullRequestStatus(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number
+    ): Promise<Result<PullRequestStatus, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(
+            mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`)
+          );
+        }
+
+        const data = (await response.json()) as {
+          state?: string;
+          merged_at?: string | null;
+          head?: { ref?: string };
+        };
+
+        const state = data.state;
+        const headRef = data.head?.ref;
+        if ((state !== 'open' && state !== 'closed') || typeof headRef !== 'string') {
+          return err({
+            code: 'API_ERROR',
+            message: 'PR response missing state or head.ref',
+          });
+        }
+
+        return ok({
+          state,
+          mergedAt: data.merged_at !== null && data.merged_at !== undefined
+            ? new Date(data.merged_at)
+            : null,
+          headRef,
+        });
       } catch (error) {
         return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
       }

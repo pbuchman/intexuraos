@@ -460,6 +460,36 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('should reuse the continuation PR branch when provided', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-task-continuation-pr',
+        workerType: 'auto',
+        prompt: 'Continue existing PR work',
+        repository: 'custom/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        continuationPrNumber: 1139,
+        continuationPrBranch: 'task_existing_pr_branch',
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(mockWorktreeManager.createWorktree).toHaveBeenCalledWith(
+        'test-task-continuation-pr',
+        'main',
+        'task_existing_pr_branch'
+      );
+
+      const task = await dispatcher.getTask('test-task-continuation-pr');
+      expect(task?.continuationPrNumber).toBe(1139);
+      expect(task?.continuationPrBranch).toBe('task_existing_pr_branch');
+    });
+
     it('should use default baseBranch when not provided', async () => {
       const request: CreateTaskRequest = {
         taskId: 'test-task-default-branch',
@@ -1577,6 +1607,34 @@ describe('TaskDispatcher', () => {
       execSpy.mockRestore();
 
       vi.useRealTimers();
+    });
+
+    it('returns undefined and warns when continuation PR output is not valid JSON', async () => {
+      const internal = dispatcher as unknown as {
+        parseContinuationPrOutput: (
+          taskId: string,
+          prOutput: string
+        ) =>
+          | {
+              url?: string;
+              number?: number;
+              headRefName?: string;
+              title?: string;
+              state?: string;
+              mergedAt?: string | null;
+            }
+          | undefined;
+      };
+      const result = internal.parseContinuationPrOutput('continuation-json-error-test', 'not-json');
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'continuation-json-error-test',
+          prOutput: 'not-json',
+        }),
+        'Failed to parse continuation PR output'
+      );
     });
 
     it('should not kill task if status changed between warning and kill timeout', async () => {
@@ -4234,7 +4292,7 @@ describe('TaskDispatcher', () => {
       const preamble = internal.buildResumePreamble();
 
       expect(preamble).toContain('[RESUME PRE-FLIGHT');
-      expect(preamble).toContain('gh pr view --json state,merged,number');
+      expect(preamble).toContain('gh pr view --json state,mergedAt,number');
       expect(preamble).toContain('MERGED or CLOSED or NO_PR');
       expect(preamble).toContain('git checkout -b followup/');
       expect(preamble).toContain('If PR is OPEN:');
@@ -4242,20 +4300,34 @@ describe('TaskDispatcher', () => {
       expect(preamble).toContain('---');
       expect(preamble.endsWith('\n')).toBe(true);
     });
+
+    it('uses the inherited PR number and branch in continuation mode', () => {
+      const internal = dispatcher as unknown as {
+        buildResumePreamble: (task?: Task) => string;
+      };
+      const preamble = internal.buildResumePreamble({
+        continuationPrNumber: 1139,
+        continuationPrBranch: 'task_existing_pr_branch',
+      } as unknown as Task);
+
+      expect(preamble).toContain('gh pr view 1139 --json state,mergedAt,number');
+      expect(preamble).toContain('git push origin HEAD:task_existing_pr_branch');
+      expect(preamble).not.toContain('gh pr view --json state,mergedAt,number');
+    });
   });
 
   describe('buildActiveGoalSection', () => {
     it('strips resume preamble and wraps user message', () => {
       const internal = dispatcher as unknown as {
-        buildActiveGoalSection: (prompt: string) => string;
-        buildResumePreamble: () => string;
+        buildActiveGoalSection: (task: Task | undefined, prompt: string) => string;
+        buildResumePreamble: (task?: Task) => string;
       };
       const preamble = internal.buildResumePreamble();
       const userMessage =
         '[PR Comment] New comment on PR #849\nFrom: @pbuchman\nThe commenter said:\nFix the bug';
       const combined = preamble + userMessage;
 
-      const result = internal.buildActiveGoalSection(combined);
+      const result = internal.buildActiveGoalSection(undefined, combined);
 
       expect(result).toContain('[ACTIVE GOAL');
       expect(result).toContain('[PR Comment] New comment on PR #849');
@@ -4265,9 +4337,9 @@ describe('TaskDispatcher', () => {
 
     it('handles prompt without preamble', () => {
       const internal = dispatcher as unknown as {
-        buildActiveGoalSection: (prompt: string) => string;
+        buildActiveGoalSection: (task: Task | undefined, prompt: string) => string;
       };
-      const result = internal.buildActiveGoalSection('Just a plain message');
+      const result = internal.buildActiveGoalSection(undefined, 'Just a plain message');
 
       expect(result).toContain('[ACTIVE GOAL');
       expect(result).toContain('Just a plain message');
@@ -4371,7 +4443,10 @@ describe('TaskDispatcher', () => {
         internal.clearTaskTimers('resume-ack-test');
 
         const runningCountBeforeResume = localDispatcher.getRunningCount();
-        const result = await localDispatcher.sendMessage('resume-ack-test', 'User follow-up message');
+        const result = await localDispatcher.sendMessage(
+          'resume-ack-test',
+          'User follow-up message'
+        );
 
         expect(result).toEqual({ ok: true, value: { action: 'resumed' } });
         expect(localDispatcher.getRunningCount()).toBe(runningCountBeforeResume + 1);
@@ -5517,14 +5592,14 @@ describe('TaskDispatcher', () => {
       expect(dispatcher.getRunningCount()).toBe(1);
       expect(mockLogForwarder.registerTask).toHaveBeenCalledWith(
         'recover-resume-task-1',
-        'secret-123',
+        'secret-123'
       );
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: 'recover-resume-task-1',
           prompt: '[RESUME PRE-FLIGHT]\nUser follow-up message',
           continueSession: true,
-        }),
+        })
       );
       expect(task.containerId).toBe('container-recover-resume-task-1');
       expect(task.pendingResumeStart).toBeUndefined();
@@ -5551,7 +5626,7 @@ describe('TaskDispatcher', () => {
               code: 'RESUME_ATTEMPT_FAILED',
             }),
           }),
-        }),
+        })
       );
     });
 

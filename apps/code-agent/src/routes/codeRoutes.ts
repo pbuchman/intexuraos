@@ -3228,7 +3228,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /code/retry',
       });
 
-      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo } =
+      const {
+        codeTaskRepo,
+        linearAgentClient,
+        taskDispatcher,
+        whatsappNotifier,
+        metricsClient,
+        workerSettingsRepo,
+        gitHubPRClient,
+        userServiceClient,
+      } =
         getServices();
       const userId = request.user?.userId;
 
@@ -3270,6 +3279,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier,
           metricsClient,
           workerSettingsRepo,
+          gitHubPRClient,
+          userServiceClient,
           orchestratorSecret: loadConfig().orchestratorSecret,
           serviceUrl: loadConfig().serviceUrl,
         },
@@ -3438,7 +3449,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /code/tasks/:taskId/feedback',
       });
 
-      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo } =
+      const {
+        codeTaskRepo,
+        linearAgentClient,
+        taskDispatcher,
+        whatsappNotifier,
+        metricsClient,
+        workerSettingsRepo,
+        gitHubPRClient,
+        userServiceClient,
+      } =
         getServices();
       const userId = request.user?.userId;
 
@@ -3462,6 +3482,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier,
           metricsClient,
           workerSettingsRepo,
+          gitHubPRClient,
+          userServiceClient,
           orchestratorSecret: loadConfig().orchestratorSecret,
           serviceUrl: loadConfig().serviceUrl,
         },

@@ -136,7 +136,10 @@ describe('main.ts', () => {
     });
     vi.mocked(mockWebhookClient.retryPending).mockResolvedValue(undefined);
     vi.mocked(mockDispatcher.adoptTask).mockResolvedValue({ ok: true, value: undefined });
-    vi.mocked(mockDispatcher.recoverPendingResumeTask).mockResolvedValue({ ok: true, value: undefined });
+    vi.mocked(mockDispatcher.recoverPendingResumeTask).mockResolvedValue({
+      ok: true,
+      value: undefined,
+    });
     mockListWorkerContainers.mockResolvedValue([]);
     vi.mocked(mockIsolationProvider.destroyWorker).mockResolvedValue(undefined);
   });

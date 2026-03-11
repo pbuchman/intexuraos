@@ -8,7 +8,9 @@ import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
 import { ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
+import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from './domain/repositories/logLineRepository.js';
@@ -54,8 +56,6 @@ import { createWebhookDispatchService, type WebhookDispatchService } from './dom
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
-import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
-import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
 import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
 import type { DispatchRetryRepository } from './domain/repositories/dispatchRetryRepository.js';
@@ -67,6 +67,9 @@ import { createReviewTask } from './domain/usecases/createReviewTask.js';
 import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
 import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
 import { parseOwnerRepo } from './domain/utils/parseOwnerRepo.js';
+
+const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
+const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -340,9 +343,9 @@ export function initServices(config: ServiceConfig): void {
   const toolCallingClient = config.geminiAppApiKey !== ''
     ? createToolCallingClient({
         apiKey: config.geminiAppApiKey,
-        model: LlmModels.Gemini25Flash,
+        model: GEMINI_TOOL_CALLING_MODEL,
         userId: 'system:github-agent',
-        pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
+        pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
       })
     : undefined;

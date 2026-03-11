@@ -589,6 +589,20 @@
       ]
     },
     {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "linearIssueId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "whatsapp_phone_verifications",
       "queryScope": "COLLECTION",
       "fields": [

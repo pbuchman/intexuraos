@@ -28,6 +28,9 @@ function createFakeGitHubPRClient(): GitHubPRClient {
     getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
     getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
     getPullRequestBaseBranch: vi.fn().mockResolvedValue(ok('main')),
+    getPullRequestStatus: vi.fn().mockResolvedValue(
+      ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })
+    ),
     postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 42 })),
     listOpenPullRequestsByBaseBranch: vi.fn().mockResolvedValue(ok([])),
     getPullRequestDetails: vi.fn().mockResolvedValue(ok({

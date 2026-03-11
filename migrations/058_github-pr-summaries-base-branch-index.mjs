@@ -1,5 +1,5 @@
 /**
- * Migration 057: Composite index for open PR summaries by repository/base branch
+ * Migration 058: Composite index for open PR summaries by repository/base branch
  *
  * Required for findOpenByBaseBranch query:
  *   .where('repository', '==', repository)
@@ -8,9 +8,10 @@
  */
 
 export const metadata = {
-  id: '057',
+  id: '058',
   name: 'github-pr-summaries-base-branch-index',
-  description: 'Composite index for github-pr-summaries open PR lookup by repository and base branch',
+  description:
+    'Composite index for github-pr-summaries open PR lookup by repository and base branch',
   createdAt: '2026-03-11',
 };
 

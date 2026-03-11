@@ -176,6 +176,22 @@ describe('system-prompt', () => {
     expect(result).not.toContain('- Turn summary:');
   });
 
+  it('builds execution continuation instructions when an open PR is inherited', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      continuationPrNumber: 1139,
+      continuationPrBranch: 'task_existing_pr_branch',
+    });
+
+    expect(result).toContain('Existing PR: #1139');
+    expect(result).toContain('Do NOT run `gh pr create`');
+    expect(result).toContain('Do NOT open a second PR for this task');
+    expect(result).toContain('git push origin HEAD:task_existing_pr_branch');
+    expect(result).toContain('gh pr view 1139 --json url');
+    expect(result).not.toContain('gh pr create --base development');
+  });
+
   it('builds pull request agent prompt when pr-comment label is present', () => {
     const result = buildSystemPrompt({
       ...baseParams,
