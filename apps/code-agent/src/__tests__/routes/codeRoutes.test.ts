@@ -770,6 +770,43 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.data.hasActive).toBe(false);
     });
 
+    it('returns hasActive: false when only an active review task exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-review-123',
+        linearIssueId: 'INT-123',
+        prNumber: 42,
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/linear/INT-123/active',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.hasActive).toBe(false);
+      expect(body.data.taskId).toBeUndefined();
+    });
+
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'GET',
