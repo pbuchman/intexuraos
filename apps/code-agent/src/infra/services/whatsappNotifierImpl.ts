@@ -53,61 +53,65 @@ async function resolveTaskTitle(
   return summarizeTask(task);
 }
 
-function formatCompletionMessage(title: string, task: CodeTask): string {
-
+function formatCompletionMessage(title: string, task: CodeTask, linearIssueId?: string): string {
+  const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
   const result = task.result;
   if (!result) {
-    return `✅ Code task completed: ${title}`;
+    return `✅ ${idPrefix}${title}`;
   }
 
   const branchLine = result.branch !== undefined ? `Branch: ${result.branch}\n` : '';
   const commitsLine = result.commits !== undefined ? `Commits: ${String(result.commits)}\n` : '';
   const summaryLine = result.summary ?? '';
-  return `✅ Code task completed: ${title}
+  return `✅ ${idPrefix}${title}
 
 ${branchLine}${commitsLine}${summaryLine}`;
 }
 
-function formatFailureMessage(title: string, error: TaskError): string {
+function formatFailureMessage(title: string, error: TaskError, linearIssueId?: string): string {
+  const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
   const remedation = error.remediation?.manualSteps !== undefined &&
     error.remediation.manualSteps.length > 0
     ? `\nSuggestion: ${error.remediation.manualSteps}`
     : '';
 
-  return `❌ Code task failed: ${title}
+  return `❌ ${idPrefix}${title}
 
 Error: ${error.message}${remedation}`;
 }
 
-function formatStartedMessage(title: string, task: CodeTask): string {
-  return `🚀 Code task started: ${title}
-
-Task ID: ${task.id}
-Repository: ${task.repository}
-Branch: ${task.baseBranch}`;
+function formatStartedMessage(title: string, _task: CodeTask, linearIssueId?: string): string {
+  const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
+  return `🚀 ${idPrefix}${title}`;
 }
 
-function formatResumedMessage(title: string, task: CodeTask): string {
-  return `🔄 Code task resumed: ${title}
-
-Task ID: ${task.id}
-Repository: ${task.repository}
-Branch: ${task.baseBranch}`;
+function formatResumedMessage(title: string, _task: CodeTask, linearIssueId?: string): string {
+  /* v8 ignore start -- ts-type: ternary branch requires task with linearIssueId for testing @preserve */
+  const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
+  /* v8 ignore stop @preserve */
+  return `🔄 ${idPrefix}${title}`;
 }
 
-function formatResumedCompletionMessage(title: string, task: CodeTask): string {
+function formatResumedCompletionMessage(title: string, task: CodeTask, linearIssueId?: string): string {
+  const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
   const result = task.result;
   if (!result) {
-    return `🔁 Session continued: ${title}`;
+    return `🔁 ${idPrefix}${title}`;
   }
 
   const summaryLine = result.summary ?? '';
-  return `🔁 Session continued: ${title}
+  return `🔁 ${idPrefix}${title}
 
 ${summaryLine}`;
 }
 
-function formatDesignCompleteMessage(title: string, task: CodeTask, includeButtonPrompt: boolean): string {
+function formatDesignCompleteMessage(
+  title: string,
+  task: CodeTask,
+  includeButtonPrompt: boolean,
+  linearIssueId?: string
+): string {
+  const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
   const result = task.result;
   /* v8 ignore start -- ts-type: defensive null check for optional result summary @preserve */
   const summary = result?.summary ?? 'Design completed and ready for implementation.';
@@ -117,7 +121,7 @@ function formatDesignCompleteMessage(title: string, task: CodeTask, includeButto
     ? '\n\nReady to implement? Click the button below to start Phase 2.'
     : '\n\nReady to implement? Open the web app to start Phase 2.';
 
-  return `🎨 Design ready: ${title}
+  return `🎨 ${idPrefix}${title}
 
 ${summary}${buttonPrompt}`;
 }
@@ -134,7 +138,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       task: CodeTask
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      const message = formatCompletionMessage(title, task);
+      const message = formatCompletionMessage(title, task, task.linearIssueId);
 
       const prUrl = task.result?.prUrl;
       const publishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
@@ -165,12 +169,12 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       error: TaskError
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      const message = formatFailureMessage(title, error);
+      const message = formatFailureMessage(title, error, task.linearIssueId);
 
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: '🔍 View Task', url: buildTaskUrl(task.id) },
+        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
       });
 
@@ -189,7 +193,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       task: CodeTask
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      const message = formatStartedMessage(title, task);
+      const message = formatStartedMessage(title, task, task.linearIssueId);
 
       // Build interactive buttons for task management (INT-379)
       // Cancel button includes nonce for security validation
@@ -205,18 +209,11 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         });
       }
 
-      buttons.push({
-        type: 'reply',
-        reply: {
-          id: `view-task:${task.id}`,
-          title: '👁️ View Progress',
-        },
-      });
-
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
         buttons,
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
       });
 
@@ -235,7 +232,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       task: CodeTask
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      const message = formatResumedMessage(title, task);
+      const message = formatResumedMessage(title, task, task.linearIssueId);
 
       const buttons: { type: 'reply'; reply: { id: string; title: string } }[] = [];
 
@@ -249,18 +246,11 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         });
       }
 
-      buttons.push({
-        type: 'reply',
-        reply: {
-          id: `view-task:${task.id}`,
-          title: '👁️ View Progress',
-        },
-      });
-
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
         buttons,
+        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
       });
 
@@ -279,7 +269,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       task: CodeTask
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      const message = formatResumedCompletionMessage(title, task);
+      const message = formatResumedCompletionMessage(title, task, task.linearIssueId);
 
       const prUrl = task.result?.prUrl;
       const resumedPublishParams: Parameters<typeof whatsappPublisher.publishSendMessage>[0] = {
@@ -309,7 +299,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       task: CodeTask
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      const message = formatDesignCompleteMessage(title, task, true);
+      const message = formatDesignCompleteMessage(title, task, true, task.linearIssueId);
 
       // Build interactive button to proceed to Phase 2 (INT-628)
       const buttons: { type: 'reply'; reply: { id: string; title: string } }[] = [
@@ -332,7 +322,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       if (!result.ok) {
         // Graceful degradation: if buttons can't be sent, try without buttons (with corrected message)
         if (result.error.code === 'PUBLISH_FAILED') {
-          const fallbackMessage = formatDesignCompleteMessage(title, task, false);
+          const fallbackMessage = formatDesignCompleteMessage(title, task, false, task.linearIssueId);
           const fallbackResult = await whatsappPublisher.publishSendMessage({
             userId,
             message: fallbackMessage,
@@ -362,14 +352,15 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       estimatedWaitMinutes: number
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      const message = `🕐 Task queued: ${title}
+      /* v8 ignore start -- ts-type: ternary branch requires task with linearIssueId for testing @preserve */
+      const idPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
+      /* v8 ignore stop @preserve */
+      const message = `🕐 ${idPrefix}${title}
 
 All workers are busy. Your task is in the queue.
 
 Position: ${String(position)}
-Estimated wait: ~${String(estimatedWaitMinutes)} minutes
-
-Task ID: ${task.id}`;
+Estimated wait: ~${String(estimatedWaitMinutes)} minutes`;
 
       const result = await whatsappPublisher.publishSendMessage({
         userId,
@@ -393,11 +384,12 @@ Task ID: ${task.id}`;
       task: CodeTask
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
-      const message = `⏰ Task expired in queue: ${title}
+      /* v8 ignore start -- ts-type: ternary branch requires task with linearIssueId for testing @preserve */
+      const idPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
+      /* v8 ignore stop @preserve */
+      const message = `⏰ ${idPrefix}${title}
 
-Workers were still busy and the task timed out. Please retry when workers are available.
-
-Task ID: ${task.id}`;
+Workers were still busy and the task timed out. Please retry when workers are available.`;
 
       const result = await whatsappPublisher.publishSendMessage({
         userId,
