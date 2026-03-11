@@ -33,8 +33,8 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
   const claimsJson = JSON.stringify(input.agentClaims, null, 2);
   const planSection =
     input.planContent !== undefined
-      ? `Plan file content:\n${input.planContent}`
-      : 'No plan file found on branch.';
+      ? `Plan document content:\n${input.planContent}`
+      : 'No plan document referenced in Linear issue.';
 
   const transcript =
     input.formattedTranscript.length > MAX_TRANSCRIPT_CHARS
