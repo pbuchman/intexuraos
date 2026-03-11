@@ -381,6 +381,51 @@ describe('UnifiedEvaluator', () => {
       );
     });
 
+    it('creates review task for @review issue_comment with selected worker type', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: {
+            action: 'request_review',
+            reviewTypes: ['architecture'],
+            workerType: 'qwen3.5-plus',
+          },
+          usage: { costUsd: 0.002, toolCalls: [] },
+          reasoning: 'The comment explicitly requested architecture review with qwen.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-comment-1' })),
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture',
+      });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.createReviewTask).toHaveBeenCalledWith(
+        logger,
+        expect.objectContaining({
+          reviewTypes: ['architecture'],
+          workerType: 'qwen3.5-plus',
+          reviewComment: '@review architecture',
+        })
+      );
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decision: 'request_review',
+          dispatchParams: expect.objectContaining({
+            taskId: 'task-review-comment-1',
+            reviewTypes: ['architecture'],
+            workerType: 'qwen3.5-plus',
+          }),
+        })
+      );
+    });
+
     it('reuses active review task when createReviewTask returns already_running', async () => {
       const postTriageComment = vi.fn().mockResolvedValue(ok({ commentId: 99 }));
       const deps = createFakeDeps({
@@ -417,6 +462,48 @@ describe('UnifiedEvaluator', () => {
           dispatchParams: expect.objectContaining({
             taskId: 'task-review-existing',
             reviewTypes: ['code_quality'],
+          }),
+        })
+      );
+    });
+
+    it('includes worker type when already_running review triage is posted', async () => {
+      const postTriageComment = vi.fn().mockResolvedValue(ok({ commentId: 99 }));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'qwen3.5-plus' },
+          usage: {
+            costUsd: 0.002,
+            toolCalls: [{ tool: 'request_review', args: { review_type: 'architecture', worker_type: 'qwen3.5-plus' } }],
+          },
+          reasoning: 'Architecture review is already in progress on qwen.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({
+          status: 'already_running',
+          taskId: 'task-review-existing',
+        })),
+        postTriageComment,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'issue_comment', action: 'created', body: '@review architecture' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(postTriageComment).toHaveBeenCalledWith(
+        'dev-user',
+        'intexuraos/intexuraos',
+        42,
+        expect.stringContaining('**Worker type:** `qwen3.5-plus`')
+      );
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dispatchParams: expect.objectContaining({
+            taskId: 'task-review-existing',
+            reviewTypes: ['architecture'],
+            workerType: 'qwen3.5-plus',
           }),
         })
       );

@@ -6,8 +6,8 @@ import { describe, it, expect } from 'vitest';
 import { githubAgentPrompt } from '../../../domain/prompts/githubAgentPrompt.js';
 
 describe('githubAgentPrompt', () => {
-  it('has version 3.0.0', () => {
-    expect(githubAgentPrompt.version).toBe('3.0.0');
+  it('has version 4.0.0', () => {
+    expect(githubAgentPrompt.version).toBe('4.0.0');
   });
 
   describe('PR section', () => {
@@ -121,6 +121,23 @@ describe('githubAgentPrompt', () => {
 
       expect(result).toContain('Comment Triage');
       expect(result).toContain('created');
+    });
+
+    it('adds review command guidance for @review comments', () => {
+      const result = githubAgentPrompt.build({
+        repository: 'owner/repo',
+        prNumber: 1,
+        prTitle: 'test PR',
+        prBody: '',
+        action: 'created',
+        senderLogin: 'user',
+        eventType: 'issue_comment',
+        commentBody: '@review architecture',
+      });
+
+      expect(result).toContain('Review Command Instructions');
+      expect(result).toContain('request_review');
+      expect(result).toContain('Allowed worker types');
     });
   });
 });
