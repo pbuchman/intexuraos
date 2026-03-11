@@ -600,6 +600,43 @@ describe('drainTaskQueue', () => {
     );
   });
 
+  it('preserves pull_request routing for legacy pr-comment-auto tasks during drain', async () => {
+    const task = createMockTask({
+      linearIssueId: 'INT-123',
+      systemPromptHash: 'pr-comment-auto',
+      sanitizedPrompt: '[PR Comment Task] Comment on PR #42 in pbuchman/intexuraos\nresolve conflicts',
+    });
+    delete (task as unknown as Record<string, unknown>)['agentType'];
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    setupWorkerSettings();
+
+    mockLinearAgentClient.validateIssue.mockResolvedValue(
+      ok({
+        id: 'issue-id',
+        identifier: 'INT-123',
+        title: 'Test issue',
+        url: 'https://linear.app/intexura/issue/INT-123',
+        labels: ['bug'],
+        childCount: 0,
+      })
+    );
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: '[PR Comment Task] Comment on PR #42 in pbuchman/intexuraos\nresolve conflicts',
+        agentType: 'pull_request',
+        linearIssueLabels: ['bug', 'pr-comment'],
+      })
+    );
+  });
+
   it('continues with empty labels when Linear validation fails', async () => {
     const task = createMockTask({ linearIssueId: 'INT-123' });
     mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));

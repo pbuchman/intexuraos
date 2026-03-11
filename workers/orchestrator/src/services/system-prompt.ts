@@ -265,7 +265,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '2.0.0',
+  version: '2.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -585,10 +585,10 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 };
 
 export function buildSystemPrompt(params: SystemPromptParams): string {
-  const isPRComment = params.linearIssueLabels.some(
-    (label) => label.trim().toLowerCase() === 'pr-comment'
-  );
-  if (isPRComment) {
+  const isPullRequestTask =
+    params.agentType === 'pull_request' ||
+    params.linearIssueLabels.some((label) => label.trim().toLowerCase() === 'pr-comment');
+  if (isPullRequestTask) {
     return pullRequestPrompt.build(params);
   }
 
