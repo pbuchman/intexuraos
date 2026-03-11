@@ -139,7 +139,6 @@ export async function submitTaskFeedback(
 
   // Step 4: Fetch user's worker settings
   const settingsResult = await workerSettingsRepo.getSettings(userId);
-  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!settingsResult.ok) {
     logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings for feedback');
     return err({
@@ -147,14 +146,11 @@ export async function submitTaskFeedback(
       message: 'Failed to fetch worker settings',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const settings = settingsResult.value;
 
   // Handle null settings by providing empty array
-  /* v8 ignore start -- ts-type: optional chaining for database result @preserve */
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
-  /* v8 ignore stop @preserve */
 
   if (enabledWorkers.length === 0) {
     logger.warn({ userId }, 'User has no workers configured for feedback');
@@ -242,7 +238,6 @@ ${feedback.trim()}
 
   const createResult = await codeTaskRepo.create(createInput);
 
-  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!createResult.ok) {
     logger.error({ error: createResult.error }, 'Failed to create follow-up task');
     return err({
@@ -250,7 +245,6 @@ ${feedback.trim()}
       message: 'Failed to create follow-up task',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const followUpTask = createResult.value;
 
@@ -339,11 +333,9 @@ ${feedback.trim()}
   };
 
   // Add optional fields if defined
-  /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
   if (followUpTask.linearIssueId !== undefined) {
     dispatchRequest.linearIssueId = followUpTask.linearIssueId;
   }
-  /* v8 ignore stop @preserve */
   // traceId was set in createInput, safe to assign directly
   dispatchRequest.traceId = followUpTask.traceId;
 
@@ -383,20 +375,20 @@ ${feedback.trim()}
     cancelNonceExpiresAt,
   });
 
-  /* v8 ignore start -- test-infra: update success path tested but not detected by coverage tool @preserve */
   if (updateResult.ok) {
     const updatedTask = updateResult.value;
     const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
+    /* v8 ignore start -- test-infra: notifyResult.error branch tested but not detected by coverage tool @preserve */
     if (!notifyResult.ok) {
       logger.warn(
         { taskId: followUpTask.id, error: notifyResult.error },
         'Failed to send task started notification for feedback'
       );
     }
+    /* v8 ignore stop @preserve */
   } else {
     logger.warn({ taskId: followUpTask.id, error: updateResult.error }, 'Failed to update task with cancel nonce');
   }
-  /* v8 ignore stop @preserve */
 
   return ok({
     codeTaskId: followUpTask.id,
