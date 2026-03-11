@@ -48,6 +48,7 @@
         "apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts",
         "apps/code-agent/src/infra/repositories/firestoreLogLineRepository.ts",
         "apps/code-agent/src/infra/services/taskDispatcherImpl.ts",
+        "apps/code-agent/src/infra/services/whatsappNotifierImpl.ts",
         "apps/code-agent/src/routes/code/github-pr-summaries.ts",
         "apps/code-agent/src/routes/code/github-pre-events.ts",
         "apps/code-agent/src/routes/codeRoutes.ts",
