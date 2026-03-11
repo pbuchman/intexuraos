@@ -10,6 +10,7 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   workerType?: WorkerType;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  trackingCommentId?: string;
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
@@ -265,9 +266,10 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '2.1.0',
+  version: '2.2.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, trackingCommentId } =
+      params;
 
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
@@ -321,7 +323,13 @@ ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''
 
 ### Tracking Comment (MANDATORY — single comment, work in-place)
 
-Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.
+${
+  trackingCommentId !== undefined
+    ? `A tracking comment already exists for this task at \`/repos/{owner}/{repo}/issues/comments/${trackingCommentId}\`.
+
+Your FIRST action must be to read and reuse that exact comment. Do NOT post a new tracking comment.`
+    : 'Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.'
+}
 
 Even if you determine there are no actionable items or no code changes needed,
 you MUST still post the tracking comment. The tracking comment documents your
@@ -336,13 +344,17 @@ VIOLATION EXAMPLE — do NOT do this:
 
 Step 3 is forbidden. You must ONLY use PATCH on the original comment ID. Never call POST a second time.
 
-gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="..."
+${trackingCommentId === undefined ? 'gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="..."' : ''}
 
 The initial comment must contain:
 - What you plan to do (1-3 bullet points summarizing the task)
 ${taskUrl !== undefined ? `- A link to the live task console: [View progress](${taskUrl})` : ''}
 
-Save the comment ID from the response — you will update this same comment with your delivery summary.
+${
+  trackingCommentId === undefined
+    ? 'Save the comment ID from the response — you will update this same comment with your delivery summary.'
+    : `Reuse tracking comment ID \`${trackingCommentId}\` for all updates.`
+}
 
 Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE this same comment in-place with:
 - What you actually did (1-3 bullet points)
@@ -350,7 +362,7 @@ Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE th
 ${taskUrl !== undefined ? `- Link to the task console: [View task](${taskUrl})` : ''}
 
 Use ONLY this method — do NOT post a new comment:
-gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="..."
+gh api -X PATCH /repos/{owner}/{repo}/issues/comments/${trackingCommentId ?? '{comment_id}'} -f body="..."
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 

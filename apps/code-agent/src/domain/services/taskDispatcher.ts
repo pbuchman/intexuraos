@@ -46,6 +46,8 @@ export interface DispatchRequest {
   retriedFrom?: string;
   /** Agent type for orchestrator agent-based routing. */
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  /** Existing PR tracking comment to reuse for pull_request tasks. */
+  trackingCommentId?: string;
   /** Branch name of planning PR to merge into execution worktree. */
   planningPrBranch?: string;
   /** PR URL to close after successful execution. */

@@ -504,9 +504,6 @@ module "secret_manager" {
     "INTEXURAOS_ORCHESTRATOR_SECRET"   = "HMAC signing secret for orchestrator communication"
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET" = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
     # GitHub App for code worker PRs (INT-156)
-    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY" = "GitHub App private key (PEM format) for code worker authentication"
-    "INTEXURAOS_GITHUB_APP_ID"          = "GitHub App ID for code worker"
-    "INTEXURAOS_GITHUB_INSTALLATION_ID" = "GitHub App installation ID for pbuchman/intexuraos"
     # Orchestrator repository management (INT-515)
     "INTEXURAOS_REPOSITORY_URL"        = "GitHub repository URL for orchestrator self-managed clone"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
@@ -2516,4 +2513,3 @@ output "pubsub_transcription_completed_topic" {
   description = "Pub/Sub topic for transcription completed events"
   value       = module.pubsub_transcription_completed.topic_name
 }
-
