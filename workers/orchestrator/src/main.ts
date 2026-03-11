@@ -180,6 +180,29 @@ async function runStartupRecovery(
   // Process each running task
   for (const task of runningTasks) {
     try {
+      if (task.pendingResumeStart !== undefined) {
+        try {
+          const result = await dispatcher.recoverPendingResumeTask(task);
+          if (result.ok) {
+            logger.info(
+              { taskId: task.taskId },
+              'Handled pending accepted resume during startup recovery'
+            );
+            continue;
+          }
+
+          logger.warn(
+            { taskId: task.taskId, error: result.error },
+            'Pending accepted resume recovery failed, marking as interrupted'
+          );
+        } catch (error) {
+          logger.error(
+            { taskId: task.taskId, error },
+            'Pending accepted resume recovery threw, marking as interrupted'
+          );
+        }
+      }
+
       const container = containerMap?.get(task.taskId);
 
       if (container?.state === 'running') {

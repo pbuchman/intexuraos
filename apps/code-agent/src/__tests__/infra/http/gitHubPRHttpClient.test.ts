@@ -448,4 +448,360 @@ describe('GitHubPRHttpClient', () => {
       }
     });
   });
+
+  describe('listOpenPullRequestsByBaseBranch', () => {
+    it('returns open PRs targeting the requested base branch', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, [
+          {
+            number: 42,
+            title: 'Fix conflict',
+            user: { login: 'alice' },
+            base: { ref: 'development' },
+            head: { ref: 'feature/alice' },
+          },
+          {
+            number: 43,
+            title: 'Second PR',
+            user: { login: 'bob' },
+            base: { ref: 'development' },
+            head: { ref: 'feature/bob' },
+          },
+        ]);
+
+      const result = await client.listOpenPullRequestsByBaseBranch(
+        'test-token',
+        'owner',
+        'repo',
+        'development'
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([
+          {
+            number: 42,
+            title: 'Fix conflict',
+            authorLogin: 'alice',
+            baseBranch: 'development',
+            headBranch: 'feature/alice',
+          },
+          {
+            number: 43,
+            title: 'Second PR',
+            authorLogin: 'bob',
+            baseBranch: 'development',
+            headBranch: 'feature/bob',
+          },
+        ]);
+      }
+    });
+
+    it('paginates open PR listing when GitHub returns a next-page link', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+        .reply(200, [
+          {
+            number: 42,
+            title: 'Fix conflict',
+            user: { login: 'alice' },
+            base: { ref: 'development' },
+            head: { ref: 'feature/alice' },
+          },
+        ], {
+          link: '<https://api.github.com/repos/owner/repo/pulls?state=open&base=development&per_page=100&page=2>; rel="next"',
+        });
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100&page=2')
+        .reply(200, [
+          {
+            number: 43,
+            title: 'Second PR',
+            user: { login: 'bob' },
+            base: { ref: 'development' },
+            head: { ref: 'feature/bob' },
+          },
+        ]);
+
+      const result = await client.listOpenPullRequestsByBaseBranch(
+        'test-token',
+        'owner',
+        'repo',
+        'development'
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([
+          {
+            number: 42,
+            title: 'Fix conflict',
+            authorLogin: 'alice',
+            baseBranch: 'development',
+            headBranch: 'feature/alice',
+          },
+          {
+            number: 43,
+            title: 'Second PR',
+            authorLogin: 'bob',
+            baseBranch: 'development',
+            headBranch: 'feature/bob',
+          },
+        ]);
+      }
+    });
+
+    it('returns API_ERROR when PR list is missing author login', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+        .reply(200, [
+          {
+            number: 42,
+            title: 'Fix conflict',
+            user: {},
+            base: { ref: 'development' },
+            head: { ref: 'feature/alice' },
+          },
+        ]);
+
+      const result = await client.listOpenPullRequestsByBaseBranch(
+        'test-token',
+        'owner',
+        'repo',
+        'development'
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('user.login');
+      }
+    });
+
+    it('returns API_ERROR when PR list is missing number, title, base, or head data', async () => {
+      const cases = [
+        [{ title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'number'],
+        [{ number: 42, user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'title'],
+        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice' } }, 'base.ref'],
+        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: {} }, 'head.ref'],
+      ] as const;
+
+      for (const [payload, expectedField] of cases) {
+        nock.cleanAll();
+        nock('https://api.github.com')
+          .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+          .reply(200, [payload]);
+
+        const result = await client.listOpenPullRequestsByBaseBranch(
+          'test-token',
+          'owner',
+          'repo',
+          'development'
+        );
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('API_ERROR');
+          expect(result.error.message).toContain(expectedField);
+        }
+      }
+    });
+
+    it('returns NOT_FOUND when GitHub rejects the PR list request', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls?state=open&base=development&per_page=100')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.listOpenPullRequestsByBaseBranch(
+        'test-token',
+        'owner',
+        'repo',
+        'development'
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+  });
+
+  describe('getPullRequestDetails', () => {
+    it('returns mergeability, author, branches, and body on success', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, {
+          number: 42,
+          title: 'Fix conflict',
+          body: 'PR body',
+          mergeable: false,
+          mergeable_state: 'dirty',
+          user: { login: 'alice' },
+          base: { ref: 'development' },
+          head: { ref: 'feature/alice' },
+        });
+
+      const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({
+          number: 42,
+          title: 'Fix conflict',
+          body: 'PR body',
+          authorLogin: 'alice',
+          baseBranch: 'development',
+          headBranch: 'feature/alice',
+          mergeable: false,
+          mergeableState: 'dirty',
+        });
+      }
+    });
+
+    it('allows mergeable to be null while GitHub computes the value', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .reply(200, {
+          number: 42,
+          title: 'Fix conflict',
+          body: null,
+          mergeable: null,
+          mergeable_state: 'unknown',
+          user: { login: 'alice' },
+          base: { ref: 'development' },
+          head: { ref: 'feature/alice' },
+        });
+
+      const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.mergeable).toBeNull();
+        expect(result.value.mergeableState).toBe('unknown');
+      }
+    });
+
+    it('defaults mergeableState to null when GitHub omits it', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .reply(200, {
+          number: 42,
+          title: 'Fix conflict',
+          body: 'PR body',
+          mergeable: false,
+          user: { login: 'alice' },
+          base: { ref: 'development' },
+          head: { ref: 'feature/alice' },
+        });
+
+      const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.mergeableState).toBeNull();
+      }
+    });
+
+    it('returns API_ERROR when PR details are missing required fields', async () => {
+      const cases = [
+        [{ title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'number'],
+        [{ number: 42, user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'title'],
+        [{ number: 42, title: 'Fix conflict', user: {}, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'user.login'],
+        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice' } }, 'base.ref'],
+        [{ number: 42, title: 'Fix conflict', user: { login: 'alice' }, base: { ref: 'development' }, head: {} }, 'head.ref'],
+      ] as const;
+
+      for (const [payload, expectedField] of cases) {
+        nock.cleanAll();
+        nock('https://api.github.com')
+          .get('/repos/owner/repo/pulls/42')
+          .reply(200, payload);
+
+        const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('API_ERROR');
+          expect(result.error.message).toContain(expectedField);
+        }
+      }
+    });
+
+    it('returns NOT_FOUND when PR details cannot be fetched', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+  });
+
+  describe('updateIssueComment', () => {
+    it('updates an existing issue comment', async () => {
+      nock('https://api.github.com')
+        .patch('/repos/owner/repo/issues/comments/12345', { body: 'Updated body' })
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, { id: 12345 });
+
+      const result = await client.updateIssueComment(
+        'test-token',
+        'owner',
+        'repo',
+        12345,
+        'Updated body'
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.commentId).toBe(12345);
+      }
+    });
+
+    it('returns NOT_FOUND when the managed comment no longer exists', async () => {
+      nock('https://api.github.com')
+        .patch('/repos/owner/repo/issues/comments/12345')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.updateIssueComment(
+        'test-token',
+        'owner',
+        'repo',
+        12345,
+        'Updated body'
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('returns API_ERROR when GitHub omits the updated comment id', async () => {
+      nock('https://api.github.com')
+        .patch('/repos/owner/repo/issues/comments/12345')
+        .reply(200, {});
+
+      const result = await client.updateIssueComment(
+        'test-token',
+        'owner',
+        'repo',
+        12345,
+        'Updated body'
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('comment id');
+      }
+    });
+  });
 });

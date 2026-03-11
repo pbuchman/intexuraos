@@ -25,6 +25,10 @@ export interface ResolveContinuationPrInput {
   limit?: number;
 }
 
+export interface ResolveExecutionContinuationPrInput extends ResolveContinuationPrInput {
+  agentType?: CodeTask['agentType'];
+}
+
 export interface ContinuationPrError {
   code: 'github_token_unavailable' | 'verification_failed';
   message: string;
@@ -48,6 +52,17 @@ export interface PostContinuationCommentInput {
 export interface PostContinuationCommentError {
   code: 'github_token_unavailable' | 'comment_failed';
   message: string;
+}
+
+export interface BootstrapContinuationPrTaskCommentDeps extends PostContinuationCommentDeps {
+  codeTaskRepo: CodeTaskRepository;
+}
+
+export interface BootstrapContinuationPrTaskCommentInput {
+  continuationPr: ContinuationPr | null;
+  task: CodeTask;
+  userId: string;
+  commentTitle: string;
 }
 
 function parsePrNumber(task: CodeTask): number | undefined {
@@ -276,6 +291,17 @@ export async function resolveContinuationPr(
   return ok(null);
 }
 
+export async function resolveExecutionContinuationPr(
+  deps: ResolveContinuationPrDeps,
+  input: ResolveExecutionContinuationPrInput
+): Promise<Result<ContinuationPr | null, ContinuationPrError>> {
+  if (input.agentType !== 'execution') {
+    return ok(null);
+  }
+
+  return await resolveContinuationPr(deps, input);
+}
+
 export async function postContinuationPrComment(
   deps: PostContinuationCommentDeps,
   input: PostContinuationCommentInput
@@ -311,4 +337,35 @@ export async function postContinuationPrComment(
   }
 
   return ok(undefined);
+}
+
+export async function bootstrapContinuationPrTaskComment(
+  deps: BootstrapContinuationPrTaskCommentDeps,
+  input: BootstrapContinuationPrTaskCommentInput
+): Promise<Result<void, PostContinuationCommentError>> {
+  if (input.continuationPr === null) {
+    return ok(undefined);
+  }
+
+  const commentResult = await postContinuationPrComment(deps, {
+    repository: input.task.repository,
+    prNumber: input.continuationPr.prNumber,
+    taskId: input.task.id,
+    userId: input.userId,
+    commentTitle: input.commentTitle,
+    ...(input.task.linearIssueId !== undefined && { linearIssueId: input.task.linearIssueId }),
+  });
+  if (commentResult.ok) {
+    return ok(undefined);
+  }
+
+  await deps.codeTaskRepo.update(input.task.id, {
+    status: 'failed',
+    error: {
+      code: 'PR_BOOTSTRAP_COMMENT_FAILED',
+      message: commentResult.error.message,
+    },
+  });
+
+  return err(commentResult.error);
 }

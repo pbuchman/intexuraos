@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { type Result, ok, err, type Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
+const SAFE_GIT_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 
 export interface WorktreeManagerConfig {
   repositoryPath: string;
@@ -15,6 +16,12 @@ export interface WorktreeManagerConfig {
 }
 
 const LOCK_TIMEOUT_MS = 10_000;
+
+function assertSafeBranchName(branch: string, branchLabel: string): void {
+  if (!SAFE_GIT_BRANCH_PATTERN.test(branch)) {
+    throw new Error(`Invalid ${branchLabel} branch name: ${branch}`);
+  }
+}
 
 export class WorktreeManager {
   private gitLock: Promise<void> = Promise.resolve();
@@ -58,6 +65,11 @@ export class WorktreeManager {
     return await this.withGitLock(async () => {
       const worktreePath = join(this.config.worktreeBasePath, taskId);
       this.logger.info({ taskId, baseBranch, continuationPrBranch }, 'Creating worktree');
+
+      assertSafeBranchName(baseBranch, 'base');
+      if (continuationPrBranch !== undefined) {
+        assertSafeBranchName(continuationPrBranch, 'continuation PR');
+      }
 
       // Check if worktree already exists
       if (await this.worktreeExists(taskId)) {
@@ -195,6 +207,7 @@ export class WorktreeManager {
     planningBranch: string
   ): Promise<Result<void, string>> {
     try {
+      assertSafeBranchName(planningBranch, 'planning');
       await execAsync(`git fetch origin "${planningBranch}"`, { cwd: worktreePath });
       await execAsync(`git merge "origin/${planningBranch}" --no-edit`, { cwd: worktreePath });
       this.logger.info({ worktreePath, planningBranch }, 'Planning branch merged into worktree');

@@ -872,14 +872,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
-  // GET /internal/code-tasks/linear/:linearIssueId/active - Check for active task
+  // GET /internal/code-tasks/linear/:linearIssueId/active - Check for active blocking task
   fastify.get<{ Params: { linearIssueId: string } }>(
     '/internal/code-tasks/linear/:linearIssueId/active',
     {
       schema: {
         operationId: 'hasActiveCodeTaskForLinearIssue',
-        summary: 'Check if active task exists for Linear issue',
-        description: 'Internal endpoint for checking if a Linear issue has an active (non-completed) task.',
+        summary: 'Check if blocking task exists for Linear issue',
+        description: 'Internal endpoint for checking if a Linear issue has an active non-review task.',
         tags: ['internal'],
         params: {
           type: 'object',
@@ -940,16 +940,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo } = getServices();
       const { linearIssueId } = request.params;
 
-      request.log.info({ linearIssueId }, 'Checking for active code task');
+      request.log.info({ linearIssueId }, 'Checking for active blocking code task');
 
       const result = await codeTaskRepo.hasActiveTaskForLinearIssue(linearIssueId);
 
       if (!result.ok) {
-        request.log.error({ linearIssueId, error: result.error }, 'Failed to check active code task');
+        request.log.error({ linearIssueId, error: result.error }, 'Failed to check active blocking code task');
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active code task check complete'); // @allow-result-access -- .ok checked at line 891
+      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active blocking code task check complete'); // @allow-result-access -- .ok checked at line 891
       return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 891
     }
   );

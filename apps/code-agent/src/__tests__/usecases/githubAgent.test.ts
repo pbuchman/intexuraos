@@ -61,6 +61,18 @@ function createFakeGitHubPRClient(): GitHubPRClient {
       ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })
     ),
     postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
+    listOpenPullRequestsByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+    getPullRequestDetails: vi.fn().mockResolvedValue(ok({
+      number: 42,
+      title: 'feat: add new feature',
+      body: 'This PR adds a new feature.',
+      authorLogin: 'dev-user',
+      baseBranch: 'main',
+      headBranch: 'feature/test',
+      mergeable: true,
+      mergeableState: 'clean',
+    })),
+    updateIssueComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
   };
 }
 

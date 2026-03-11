@@ -47,6 +47,20 @@ const flushAsync = async (): Promise<void> => {
   });
 };
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolveFn, rejectFn) => {
+    resolve = resolveFn;
+    reject = rejectFn;
+  });
+  return { promise, resolve, reject };
+}
+
 const createMockChildProcess = (): ChildProcess =>
   ({
     pid: 12345,
@@ -1284,6 +1298,29 @@ describe('TaskDispatcher', () => {
       expect(task?.slug).toBeUndefined();
       expect(task?.actionId).toBeUndefined();
     });
+
+    it('should persist trackingCommentId when provided', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-task-tracking-comment',
+        workerType: 'auto',
+        prompt: 'Test prompt with tracking comment',
+        trackingCommentId: '12345',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['pr-comment'],
+        hasChildren: false,
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const task = await dispatcher.getTask('test-task-tracking-comment');
+      expect(task).not.toBeNull();
+      expect(task?.trackingCommentId).toBe('12345');
+    });
   });
 
   describe('Error handling edge cases', () => {
@@ -1570,6 +1607,34 @@ describe('TaskDispatcher', () => {
       execSpy.mockRestore();
 
       vi.useRealTimers();
+    });
+
+    it('returns undefined and warns when continuation PR output is not valid JSON', async () => {
+      const internal = dispatcher as unknown as {
+        parseContinuationPrOutput: (
+          taskId: string,
+          prOutput: string
+        ) =>
+          | {
+              url?: string;
+              number?: number;
+              headRefName?: string;
+              title?: string;
+              state?: string;
+              mergedAt?: string | null;
+            }
+          | undefined;
+      };
+      const result = internal.parseContinuationPrOutput('continuation-json-error-test', 'not-json');
+
+      expect(result).toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'continuation-json-error-test',
+          prOutput: 'not-json',
+        }),
+        'Failed to parse continuation PR output'
+      );
     });
 
     it('should not kill task if status changed between warning and kill timeout', async () => {
@@ -4254,15 +4319,15 @@ describe('TaskDispatcher', () => {
   describe('buildActiveGoalSection', () => {
     it('strips resume preamble and wraps user message', () => {
       const internal = dispatcher as unknown as {
-        buildActiveGoalSection: (prompt: string) => string;
-        buildResumePreamble: () => string;
+        buildActiveGoalSection: (task: Task | undefined, prompt: string) => string;
+        buildResumePreamble: (task?: Task) => string;
       };
       const preamble = internal.buildResumePreamble();
       const userMessage =
         '[PR Comment] New comment on PR #849\nFrom: @pbuchman\nThe commenter said:\nFix the bug';
       const combined = preamble + userMessage;
 
-      const result = internal.buildActiveGoalSection(combined);
+      const result = internal.buildActiveGoalSection(undefined, combined);
 
       expect(result).toContain('[ACTIVE GOAL');
       expect(result).toContain('[PR Comment] New comment on PR #849');
@@ -4272,9 +4337,9 @@ describe('TaskDispatcher', () => {
 
     it('handles prompt without preamble', () => {
       const internal = dispatcher as unknown as {
-        buildActiveGoalSection: (prompt: string) => string;
+        buildActiveGoalSection: (task: Task | undefined, prompt: string) => string;
       };
-      const result = internal.buildActiveGoalSection('Just a plain message');
+      const result = internal.buildActiveGoalSection(undefined, 'Just a plain message');
 
       expect(result).toContain('[ACTIVE GOAL');
       expect(result).toContain('Just a plain message');
@@ -4317,6 +4382,106 @@ describe('TaskDispatcher', () => {
       const config = createWorkerCall?.[0];
       expect(config?.systemPrompt).toContain('[ACTIVE GOAL');
       expect(config?.systemPrompt).toContain('User follow-up message');
+    });
+
+    it('acknowledges resume before worker startup completes and reconciles async failure later', async () => {
+      vi.useFakeTimers();
+      try {
+        const resumeDeferred = createDeferred<WorkerHandle>();
+        const createWorker = vi
+          .fn()
+          .mockResolvedValueOnce({
+            taskId: 'resume-ack-test',
+            containerId: 'container-resume-ack-1',
+            status: 'running',
+            startedAt: new Date(),
+          })
+          .mockImplementationOnce(async () => resumeDeferred.promise);
+
+        const localIsolationProvider: IsolationProvider = {
+          ...mockIsolationProvider,
+          createWorker,
+        };
+        const localIsolation: IsolationConfig = {
+          ...mockIsolationConfig,
+          provider: localIsolationProvider,
+        };
+        const localStatePersistence = createStatePersistence();
+        const localDispatcher = new TaskDispatcher(
+          mockConfig,
+          localStatePersistence,
+          mockWorktreeManager,
+          mockLogForwarder,
+          mockWebhookClient,
+          mockGitHubTokenService,
+          mockLogger,
+          localIsolation,
+          singleAttemptCompletionControl
+        );
+
+        const request: CreateTaskRequest = {
+          taskId: 'resume-ack-test',
+          workerType: 'auto',
+          prompt: 'Original task prompt',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          linearIssueLabels: ['code-task'],
+          hasChildren: false,
+        };
+        await localDispatcher.submitTask(request);
+        await vi.advanceTimersByTimeAsync(0);
+
+        const state = await localStatePersistence.load();
+        const task = state.tasks['resume-ack-test'];
+        if (!task) throw new Error('Task not found');
+        task.status = 'completed';
+        task.completedAt = new Date().toISOString();
+        await localStatePersistence.save(state);
+        const internal = localDispatcher as unknown as {
+          clearTaskTimers: (taskId: string) => void;
+        };
+        internal.clearTaskTimers('resume-ack-test');
+
+        const runningCountBeforeResume = localDispatcher.getRunningCount();
+        const result = await localDispatcher.sendMessage(
+          'resume-ack-test',
+          'User follow-up message'
+        );
+
+        expect(result).toEqual({ ok: true, value: { action: 'resumed' } });
+        expect(localDispatcher.getRunningCount()).toBe(runningCountBeforeResume + 1);
+
+        const runningTask = await localDispatcher.getTask('resume-ack-test');
+        expect(runningTask?.status).toBe('running');
+        expect(runningTask?.containerId).toBe('');
+        expect(runningTask?.completedAt).toBeUndefined();
+
+        vi.clearAllMocks();
+        await vi.advanceTimersByTimeAsync(30 * 1000);
+        expect(mockWebhookClient.send).not.toHaveBeenCalled();
+
+        resumeDeferred.reject(new Error('resume start failed'));
+        await Promise.resolve();
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(0);
+
+        const failedTask = await localDispatcher.getTask('resume-ack-test');
+        expect(failedTask?.status).toBe('failed');
+        expect(mockWebhookClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              taskId: 'resume-ack-test',
+              status: 'failed',
+              error: expect.objectContaining({
+                code: 'RESUME_ATTEMPT_FAILED',
+              }),
+            }),
+          })
+        );
+        expect(localDispatcher.getRunningCount()).toBe(runningCountBeforeResume);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('does not include active goal in system prompt for initial submission', async () => {
@@ -5389,6 +5554,93 @@ describe('TaskDispatcher', () => {
         expect(result.error.message).toBe('Task at max attempts');
       }
       expect(dispatcher.getRunningCount()).toBe(0);
+    });
+  });
+
+  describe('recoverPendingResumeTask', () => {
+    const createPendingResumeTask = (overrides?: Partial<Task>): Task => ({
+      taskId: 'recover-resume-task-1',
+      workerType: 'auto',
+      prompt: 'Original task prompt',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret-123',
+      status: 'running',
+      worktreePath: '/tmp/worktrees/recover-resume-task-1',
+      containerId: '',
+      startedAt: new Date().toISOString(),
+      attemptCount: 1,
+      maxAttempts: 3,
+      verificationHistory: [],
+      linearIssueLabels: [],
+      hasChildren: false,
+      resumedAfterSuccess: true,
+      pendingResumeStart: {
+        prompt: '[RESUME PRE-FLIGHT]\nUser follow-up message',
+        acceptedAt: new Date().toISOString(),
+      },
+      ...overrides,
+    });
+
+    it('should restart a persisted pending resume and clear the pending marker on success', async () => {
+      const task = createPendingResumeTask();
+
+      const result = await dispatcher.recoverPendingResumeTask(task);
+
+      expect(result.ok).toBe(true);
+      expect(dispatcher.getRunningCount()).toBe(1);
+      expect(mockLogForwarder.registerTask).toHaveBeenCalledWith(
+        'recover-resume-task-1',
+        'secret-123'
+      );
+      expect(mockIsolationProvider.createWorker).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'recover-resume-task-1',
+          prompt: '[RESUME PRE-FLIGHT]\nUser follow-up message',
+          continueSession: true,
+        })
+      );
+      expect(task.containerId).toBe('container-recover-resume-task-1');
+      expect(task.pendingResumeStart).toBeUndefined();
+      expect(task.attemptCount).toBe(1);
+    });
+
+    it('should fail the task and clear the pending marker when recovery startup fails', async () => {
+      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
+        new Error('resume recovery failed')
+      );
+      const task = createPendingResumeTask();
+
+      const result = await dispatcher.recoverPendingResumeTask(task);
+
+      expect(result.ok).toBe(true);
+      expect(task.pendingResumeStart).toBeUndefined();
+      expect(dispatcher.getRunningCount()).toBe(0);
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'recover-resume-task-1',
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'RESUME_ATTEMPT_FAILED',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('should reject tasks that do not have a persisted pending resume', async () => {
+      const task = createPendingResumeTask();
+      delete task.pendingResumeStart;
+
+      const result = await dispatcher.recoverPendingResumeTask(task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_status');
+      }
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
     });
   });
 

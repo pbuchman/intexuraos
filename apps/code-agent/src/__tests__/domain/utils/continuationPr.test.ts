@@ -6,8 +6,11 @@ import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import {
+  bootstrapContinuationPrTaskComment,
   postContinuationPrComment,
+  resolveExecutionContinuationPr,
   resolveContinuationPr,
+  type BootstrapContinuationPrTaskCommentDeps,
   type PostContinuationCommentDeps,
   type ResolveContinuationPrDeps,
 } from '../../../domain/utils/continuationPr.js';
@@ -17,6 +20,7 @@ describe('continuationPr utilities', () => {
   let mockCodeTaskRepo: {
     findById: ReturnType<typeof vi.fn>;
     findRecentTasksByLinearIssue: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
   };
   let mockGitHubPRClient: {
     updatePRTitle: ReturnType<typeof vi.fn>;
@@ -43,6 +47,7 @@ describe('continuationPr utilities', () => {
     mockCodeTaskRepo = {
       findById: vi.fn(),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
+      update: vi.fn().mockResolvedValue(ok(createTask())),
     };
 
     mockGitHubPRClient = {
@@ -98,6 +103,13 @@ describe('continuationPr utilities', () => {
       logger: mockLogger,
       gitHubPRClient: mockGitHubPRClient as unknown as GitHubPRClient,
       userServiceClient: mockUserServiceClient as unknown as UserServiceClient,
+    };
+  }
+
+  function createBootstrapDeps(): BootstrapContinuationPrTaskCommentDeps {
+    return {
+      ...createCommentDeps(),
+      codeTaskRepo: mockCodeTaskRepo as unknown as CodeTaskRepository,
     };
   }
 
@@ -502,6 +514,20 @@ describe('continuationPr utilities', () => {
     });
   });
 
+  describe('resolveExecutionContinuationPr', () => {
+    it('returns null without loading GitHub state for non-execution tasks', async () => {
+      const result = await resolveExecutionContinuationPr(createResolveDeps(), {
+        agentType: 'planning',
+        task: createTask({ agentType: 'planning', prNumber: 1131 }),
+        userId: 'user-123',
+      });
+
+      expect(result).toEqual(ok(null));
+      expect(mockUserServiceClient.getOAuthToken).not.toHaveBeenCalled();
+      expect(mockGitHubPRClient.getPullRequestStatus).not.toHaveBeenCalled();
+    });
+  });
+
   describe('postContinuationPrComment', () => {
     it('returns comment_failed when repository format is invalid', async () => {
       const result = await postContinuationPrComment(createCommentDeps(), {
@@ -601,6 +627,48 @@ describe('continuationPr utilities', () => {
       const commentBody = mockGitHubPRClient.postPRComment.mock.calls[0]?.[4] as string;
       expect(commentBody).not.toContain('**Linear Issue:**');
       expect(commentBody).toContain('Execution Retry Task Created');
+    });
+  });
+
+  describe('bootstrapContinuationPrTaskComment', () => {
+    it('returns ok without posting when no continuation PR exists', async () => {
+      const result = await bootstrapContinuationPrTaskComment(createBootstrapDeps(), {
+        continuationPr: null,
+        task: createTask(),
+        userId: 'user-123',
+        commentTitle: 'Execution Retry Task Created',
+      });
+
+      expect(result).toEqual(ok(undefined));
+      expect(mockGitHubPRClient.postPRComment).not.toHaveBeenCalled();
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('marks the task failed when the bootstrap comment cannot be posted', async () => {
+      mockGitHubPRClient.postPRComment.mockResolvedValue(
+        err({ code: 'API_ERROR', message: 'Comment rejected' })
+      );
+
+      const result = await bootstrapContinuationPrTaskComment(createBootstrapDeps(), {
+        continuationPr: { prNumber: 1139, prBranch: 'task_existing_pr_branch' },
+        task: createTask({ id: 'task_retry_1' }),
+        userId: 'user-123',
+        commentTitle: 'Execution Retry Task Created',
+      });
+
+      expect(result).toEqual(
+        err({
+          code: 'comment_failed',
+          message: 'Comment rejected',
+        })
+      );
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_retry_1', {
+        status: 'failed',
+        error: {
+          code: 'PR_BOOTSTRAP_COMMENT_FAILED',
+          message: 'Comment rejected',
+        },
+      });
     });
   });
 });
