@@ -162,6 +162,10 @@ export interface IsolationProvider {
 
   listWorkerContainers?(): Promise<DiscoveredContainer[]>;
 
+  startPeriodicCleanup?(): void;
+
+  stopPeriodicCleanup?(): void;
+
   getImageInfo?(): {
     configuredRef: string;
     lastResolvedDigest: string | null;
