@@ -439,6 +439,50 @@ describe('groupByLinearIssue', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]?.pipeline.pr).toBeNull();
   });
+
+  it('extracts PR from review task prompt when no result.prUrl exists', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prompt: 'Review PR https://github.com/org/repo/pull/123 for changes',
+        updatedAt: '2026-03-07T16:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/123', number: '123' });
+  });
+
+  it('prefers result.prUrl over prompt PR URL', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        prompt: 'Review PR https://github.com/org/repo/pull/999 for changes',
+        updatedAt: '2026-03-07T17:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // Should use the execution task's result.prUrl, not the review task's prompt
+    expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/42', number: '42' });
+  });
 });
 
 // --- Helper for sortIssueGroups tests ---
