@@ -52,7 +52,9 @@ export function createMockPackage(
   const pkgDir = path.join(tempDir, 'packages', packageName);
 
   // Create package.json
-  const pkgJson: { scripts?: Record<string, string> } = {};
+  const pkgJson: { name: string; scripts?: Record<string, string> } = {
+    name: `@intexuraos/${packageName}`,
+  };
   if (options.hasBuildScript) {
     pkgJson.scripts = { build: 'tsc' };
   }

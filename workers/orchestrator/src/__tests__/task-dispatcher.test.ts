@@ -4641,6 +4641,237 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('falls back to lastSuccessResult when checkForResult returns undefined', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-fallback-result-test',
+        workerType: 'auto',
+        prompt: 'Test fallback to lastSuccessResult',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'planning',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue(undefined);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-fallback-result-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        planning_outcome_label: 'planned',
+        planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('resumed-fallback-result-test');
+      expect(finalTask?.status).toBe('completed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              planning_outcome_label: 'planned',
+              planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('checkForResult PR result takes priority over lastSuccessResult', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-pr-priority-test',
+        workerType: 'auto',
+        prompt: 'Test PR result priority',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'fix/something',
+        commits: 1,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/999',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-pr-priority-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        planning_outcome_label: 'planned',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              prUrl: 'https://github.com/pbuchman/intexuraos/pull/999',
+            }),
+          }),
+        })
+      );
+
+      const webhookCall = vi.mocked(mockWebhookClient.send).mock.calls.at(-1);
+      expect(webhookCall?.[0]?.payload).not.toHaveProperty('result.planning_outcome_label');
+    });
+
+    it('lastSuccessResult is stored on successful completion', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'store-success-result-test',
+        workerType: 'auto',
+        prompt: 'Test storing lastSuccessResult',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'fix/store-test',
+        commits: 1,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/1000',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['store-success-result-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('store-success-result-test');
+      expect(finalTask?.status).toBe('completed');
+      expect(finalTask?.lastSuccessResult).toBeDefined();
+      expect(finalTask?.lastSuccessResult?.prUrl).toBe(
+        'https://github.com/pbuchman/intexuraos/pull/1000'
+      );
+    });
+
+    it('falls back to lastSuccessResult in failure webhook when checkForResult returns undefined', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-fallback-error-test',
+        workerType: 'auto',
+        prompt: 'Test fallback to lastSuccessResult on error path',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'planning',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue(undefined);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onComplete).toBeDefined();
+      onComplete?.(1);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-fallback-error-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        planning_outcome_label: 'planned',
+        planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('resumed-fallback-error-test');
+      expect(finalTask?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            result: expect.objectContaining({
+              planning_outcome_label: 'planned',
+              planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+            }),
+            error: expect.objectContaining({
+              code: 'TASK_RESUMED_HARD_ERROR',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('lastSuccessResult is cleared on failure', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'clear-result-on-fail-test',
+        workerType: 'auto',
+        prompt: 'Test clearing lastSuccessResult on failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onComplete).toBeDefined();
+      onComplete?.(1);
+
+      // Pre-set lastSuccessResult and resumedAfterSuccess
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['clear-result-on-fail-test'];
+      if (!task) throw new Error('Task not found');
+      task.lastSuccessResult = { planning_outcome_label: 'planned' };
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('clear-result-on-fail-test');
+      expect(finalTask?.status).toBe('failed');
+      expect(finalTask?.lastSuccessResult).toBeUndefined();
+    });
+
     it('does not send resumedCompletion in webhook payload on failure', async () => {
       const request: CreateTaskRequest = {
         taskId: 'resumed-failure-no-flag-test',
