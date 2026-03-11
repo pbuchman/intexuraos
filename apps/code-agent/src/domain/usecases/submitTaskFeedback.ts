@@ -218,12 +218,9 @@ ${feedback.trim()}
   let continuationPrNumber: number | undefined;
   let continuationPrBranch: string | undefined;
 
-  if (
-    agentType === 'execution' ||
-    originalTask.prNumber !== undefined ||
-    originalTask.prBranch !== undefined ||
-    originalTask.result?.prUrl !== undefined
-  ) {
+  // resolveTaskAgentType() already routes legacy PR-linked tasks back to execution
+  // when they only carry prNumber, prBranch, or result.prUrl metadata.
+  if (agentType === 'execution') {
     const continuationResult = await resolveContinuationPr(
       {
         logger,

@@ -6,15 +6,9 @@
  * For comments: triages whether to dispatch or skip.
  */
 
+import type { PromptBuilder } from '@intexuraos/llm-prompts';
 import type { PullRequestFile } from '../ports/gitHubPRClient.js';
 import { buildIssueCommentTriageSection } from './issueCommentTriagePrompt.js';
-
-interface PromptBuilder<TInput> {
-  name: string;
-  description: string;
-  version: string;
-  build(input: TInput): string;
-}
 
 export interface GitHubAgentPromptInput {
   repository: string;

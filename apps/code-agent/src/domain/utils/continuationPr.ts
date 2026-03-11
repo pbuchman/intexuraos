@@ -153,6 +153,8 @@ async function loadLineageCandidates(
   const queue: CodeTask[] = [task];
   const ordered: CodeTask[] = [];
 
+  // The queue grows during iteration on purpose: this is a breadth-first walk
+  // over retry/parent lineage so we prefer the closest continuation candidates first.
   for (const current of queue) {
     ordered.push(current);
 
@@ -220,7 +222,13 @@ export async function resolveContinuationPr(
     }
 
     const continuationResult = await verifyCandidate(deps, candidate, tokenResult.value, prNumber);
-    if (!continuationResult.ok || continuationResult.value !== null) {
+    // Hard GitHub verification failures stop here. Falling through to same-ticket
+    // history would risk attaching the retry to a different PR while this candidate
+    // still has an unknown state.
+    if (!continuationResult.ok) {
+      return continuationResult;
+    }
+    if (continuationResult.value !== null) {
       return continuationResult;
     }
   }
@@ -257,7 +265,10 @@ export async function resolveContinuationPr(
     }
 
     const continuationResult = await verifyCandidate(deps, candidate, tokenResult.value, prNumber);
-    if (!continuationResult.ok || continuationResult.value !== null) {
+    if (!continuationResult.ok) {
+      return continuationResult;
+    }
+    if (continuationResult.value !== null) {
       return continuationResult;
     }
   }

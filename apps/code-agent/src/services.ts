@@ -10,7 +10,7 @@ import { ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
-import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from './domain/repositories/logLineRepository.js';
@@ -56,7 +56,6 @@ import { createWebhookDispatchService, type WebhookDispatchService } from './dom
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
-import type { ToolCallingClient } from './domain/ports/toolCallingClient.js';
 import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
 import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
 import type { DispatchRetryRepository } from './domain/repositories/dispatchRetryRepository.js';
@@ -65,14 +64,6 @@ import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services
 import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
 import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
 import { createReviewTask } from './domain/usecases/createReviewTask.js';
-
-type ToolCallingFactory = (config: {
-  apiKey: string;
-  model: typeof LlmModels.Gemini25Flash;
-  userId: string;
-  pricing: ModelPricing;
-  logger: Logger;
-}) => ToolCallingClient;
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
@@ -345,9 +336,8 @@ export function initServices(config: ServiceConfig): void {
     // The original dispatched all edited bot comments without payload inspection.
   ]);
 
-  const createToolCallingClientFactory = createToolCallingClient as unknown as ToolCallingFactory;
   const toolCallingClient = config.geminiAppApiKey !== ''
-    ? createToolCallingClientFactory({
+    ? createToolCallingClient({
         apiKey: config.geminiAppApiKey,
         model: GEMINI_TOOL_CALLING_MODEL,
         userId: 'system:github-agent',

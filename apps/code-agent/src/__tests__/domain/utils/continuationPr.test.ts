@@ -366,6 +366,35 @@ describe('continuationPr utilities', () => {
       expect(mockGitHubPRClient.getPullRequestStatus).not.toHaveBeenCalled();
     });
 
+    it('returns verification_failed when same-ticket PR verification fails', async () => {
+      const currentTask = createTask();
+      delete (currentTask as unknown as { prNumber?: number }).prNumber;
+
+      mockCodeTaskRepo.findRecentTasksByLinearIssue.mockResolvedValue(
+        ok([
+          createTask({
+            id: 'task_same_ticket',
+            prNumber: 1139,
+          }),
+        ])
+      );
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(
+        err({ code: 'API_ERROR', message: 'GitHub API unavailable' })
+      );
+
+      const result = await resolveContinuationPr(createResolveDeps(), {
+        task: currentTask,
+        userId: 'user-123',
+      });
+
+      expect(result).toEqual(
+        err({
+          code: 'verification_failed',
+          message: 'GitHub API unavailable',
+        })
+      );
+    });
+
     it('continues past a closed same-ticket PR candidate before reusing the next open PR', async () => {
       mockCodeTaskRepo.findRecentTasksByLinearIssue.mockResolvedValue(
         ok([
