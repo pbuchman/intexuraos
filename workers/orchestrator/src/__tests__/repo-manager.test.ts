@@ -688,6 +688,38 @@ describe('RepoManager', () => {
       ).resolves.toBeUndefined();
     });
 
+    it('should not unset http.extraheader when config --get returns empty string', async () => {
+      const { sanitizeRepoConfig } = await loadRepoManager();
+      const repoPath = join(tempDir, 'empty-extraheader');
+      mkdirSync(repoPath, { recursive: true });
+
+      const calls: string[][] = [];
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        calls.push(args);
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+          return { stdout: '\n', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await sanitizeRepoConfig(
+        repoPath,
+        'https://github.com/pbuchman/intexuraos.git',
+        mockLogger
+      );
+
+      const unsetCall = calls.find(
+        (c) => c[0] === 'config' && c[1] === '--unset' && c[2] === 'http.extraheader'
+      );
+      expect(unsetCall).toBeUndefined();
+    });
+
     it('should handle both URL sanitization and extraheader removal', async () => {
       const { sanitizeRepoConfig } = await loadRepoManager();
       const repoPath = join(tempDir, 'both-dirty');
