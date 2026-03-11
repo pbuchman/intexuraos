@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, ScrollText, Trash2 } from 'lucide-react';
 import type { IssueGroup, StepState } from '@/utils/issueGroups';
 import { formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
@@ -7,6 +7,7 @@ import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
 interface IssueGroupRowProps {
   group: IssueGroup;
   onAction: (taskId: string, action: 'delete' | 'retry' | 'implement') => void;
+  onOpenLogs: (taskId: string) => void;
 }
 
 // --- Left border accent color ---
@@ -167,6 +168,7 @@ function computeDurationSeconds(createdAt: string, updatedAt: string, isActive: 
 const IssueGroupRow = memo(function IssueGroupRow({
   group,
   onAction,
+  onOpenLogs,
 }: IssueGroupRowProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -239,6 +241,17 @@ const IssueGroupRow = memo(function IssueGroupRow({
 
           {/* Output column */}
           <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                onOpenLogs(latestTask.id);
+              }}
+              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+              title="Preview logs"
+              aria-label={`Preview logs for ${latestTask.id}`}
+            >
+              <ScrollText className="h-3.5 w-3.5" />
+            </button>
             {pipeline.execution === 'actionable' ? (
               <button
                 onClick={(e): void => {
@@ -320,6 +333,17 @@ const IssueGroupRow = memo(function IssueGroupRow({
               )}
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={(e): void => {
+                  e.stopPropagation();
+                  onOpenLogs(latestTask.id);
+                }}
+                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                title="Preview logs"
+                aria-label={`Preview logs for ${latestTask.id}`}
+              >
+                <ScrollText className="h-3.5 w-3.5" />
+              </button>
               {pipeline.execution === 'actionable' ? (
                 <button
                   onClick={(e): void => {
@@ -411,7 +435,8 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.group.pipeline.review === next.group.pipeline.review &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
-  prev.onAction === next.onAction,
+  prev.onAction === next.onAction &&
+  prev.onOpenLogs === next.onOpenLogs,
 );
 
 export { IssueGroupRow };

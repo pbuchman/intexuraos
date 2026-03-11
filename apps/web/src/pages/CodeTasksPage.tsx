@@ -1,11 +1,11 @@
 import { useMemo, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
-import { Button, Layout } from '@/components';
+import { ArrowUpDown, Plus } from 'lucide-react';
+import { Button, CodeTaskLogsModal, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useCodeTasks } from '@/hooks';
-import { groupByLinearIssue } from '@/utils/issueGroups';
-import type { IssueGroup, GroupStatus } from '@/utils/issueGroups';
+import { groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
+import type { IssueGroup, GroupStatus, SortOption } from '@/utils/issueGroups';
 import type { CodeTaskStatus } from '@/types';
 
 // Statuses shown by default (all except archived — INT-711)
@@ -52,8 +52,24 @@ const INACTIVE_SEGMENT_CLASS =
   'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500';
 
 const STORAGE_KEY = 'code-tasks-group-filter';
+const SORT_STORAGE_KEY = 'code-tasks-sort';
 
 const DEFAULT_NON_ARCHIVED: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
+
+const SORT_OPTIONS: { key: SortOption; label: string }[] = [
+  { key: 'linear-id', label: 'Linear ID' },
+  { key: 'pr-number', label: 'PR #' },
+  { key: 'finished-time', label: 'Finished' },
+  { key: 'started-time', label: 'Started At' },
+];
+
+function loadSortFromStorage(): SortOption {
+  const stored = localStorage.getItem(SORT_STORAGE_KEY);
+  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'finished-time' || stored === 'started-time') {
+    return stored;
+  }
+  return 'linear-id';
+}
 
 function loadFiltersFromStorage(): Set<GroupStatus> {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -146,6 +162,39 @@ function StatusPipeline({ counts, activeFilters, onToggle }: StatusPipelineProps
   );
 }
 
+// --- SortSelector ---
+
+interface SortSelectorProps {
+  activeSort: SortOption;
+  onChangeSort: (sort: SortOption) => void;
+}
+
+function SortSelector({ activeSort, onChangeSort }: SortSelectorProps): React.JSX.Element {
+  return (
+    <div className="mb-4 flex items-center gap-2">
+      <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+      <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500">
+        Sort
+      </span>
+      <div className="flex gap-1.5">
+        {SORT_OPTIONS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={(): void => { onChangeSort(key); }}
+            className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+              activeSort === key
+                ? 'border-slate-400 bg-slate-100 font-medium text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
+                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // --- ColumnHeader ---
 
 function ColumnHeader(): React.JSX.Element {
@@ -165,6 +214,8 @@ export function CodeTasksPage(): React.JSX.Element {
   const navigate = useNavigate();
 
   const [activeFilters, setActiveFilters] = useState<Set<GroupStatus>>(loadFiltersFromStorage);
+  const [activeSort, setActiveSort] = useState<SortOption>(loadSortFromStorage);
+  const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
 
   // When the Archived filter is active, include 'archived' in the API status filter
   // so the backend returns archived tasks. Otherwise use default (non-archived) statuses.
@@ -178,13 +229,13 @@ export function CodeTasksPage(): React.JSX.Element {
   });
   const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
 
-  const filteredGroups = useMemo(
-    () =>
+  const filteredGroups = useMemo(() => {
+    const filtered =
       activeFilters.size === 0
         ? allGroups
-        : allGroups.filter((g) => activeFilters.has(g.aggregateStatus)),
-    [allGroups, activeFilters],
-  );
+        : allGroups.filter((g) => activeFilters.has(g.aggregateStatus));
+    return sortIssueGroups(filtered, activeSort);
+  }, [allGroups, activeFilters, activeSort]);
 
   const counts = useMemo(() => {
     const c: Record<GroupStatus, number> = {
@@ -211,6 +262,11 @@ export function CodeTasksPage(): React.JSX.Element {
       localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
       return next;
     });
+  }, []);
+
+  const handleChangeSort = useCallback((sort: SortOption): void => {
+    setActiveSort(sort);
+    localStorage.setItem(SORT_STORAGE_KEY, sort);
   }, []);
 
   const handleAction = useCallback(
@@ -244,6 +300,8 @@ export function CodeTasksPage(): React.JSX.Element {
         activeFilters={activeFilters}
         onToggle={handleToggleFilter}
       />
+
+      <SortSelector activeSort={activeSort} onChangeSort={handleChangeSort} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
@@ -288,6 +346,7 @@ export function CodeTasksPage(): React.JSX.Element {
                 key={group.linearIssueId ?? group.latestTask.id}
                 group={group}
                 onAction={handleAction}
+                onOpenLogs={setPreviewTaskId}
               />
             ))}
           </div>
@@ -314,6 +373,13 @@ export function CodeTasksPage(): React.JSX.Element {
           ) : null}
         </div>
       )}
+
+      {previewTaskId !== null ? (
+        <CodeTaskLogsModal
+          taskId={previewTaskId}
+          onClose={(): void => { setPreviewTaskId(null); }}
+        />
+      ) : null}
     </Layout>
   );
 }

@@ -1315,6 +1315,287 @@ describe('processCodeAction', () => {
     }
   });
 
+  // ─── Worker Settings Error Path Tests (v8 ignore blocks 1-3) ─────
+  describe('worker settings error paths', () => {
+    it('returns internal_error when getSettings fails', async () => {
+      const failingWorkerSettingsRepo = {
+        getSettings: vi.fn().mockResolvedValue(
+          err({ code: 'internal_error' as const, message: 'Firestore unavailable' })
+        ),
+        getWorkerByName: vi.fn(),
+        addWorker: vi.fn(),
+        updateWorker: vi.fn(),
+        deleteWorker: vi.fn(),
+        reorderWorkers: vi.fn(),
+        updateTestResult: vi.fn(),
+      } as unknown as WorkerSettingsRepository;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: failingWorkerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Failed to fetch worker settings');
+      }
+      expect(logger.error).toHaveBeenCalledWith(
+        { userId: 'user-789', error: { code: 'internal_error', message: 'Firestore unavailable' } },
+        'Failed to fetch worker settings'
+      );
+    });
+
+    it('returns worker_not_configured when settings is null', async () => {
+      const nullSettingsWorkerSettingsRepo = {
+        getSettings: vi.fn().mockResolvedValue(ok(null)),
+        getWorkerByName: vi.fn(),
+        addWorker: vi.fn(),
+        updateWorker: vi.fn(),
+        deleteWorker: vi.fn(),
+        reorderWorkers: vi.fn(),
+        updateTestResult: vi.fn(),
+      } as unknown as WorkerSettingsRepository;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: nullSettingsWorkerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_not_configured');
+        expect(result.error.message).toBe('Please configure your workers in Settings before submitting code tasks');
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        { userId: 'user-789' },
+        'User has no workers configured'
+      );
+    });
+
+    it('returns worker_not_configured when all workers are disabled', async () => {
+      const disabledWorkersRepo = {
+        getSettings: vi.fn().mockResolvedValue(
+          ok({
+            userId: 'user-789',
+            workers: [
+              {
+                name: 'home-mac',
+                url: 'https://cc-mac.intexuraos.cloud',
+                cfAccessClientId: 'test-client-id',
+                cfAccessClientSecret: 'test-client-secret',
+                dispatchSigningSecret: 'test-dispatch-secret',
+                enabled: false, // All workers disabled
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+        ),
+        getWorkerByName: vi.fn(),
+        addWorker: vi.fn(),
+        updateWorker: vi.fn(),
+        deleteWorker: vi.fn(),
+        reorderWorkers: vi.fn(),
+        updateTestResult: vi.fn(),
+      } as unknown as WorkerSettingsRepository;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: disabledWorkersRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_not_configured');
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        { userId: 'user-789' },
+        'User has no workers configured'
+      );
+    });
+
+    it('returns worker_not_configured when workers array is empty', async () => {
+      const emptyWorkersRepo = {
+        getSettings: vi.fn().mockResolvedValue(
+          ok({
+            userId: 'user-789',
+            workers: [], // Empty array
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+        ),
+        getWorkerByName: vi.fn(),
+        addWorker: vi.fn(),
+        updateWorker: vi.fn(),
+        deleteWorker: vi.fn(),
+        reorderWorkers: vi.fn(),
+        updateTestResult: vi.fn(),
+      } as unknown as WorkerSettingsRepository;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: emptyWorkersRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_not_configured');
+      }
+    });
+  });
+
+  // ─── Linear Issue Validation Error Path Tests (v8 ignore block 4) ─
+  describe('linear issue validation error paths', () => {
+    it('returns internal_error when user provides linearIssueId but validation fails (linearFallback: true)', async () => {
+      const failingLinearService = {
+        ensureIssueExists: vi.fn().mockResolvedValue({
+          linearIssueTitle: 'Linked issue INT-100',
+          linearFallback: true, // Validation failed, fallback mode
+          linearIssueLabels: [],
+          hasChildren: false,
+        }),
+        markInProgress: vi.fn(),
+        markInReview: vi.fn(),
+      } as unknown as LinearIssueService;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService: failingLinearService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-100', // User provided issue ID
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('could not be validated');
+      }
+      expect(logger.error).toHaveBeenCalledWith(
+        { linearIssueId: 'INT-100' },
+        'User-provided Linear issue could not be validated'
+      );
+    });
+  });
+
+  // ─── Final Linear Issue ID Undefined Test (v8 ignore block 5) ──────
+  describe('linear issue id undefined path (v8 ignore block 5)', () => {
+    it('does not include linearIssueId in task when ensureIssueExists returns undefined', async () => {
+      const fallbackLinearService = {
+        ensureIssueExists: vi.fn().mockResolvedValue({
+          // linearIssueId is undefined - fallback mode
+          linearIssueTitle: 'Fallback Task',
+          linearFallback: true,
+          linearIssueLabels: [],
+          hasChildren: false,
+        }),
+        markInProgress: vi.fn(),
+        markInReview: vi.fn(),
+      } as unknown as LinearIssueService;
+
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+        ok({
+          id: 'new-task-no-issue',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          sanitizedPrompt: 'Fix the bug',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          status: 'queued',
+          callbackReceived: false,
+          dedupKey: 'dedup-key-123',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          // linearIssueId NOT set because finalLinearIssueId was undefined
+        })
+      );
+
+      vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+        ok({ dispatched: true, workerLocation: 'mac' })
+      );
+
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({
+          id: 'new-task-no-issue',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          sanitizedPrompt: 'Fix the bug',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          status: 'queued',
+          callbackReceived: false,
+          dedupKey: 'dedup-key-123',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          cancelNonce: 'abcd',
+          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService: fallbackLinearService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          // No linearIssueId provided - should trigger the undefined branch
+        }
+      );
+
+      expect(result.ok).toBe(true);
+
+      // Verify create was called with linearIssueId NOT set (undefined means property is omitted)
+      expect(codeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueId: expect.anything(),
+        })
+      );
+    });
+  });
+
   // ─── Prompt injection sanitization (INT-413) ──────────────────────
   it('returns validation_error for empty prompt', async () => {
     const result = await processCodeAction(

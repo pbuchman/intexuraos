@@ -468,6 +468,51 @@ describe('submitTaskFeedback use case', () => {
       );
     });
 
+    it('should infer pull_request agentType from pr-comment-auto on legacy tasks', async () => {
+      const mockTask = createMockTask({ systemPromptHash: 'pr-comment-auto' });
+      const taskRecord = mockTask as unknown as Record<string, unknown>;
+      delete taskRecord['agentType'];
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['bug'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      let createInputAgentType: unknown;
+      let dispatchLabels: unknown;
+      mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        return ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+          agentType: 'pull_request',
+        });
+      });
+      mockTaskDispatcher.dispatch.mockImplementation(async (input: Record<string, unknown>) => {
+        dispatchLabels = input['linearIssueLabels'];
+        return ok({ dispatched: true, workerLocation: 'home-mac' });
+      });
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
+
+      expect(result.ok).toBe(true);
+      expect(createInputAgentType).toBe('pull_request');
+      expect(dispatchLabels).toEqual(['bug', 'pr-comment']);
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'pull_request' })
+      );
+    });
+
     it('should fall back to label-based routing when original task is not pull_request', async () => {
       // agentType is undefined (legacy task) — should use labels to decide
       const mockTask = createMockTask();

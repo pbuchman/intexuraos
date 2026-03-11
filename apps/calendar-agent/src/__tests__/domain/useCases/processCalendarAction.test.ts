@@ -1362,4 +1362,102 @@ describe('processCalendarAction', () => {
       expect(calendarPreviewRepository.getPreview('action-with-cleanup')).toBeUndefined();
     });
   });
+
+  describe('when preview repository getByActionId fails', () => {
+    it('falls back to LLM extraction and still succeeds', async () => {
+      calendarPreviewRepository.setGetByActionIdResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Firestore unavailable' })
+      );
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Lunch tomorrow at noon',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.status).toBe('completed');
+      }
+
+      // Verify it logged the warning about preview failure
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-456',
+          actionId: 'action-123',
+          error: { code: 'INTERNAL_ERROR', message: 'Firestore unavailable' },
+        }),
+        'processCalendarAction: failed to fetch preview, falling back to LLM extraction'
+      );
+
+      // Verify LLM extraction was used as fallback
+      expect(calendarActionExtractionService.extractEventCalls).toHaveLength(1);
+    });
+  });
+
+  describe('when preview delete fails after successful event creation', () => {
+    it('still returns completed status', async () => {
+      calendarPreviewRepository.seedPreview({
+        actionId: 'action-123',
+        userId: 'user-456',
+        status: 'ready',
+        summary: 'Lunch',
+        start: '2025-01-15T14:00:00',
+        end: '2025-01-15T15:00:00',
+        location: null,
+        description: null,
+        generatedAt: '2025-01-14T10:00:00Z',
+      });
+
+      calendarPreviewRepository.setDeleteResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Delete failed' })
+      );
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Lunch tomorrow at 2pm',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.status).toBe('completed');
+        expect(result.value.message).toContain('Lunch');
+      }
+
+      // Verify it logged the warning about delete failure
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionId: 'action-123',
+          error: { code: 'INTERNAL_ERROR', message: 'Delete failed' },
+        }),
+        'processCalendarAction: failed to delete calendar preview after successful event creation'
+      );
+
+      // Verify LLM extraction was NOT used (preview data was used instead)
+      expect(calendarActionExtractionService.extractEventCalls).toHaveLength(0);
+    });
+  });
 });

@@ -168,25 +168,19 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       const user = await requireAuth(request, reply);
-      /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
       if (!user) {
         return;
       }
-      /* v8 ignore stop @preserve */
 
       const { limit, cursor } = request.query;
       const { messageRepository, userMappingRepository } = getServices();
 
       // Get user's registered phone number for display
       const mappingResult = await userMappingRepository.getMapping(user.userId);
-      /* v8 ignore start -- ts-type: optional chaining result @preserve */
       const fromNumber = mappingResult.ok ? mappingResult.value?.phoneNumbers[0] : null;
-      /* v8 ignore stop @preserve */
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
 
       // Build pagination options (only include defined values)
       const options: { limit?: number; cursor?: string } = {};
-      /* v8 ignore stop @preserve */
       if (limit !== undefined) {
         options.limit = limit;
       }
@@ -320,22 +314,18 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       const user = await requireAuth(request, reply);
-      /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
       if (!user) {
         return;
       }
-      /* v8 ignore stop @preserve */
 
       const { message_id: messageId } = request.params;
       const { messageRepository, mediaStorage } = getServices();
 
       const messageResult = await messageRepository.getMessage(messageId);
 
-      /* v8 ignore start -- test-infra: fake repository always succeeds @preserve */
       if (!messageResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', messageResult.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       if (messageResult.value === null) {
         return await reply.fail('NOT_FOUND', 'Message not found');
@@ -353,11 +343,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const ttlSeconds = 900; // 15 minutes
       const urlResult = await mediaStorage.getSignedUrl(gcsPath, ttlSeconds);
 
-      /* v8 ignore start -- test-infra: fake media storage always succeeds @preserve */
       if (!urlResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', urlResult.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
@@ -447,22 +435,18 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       const user = await requireAuth(request, reply);
-      /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
       if (!user) {
         return;
       }
-      /* v8 ignore stop @preserve */
 
       const { message_id: messageId } = request.params;
       const { messageRepository, mediaStorage } = getServices();
 
       const messageResult = await messageRepository.getMessage(messageId);
 
-      /* v8 ignore start -- test-infra: fake repository always succeeds @preserve */
       if (!messageResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', messageResult.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       if (messageResult.value === null) {
         return await reply.fail('NOT_FOUND', 'Message not found');
@@ -480,11 +464,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const ttlSeconds = 900; // 15 minutes
       const urlResult = await mediaStorage.getSignedUrl(thumbnailGcsPath, ttlSeconds);
 
-      /* v8 ignore start -- test-infra: fake media storage always succeeds @preserve */
       if (!urlResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', urlResult.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
@@ -562,11 +544,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Params: MessageParams }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
       if (!user) {
         return;
       }
-      /* v8 ignore stop @preserve */
 
       const { message_id: messageId } = request.params;
       const { messageRepository, eventPublisher } = getServices();
@@ -574,11 +554,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // First, verify the message exists and belongs to the user
       const messageResult = await messageRepository.getMessage(messageId);
 
-      /* v8 ignore start -- test-infra: fake repository always succeeds @preserve */
       if (!messageResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', messageResult.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       if (messageResult.value === null) {
         return await reply.fail('NOT_FOUND', 'Message not found');
@@ -601,11 +579,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Delete the message from Firestore first
       const deleteResult = await messageRepository.deleteMessage(messageId);
 
-      /* v8 ignore start -- test-infra: fake repository delete always succeeds @preserve */
       if (!deleteResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', deleteResult.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       // Publish cleanup event for GCS media deletion (async, best-effort)
       // Event is published after successful Firestore deletion to ensure data consistency.

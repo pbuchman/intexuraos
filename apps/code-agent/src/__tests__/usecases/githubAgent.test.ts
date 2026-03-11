@@ -392,6 +392,39 @@ describe('evaluateEvent', () => {
       }
     });
 
+    it('resolves bot sender to repo owner before user lookup', async () => {
+      const userClient = createFakeUserServiceClient();
+      const deps = createDeps({
+        userServiceClient: userClient,
+        allowedBots: new Set(['claude[bot]', 'chatgpt-codex-connector[bot]', 'intexuraos-code-worker[bot]']),
+      });
+      const event = createFakePREvent({
+        senderLogin: 'intexuraos-code-worker[bot]',
+        repository: 'pbuchman/intexuraos',
+      });
+
+      await evaluateEvent(deps, event);
+
+      // Should resolve 'pbuchman' (repo owner), not 'intexuraos-code-worker[bot]'
+      expect(userClient.resolveGitHubUsername).toHaveBeenCalledWith('pbuchman');
+    });
+
+    it('does not remap non-bot sender for user lookup', async () => {
+      const userClient = createFakeUserServiceClient();
+      const deps = createDeps({
+        userServiceClient: userClient,
+        allowedBots: new Set(['claude[bot]', 'intexuraos-code-worker[bot]']),
+      });
+      const event = createFakePREvent({
+        senderLogin: 'dev-user',
+        repository: 'pbuchman/intexuraos',
+      });
+
+      await evaluateEvent(deps, event);
+
+      expect(userClient.resolveGitHubUsername).toHaveBeenCalledWith('dev-user');
+    });
+
     it('handles synchronize action', async () => {
       const deps = createDeps();
       const event = createFakePREvent({ action: 'synchronize' });
