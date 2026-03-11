@@ -49,6 +49,10 @@ export interface Task {
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
   /** Existing PR tracking comment to reuse instead of creating a new one. */
   trackingCommentId?: string;
+  /** Existing PR number inherited from retry/follow-up continuation flow. */
+  continuationPrNumber?: number;
+  /** Existing PR branch inherited from retry/follow-up continuation flow. */
+  continuationPrBranch?: string;
   /** Branch name of planning PR to merge into execution worktree. */
   planningPrBranch?: string;
   /** PR URL to close after successful execution. */

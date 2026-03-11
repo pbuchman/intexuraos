@@ -184,7 +184,10 @@ async function runStartupRecovery(
         try {
           const result = await dispatcher.recoverPendingResumeTask(task);
           if (result.ok) {
-            logger.info({ taskId: task.taskId }, 'Handled pending accepted resume during startup recovery');
+            logger.info(
+              { taskId: task.taskId },
+              'Handled pending accepted resume during startup recovery'
+            );
             continue;
           }
 

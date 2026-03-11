@@ -105,6 +105,16 @@ describe('code_tasks Firestore composite indexes', () => {
       );
       expect(index).toBeDefined();
     });
+
+    it('should have linearIssueId + createdAt DESC index for same-ticket history lookups', () => {
+      const index = codeTasksIndexes.find((idx) =>
+        idx.fields.length === 2 &&
+        idx.fields[0]?.fieldPath === 'linearIssueId' &&
+        idx.fields[1]?.fieldPath === 'createdAt' &&
+        idx.fields[1]?.order === 'DESCENDING'
+      );
+      expect(index).toBeDefined();
+    });
   });
 
   describe('logs subcollection indexes', () => {
@@ -167,6 +177,17 @@ describe('code_tasks Firestore composite indexes', () => {
         idx.fields.length === 2 &&
         idx.fields[0]?.fieldPath === 'linearIssueId' &&
         idx.fields[1]?.fieldPath === 'status'
+      );
+      expect(hasIndex).toBe(true);
+    });
+
+    it('should support recent same-ticket task lookup', () => {
+      // Query: where('linearIssueId', '==', id).orderBy('createdAt', 'desc').limit(20)
+      const hasIndex = codeTasksIndexes.some((idx) =>
+        idx.fields.length === 2 &&
+        idx.fields[0]?.fieldPath === 'linearIssueId' &&
+        idx.fields[1]?.fieldPath === 'createdAt' &&
+        idx.fields[1]?.order === 'DESCENDING'
       );
       expect(hasIndex).toBe(true);
     });

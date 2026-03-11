@@ -9,7 +9,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
-import type { Firestore, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
+import type { Firestore, QueryDocumentSnapshot, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Result } from '@intexuraos/common-core';
@@ -518,7 +518,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .get();
 
          
-        const tasks = snapshot.docs.map((doc: any) =>
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
           toCodeTask(doc as { id: string; data(): Record<string, unknown> })
         );
 
@@ -870,6 +870,31 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find active review task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findRecentTasksByLinearIssue: async (
+      linearIssueId: string,
+      limit: number
+    ): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('linearIssueId', '==', linearIssueId)
+          .orderBy('createdAt', 'desc')
+          .limit(limit)
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error, linearIssueId, limit }, 'Failed to find recent tasks by Linear issue');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

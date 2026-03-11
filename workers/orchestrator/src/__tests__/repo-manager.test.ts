@@ -554,11 +554,7 @@ describe('RepoManager', () => {
         return { stdout: '', stderr: '' };
       };
 
-      await sanitizeRepoConfig(
-        repoPath,
-        'https://github.com/pbuchman/intexuraos.git',
-        mockLogger
-      );
+      await sanitizeRepoConfig(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger);
 
       const setUrlCall = calls.find(
         (c) => c[0] === 'remote' && c[1] === 'set-url' && c[2] === 'origin'
@@ -566,7 +562,10 @@ describe('RepoManager', () => {
       expect(setUrlCall).toBeDefined();
       expect(setUrlCall?.[3]).toBe('https://github.com/pbuchman/intexuraos.git');
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ currentUrl: expect.any(String), expectedUrl: expect.any(String) }),
+        expect.objectContaining({
+          currentUrl: expect.any(String),
+          expectedUrl: expect.any(String),
+        }),
         expect.stringContaining('Remote origin URL differs from expected')
       );
     });
@@ -591,11 +590,7 @@ describe('RepoManager', () => {
         return { stdout: '', stderr: '' };
       };
 
-      await sanitizeRepoConfig(
-        repoPath,
-        'https://github.com/pbuchman/intexuraos.git',
-        mockLogger
-      );
+      await sanitizeRepoConfig(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger);
 
       const setUrlCall = calls.find((c) => c[0] === 'remote' && c[1] === 'set-url');
       expect(setUrlCall).toBeUndefined();
@@ -621,11 +616,7 @@ describe('RepoManager', () => {
         return { stdout: '', stderr: '' };
       };
 
-      await sanitizeRepoConfig(
-        repoPath,
-        'https://github.com/pbuchman/intexuraos.git',
-        mockLogger
-      );
+      await sanitizeRepoConfig(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger);
 
       const unsetCall = calls.find(
         (c) => c[0] === 'config' && c[1] === '--unset' && c[2] === 'http.extraheader'
@@ -653,11 +644,7 @@ describe('RepoManager', () => {
       };
 
       await expect(
-        sanitizeRepoConfig(
-          repoPath,
-          'https://github.com/pbuchman/intexuraos.git',
-          mockLogger
-        )
+        sanitizeRepoConfig(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
       ).resolves.toBeUndefined();
     });
 
@@ -680,11 +667,7 @@ describe('RepoManager', () => {
       };
 
       await expect(
-        sanitizeRepoConfig(
-          repoPath,
-          'https://github.com/pbuchman/intexuraos.git',
-          mockLogger
-        )
+        sanitizeRepoConfig(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
       ).resolves.toBeUndefined();
     });
 
@@ -708,11 +691,7 @@ describe('RepoManager', () => {
         return { stdout: '', stderr: '' };
       };
 
-      await sanitizeRepoConfig(
-        repoPath,
-        'https://github.com/pbuchman/intexuraos.git',
-        mockLogger
-      );
+      await sanitizeRepoConfig(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger);
 
       const unsetCall = calls.find(
         (c) => c[0] === 'config' && c[1] === '--unset' && c[2] === 'http.extraheader'
@@ -743,11 +722,7 @@ describe('RepoManager', () => {
         return { stdout: '', stderr: '' };
       };
 
-      await sanitizeRepoConfig(
-        repoPath,
-        'https://github.com/pbuchman/intexuraos.git',
-        mockLogger
-      );
+      await sanitizeRepoConfig(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger);
 
       const setUrlCall = calls.find((c) => c[0] === 'remote' && c[1] === 'set-url');
       const unsetCall = calls.find(
@@ -779,11 +754,7 @@ describe('RepoManager', () => {
       };
 
       await expect(
-        sanitizeRepoConfig(
-          repoPath,
-          'https://github.com/pbuchman/intexuraos.git',
-          mockLogger
-        )
+        sanitizeRepoConfig(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
       ).resolves.toBeUndefined();
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -825,11 +796,21 @@ describe('RepoManager', () => {
         file: string,
         args: string[]
       ): Promise<{ stdout: string; stderr: string }> => {
-        if (file === 'git' && args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+        if (
+          file === 'git' &&
+          args[0] === 'config' &&
+          args[1] === '--get' &&
+          args[2] === 'remote.origin.url'
+        ) {
           callOrder.push('sanitize-url');
           return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
         }
-        if (file === 'git' && args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+        if (
+          file === 'git' &&
+          args[0] === 'config' &&
+          args[1] === '--get' &&
+          args[2] === 'http.extraheader'
+        ) {
           throw new Error('exit code 1');
         }
         if (file === 'git' && args[0] === 'reset') {

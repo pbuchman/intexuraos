@@ -25,10 +25,12 @@ import { retryTask, type RetryTaskDeps } from '../../domain/usecases/retryTask.j
 describe('retryTask use case', () => {
   let mockCodeTaskRepo: {
     findByIdForUser: ReturnType<typeof vi.fn>;
+    findById: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
+    findRecentTasksByLinearIssue: ReturnType<typeof vi.fn>;
   };
   let mockLinearAgentClient: {
     updateIssueState: ReturnType<typeof vi.fn>;
@@ -46,6 +48,13 @@ describe('retryTask use case', () => {
   };
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
+  };
+  let mockGitHubPRClient: {
+    getPullRequestStatus: ReturnType<typeof vi.fn>;
+    postPRComment: ReturnType<typeof vi.fn>;
+  };
+  let mockUserServiceClient: {
+    getOAuthToken: ReturnType<typeof vi.fn>;
   };
   let mockLogger: Logger;
   let mockMetricsClient: {
@@ -114,10 +123,12 @@ describe('retryTask use case', () => {
     // Mock code task repo
     mockCodeTaskRepo = {
       findByIdForUser: vi.fn(),
+      findById: vi.fn(),
       create: vi.fn(),
       update: vi.fn().mockResolvedValue(ok(createMockTask())),
       hasActiveTaskForLinearIssue: vi.fn(),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
+      findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
     };
 
     // Mock Linear agent client
@@ -155,6 +166,15 @@ describe('retryTask use case', () => {
       getSettings: vi.fn(),
     };
 
+    mockGitHubPRClient = {
+      getPullRequestStatus: vi.fn(),
+      postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 123 })),
+    };
+
+    mockUserServiceClient = {
+      getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'gh-token' })),
+    };
+
     // Mock metrics client
     mockMetricsClient = {
       incrementTasksSubmitted: vi.fn().mockResolvedValue(undefined),
@@ -171,6 +191,8 @@ describe('retryTask use case', () => {
       whatsappNotifier: mockWhatsAppNotifier as unknown as RetryTaskDeps['whatsappNotifier'],
       metricsClient: mockMetricsClient as unknown as RetryTaskDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as RetryTaskDeps['workerSettingsRepo'],
+      gitHubPRClient: mockGitHubPRClient as unknown as RetryTaskDeps['gitHubPRClient'],
+      userServiceClient: mockUserServiceClient as unknown as RetryTaskDeps['userServiceClient'],
       orchestratorSecret: 'test-orchestrator-secret',
       serviceUrl: 'https://test.example.com',
     };
@@ -566,6 +588,9 @@ describe('retryTask use case', () => {
           retriedFrom: originalTaskId,
           linearIssueId,
           webhookSecret: input.webhookSecret ?? 'whsec_secret',
+          ...(input.agentType !== undefined && { agentType: input.agentType }),
+          ...(input.prNumber !== undefined && { prNumber: input.prNumber }),
+          ...(input.prBranch !== undefined && { prBranch: input.prBranch }),
         };
         return Promise.resolve(ok(newTask));
       });
@@ -726,6 +751,215 @@ describe('retryTask use case', () => {
       expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           agentType: 'execution',
+        })
+      );
+    });
+
+    it('should inherit an open continuation PR on execution retry', async () => {
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        agentType: 'execution',
+        prNumber: 1131,
+        prBranch: 'task_original_branch',
+      });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(
+        ok({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'task_existing_pr_branch',
+        })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+          prNumber: 1131,
+          prBranch: 'task_existing_pr_branch',
+        })
+      );
+      expect(mockGitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'gh-token',
+        'pbuchman',
+        'intexuraos',
+        1131,
+        expect.stringContaining('@ignore')
+      );
+      expect(mockGitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'gh-token',
+        'pbuchman',
+        'intexuraos',
+        1131,
+        expect.stringContaining('Execution Retry Task Created')
+      );
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+          continuationPrNumber: 1131,
+          continuationPrBranch: 'task_existing_pr_branch',
+        })
+      );
+    });
+
+    it('should reuse the newest open PR from same-ticket history when the original task has none', async () => {
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        agentType: 'execution',
+      });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.findRecentTasksByLinearIssue.mockResolvedValue(
+        ok([
+          createMockTask({
+            id: 'task_same_ticket_open_pr',
+            prNumber: 1139,
+            prBranch: 'task_stale_branch',
+            agentType: 'execution',
+          }),
+        ])
+      );
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(
+        ok({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'task_same_ticket_open_pr_branch',
+        })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.findRecentTasksByLinearIssue).toHaveBeenCalledWith(linearIssueId, 20);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prNumber: 1139,
+          prBranch: 'task_same_ticket_open_pr_branch',
+        })
+      );
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          continuationPrNumber: 1139,
+          continuationPrBranch: 'task_same_ticket_open_pr_branch',
+        })
+      );
+    });
+
+    it('should fail before creating a retry when continuation PR verification cannot fetch a GitHub token', async () => {
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        agentType: 'execution',
+        prNumber: 1131,
+      });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockUserServiceClient.getOAuthToken.mockResolvedValue(
+        err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe(
+          'GitHub OAuth token is required to verify continuation PR state'
+        );
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ originalTaskId, userId }),
+        'Failed to resolve continuation PR for retry'
+      );
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('should fail before dispatch when continuation bootstrap comment cannot be posted', async () => {
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        agentType: 'execution',
+        prNumber: 1131,
+      });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(
+        ok({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'task_existing_pr_branch',
+        })
+      );
+      mockGitHubPRClient.postPRComment.mockResolvedValue(
+        err({ code: 'API_ERROR', message: 'Failed to post PR bootstrap comment' })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Failed to post PR bootstrap comment');
+      }
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        retryTaskId,
+        expect.objectContaining({
+          status: 'failed',
+          error: {
+            code: 'PR_BOOTSTRAP_COMMENT_FAILED',
+            message: 'Failed to post PR bootstrap comment',
+          },
+        })
+      );
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        originalTaskId,
+        expect.objectContaining({ status: 'archived' })
+      );
+    });
+
+    it('should treat legacy PR result metadata as execution and reuse the existing PR', async () => {
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/1131' },
+      });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Retry mechanism test',
+          url: 'https://linear.app/intexuraos/issue/INT-520',
+          labels: ['unclear'],
+          childCount: 0,
+        })
+      );
+      mockGitHubPRClient.getPullRequestStatus.mockResolvedValue(
+        ok({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'task_existing_pr_branch',
+        })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+          prNumber: 1131,
+          prBranch: 'task_existing_pr_branch',
+        })
+      );
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+          continuationPrNumber: 1131,
+          continuationPrBranch: 'task_existing_pr_branch',
         })
       );
     });

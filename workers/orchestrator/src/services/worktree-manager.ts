@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { type Result, ok, err, type Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
+const SAFE_GIT_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 
 export interface WorktreeManagerConfig {
   repositoryPath: string;
@@ -15,6 +16,12 @@ export interface WorktreeManagerConfig {
 }
 
 const LOCK_TIMEOUT_MS = 10_000;
+
+function assertSafeBranchName(branch: string, branchLabel: string): void {
+  if (!SAFE_GIT_BRANCH_PATTERN.test(branch)) {
+    throw new Error(`Invalid ${branchLabel} branch name: ${branch}`);
+  }
+}
 
 export class WorktreeManager {
   private gitLock: Promise<void> = Promise.resolve();
@@ -50,10 +57,19 @@ export class WorktreeManager {
     }
   }
 
-  async createWorktree(taskId: string, baseBranch: string): Promise<string> {
+  async createWorktree(
+    taskId: string,
+    baseBranch: string,
+    continuationPrBranch?: string
+  ): Promise<string> {
     return await this.withGitLock(async () => {
       const worktreePath = join(this.config.worktreeBasePath, taskId);
-      this.logger.info({ taskId, baseBranch }, 'Creating worktree');
+      this.logger.info({ taskId, baseBranch, continuationPrBranch }, 'Creating worktree');
+
+      assertSafeBranchName(baseBranch, 'base');
+      if (continuationPrBranch !== undefined) {
+        assertSafeBranchName(continuationPrBranch, 'continuation PR');
+      }
 
       // Check if worktree already exists
       if (await this.worktreeExists(taskId)) {
@@ -67,12 +83,25 @@ export class WorktreeManager {
         // Create worktree with a new branch for the task
         // Using -b creates a local branch, avoiding detached HEAD state
         // which is required for Claude to create commits and PRs
-        const { stderr } = await execAsync(
-          `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
-          {
+        let stderr: string;
+        if (continuationPrBranch === undefined) {
+          ({ stderr } = await execAsync(
+            `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
+            {
+              cwd: this.config.repositoryPath,
+            }
+          ));
+        } else {
+          await execAsync(`git fetch origin "${continuationPrBranch}"`, {
             cwd: this.config.repositoryPath,
-          }
-        );
+          });
+          ({ stderr } = await execAsync(
+            `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`,
+            {
+              cwd: this.config.repositoryPath,
+            }
+          ));
+        }
 
         // git worktree add outputs to stderr even on success
         /* v8 ignore start -- test-infra: git worktree add outputs to stderr on success (e @preserve */
@@ -178,6 +207,7 @@ export class WorktreeManager {
     planningBranch: string
   ): Promise<Result<void, string>> {
     try {
+      assertSafeBranchName(planningBranch, 'planning');
       await execAsync(`git fetch origin "${planningBranch}"`, { cwd: worktreePath });
       await execAsync(`git merge "origin/${planningBranch}" --no-edit`, { cwd: worktreePath });
       this.logger.info({ worktreePath, planningBranch }, 'Planning branch merged into worktree');

@@ -271,6 +271,78 @@ describe('drainRetryQueue', () => {
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({ status: 'dispatched' }));
     });
 
+    it('forwards continuation PR metadata and archives the original task after retry dispatch', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(
+        ok({
+          ...sampleTask,
+          prNumber: 1144,
+          prBranch: 'task_existing_pr_branch',
+          retriedFrom: 'task_original_retry_source',
+          agentType: 'execution',
+        })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update
+        .mockResolvedValueOnce(ok({ ...sampleTask, status: 'dispatched', workerLocation: 'home-mac' }))
+        .mockResolvedValueOnce(ok({ ...sampleTask, id: 'task_original_retry_source', status: 'archived' }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          continuationPrNumber: 1144,
+          continuationPrBranch: 'task_existing_pr_branch',
+          agentType: 'execution',
+        })
+      );
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_original_retry_source', {
+        status: 'archived',
+      });
+    });
+
+    it('logs a warning when archiving the original task after retry dispatch fails', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(
+        ok({
+          ...sampleTask,
+          prNumber: 1144,
+          prBranch: 'task_existing_pr_branch',
+          retriedFrom: 'task_original_retry_source',
+          agentType: 'execution',
+        })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update
+        .mockResolvedValueOnce(ok({ ...sampleTask, status: 'dispatched', workerLocation: 'home-mac' }))
+        .mockResolvedValueOnce(
+          err({ code: 'FIRESTORE_ERROR', message: 'archive failed' })
+        );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        return;
+      }
+      expect(result.value.action).toBe('dispatched');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originalTaskId: 'task_original_retry_source',
+          retryTaskId: 'task_xyz',
+        }),
+        'Failed to archive original task after retry drain dispatch'
+      );
+      expect(mockWhatsappNotifier.notifyTaskStarted).toHaveBeenCalled();
+    });
+
     it('increments attempts on retryable failure', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));

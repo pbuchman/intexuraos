@@ -33,6 +33,18 @@ describe('taskRouting', () => {
       expect(resolveTaskAgentType({ systemPromptHash: 'review-auto' }, ['bug'])).toBe('review');
     });
 
+    it('treats stored PR metadata as execution for legacy tasks', () => {
+      expect(
+        resolveTaskAgentType(
+          {
+            systemPromptHash: 'other',
+            result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/1131' },
+          },
+          ['bug']
+        )
+      ).toBe('execution');
+    });
+
     it('falls back to execution for code-task labels', () => {
       expect(resolveTaskAgentType({ systemPromptHash: 'other' }, ['code-task'])).toBe('execution');
     });

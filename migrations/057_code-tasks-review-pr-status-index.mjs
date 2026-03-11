@@ -1,5 +1,5 @@
 /**
- * Migration 056: Composite index for active review-task lookup by PR
+ * Migration 057: Composite index for active review-task lookup by PR
  *
  * Required for findActiveReviewForPR query:
  *   .where('repository', '==', repo)
@@ -10,7 +10,7 @@
  */
 
 export const metadata = {
-  id: '056',
+  id: '057',
   name: 'code-tasks-review-pr-status-index',
   description: 'Composite index for code_tasks active review-task lookup by PR',
   createdAt: '2026-03-11',

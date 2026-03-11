@@ -22,6 +22,7 @@ import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
+import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
 
 // In-memory guard for single-instance environments
 let isDrainingRetries = false;
@@ -260,6 +261,10 @@ async function handleNewTaskRetry(
     linearIssueLabels: dispatchLabels,
     hasChildren,
     agentType,
+    ...(task.prNumber !== undefined && task.prBranch !== undefined && {
+      continuationPrNumber: task.prNumber,
+      continuationPrBranch: task.prBranch,
+    }),
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
   });
 
@@ -304,6 +309,13 @@ async function handleNewTaskRetry(
   });
 
   if (updateResult.ok) {
+    await archiveRetriedTaskAfterDispatch({
+      logger,
+      codeTaskRepo,
+      retryTaskId: task.id,
+      warningMessage: 'Failed to archive original task after retry drain dispatch',
+      ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
+    });
     await whatsappNotifier.notifyTaskStarted(task.userId, updateResult.value);
   }
 

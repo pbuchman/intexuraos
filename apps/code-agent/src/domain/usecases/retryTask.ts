@@ -16,10 +16,16 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
+import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { randomUUID } from 'node:crypto';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import {
+  bootstrapContinuationPrTaskComment,
+  resolveExecutionContinuationPr,
+} from '../../domain/utils/continuationPr.js';
 import { loadConfig } from '../../config.js';
 
 /**
@@ -79,6 +85,8 @@ export interface RetryTaskDeps {
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  gitHubPRClient: GitHubPRClient;
+  userServiceClient: UserServiceClient;
   orchestratorSecret: string;
   serviceUrl: string;
 }
@@ -262,6 +270,33 @@ ${additionalContext.trim()}
   const retryTaskId = `task_${randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, retryTaskId);
 
+  const continuationResult = await resolveExecutionContinuationPr(
+    {
+      logger,
+      codeTaskRepo,
+      gitHubPRClient: deps.gitHubPRClient,
+      userServiceClient: deps.userServiceClient,
+    },
+    {
+      agentType,
+      task: originalTask,
+      userId,
+    }
+  );
+
+  if (!continuationResult.ok) {
+    logger.error(
+      { originalTaskId, userId, error: continuationResult.error },
+      'Failed to resolve continuation PR for retry'
+    );
+    return err({
+      code: 'internal_error',
+      message: continuationResult.error.message,
+    });
+  }
+
+  const continuationPr = continuationResult.value;
+
   // Step 8: Create retry task with retriedFrom
   // Use provided workerType if specified, otherwise use original task's workerType
   const effectiveWorkerType = workerType ?? originalTask.workerType;
@@ -283,6 +318,8 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     agentType,
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
+    ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
+    ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
   };
 
   const createResult = await codeTaskRepo.create(createInput);
@@ -296,6 +333,32 @@ ${additionalContext.trim()}
   }
 
   const retryTask = createResult.value;
+
+  const commentResult = await bootstrapContinuationPrTaskComment(
+    {
+      logger,
+      codeTaskRepo,
+      gitHubPRClient: deps.gitHubPRClient,
+      userServiceClient: deps.userServiceClient,
+    },
+    {
+      continuationPr,
+      task: retryTask,
+      userId,
+      commentTitle: 'Execution Retry Task Created',
+    }
+  );
+
+  if (!commentResult.ok) {
+    logger.error(
+      { taskId: retryTask.id, originalTaskId, error: commentResult.error },
+      'Failed to post continuation PR bootstrap comment for retry'
+    );
+    return err({
+      code: 'internal_error',
+      message: commentResult.error.message,
+    });
+  }
 
   // Step 9: Build webhook URL
   const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
@@ -317,6 +380,8 @@ ${additionalContext.trim()}
     linearIssueLabels: string[];
     hasChildren: boolean;
     agentType: 'planning' | 'execution' | 'pull_request' | 'review';
+    continuationPrNumber?: number;
+    continuationPrBranch?: string;
   } = {
     taskId: retryTask.id,
     prompt: retryTask.sanitizedPrompt,
@@ -331,6 +396,8 @@ ${additionalContext.trim()}
     linearIssueLabels: dispatchLabels,
     hasChildren: hasChildrenForDispatch,
     agentType: retryTask.agentType ?? 'planning',
+    ...(continuationPr !== null && { continuationPrNumber: continuationPr.prNumber }),
+    ...(continuationPr !== null && { continuationPrBranch: continuationPr.prBranch }),
   };
 
   // Only include optional fields if defined

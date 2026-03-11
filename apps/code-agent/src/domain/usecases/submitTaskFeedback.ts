@@ -16,10 +16,16 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
+import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { randomUUID } from 'node:crypto';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import {
+  bootstrapContinuationPrTaskComment,
+  resolveExecutionContinuationPr,
+} from '../../domain/utils/continuationPr.js';
 
 /**
  * Request to submit feedback on a task.
@@ -68,6 +74,8 @@ export interface SubmitTaskFeedbackDeps {
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  gitHubPRClient: GitHubPRClient;
+  userServiceClient: UserServiceClient;
   orchestratorSecret: string;
   serviceUrl: string;
 }
@@ -210,6 +218,35 @@ ${feedback.trim()}
   const agentType = resolveTaskAgentType(originalTask, linearIssueLabelsForDispatch);
   const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabelsForDispatch, agentType);
 
+  // resolveTaskAgentType() already routes legacy PR-linked tasks back to execution
+  // when they only carry prNumber, prBranch, or result.prUrl metadata.
+  const continuationResult = await resolveExecutionContinuationPr(
+    {
+      logger,
+      codeTaskRepo,
+      gitHubPRClient: deps.gitHubPRClient,
+      userServiceClient: deps.userServiceClient,
+    },
+    {
+      agentType,
+      task: originalTask,
+      userId,
+    }
+  );
+
+  if (!continuationResult.ok) {
+    logger.error(
+      { originalTaskId, userId, error: continuationResult.error },
+      'Failed to resolve continuation PR for feedback task'
+    );
+    return err({
+      code: 'internal_error',
+      message: continuationResult.error.message,
+    });
+  }
+
+  const continuationPr = continuationResult.value;
+
   // Step 8: Create follow-up task with parentTaskId
   const createInput = {
     id: followUpTaskId,
@@ -231,7 +268,8 @@ ${feedback.trim()}
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.actionId !== undefined && { actionId: originalTask.actionId }),
     ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
-    ...(originalTask.prNumber !== undefined && { prNumber: originalTask.prNumber }),
+    ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
+    ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
     /* v8 ignore stop @preserve */
     agentType,
   };
@@ -247,6 +285,32 @@ ${feedback.trim()}
   }
 
   const followUpTask = createResult.value;
+
+  const commentResult = await bootstrapContinuationPrTaskComment(
+    {
+      logger,
+      codeTaskRepo,
+      gitHubPRClient: deps.gitHubPRClient,
+      userServiceClient: deps.userServiceClient,
+    },
+    {
+      continuationPr,
+      task: followUpTask,
+      userId,
+      commentTitle: 'Execution Follow-up Task Created',
+    }
+  );
+
+  if (!commentResult.ok) {
+    logger.error(
+      { taskId: followUpTask.id, originalTaskId, error: commentResult.error },
+      'Failed to post continuation PR bootstrap comment for feedback task'
+    );
+    return err({
+      code: 'internal_error',
+      message: commentResult.error.message,
+    });
+  }
 
   logger.info(
     { originalTaskId: originalTask.id, followUpTaskId: followUpTask.id },
@@ -316,6 +380,8 @@ ${feedback.trim()}
     linearIssueLabels: string[];
     hasChildren: boolean;
     agentType: 'planning' | 'execution' | 'pull_request' | 'review';
+    continuationPrNumber?: number;
+    continuationPrBranch?: string;
   } = {
     taskId: followUpTask.id,
     prompt: followUpTask.sanitizedPrompt,
@@ -330,6 +396,8 @@ ${feedback.trim()}
     linearIssueLabels: dispatchLabels,
     hasChildren: hasChildrenForDispatch,
     agentType: followUpTask.agentType ?? 'planning',
+    ...(continuationPr !== null && { continuationPrNumber: continuationPr.prNumber }),
+    ...(continuationPr !== null && { continuationPrBranch: continuationPr.prBranch }),
   };
 
   // Add optional fields if defined

@@ -100,6 +100,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
       return ok(0);
     },
+    async findRecentTasksByLinearIssue(): ReturnType<CodeTaskRepository['findRecentTasksByLinearIssue']> {
+      return ok([]);
+    },
     async findPlannedTaskByLinearIssue(): ReturnType<CodeTaskRepository['findPlannedTaskByLinearIssue']> {
       return ok(null);
     },
@@ -163,6 +166,9 @@ function createMockGitHubPRClient(): GitHubPRClient {
     },
     async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
       return ok('main');
+    },
+    async getPullRequestStatus(): ReturnType<GitHubPRClient['getPullRequestStatus']> {
+      return ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' });
     },
     async postPRComment(): ReturnType<GitHubPRClient['postPRComment']> {
       return ok({ commentId: 1 });
