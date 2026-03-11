@@ -103,6 +103,21 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
     }
   }
 
+  // Fallback: extract PR URL from task prompts (e.g., review tasks may have PR URL in prompt)
+  if (pr === null) {
+    for (const task of tasks) {
+      const match = PR_URL_REGEX.exec(task.prompt);
+      if (match !== null) {
+        const prNumber = match[1];
+        if (prNumber !== undefined) {
+          const prUrl = `https://github.com/org/repo/pull/${prNumber}`;
+          pr = { url: prUrl, number: prNumber };
+          break;
+        }
+      }
+    }
+  }
+
   // failedAttempts: count of tasks with status === 'failed'
   const failedAttempts = tasks.filter(
     (t) => t.status === 'failed',
