@@ -530,6 +530,269 @@ describe('RepoManager', () => {
     });
   });
 
+  describe('sanitizeRepoConfig', () => {
+    it('should reset remote URL when it contains embedded credentials', async () => {
+      const { sanitizeRepoConfig } = await loadRepoManager();
+      const repoPath = join(tempDir, 'stale-creds');
+      mkdirSync(repoPath, { recursive: true });
+
+      const calls: string[][] = [];
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        calls.push(args);
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+          return {
+            stdout: 'https://x-access-token:ghs_TOKEN@github.com/pbuchman/intexuraos.git\n',
+            stderr: '',
+          };
+        }
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+          throw new Error('exit code 1');
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await sanitizeRepoConfig(
+        repoPath,
+        'https://github.com/pbuchman/intexuraos.git',
+        mockLogger
+      );
+
+      const setUrlCall = calls.find(
+        (c) => c[0] === 'remote' && c[1] === 'set-url' && c[2] === 'origin'
+      );
+      expect(setUrlCall).toBeDefined();
+      expect(setUrlCall?.[3]).toBe('https://github.com/pbuchman/intexuraos.git');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ currentUrl: expect.any(String), expectedUrl: expect.any(String) }),
+        expect.stringContaining('Remote origin URL differs from expected')
+      );
+    });
+
+    it('should not modify remote URL when it matches expected URL exactly', async () => {
+      const { sanitizeRepoConfig } = await loadRepoManager();
+      const repoPath = join(tempDir, 'clean-url');
+      mkdirSync(repoPath, { recursive: true });
+
+      const calls: string[][] = [];
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        calls.push(args);
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+          throw new Error('exit code 1');
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await sanitizeRepoConfig(
+        repoPath,
+        'https://github.com/pbuchman/intexuraos.git',
+        mockLogger
+      );
+
+      const setUrlCall = calls.find((c) => c[0] === 'remote' && c[1] === 'set-url');
+      expect(setUrlCall).toBeUndefined();
+    });
+
+    it('should remove http.extraheader when present', async () => {
+      const { sanitizeRepoConfig } = await loadRepoManager();
+      const repoPath = join(tempDir, 'extra-header');
+      mkdirSync(repoPath, { recursive: true });
+
+      const calls: string[][] = [];
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        calls.push(args);
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+          return { stdout: 'Authorization: token ghs_EXPIRED\n', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await sanitizeRepoConfig(
+        repoPath,
+        'https://github.com/pbuchman/intexuraos.git',
+        mockLogger
+      );
+
+      const unsetCall = calls.find(
+        (c) => c[0] === 'config' && c[1] === '--unset' && c[2] === 'http.extraheader'
+      );
+      expect(unsetCall).toBeDefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ path: repoPath }),
+        'Found http.extraheader in repo git config, removing'
+      );
+    });
+
+    it('should not throw when config --get remote.origin.url fails', async () => {
+      const { sanitizeRepoConfig } = await loadRepoManager();
+      const repoPath = join(tempDir, 'url-get-fail');
+      mkdirSync(repoPath, { recursive: true });
+
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (args[0] === 'config' && args[1] === '--get') {
+          throw new Error('git config failed');
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await expect(
+        sanitizeRepoConfig(
+          repoPath,
+          'https://github.com/pbuchman/intexuraos.git',
+          mockLogger
+        )
+      ).resolves.toBeUndefined();
+    });
+
+    it('should not throw when config --get http.extraheader exits non-zero (key absent)', async () => {
+      const { sanitizeRepoConfig } = await loadRepoManager();
+      const repoPath = join(tempDir, 'no-extraheader');
+      mkdirSync(repoPath, { recursive: true });
+
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+          throw new Error('exit code 1');
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await expect(
+        sanitizeRepoConfig(
+          repoPath,
+          'https://github.com/pbuchman/intexuraos.git',
+          mockLogger
+        )
+      ).resolves.toBeUndefined();
+    });
+
+    it('should not unset http.extraheader when config --get returns empty string', async () => {
+      const { sanitizeRepoConfig } = await loadRepoManager();
+      const repoPath = join(tempDir, 'empty-extraheader');
+      mkdirSync(repoPath, { recursive: true });
+
+      const calls: string[][] = [];
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        calls.push(args);
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+          return { stdout: '\n', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await sanitizeRepoConfig(
+        repoPath,
+        'https://github.com/pbuchman/intexuraos.git',
+        mockLogger
+      );
+
+      const unsetCall = calls.find(
+        (c) => c[0] === 'config' && c[1] === '--unset' && c[2] === 'http.extraheader'
+      );
+      expect(unsetCall).toBeUndefined();
+    });
+
+    it('should handle both URL sanitization and extraheader removal', async () => {
+      const { sanitizeRepoConfig } = await loadRepoManager();
+      const repoPath = join(tempDir, 'both-dirty');
+      mkdirSync(repoPath, { recursive: true });
+
+      const calls: string[][] = [];
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        calls.push(args);
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+          return {
+            stdout: 'https://x-access-token:ghs_TOKEN@github.com/pbuchman/intexuraos.git\n',
+            stderr: '',
+          };
+        }
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+          return { stdout: 'Authorization: token ghs_EXPIRED\n', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await sanitizeRepoConfig(
+        repoPath,
+        'https://github.com/pbuchman/intexuraos.git',
+        mockLogger
+      );
+
+      const setUrlCall = calls.find((c) => c[0] === 'remote' && c[1] === 'set-url');
+      const unsetCall = calls.find(
+        (c) => c[0] === 'config' && c[1] === '--unset' && c[2] === 'http.extraheader'
+      );
+      expect(setUrlCall).toBeDefined();
+      expect(unsetCall).toBeDefined();
+    });
+
+    it('should not throw when config --unset http.extraheader fails', async () => {
+      const { sanitizeRepoConfig } = await loadRepoManager();
+      const repoPath = join(tempDir, 'unset-fail');
+      mkdirSync(repoPath, { recursive: true });
+
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+          return { stdout: 'Authorization: token ghs_EXPIRED\n', stderr: '' };
+        }
+        if (args[0] === 'config' && args[1] === '--unset') {
+          throw new Error('unset failed');
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await expect(
+        sanitizeRepoConfig(
+          repoPath,
+          'https://github.com/pbuchman/intexuraos.git',
+          mockLogger
+        )
+      ).resolves.toBeUndefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ path: repoPath }),
+        'Failed to unset http.extraheader'
+      );
+    });
+  });
+
   describe('ensureRepository', () => {
     it('should clone repository when path does not exist', async () => {
       const { ensureRepository } = await loadRepoManager();
@@ -551,7 +814,7 @@ describe('RepoManager', () => {
       expect(cloneCalled).toBe(true);
     });
 
-    it('should validate, fetch, and clean when path exists with correct repo', async () => {
+    it('should validate, sanitize, fetch, and clean when path exists with correct repo', async () => {
       const { ensureRepository } = await loadRepoManager();
       const repoPath = join(tempDir, 'existing-repo');
       mkdirSync(join(repoPath, '.git'), { recursive: true });
@@ -562,6 +825,13 @@ describe('RepoManager', () => {
         file: string,
         args: string[]
       ): Promise<{ stdout: string; stderr: string }> => {
+        if (file === 'git' && args[0] === 'config' && args[1] === '--get' && args[2] === 'remote.origin.url') {
+          callOrder.push('sanitize-url');
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (file === 'git' && args[0] === 'config' && args[1] === '--get' && args[2] === 'http.extraheader') {
+          throw new Error('exit code 1');
+        }
         if (file === 'git' && args[0] === 'reset') {
           callOrder.push('reset');
         }
@@ -579,7 +849,7 @@ describe('RepoManager', () => {
 
       await ensureRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger);
 
-      expect(callOrder).toEqual(['fetch', 'reset', 'clean']);
+      expect(callOrder).toEqual(['sanitize-url', 'fetch', 'reset', 'clean']);
     });
 
     it('should throw validation error for invalid repository', async () => {
@@ -607,7 +877,7 @@ describe('RepoManager', () => {
           path: repoPath,
           url: 'https://github.com/pbuchman/intexuraos.git',
         }),
-        'Repository validation or fetch failed'
+        'Repository validation failed'
       );
     });
 
@@ -630,6 +900,117 @@ describe('RepoManager', () => {
           url: 'https://github.com/pbuchman/intexuraos.git',
         }),
         'Repository clone failed'
+      );
+    });
+
+    it('should continue when fetchRemote fails but cleanWorktree succeeds', async () => {
+      const { ensureRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'fetch-fail-clean-ok');
+      mkdirSync(join(repoPath, '.git'), { recursive: true });
+      writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ name: 'intexuraos' }));
+
+      mockExecFileAsyncImpl = async (
+        file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (file === 'git' && args[0] === 'config' && args[1] === '--get') {
+          if (args[2] === 'remote.origin.url') {
+            return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+          }
+          throw new Error('exit code 1');
+        }
+        if (file === 'git' && args[0] === 'remote') {
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (file === 'git' && args[0] === 'fetch') {
+          throw new Error('Could not resolve host: github.com');
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await expect(
+        ensureRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).resolves.toBeUndefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ path: repoPath }),
+        'Fetch failed, continuing with existing local state'
+      );
+    });
+
+    it('should throw when both fetchRemote and cleanWorktree fail', async () => {
+      const { ensureRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'fetch-fail-clean-fail');
+      mkdirSync(join(repoPath, '.git'), { recursive: true });
+      writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ name: 'intexuraos' }));
+
+      mockExecFileAsyncImpl = async (
+        file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (file === 'git' && args[0] === 'config' && args[1] === '--get') {
+          if (args[2] === 'remote.origin.url') {
+            return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+          }
+          throw new Error('exit code 1');
+        }
+        if (file === 'git' && args[0] === 'remote') {
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (file === 'git' && args[0] === 'fetch') {
+          throw new Error('Could not resolve host: github.com');
+        }
+        if (file === 'git' && args[0] === 'reset') {
+          throw new Error('reset failed');
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await expect(
+        ensureRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).rejects.toThrow('Failed to clean worktree');
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ path: repoPath }),
+        'Both fetch and clean failed — repository is unusable'
+      );
+    });
+
+    it('should throw when fetchRemote succeeds but cleanWorktree fails', async () => {
+      const { ensureRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'fetch-ok-clean-fail');
+      mkdirSync(join(repoPath, '.git'), { recursive: true });
+      writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ name: 'intexuraos' }));
+
+      mockExecFileAsyncImpl = async (
+        file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (file === 'git' && args[0] === 'config' && args[1] === '--get') {
+          if (args[2] === 'remote.origin.url') {
+            return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+          }
+          throw new Error('exit code 1');
+        }
+        if (file === 'git' && args[0] === 'remote') {
+          return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
+        }
+        if (file === 'git' && args[0] === 'fetch') {
+          return { stdout: '', stderr: '' };
+        }
+        if (file === 'git' && args[0] === 'reset') {
+          throw new Error('reset failed');
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      await expect(
+        ensureRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).rejects.toThrow('Failed to clean worktree');
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ path: repoPath }),
+        'Clean worktree failed after successful fetch'
       );
     });
 

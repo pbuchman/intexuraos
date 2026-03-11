@@ -290,6 +290,58 @@ describe('firestoreCodeTaskRepository', () => {
       expect(second.ok).toBe(true);
     });
 
+    it('allows review task when an execution task is active for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const executionTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+      }));
+      expect(executionTask.ok).toBe(true);
+
+      const reviewTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+        linearIssueId: 'LIN-123',
+        agentType: 'review',
+        prNumber: 42,
+      }));
+
+      expect(reviewTask.ok).toBe(true);
+      if (!reviewTask.ok) return;
+      expect(reviewTask.value.agentType).toBe('review');
+    });
+
+    it('allows non-review task when only an active review task exists for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const reviewTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'review',
+        prNumber: 42,
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+      }));
+      expect(reviewTask.ok).toBe(true);
+
+      const executionTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+        prompt: 'Implement issue',
+        sanitizedPrompt: 'implement issue',
+      }));
+
+      expect(executionTask.ok).toBe(true);
+    });
+
     it('normalizes prompt for dedupKey', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -752,6 +804,83 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
 
       expect(result.value.hasActive).toBe(false);
+    });
+
+    it('returns false when only an active review task exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'review',
+        prNumber: 42,
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+      }));
+      expect(created.ok).toBe(true);
+
+      const result = await repo.hasActiveTaskForLinearIssue('LIN-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(false);
+      expect(result.value.taskId).toBeUndefined();
+    });
+
+    it('returns true for legacy active task without agentType', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ linearIssueId: 'LIN-123' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.hasActiveTaskForLinearIssue('LIN-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(true);
+      expect(result.value.taskId).toBe(created.value.id);
+    });
+
+    it('returns non-review task when both review and blocking tasks are active', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const reviewTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'review',
+        prNumber: 42,
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+      }));
+      expect(reviewTask.ok).toBe(true);
+
+      const executionTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+        prompt: 'Implement issue',
+        sanitizedPrompt: 'implement issue',
+      }));
+      expect(executionTask.ok).toBe(true);
+      if (!executionTask.ok) return;
+
+      const result = await repo.hasActiveTaskForLinearIssue('LIN-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(true);
+      expect(result.value.taskId).toBe(executionTask.value.id);
     });
   });
 
@@ -1537,6 +1666,68 @@ describe('firestoreCodeTaskRepository', () => {
       }));
 
       const result = await repo.findByPR('other/repo', 123);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+  });
+
+  describe('findActiveReviewForPR', () => {
+    it('returns queued/dispatched/running review task for matching repository and PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      const result = await repo.findActiveReviewForPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.agentType).toBe('review');
+      expect(result.value?.prNumber).toBe(456);
+    });
+
+    it('ignores non-review tasks and completed review tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const executionTask = await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'execution',
+        prompt: 'Execution task',
+        sanitizedPrompt: 'execution task',
+      }));
+      expect(executionTask.ok).toBe(true);
+
+      const completedReview = await repo.create(createTaskInput({
+        userId: 'user-456',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Completed review task',
+        sanitizedPrompt: 'completed review task',
+      }));
+      expect(completedReview.ok).toBe(true);
+      if (completedReview.ok) {
+        await repo.update(completedReview.value.id, { status: 'reviewed' });
+      }
+
+      const result = await repo.findActiveReviewForPR('test/repo', 456);
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;

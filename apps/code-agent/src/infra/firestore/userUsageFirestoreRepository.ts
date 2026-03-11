@@ -186,34 +186,28 @@ export function createUserUsageFirestoreRepository(
         };
 
         // Reset hour window if needed
-        /* v8 ignore start -- test-infra: time-based conditional requires precise timestamp manipulation @preserve */
         if (isNewHour(usage.hourStartedAt, now)) {
           updates.tasksThisHour = 1;
           updates.hourStartedAt = now;
         } else {
           updates.tasksThisHour = usage.tasksThisHour + 1;
         }
-        /* v8 ignore stop @preserve */
 
         // Reset day window if needed
-        /* v8 ignore start -- test-infra: time-based conditional requires precise timestamp manipulation @preserve */
         if (isNewDay(usage.dayStartedAt, now)) {
           updates.costToday = estimatedCost;
           updates.dayStartedAt = getStartOfDay(now);
         } else {
           updates.costToday = usage.costToday + estimatedCost;
         }
-        /* v8 ignore stop @preserve */
 
         // Reset month window if needed
-        /* v8 ignore start -- test-infra: time-based conditional requires precise timestamp manipulation @preserve */
         if (isNewMonth(usage.monthStartedAt, now)) {
           updates.costThisMonth = estimatedCost;
           updates.monthStartedAt = getStartOfMonth(now);
         } else {
           updates.costThisMonth = usage.costThisMonth + estimatedCost;
         }
-        /* v8 ignore stop @preserve */
 
         tx.update(ref, updates);
       });

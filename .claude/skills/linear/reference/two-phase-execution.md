@@ -101,8 +101,9 @@ The orchestrator uses a two-phase model to process Linear issues based on label 
 For complex architectural decisions that need preserved reasoning:
 
 1. Create design document at `docs/plans/{issue-id}-design.md`
-2. Create PR on `design/{issue-id}` branch (required to preserve the work)
-3. PR description references the Linear issue
+2. Add `Plan document: docs/plans/{issue-id}-design.md` to the Linear issue description
+3. Create PR on `design/{issue-id}` branch (required to preserve the work)
+4. PR description references the Linear issue
 
 **Exit Conditions:**
 

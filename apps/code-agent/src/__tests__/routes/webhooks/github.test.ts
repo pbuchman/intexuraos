@@ -98,6 +98,7 @@ describe('POST /webhooks/github', () => {
       findArchivableTasks: vi.fn().mockResolvedValue(ok([])),
       archiveTaskLogs: vi.fn().mockResolvedValue(ok(undefined)),
       findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       findOldestQueued: vi.fn().mockResolvedValue(ok(null)),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
@@ -108,6 +109,8 @@ describe('POST /webhooks/github', () => {
     mockSummaryRepo = {
       upsert: vi.fn().mockResolvedValue(ok(undefined)),
       findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
+      findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
+      findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([])),
     };
 
     // Setup services with all required fields
@@ -149,6 +152,7 @@ describe('POST /webhooks/github', () => {
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
       toolCallingClient: undefined,
       eventDecisionRepo: { save: vi.fn().mockResolvedValue({ ok: true, value: {} }) },
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
     };
 
@@ -487,6 +491,73 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
+    });
+
+    it('triggers merge-conflict detection for push events when detector is configured', async () => {
+      const { getServices } = await import('../../../services.js');
+      const currentServices = getServices();
+      const mockDetectOnPush = vi.fn().mockResolvedValue(undefined);
+      currentServices.mergeConflictDetector = { detectOnPush: mockDetectOnPush };
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'push-event-id',
+        githubEventId: 999,
+        deliveryId: 'delivery-123',
+        repository: 'intexuraos/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 0,
+        pullRequestId: 0,
+        eventType: 'push',
+        action: null,
+        senderLogin: 'pusher',
+        senderId: 222,
+        senderType: 'User',
+        title: 'Push to development',
+        body: null,
+        state: null,
+        baseBranch: null,
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: { ref: 'refs/heads/development' },
+      }));
+
+      const pushPayload = {
+        ref: 'refs/heads/development',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'pusher',
+          id: 222,
+          type: 'User',
+        },
+      };
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(mockDetectOnPush).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1671,4 +1742,3 @@ describe('POST /webhooks/github', () => {
     });
   });
 });
-

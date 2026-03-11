@@ -37,6 +37,7 @@ import { createWebhookDispatchService } from '../../domain/services/gitHubDispat
 import { createWebhookMessageBuilder } from '../../domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from '../../routes/webhooks/github.js';
 import { createFirestoreEventDecisionRepository } from '../../infra/firestore/eventDecisionRepository.js';
+import { createFirestoreDispatchRetryRepository } from '../../infra/firestore/dispatchRetryRepository.js';
 import { createUnifiedEvaluator } from '../../domain/services/unifiedEvaluator.js';
 
 /**
@@ -155,6 +156,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: 'test-secret',
     serviceUrl: 'http://localhost:8080',
+    dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
   });
 
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
@@ -240,12 +242,13 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     webhookRules: webhookRules,
     dispatchService: dispatchService,
     eventDecisionRepo: eventDecisionRepo,
+    dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
     unifiedEvaluator: createUnifiedEvaluator({
       webhookRules,
       dispatchService,
       eventDecisionRepo,
       evaluateEvent: undefined,
-      createReviewTask: async () => ({ ok: true as const, value: { taskId: 'mock-task' } }),
+      createReviewTask: async () => ({ ok: true as const, value: { status: 'created' as const, taskId: 'mock-task' } }),
       allowedBots: ALLOWED_BOTS,
     }),
   };

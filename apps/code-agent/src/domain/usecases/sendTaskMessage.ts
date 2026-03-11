@@ -4,7 +4,7 @@
  * Running tasks: message is queued on the worker and delivered when the current attempt completes.
  * Terminal tasks (completed/failed/interrupted/cancelled): task resumes with the message via --continue.
  * Dispatched tasks: message is queued locally in Firestore (pendingUserMessages) until orchestrator picks up.
- * Queued tasks: rejected.
+ * Queued tasks: message is appended locally until worker capacity is available.
  */
 
 import { Timestamp } from '@google-cloud/firestore';
@@ -66,17 +66,8 @@ export async function sendTaskMessage(
 
   const task = taskResult.value;
 
-  // Step 2: Validate task status
-  if (task.status === 'queued') {
-    logger.warn({ taskId, status: task.status }, 'Cannot send message to task with this status');
-    return err({
-      code: 'invalid_status',
-      message: `Cannot send message to task with status "${task.status}"`,
-    });
-  }
-
-  // Step 2b: For dispatched tasks, queue message locally without contacting the worker
-  if (task.status === 'dispatched') {
+  // Step 2: For queued/dispatched tasks, queue message locally without contacting the worker
+  if (task.status === 'queued' || task.status === 'dispatched') {
     const sequence = Date.now() * 1000;
     const storeResult = await logLineRepo.storeBatch(taskId, [
       { sequence, text: `[user] ${message}`, timestamp: Timestamp.now() },
@@ -98,7 +89,7 @@ export async function sendTaskMessage(
       logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
     }
 
-    logger.info({ taskId, action: 'queued', status: 'dispatched' }, 'Message queued for dispatched task');
+    logger.info({ taskId, action: 'queued', status: task.status }, 'Message queued for non-running task');
     return ok({ action: 'queued' });
   }
 

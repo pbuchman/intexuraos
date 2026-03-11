@@ -31,7 +31,6 @@ export interface HandleApprovalReplyDeps {
   executeLinearAction?: ExecuteLinearActionUseCase;
   executeCodeAction?: ExecuteCodeActionUseCase;
   codeAgentClient?: CodeAgentClient;
-  webAppUrl: string;
 }
 
 export interface ApprovalReplyInput {
@@ -71,7 +70,6 @@ export function createHandleApprovalReplyUseCase(
     executeLinearAction,
     executeCodeAction,
     codeAgentClient,
-    webAppUrl,
   } = deps;
 
   return async (input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {
@@ -108,13 +106,6 @@ export function createHandleApprovalReplyUseCase(
           codeAgentClient,
           logger
         );
-      }
-
-      if (intent === 'view-task') {
-        /* v8 ignore start -- ts-type: button ID format guarantees taskId exists @preserve */
-        const [, taskId] = parts;
-        return await handleViewTaskButton(taskId ?? '', userId, whatsappPublisher, webAppUrl, logger);
-        /* v8 ignore stop @preserve */
       }
 
       // INT-628: Handle proceed-implementation button
@@ -744,30 +735,6 @@ async function handleCancelTaskButton(
   return ok({
     matched: true,
     outcome: 'rejected',
-  });
-}
-
-/**
- * Handle view-task button (INT-379).
- * Button ID format: "view-task:{taskId}"
- */
-async function handleViewTaskButton(
-  taskId: string,
-  userId: string,
-  whatsappPublisher: HandleApprovalReplyDeps['whatsappPublisher'],
-  webAppUrl: string,
-  logger: Logger
-): Promise<Result<ApprovalReplyResult>> {
-  logger.info({ taskId, userId }, 'Handling view-task button');
-
-  await whatsappPublisher.publishSendMessage({
-    userId,
-    message: `View task details at: ${webAppUrl}/#/code-tasks/${taskId}`,
-    correlationId: `view-task-${taskId}`,
-  });
-
-  return ok({
-    matched: true,
   });
 }
 

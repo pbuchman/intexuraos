@@ -1,9 +1,9 @@
 /**
  * Shared PR notification utility.
  *
- * Posts a "task created" comment and optionally updates the PR title
- * with a Linear issue tag. Used by both createReviewTask and createTaskForPR
- * to avoid duplicating post-task-creation logic.
+ * Posts a dispatch-accepted comment and optionally updates the PR title
+ * with a Linear issue tag. Used by task-creation and existing-task-dispatch
+ * flows to avoid duplicating GitHub PR notification logic.
  *
  * All operations are best-effort — errors are logged and swallowed.
  */
@@ -23,11 +23,21 @@ export interface PRTaskNotificationRequest {
   repository: string;
   prNumber: number;
   userId: string;
+  dispatchOutcome: PRTaskDispatchOutcome;
   linearIssueId?: string;
   prTitle?: string;
-  titleAlreadyTagged: boolean;
+  updateTitle: boolean;
+  titleAlreadyTagged?: boolean;
   reviewTypes?: string[];
+  workerType?: string;
 }
+
+export type PRTaskDispatchOutcome =
+  | 'created_and_dispatched'
+  | 'created_and_queued'
+  | 'existing_task_resumed'
+  | 'existing_task_queued'
+  | 'review_task_dispatched';
 
 /**
  * Fetch per-user GitHub OAuth token.
@@ -51,10 +61,18 @@ export async function fetchGitHubToken(
   return tokenResult.value.accessToken; // @allow-result-access -- narrowed by !tokenResult.ok above
 }
 
-function buildTaskCreatedComment(request: PRTaskNotificationRequest): string {
+const dispatchOutcomeLabels: Record<PRTaskDispatchOutcome, string> = {
+  created_and_dispatched: 'Created and dispatched',
+  created_and_queued: 'Created and queued',
+  existing_task_resumed: 'Existing task resumed',
+  existing_task_queued: 'Existing task queued',
+  review_task_dispatched: 'Review task dispatched',
+};
+
+function buildTaskDispatchComment(request: PRTaskNotificationRequest): string {
   const lines: string[] = [
     '@ignore',
-    '### Automated Code Review Task Created',
+    '### Automated Code Review Task Accepted',
     '',
     `**Task ID:** \`${request.taskId}\``,
   ];
@@ -68,6 +86,11 @@ function buildTaskCreatedComment(request: PRTaskNotificationRequest): string {
     lines.push(`**Review types:** ${reviewTypesStr}`);
   }
 
+  if (request.workerType !== undefined) {
+    lines.push(`**Reviewer:** \`${request.workerType}\``);
+  }
+
+  lines.push(`**Dispatch outcome:** ${dispatchOutcomeLabels[request.dispatchOutcome]}`);
   lines.push(
     '',
     `[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/${request.taskId})`,
@@ -76,7 +99,7 @@ function buildTaskCreatedComment(request: PRTaskNotificationRequest): string {
   return lines.join('\n');
 }
 
-export async function notifyPROfTaskCreation(
+export async function notifyPROfTaskDispatch(
   deps: PRTaskNotificationDeps,
   request: PRTaskNotificationRequest,
 ): Promise<void> {
@@ -103,9 +126,22 @@ export async function notifyPROfTaskCreation(
       return;
     }
 
-    // Best-effort: update PR title with Linear issue tag
+    // Post dispatch comment
+    const commentBody = buildTaskDispatchComment(request);
+    const commentResult = await gitHubPRClient.postPRComment(
+      githubToken, owner, repo, request.prNumber, commentBody,
+    );
+    if (!commentResult.ok) {
+      logger.warn(
+        { error: commentResult.error, taskId: request.taskId, prNumber: request.prNumber },
+        'Failed to post task-dispatch comment (best-effort)',
+      );
+    }
+
+    // Best-effort: update PR title with Linear issue tag after the ack comment.
     if (
-      !request.titleAlreadyTagged &&
+      request.updateTitle &&
+      request.titleAlreadyTagged !== true &&
       request.linearIssueId !== undefined &&
       request.prTitle !== undefined
     ) {
@@ -119,18 +155,6 @@ export async function notifyPROfTaskCreation(
           'Failed to update PR title with Linear issue ID (best-effort)',
         );
       }
-    }
-
-    // Post task-created comment
-    const commentBody = buildTaskCreatedComment(request);
-    const commentResult = await gitHubPRClient.postPRComment(
-      githubToken, owner, repo, request.prNumber, commentBody,
-    );
-    if (!commentResult.ok) {
-      logger.warn(
-        { error: commentResult.error, taskId: request.taskId, prNumber: request.prNumber },
-        'Failed to post task-created comment (best-effort)',
-      );
     }
   } catch (error: unknown) {
     logger.warn(
