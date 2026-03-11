@@ -298,6 +298,31 @@ describe('Routes', () => {
       expect(response.json()).toHaveProperty('error');
     });
 
+    it('should reject an empty continuationPrBranch', async () => {
+      const taskPayload = {
+        taskId: 'test-task',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        continuationPrNumber: 1139,
+        continuationPrBranch: '',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toHaveProperty('error');
+      expect(dispatcher.submitTask).not.toHaveBeenCalled();
+    });
+
     it('should return 400 for service errors (not at_capacity)', async () => {
       vi.mocked(dispatcher.submitTask).mockResolvedValueOnce({
         ok: false,

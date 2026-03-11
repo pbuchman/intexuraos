@@ -9,7 +9,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
-import type { Firestore, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
+import type { Firestore, QueryDocumentSnapshot, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Result } from '@intexuraos/common-core';
@@ -513,7 +513,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .get();
 
          
-        const tasks = snapshot.docs.map((doc: any) =>
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
           toCodeTask(doc as { id: string; data(): Record<string, unknown> })
         );
 

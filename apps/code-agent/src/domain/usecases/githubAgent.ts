@@ -11,8 +11,8 @@
 
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { ToolCallingClient, ToolDefinition } from '@intexuraos/llm-contract';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
-import type { ToolCallingClient, ToolDefinition } from '../ports/toolCallingClient.js';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import { githubAgentPrompt } from '../prompts/githubAgentPrompt.js';
 import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.js';
