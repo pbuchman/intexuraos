@@ -21,12 +21,14 @@ import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../models/codeTask.js';
-import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
 import { buildLockDocPath, deletePRTaskLock } from '../utils/prTaskLock.js';
-import { fetchGitHubToken, notifyPROfTaskCreation } from '../utils/prTaskNotification.js';
+import { fetchGitHubToken, notifyPROfTaskDispatch } from '../utils/prTaskNotification.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
+import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
+import { isRetryableErrorCode } from '../utils/retryableErrors.js';
+import { generateWebhookSecret } from '../utils/secrets.js';
 
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
@@ -69,6 +71,7 @@ export interface CreateTaskForPRDeps {
   serviceUrl: string;
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
+  dispatchRetryRepo?: DispatchRetryRepository;
   firestore: {
     runTransaction: <T>(fn: (transaction: FirebaseFirestore.Transaction) => Promise<T>) => Promise<T>;
     doc: (path: string) => FirebaseFirestore.DocumentReference;
@@ -116,13 +119,6 @@ function buildTaskPrompt(request: CreateTaskForPRRequest): string {
     `8. Reply to the comment: gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
   );
   return lines.join('\n');
-}
-
-/**
- * Generate HMAC-SHA256 webhook secret for task.
- */
-function generateWebhookSecret(sharedSecret: string, taskId: string): string {
-  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
 }
 
 /**
@@ -334,21 +330,6 @@ export async function createTaskForPR(
 
   // For new tasks, we have webhookSecret; linearResult is already in outer scope
   const { taskId, webhookSecret } = txValue;
-
-  // Best-effort: post task-created comment and update PR title
-  await notifyPROfTaskCreation(
-    { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
-    {
-      taskId,
-      repository,
-      prNumber,
-      userId,
-      ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
-      ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
-      titleAlreadyTagged: existingLinearIssueId !== undefined,
-    },
-  );
-
   // Always include pr-comment for PR-comment-originated tasks so the orchestrator
   // routes to buildPRCommentPrompt. When INT-XXX exists, merge the issue's real
   // labels with pr-comment; when creating new, use code-task + pr-comment.
@@ -385,6 +366,7 @@ export async function createTaskForPR(
     workerCredentials,
     linearIssueLabels: dispatchLabels,
     hasChildren: linearResult.hasChildren,
+    agentType: 'pull_request',
     ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
   });
 
@@ -423,12 +405,50 @@ export async function createTaskForPR(
         prompt: buildTaskPrompt(request),
         traceId: eventId,
       } as CodeTask;
+      await notifyPROfTaskDispatch(
+        { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+        {
+          taskId,
+          repository,
+          prNumber,
+          userId,
+          dispatchOutcome: 'created_and_queued',
+          updateTitle: true,
+          ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
+          ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+          titleAlreadyTagged: existingLinearIssueId !== undefined,
+        },
+      );
       await deps.whatsappNotifier.notifyTaskQueued(userId, queuedTask, queuePosition, estimatedWaitMinutes);
 
       logger.info({ taskId, queuePosition }, 'PR comment task queued due to worker capacity');
       return ok({ taskId });
     }
 
+    // Retryable errors: queue for retry, keep task queued, keep PR lock
+    if (isRetryableErrorCode(dispatchError.code) && deps.dispatchRetryRepo !== undefined) {
+      const retryConfig = loadConfig();
+      await codeTaskRepo.update(taskId, { status: 'queued', queuedAt: new Date() });
+      await deps.dispatchRetryRepo.create({
+        type: 'new_task',
+        eventId,
+        repository,
+        pullRequestNumber: prNumber,
+        senderLogin,
+        taskId,
+        comment: request.comment,
+        ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+        ...(resolvedBaseBranch !== undefined && { baseBranch: resolvedBaseBranch }),
+        attempts: 0,
+        maxAttempts: retryConfig.retryQueue.maxAttempts,
+        lastError: dispatchError.message,
+        ttlMinutes: retryConfig.retryQueue.ttlMinutes,
+      });
+      logger.info({ taskId }, 'Dispatch failed with retryable error, queued for retry');
+      return ok({ taskId });
+    }
+
+    // Non-retryable: existing behavior (mark failed, delete lock)
     logger.error({ taskId, error: dispatchError }, 'Failed to dispatch PR comment task');
     await codeTaskRepo.update(taskId, {
       status: 'failed',
@@ -446,6 +466,21 @@ export async function createTaskForPR(
     status: 'dispatched',
     workerLocation: dispatchResult.value.workerLocation, // @allow-result-access -- narrowed by !dispatchResult.ok above
   });
+
+  await notifyPROfTaskDispatch(
+    { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+    {
+      taskId,
+      repository,
+      prNumber,
+      userId,
+      dispatchOutcome: 'created_and_dispatched',
+      updateTitle: true,
+      ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
+      ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+      titleAlreadyTagged: existingLinearIssueId !== undefined,
+    },
+  );
 
   logger.info(
     { taskId, userId, repository, prNumber, workerLocation: dispatchResult.value.workerLocation }, // @allow-result-access -- narrowed by !dispatchResult.ok above

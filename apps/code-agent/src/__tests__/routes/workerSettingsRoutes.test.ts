@@ -169,6 +169,7 @@ describe('Worker Settings Routes', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as ServiceContainer);
 

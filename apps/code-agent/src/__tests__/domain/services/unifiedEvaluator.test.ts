@@ -73,7 +73,7 @@ function createFakeDeps(overrides: Partial<UnifiedEvaluatorDeps> = {}): UnifiedE
       })),
     } as unknown as EventDecisionRepository,
     evaluateEvent: vi.fn(),
-    createReviewTask: vi.fn().mockResolvedValue(ok({ taskId: 'task-review-1' })),
+    createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-1' })),
     allowedBots: new Set(['claude[bot]']),
     ...overrides,
   };
@@ -353,7 +353,7 @@ describe('UnifiedEvaluator', () => {
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'LLM reasoning.',
         })),
-        createReviewTask: vi.fn().mockResolvedValue(ok({ taskId: 'task-review-1' })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-1' })),
       });
       const evaluator = createUnifiedEvaluator(deps);
       const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
@@ -381,6 +381,47 @@ describe('UnifiedEvaluator', () => {
       );
     });
 
+    it('reuses active review task when createReviewTask returns already_running', async () => {
+      const postTriageComment = vi.fn().mockResolvedValue(ok({ commentId: 99 }));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, toolCalls: [] },
+          reasoning: 'LLM reasoning.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({
+          status: 'already_running',
+          taskId: 'task-review-existing',
+        })),
+        postTriageComment,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(postTriageComment).toHaveBeenCalledWith(
+        'dev-user',
+        'intexuraos/intexuraos',
+        42,
+        expect.stringContaining('Review already in progress')
+      );
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decidedBy: 'github_agent',
+          decision: 'request_review',
+          dispatchAction: 'create_review_task',
+          dispatchParams: expect.objectContaining({
+            taskId: 'task-review-existing',
+            reviewTypes: ['code_quality'],
+          }),
+        })
+      );
+    });
+
     it('threads baseBranch from event to createReviewTask', async () => {
       const deps = createFakeDeps({
         webhookRules: {
@@ -391,7 +432,7 @@ describe('UnifiedEvaluator', () => {
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'LLM reasoning.',
         })),
-        createReviewTask: vi.fn().mockResolvedValue(ok({ taskId: 'task-review-2' })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-2' })),
       });
       const evaluator = createUnifiedEvaluator(deps);
       const event = createFakeEvent({ eventType: 'pull_request', action: 'opened', baseBranch: 'development' });
@@ -435,7 +476,7 @@ describe('UnifiedEvaluator', () => {
     });
 
     it('remaps bot login to repo owner for review tasks', async () => {
-      const createReviewTask = vi.fn().mockResolvedValue(ok({ taskId: 'task-review-bot' }));
+      const createReviewTask = vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-bot' }));
       const deps = createFakeDeps({
         webhookRules: {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
@@ -467,7 +508,7 @@ describe('UnifiedEvaluator', () => {
     });
 
     it('passes through non-bot login for review tasks', async () => {
-      const createReviewTask = vi.fn().mockResolvedValue(ok({ taskId: 'task-review-user' }));
+      const createReviewTask = vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-user' }));
       const deps = createFakeDeps({
         webhookRules: {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
@@ -741,7 +782,7 @@ describe('UnifiedEvaluator', () => {
   });
 
   describe('triage comment posting', () => {
-    it('posts triage comment before creating review task', async () => {
+    it('posts triage comment after createReviewTask resolves', async () => {
       const callOrder: string[] = [];
       const postTriageComment = vi.fn().mockImplementation(() => {
         callOrder.push('postTriageComment');
@@ -749,7 +790,7 @@ describe('UnifiedEvaluator', () => {
       });
       const createReviewTask = vi.fn().mockImplementation(() => {
         callOrder.push('createReviewTask');
-        return Promise.resolve(ok({ taskId: 'task-review-1' }));
+        return Promise.resolve(ok({ status: 'created', taskId: 'task-review-1' }));
       });
       const deps = createFakeDeps({
         webhookRules: {
@@ -768,7 +809,7 @@ describe('UnifiedEvaluator', () => {
 
       await evaluator.evaluate(event, logger);
 
-      expect(callOrder).toEqual(['postTriageComment', 'createReviewTask']);
+      expect(callOrder).toEqual(['createReviewTask', 'postTriageComment']);
     });
 
     it('comment body starts with @ignore and includes review types, cost, tool calls, and reasoning', async () => {
@@ -809,11 +850,38 @@ describe('UnifiedEvaluator', () => {
       expect(body).toContain('This PR modifies authentication logic');
     });
 
+    it('includes existing task id when review is already running', async () => {
+      const postTriageComment = vi.fn().mockResolvedValue(ok({ commentId: 99 }));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, toolCalls: [] },
+          reasoning: 'Review needed.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({
+          status: 'already_running',
+          taskId: 'task-review-existing',
+        })),
+        postTriageComment,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+      await evaluator.evaluate(event, logger);
+
+      const body = postTriageComment.mock.calls[0]?.[3] as string;
+      expect(body).toContain('Review already in progress');
+      expect(body).toContain('`task-review-existing`');
+    });
+
     it('continues dispatching when comment posting fails', async () => {
       const postTriageComment = vi.fn().mockResolvedValue(
         err({ code: 'UNAUTHORIZED', message: 'Bad token' })
       );
-      const createReviewTask = vi.fn().mockResolvedValue(ok({ taskId: 'task-review-1' }));
+      const createReviewTask = vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-1' }));
       const deps = createFakeDeps({
         webhookRules: {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
@@ -839,7 +907,7 @@ describe('UnifiedEvaluator', () => {
     });
 
     it('skips comment when postTriageComment is undefined', async () => {
-      const createReviewTask = vi.fn().mockResolvedValue(ok({ taskId: 'task-review-1' }));
+      const createReviewTask = vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-1' }));
       const deps = createFakeDeps({
         webhookRules: {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
@@ -980,9 +1048,8 @@ describe('UnifiedEvaluator', () => {
 
       await evaluator.evaluate(event, logger);
 
-      // First call is triage comment, second is error comment
-      expect(postTriageComment).toHaveBeenCalledTimes(2);
-      const errorCommentBody = postTriageComment.mock.calls[1]?.[3] as string;
+      expect(postTriageComment).toHaveBeenCalledTimes(1);
+      const errorCommentBody = postTriageComment.mock.calls[0]?.[3] as string;
       expect(errorCommentBody).toContain('@ignore');
       expect(errorCommentBody).toContain('Automated Code Review Triage Decision');
       expect(errorCommentBody).toContain('Review task creation failed');
@@ -1021,7 +1088,7 @@ describe('UnifiedEvaluator', () => {
   describe('triage comment error resilience', () => {
     it('continues dispatching when postTriageComment throws an exception', async () => {
       const postTriageComment = vi.fn().mockRejectedValue(new Error('Network timeout'));
-      const createReviewTask = vi.fn().mockResolvedValue(ok({ taskId: 'task-review-1' }));
+      const createReviewTask = vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-1' }));
       const deps = createFakeDeps({
         webhookRules: {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),

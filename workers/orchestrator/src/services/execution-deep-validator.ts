@@ -8,19 +8,35 @@ import {
 } from '@intexuraos/llm-contract';
 import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
 import { execFile } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { ExecutionAgentData } from './completion-verifier.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
 const execFileAsync = promisify(execFile);
 
-export const DEEP_VALIDATION_PROMPT_VERSION = '3.0.0';
+export const DEEP_VALIDATION_PROMPT_VERSION = '4.0.0';
 
 const MAX_TRANSCRIPT_CHARS = 200_000;
-const MAX_MARKDOWN_RESPONSE_CHARS = 4_000;
-const TRUNCATED_MARKDOWN_MARKER = '\n\n[truncated by orchestrator]';
+const GITHUB_COMMENT_MAX_CHARS = 65_536;
+const GITHUB_COMMENT_SAFETY_MARGIN_CHARS = 512;
+const SAFE_GITHUB_COMMENT_MAX_CHARS = GITHUB_COMMENT_MAX_CHARS - GITHUB_COMMENT_SAFETY_MARGIN_CHARS;
+const TEMP_COMMENT_DIR_PREFIX = 'orchestrator-deep-validation-';
+const REQUIRED_SECTION_HEADINGS = [
+  '#### Overall',
+  '#### Claim Verification',
+  '#### Contract Verification',
+  '#### Plan vs Reality',
+  '#### Anomalies',
+] as const;
+const LIST_LINE_REGEX = /^\s*(?:[-*+]\s+|\d+\.\s+)/mu;
+const MARKDOWN_TABLE_SEPARATOR_REGEX = /^\|\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$/u;
 
 export type ExecutionAgentClaims = Omit<ExecutionAgentData, 'agentType'>;
+type RequiredSectionHeading = (typeof REQUIRED_SECTION_HEADINGS)[number];
+type NonEmptyArray<T> = [T, ...T[]];
 
 export interface DeepValidationPromptInput {
   formattedTranscript: string;
@@ -33,8 +49,8 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
   const claimsJson = JSON.stringify(input.agentClaims, null, 2);
   const planSection =
     input.planContent !== undefined
-      ? `Plan file content:\n${input.planContent}`
-      : 'No plan file found on branch.';
+      ? `Plan document content:\n${input.planContent}`
+      : 'No plan document referenced in Linear issue.';
 
   const transcript =
     input.formattedTranscript.length > MAX_TRANSCRIPT_CHARS
@@ -45,18 +61,17 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
   return [
     `[deep-validation-prompt v${DEEP_VALIDATION_PROMPT_VERSION}]`,
     'You are a post-execution validator for an autonomous coding agent.',
-    'Analyze the full session transcript below and write a concise validation note for human review on the PR.',
+    'Analyze the full session transcript below and write a concise Deep Validation Report for human review on the PR.',
     'Return ONLY markdown.',
-    'Do not return JSON, tables, or code fences.',
+    'Return the report explicitly as markdown tables.',
+    'Do not return bullet lists, numbered lists, JSON, or code fences.',
+    'Do not return a list anywhere in the response.',
     'Use these headings exactly and in this order:',
-    '#### Overall',
-    '#### Claim Verification',
-    '#### Contract Verification',
-    '#### Plan vs Reality',
-    '#### Anomalies',
-    'Under each heading, use short "-" bullet points.',
-    'If a section has nothing noteworthy, write "- None."',
-    `Keep the entire response under ${String(MAX_MARKDOWN_RESPONSE_CHARS)} characters.`,
+    ...REQUIRED_SECTION_HEADINGS,
+    'Under each heading, include exactly one markdown table.',
+    'If a section has nothing noteworthy, include a single table row that says None.',
+    'Be concise. Preserve all warnings, failures, contradictions, and anomalies, but summarize what went well instead of exhaustively listing positive details.',
+    'Keep each section compact enough to fit in a GitHub PR comment as a complete table.',
     '',
     '=== Section 1: Claim Verification ===',
     'The agent made these claims in its final report:',
@@ -192,26 +207,57 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       return false;
     }
 
+    const reportSections = parseMarkdownReport(sanitized);
+    if (!reportSections.ok) {
+      this.logger.warn(
+        { taskId: input.taskId, reason: reportSections.reason },
+        'Deep validation response rejected'
+      );
+      onProgress?.('response rejected, skipping PR comment');
+      return false;
+    }
+
+    const commentBodies = buildCommentBodies(reportSections.value, generated.value.usage.costUsd);
+    if (!commentBodies.ok) {
+      this.logger.warn(
+        { taskId: input.taskId, reason: commentBodies.reason },
+        'Deep validation response rejected'
+      );
+      onProgress?.('response rejected, skipping PR comment');
+      return false;
+    }
+
     onProgress?.('posting PR comment...');
-    const posted = await this.postPrComment(input, sanitized, generated.value.usage.costUsd);
+    const posted = await this.postPrComments(input, commentBodies.value);
     onProgress?.(posted ? 'PR comment posted' : 'PR comment failed (see server logs)');
     return posted;
   }
 
-  private async postPrComment(
+  private async postPrComments(
     input: DeepValidationInput,
-    markdownBody: string,
-    costUsd: number
+    commentBodies: readonly string[]
   ): Promise<boolean> {
-    const comment = buildPrComment(markdownBody, costUsd);
+    const tempDirectory = await mkdtemp(join(tmpdir(), TEMP_COMMENT_DIR_PREFIX));
     try {
-      await execFileAsync(
-        'gh',
-        ['pr', 'comment', String(input.prNumber), '--repo', input.repository, '--body', comment],
-        {}
-      );
+      for (const [index, body] of commentBodies.entries()) {
+        const bodyFilePath = join(tempDirectory, `comment-${String(index + 1)}.md`);
+        await writeFile(bodyFilePath, body, 'utf8');
+        await execFileAsync(
+          'gh',
+          [
+            'pr',
+            'comment',
+            String(input.prNumber),
+            '--repo',
+            input.repository,
+            '--body-file',
+            bodyFilePath,
+          ],
+          {}
+        );
+      }
       this.logger.info(
-        { taskId: input.taskId, prNumber: input.prNumber },
+        { taskId: input.taskId, prNumber: input.prNumber, commentCount: commentBodies.length },
         'Deep validation PR comment posted'
       );
       return true;
@@ -227,6 +273,8 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         'Failed to post deep validation PR comment'
       );
       return false;
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
     }
   }
 
@@ -262,23 +310,206 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
   }
 }
 
-function buildPrComment(markdownBody: string, costUsd: number): string {
-  return ['### Deep Validation Report', '', `**Cost:** $${String(costUsd)}`, '', markdownBody].join(
-    '\n'
-  );
+function buildPrComment(
+  sectionBlocks: readonly string[],
+  costUsd: number,
+  partNumber: number,
+  totalParts: number
+): string {
+  const title =
+    totalParts === 1
+      ? '### Deep Validation Report'
+      : `### Deep Validation Report (Part ${String(partNumber)}/${String(totalParts)})`;
+  const lines = [title, ''];
+
+  if (partNumber === 1) {
+    lines.push(`**Cost:** $${String(costUsd)}`, '');
+  }
+
+  lines.push(sectionBlocks.join('\n\n'));
+  return lines.join('\n');
 }
 
 function sanitizeMarkdownResponse(content: string): string {
-  const trimmed = unwrapCodeFence(content).trim();
-  if (trimmed === '') return '';
-  if (trimmed.length <= MAX_MARKDOWN_RESPONSE_CHARS) return trimmed;
-
-  const maxBodyLength = MAX_MARKDOWN_RESPONSE_CHARS - TRUNCATED_MARKDOWN_MARKER.length;
-  return trimmed.slice(0, maxBodyLength) + TRUNCATED_MARKDOWN_MARKER;
+  return unwrapCodeFence(content).trim();
 }
 
 function unwrapCodeFence(content: string): string {
   const trimmed = content.trim();
   const match = /^```(?:[A-Za-z0-9_-]+)?\s*\n?([\s\S]*?)\n?\s*```$/u.exec(trimmed);
   return match?.[1] ?? trimmed;
+}
+
+function parseMarkdownReport(
+  markdownBody: string
+): { ok: true; value: NonEmptyArray<string> } | { ok: false; reason: string } {
+  if (LIST_LINE_REGEX.test(markdownBody)) {
+    return {
+      ok: false,
+      reason: 'contains bullet lists or numbered lists; expected markdown tables only',
+    };
+  }
+
+  const sectionBlocks = splitIntoSectionBlocks(markdownBody);
+  if (!sectionBlocks.ok) {
+    return sectionBlocks;
+  }
+
+  for (const sectionBlock of sectionBlocks.value) {
+    const validation = validateSectionBlock(sectionBlock);
+    if (!validation.ok) {
+      return validation;
+    }
+  }
+
+  return { ok: true, value: sectionBlocks.value };
+}
+
+function splitIntoSectionBlocks(
+  markdownBody: string
+): { ok: true; value: NonEmptyArray<string> } | { ok: false; reason: string } {
+  const lines = markdownBody.split('\n');
+  const sections: string[] = [];
+  let currentSectionStart: number | undefined;
+  let currentHeadingIndex = 0;
+
+  for (const [lineIndex, line] of lines.entries()) {
+    const trimmed = line.trim();
+    const expectedHeading = REQUIRED_SECTION_HEADINGS[currentHeadingIndex];
+
+    if (expectedHeading !== undefined && trimmed === expectedHeading) {
+      if (currentSectionStart !== undefined) {
+        sections.push(trimSectionBlock(lines.slice(currentSectionStart, lineIndex)));
+      } else if (lineIndex > 0) {
+        return {
+          ok: false,
+          reason: 'report must start with the required headings and contain no preamble',
+        };
+      }
+
+      currentSectionStart = lineIndex;
+      currentHeadingIndex += 1;
+      continue;
+    }
+
+    if (isRequiredSectionHeading(trimmed)) {
+      return {
+        ok: false,
+        reason: 'missing required headings or headings are out of order',
+      };
+    }
+  }
+
+  if (
+    currentSectionStart === undefined ||
+    currentHeadingIndex !== REQUIRED_SECTION_HEADINGS.length
+  ) {
+    return {
+      ok: false,
+      reason: 'missing required headings or headings are out of order',
+    };
+  }
+
+  sections.push(trimSectionBlock(lines.slice(currentSectionStart)));
+  return { ok: true, value: sections as NonEmptyArray<string> };
+}
+
+function validateSectionBlock(sectionBlock: string): { ok: true } | { ok: false; reason: string } {
+  const bodyLines = sectionBlock
+    .split('\n')
+    .slice(1)
+    .filter((line) => line.trim() !== '');
+
+  if (bodyLines.length < 3) {
+    return {
+      ok: false,
+      reason: 'each section must contain exactly one markdown table with at least one data row',
+    };
+  }
+
+  const allTableLines = bodyLines.every((line) => line.trim().startsWith('|'));
+  if (!allTableLines) {
+    return {
+      ok: false,
+      reason: 'each section must contain exactly one markdown table and no list or prose lines',
+    };
+  }
+
+  const separatorLine = bodyLines.slice(1, 2).join('').trim();
+  if (!MARKDOWN_TABLE_SEPARATOR_REGEX.test(separatorLine)) {
+    return {
+      ok: false,
+      reason: 'each section must contain exactly one markdown table with a header separator row',
+    };
+  }
+
+  return { ok: true };
+}
+
+function buildCommentBodies(
+  sectionBlocks: NonEmptyArray<string>,
+  costUsd: number
+): { ok: true; value: string[] } | { ok: false; reason: string } {
+  const plannedParts: string[][] = [];
+  let currentPart: string[] = [];
+
+  for (const sectionBlock of sectionBlocks) {
+    const candidatePart = [...currentPart, sectionBlock];
+    const partIndex = plannedParts.length + 1;
+    const candidateComment = buildPrComment(
+      candidatePart,
+      costUsd,
+      partIndex,
+      REQUIRED_SECTION_HEADINGS.length
+    );
+
+    if (candidateComment.length <= SAFE_GITHUB_COMMENT_MAX_CHARS) {
+      currentPart = candidatePart;
+      continue;
+    }
+
+    if (currentPart.length === 0) {
+      return {
+        ok: false,
+        reason: 'single section exceeds GitHub comment limit; Gemini must be more concise',
+      };
+    }
+
+    plannedParts.push(currentPart);
+    currentPart = [sectionBlock];
+
+    const singleSectionComment = buildPrComment(
+      currentPart,
+      costUsd,
+      plannedParts.length + 1,
+      REQUIRED_SECTION_HEADINGS.length
+    );
+    if (singleSectionComment.length > SAFE_GITHUB_COMMENT_MAX_CHARS) {
+      return {
+        ok: false,
+        reason: 'single section exceeds GitHub comment limit; Gemini must be more concise',
+      };
+    }
+  }
+
+  plannedParts.push(currentPart);
+
+  const totalParts = plannedParts.length;
+  const comments = plannedParts.map((sectionGroup, index) =>
+    buildPrComment(sectionGroup, costUsd, index + 1, totalParts)
+  );
+
+  return { ok: true, value: comments };
+}
+
+function trimSectionBlock(lines: readonly string[]): string {
+  let end = lines.length;
+  while (end > 0 && lines[end - 1]?.trim() === '') {
+    end -= 1;
+  }
+  return lines.slice(0, end).join('\n');
+}
+
+function isRequiredSectionHeading(value: string): value is RequiredSectionHeading {
+  return REQUIRED_SECTION_HEADINGS.includes(value as RequiredSectionHeading);
 }

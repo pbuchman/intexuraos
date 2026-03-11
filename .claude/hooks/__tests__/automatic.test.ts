@@ -116,6 +116,22 @@ describe.sequential('Claude Hooks - Automatic/Rebuild', () => {
       expect(stdout.endsWith('CONTINUE')).toBe(true);
       cleanup();
     });
+
+    it('does not run full pnpm build (uses per-package filter)', { timeout: 20000 }, () => {
+      // Verify the hook script no longer contains a bare `pnpm build` command.
+      // It should use `pnpm --filter` for targeted per-package builds to avoid OOM.
+      const hookPath = path.join(__dirname, '..', 'session-start-build.sh');
+      const hookContent = fs.readFileSync(hookPath, 'utf-8');
+
+      // Should NOT have bare `pnpm build` (without --filter)
+      const bareBuildLines = hookContent
+        .split('\n')
+        .filter((line) => /^\s*pnpm build\b/.test(line) && !line.trimStart().startsWith('#'));
+      expect(bareBuildLines).toHaveLength(0);
+
+      // Should have `pnpm --filter` build
+      expect(hookContent).toContain('pnpm --filter');
+    });
   });
 
   describe('rebuild-after-git.sh', () => {

@@ -69,6 +69,9 @@ const COMMON_OPTIONAL_ENV = new Set([
   // Queue config (optional — have sensible defaults: maxSize=10, ttlMinutes=30)
   'INTEXURAOS_QUEUE_MAX_SIZE',
   'INTEXURAOS_QUEUE_TTL_MINUTES',
+  // Retry queue config (optional — have sensible defaults: maxAttempts=3, ttlMinutes=10)
+  'INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS',
+  'INTEXURAOS_RETRY_QUEUE_TTL_MINUTES',
 ]);
 
 /**

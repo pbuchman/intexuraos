@@ -129,4 +129,16 @@ export interface WhatsAppNotifier {
     userId: string,
     task: CodeTask
   ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when dispatch retry attempts are exhausted.
+   *
+   * @param userId - User ID to send notification to
+   * @param info - Context about the failed dispatch
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyDispatchRetryExhausted(
+    userId: string,
+    info: { repository: string; pullRequestNumber: number; lastError: string }
+  ): Promise<Result<void, NotificationError>>;
 }

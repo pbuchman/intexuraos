@@ -240,6 +240,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -269,6 +270,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -3782,6 +3784,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -3811,6 +3814,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -4135,6 +4139,7 @@ describe('POST /internal/logs', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -4164,6 +4169,7 @@ describe('POST /internal/logs', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -4711,6 +4717,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -4740,6 +4747,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -4813,7 +4821,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('completed');
+    expect(params?.message).toContain('✅');
   });
 
   it('sends WhatsApp notification on task completion', async () => {
@@ -4865,7 +4873,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string; ctaUrl?: { displayText: string; url: string } } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('completed');
+    expect(params?.message).toContain('✅');
     expect(params?.message).toContain('fix/login-bug');
     expect(params?.message).not.toContain('PR:');
     expect(params?.ctaUrl).toEqual({
@@ -4922,7 +4930,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('failed');
+    expect(params?.message).toContain('❌');
   });
 
   it('sends WhatsApp notification on interrupted status', async () => {
@@ -4968,8 +4976,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('failed');
-    expect(params?.message).toContain('interrupted');
+    expect(params?.message).toContain('❌');
   });
 
   it('continues even if WhatsApp notification fails', async () => {
@@ -5072,7 +5079,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const params = publishCall?.[0] as { userId: string; message: string };
     expect(params.userId).toBe('user-123');
     expect(params.message).toContain('🔁');
-    expect(params.message).toContain('Session continued');
+    expect(params.message).toContain('Implement the new feature');
     expect(params.message).not.toContain('✅');
   });
 
