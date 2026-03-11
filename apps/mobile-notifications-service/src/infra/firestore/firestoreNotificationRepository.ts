@@ -198,10 +198,13 @@ export class FirestoreNotificationRepository implements NotificationRepository {
         // Update cursor for next iteration (tracks DB position, not filtered results)
         if (docs.length > 0) {
           const lastDoc = docs[docs.length - 1];
+          // @allow-empty-if: v8-ignore block below for ts-type narrowing edge case
+          /* v8 ignore start -- ts-type: TypeScript narrows docs.length > 0 but array access returns T | undefined due to noUncheckedIndexedAccess @preserve */
           if (lastDoc !== undefined) {
             const lastData = lastDoc.data() as NotificationDoc;
             currentCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
           }
+          /* v8 ignore stop @preserve */
         }
       }
 
