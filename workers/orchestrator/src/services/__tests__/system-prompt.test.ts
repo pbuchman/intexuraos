@@ -55,6 +55,7 @@ describe('system-prompt', () => {
     expect(result).toContain('Parallel work breakdown');
     expect(result).toContain('service/package');
     expect(result).toContain('PLANNING_AGENT_FINAL:');
+    expect(result).toContain('Plan document: docs/plans/<file>.md');
   });
 
   it('requires archiving issue content before editing in planning prompt', () => {
@@ -184,6 +185,19 @@ describe('system-prompt', () => {
     expect(result).toContain('[AGENT:PULL_REQUEST]');
     expect(result).toContain('[PULL REQUEST AGENT MODE]');
     expect(result).toContain('PULL_REQUEST_AGENT_FINAL:');
+    expect(result).not.toContain('[AGENT:EXECUTION]');
+    expect(result).not.toContain('[AGENT:PLANNING]');
+  });
+
+  it('builds pull request agent prompt when agentType is pull_request without pr-comment label', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['bug'],
+      agentType: 'pull_request',
+    });
+
+    expect(result).toContain('[AGENT:PULL_REQUEST]');
+    expect(result).toContain('[PULL REQUEST AGENT MODE]');
     expect(result).not.toContain('[AGENT:EXECUTION]');
     expect(result).not.toContain('[AGENT:PLANNING]');
   });

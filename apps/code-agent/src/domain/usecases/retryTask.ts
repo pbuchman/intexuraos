@@ -17,8 +17,8 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomUUID } from 'node:crypto';
-import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
+import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { loadConfig } from '../../config.js';
 
@@ -207,6 +207,8 @@ export async function retryTask(
       );
     }
   }
+  const agentType = resolveTaskAgentType(originalTask, linearIssueLabelsForDispatch);
+  const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabelsForDispatch, agentType);
 
   // Step 5: Fetch user's worker settings
   const settingsResult = await workerSettingsRepo.getSettings(userId);
@@ -279,8 +281,7 @@ ${additionalContext.trim()}
     traceId: `retry-${String(Date.now())}`,
     webhookSecret,
     retriedFrom: originalTaskId,
-    agentType: originalTask.agentType
-      ?? (hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const)),
+    agentType,
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
   };
 
@@ -327,17 +328,15 @@ ${additionalContext.trim()}
     webhookSecret,
     workerCredentials,
     retriedFrom: originalTaskId,
-    linearIssueLabels: linearIssueLabelsForDispatch,
+    linearIssueLabels: dispatchLabels,
     hasChildren: hasChildrenForDispatch,
     agentType: retryTask.agentType ?? 'planning',
   };
 
   // Only include optional fields if defined
-  /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
   if (retryTask.linearIssueId !== undefined) {
     dispatchRequest.linearIssueId = retryTask.linearIssueId;
   }
-  /* v8 ignore stop @preserve */
   // traceId was set in createInput, so it's always defined on retryTask
   // Use ?? for type safety (traceId?: string in CodeTask type)
   /* v8 ignore start -- ts-type: nullish coalescing creates type narrowing branch @preserve */
@@ -354,11 +353,9 @@ ${additionalContext.trim()}
     // INT-619: Queue task when all workers are at capacity
     if (dispatchError.code === 'at_capacity') {
       const queueCountResult = await codeTaskRepo.countQueued();
-      /* v8 ignore start -- test-infra: Firestore countQueued failure fallback to fail-closed @preserve */
       if (!queueCountResult.ok) {
         logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
       }
-      /* v8 ignore stop @preserve */
       const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
 
       if (queueCount > config.queue.maxSize) {
@@ -469,7 +466,6 @@ ${additionalContext.trim()}
       body: commentBody,
     });
 
-    /* v8 ignore start -- test-infra: addComment success path tested but not detected by coverage tool @preserve */
     if (!commentResult.ok) {
       logger.warn(
         { linearIssueId: originalTask.linearIssueId, error: commentResult.error },
@@ -477,7 +473,6 @@ ${additionalContext.trim()}
       );
       // Don't fail the retry - continue without comment
     }
-    /* v8 ignore stop @preserve */
   }
 
   // Step 13: Record metrics
@@ -496,7 +491,6 @@ ${additionalContext.trim()}
     cancelNonceExpiresAt,
   });
 
-  /* v8 ignore start -- test-infra: update success path tested but not detected by coverage tool @preserve */
   if (updateResult.ok) {
     const updatedTask = updateResult.value;
     const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
@@ -506,7 +500,6 @@ ${additionalContext.trim()}
   } else {
     logger.warn({ taskId: retryTask.id, error: updateResult.error }, 'Failed to update retry task with cancel nonce');
   }
-  /* v8 ignore stop @preserve */
 
   // Step 15: Archive original task (automatic cleanup on retry, INT-711)
   const archiveResult = await codeTaskRepo.update(originalTaskId, {

@@ -34,6 +34,9 @@ export interface EventDecision {
   llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
   llmReasoning?: string;
 
+  dispatchSuccess?: boolean;
+  dispatchError?: string;
+
   createdAt: Date;
   decisionLatencyMs: number;
 }
@@ -66,6 +69,9 @@ export interface CreateEventDecisionInput {
   llmCostUsd?: number;
   llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
   llmReasoning?: string;
+
+  dispatchSuccess?: boolean;
+  dispatchError?: string;
 
   decisionLatencyMs: number;
 }

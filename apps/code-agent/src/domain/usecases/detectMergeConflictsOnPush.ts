@@ -929,6 +929,7 @@ export function createDetectMergeConflictsOnPush(
         const now = new Date();
         const preserveActiveEpisode =
           status !== 'clean' && existingSummary.mergeConflictStatus === 'conflicting';
+        const preservedConflictEpisodeStartedAt = existingSummary.conflictEpisodeStartedAt ?? null;
         await upsertSummary(
           deps.gitHubPRSummaryRepo,
           {
@@ -946,7 +947,7 @@ export function createDetectMergeConflictsOnPush(
               status === 'conflicting'
                 ? existingSummary.conflictEpisodeStartedAt ?? now
                 : preserveActiveEpisode
-                  ? existingSummary.conflictEpisodeStartedAt ?? null
+                  ? preservedConflictEpisodeStartedAt
                   : null,
             conflictResolvedAt:
               status === 'clean' && existingSummary.mergeConflictStatus === 'conflicting' ? now : null,

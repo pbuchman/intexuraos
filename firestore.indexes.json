@@ -487,6 +487,28 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "repository",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prNumber",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "agentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "linearIssueId",
           "order": "ASCENDING"
         },

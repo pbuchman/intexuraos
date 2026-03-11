@@ -98,6 +98,7 @@ describe('POST /webhooks/github', () => {
       findArchivableTasks: vi.fn().mockResolvedValue(ok([])),
       archiveTaskLogs: vi.fn().mockResolvedValue(ok(undefined)),
       findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       findOldestQueued: vi.fn().mockResolvedValue(ok(null)),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
@@ -151,6 +152,7 @@ describe('POST /webhooks/github', () => {
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
       toolCallingClient: undefined,
       eventDecisionRepo: { save: vi.fn().mockResolvedValue({ ok: true, value: {} }) },
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
     };
 

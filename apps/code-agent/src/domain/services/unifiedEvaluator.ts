@@ -15,7 +15,11 @@ import type { WebhookDispatchService } from './gitHubDispatchService.js';
 import { resolveLoginForTaskCreation } from './gitHubDispatchService.js';
 import type { EventDecisionRepository } from '../repositories/eventDecisionRepository.js';
 import type { GitHubAgentEvalResult, GitHubAgentError } from '../usecases/githubAgent.js';
-import type { CreateReviewTaskRequest, CreateReviewTaskError } from '../usecases/createReviewTask.js';
+import type {
+  CreateReviewTaskRequest,
+  CreateReviewTaskError,
+  CreateReviewTaskResult,
+} from '../usecases/createReviewTask.js';
 
 export interface UnifiedEvaluatorDeps {
   webhookRules: WebhookRulesService;
@@ -23,7 +27,7 @@ export interface UnifiedEvaluatorDeps {
   eventDecisionRepo: EventDecisionRepository;
   evaluateEvent?: ((event: GitHubPREvent) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
   /** Pre-bound review task creator. Logger is injected at call time; all other deps are closed over at wiring. */
-  createReviewTask: (logger: Logger, request: CreateReviewTaskRequest) => Promise<Result<{ taskId: string }, CreateReviewTaskError>>;
+  createReviewTask: (logger: Logger, request: CreateReviewTaskRequest) => Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>>;
   postTriageComment?: ((
     senderLogin: string,
     repository: string,
@@ -42,6 +46,7 @@ export function buildTriageCommentBody(
   costUsd: number,
   toolCalls: { tool: string; args: Record<string, unknown> }[],
   reasoning: string,
+  options?: { action?: 'dispatch' | 'already_running'; taskId?: string },
 ): string {
   const reviewTypesStr = reviewTypes.map((t) => `\`${t}\``).join(', ');
 
@@ -58,17 +63,25 @@ export function buildTriageCommentBody(
     .map((tc) => `- \`${tc.tool}(${JSON.stringify(tc.args)})\``)
     .join('\n');
   const costStr = `$${String(costUsd)}`;
+  const action = options?.action ?? 'dispatch';
+  const actionLine = action === 'already_running'
+    ? '**Action:** Review already in progress'
+    : '**Action:** Dispatching review';
+  const taskIdLine = action === 'already_running' && options?.taskId !== undefined
+    ? [`**Task ID:** \`${options.taskId}\``, '']
+    : [];
 
   return [
     '@ignore',
     '### Automated Code Review Triage Decision',
     '',
-    '**Action:** Dispatching review',
+    actionLine,
     `**Review types:** ${reviewTypesStr}`,
     `**Cost:** ${costStr}`,
     '',
+    ...taskIdLine,
     '**Tool calls:**',
-    toolCallLines,
+    toolCallLines === '' ? '- None' : toolCallLines,
     '',
     '**Reasoning:**',
     reasoning.split('\n').map((line) => `> ${line}`).join('\n'),
@@ -98,7 +111,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           decidedBy: 'hard_rules',
           decision: 'skip',
           reason: ruleOutcome.reason,
-        }, startTime);
+        }, startTime, logger);
         return;
       }
 
@@ -123,11 +136,14 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       const { triage, usage, reasoning } = llmResult.value; // @allow-result-access -- narrowed by !llmResult.ok
 
       if (triage.action === 'dispatch') {
-        await deps.dispatchService.dispatch({
+        const llmDispatchResult = await deps.dispatchService.dispatch({
           event,
           decision: { action: 'dispatch', reason: 'LLM_DISPATCH' },
           logger,
         });
+        if (!llmDispatchResult.success) {
+          logger.warn({ eventId: event.id, error: llmDispatchResult.error }, 'Dispatch failed for LLM decision');
+        }
         await recordDecision(deps, event, {
           decidedBy: 'github_agent',
           decision: 'dispatch',
@@ -138,35 +154,13 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
           llmReasoning: reasoning,
-        }, startTime);
+          dispatchSuccess: llmDispatchResult.success,
+          ...(llmDispatchResult.error !== undefined && { dispatchError: llmDispatchResult.error }),
+        }, startTime, logger);
         return;
       }
 
       if (triage.action === 'request_review') {
-        // Post informational triage comment (non-fatal — must not block review task creation)
-        if (deps.postTriageComment !== undefined) {
-          try {
-            const commentBody = buildTriageCommentBody(triage.reviewTypes, usage.costUsd, usage.toolCalls, reasoning);
-            const commentResult = await deps.postTriageComment(
-              resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
-              event.repository,
-              event.pullRequestNumber,
-              commentBody,
-            );
-            if (!commentResult.ok) {
-              logger.warn(
-                { eventId: event.id, error: commentResult.error },
-                'Failed to post triage comment, continuing with review task creation'
-              );
-            }
-          } catch (commentError: unknown) {
-            logger.warn(
-              { eventId: event.id, error: commentError },
-              'Unexpected error posting triage comment, continuing with review task creation'
-            );
-          }
-        }
-
         const reviewResult = await deps.createReviewTask(
           logger,
           {
@@ -225,9 +219,24 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             /* v8 ignore stop @preserve */
             llmToolCalls: usage.toolCalls,
             llmReasoning: reasoning,
-          }, startTime);
+          }, startTime, logger);
           return;
         }
+
+        await postReviewTriageComment(
+          deps,
+          event,
+          logger,
+          buildTriageCommentBody(
+            triage.reviewTypes,
+            usage.costUsd,
+            usage.toolCalls,
+            reasoning,
+            reviewResult.value.status === 'already_running'
+              ? { action: 'already_running', taskId: reviewResult.value.taskId }
+              : undefined,
+          ),
+        );
 
         await recordDecision(deps, event, {
           decidedBy: 'github_agent',
@@ -241,7 +250,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           /* v8 ignore stop @preserve */
           llmToolCalls: usage.toolCalls,
           llmReasoning: reasoning,
-        }, startTime);
+        }, startTime, logger);
         return;
       }
 
@@ -256,9 +265,40 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         /* v8 ignore stop @preserve */
         llmToolCalls: usage.toolCalls,
         llmReasoning: reasoning,
-      }, startTime);
+      }, startTime, logger);
     },
   };
+}
+
+async function postReviewTriageComment(
+  deps: UnifiedEvaluatorDeps,
+  event: GitHubPREvent,
+  logger: Logger,
+  body: string,
+): Promise<void> {
+  if (deps.postTriageComment === undefined) {
+    return;
+  }
+
+  try {
+    const commentResult = await deps.postTriageComment(
+      resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
+      event.repository,
+      event.pullRequestNumber,
+      body,
+    );
+    if (!commentResult.ok) {
+      logger.warn(
+        { eventId: event.id, error: commentResult.error },
+        'Failed to post triage comment'
+      );
+    }
+  } catch (commentError: unknown) {
+    logger.warn(
+      { eventId: event.id, error: commentError },
+      'Unexpected error posting triage comment'
+    );
+  }
 }
 
 async function dispatchAndRecord(
@@ -268,12 +308,17 @@ async function dispatchAndRecord(
   startTime: number,
   logger: Logger,
 ): Promise<void> {
-  await deps.dispatchService.dispatch({ event, decision, logger });
+  const result = await deps.dispatchService.dispatch({ event, decision, logger });
+  if (!result.success) {
+    logger.warn({ eventId: event.id, error: result.error }, 'Dispatch failed for hard-rule decision');
+  }
   await recordDecision(deps, event, {
     decidedBy: 'hard_rules',
     decision: 'dispatch',
     reason: decision.reason,
-  }, startTime);
+    dispatchSuccess: result.success,
+    ...(result.error !== undefined && { dispatchError: result.error }),
+  }, startTime, logger);
 }
 
 /**
@@ -290,22 +335,27 @@ async function handleFallback(
 ): Promise<void> {
   if (event.eventType === 'issue_comment' || event.eventType === 'pull_request_review' || event.eventType === 'pull_request_review_comment') {
     logger.warn({ eventId: event.id }, 'Fallback: dispatching comment event');
-    await deps.dispatchService.dispatch({
+    const fallbackResult = await deps.dispatchService.dispatch({
       event,
       decision: { action: 'dispatch', reason: `FALLBACK_DISPATCH: ${reason}` },
       logger,
     });
+    if (!fallbackResult.success) {
+      logger.warn({ eventId: event.id, error: fallbackResult.error }, 'Dispatch failed for fallback decision');
+    }
     await recordDecision(deps, event, {
       decidedBy: 'hard_rules',
       decision: 'dispatch',
       reason: `fallback_dispatch: ${reason}`,
-    }, startTime);
+      dispatchSuccess: fallbackResult.success,
+      ...(fallbackResult.error !== undefined && { dispatchError: fallbackResult.error }),
+    }, startTime, logger);
   } else {
     await recordDecision(deps, event, {
       decidedBy: 'hard_rules',
       decision: 'skip',
       reason: `fallback_skip: ${reason}`,
-    }, startTime);
+    }, startTime, logger);
   }
 }
 
@@ -322,8 +372,11 @@ async function recordDecision(
     llmModel?: string;
     llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
     llmReasoning?: string;
+    dispatchSuccess?: boolean;
+    dispatchError?: string;
   },
   startTime: number,
+  logger: Logger,
 ): Promise<void> {
   const input: CreateEventDecisionInput = {
     eventId: event.id,
@@ -345,8 +398,17 @@ async function recordDecision(
     /* v8 ignore stop @preserve */
     ...(fields.llmToolCalls !== undefined && { llmToolCalls: fields.llmToolCalls }),
     ...(fields.llmReasoning !== undefined && { llmReasoning: fields.llmReasoning }),
+    ...(fields.dispatchSuccess !== undefined && { dispatchSuccess: fields.dispatchSuccess }),
+    ...(fields.dispatchError !== undefined && { dispatchError: fields.dispatchError }),
     decisionLatencyMs: Date.now() - startTime,
   };
 
-  await deps.eventDecisionRepo.save(input);
+  try {
+    await deps.eventDecisionRepo.save(input);
+  } catch (saveError) {
+    logger.error(
+      { eventId: event.id, error: saveError },
+      'Failed to save event decision audit record'
+    );
+  }
 }

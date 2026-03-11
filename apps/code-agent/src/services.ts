@@ -49,15 +49,17 @@ import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
-import { ALLOWED_BOTS } from './routes/webhooks/github.js';
+import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
 import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
 import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
+import type { DispatchRetryRepository } from './domain/repositories/dispatchRetryRepository.js';
+import { createFirestoreDispatchRetryRepository } from './infra/firestore/dispatchRetryRepository.js';
 import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services/unifiedEvaluator.js';
 import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
 import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
@@ -97,6 +99,7 @@ export interface ServiceContainer {
   toolCallingClient: ToolCallingClient | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
   // INT-744: Unified Webhook Evaluator
   eventDecisionRepo: EventDecisionRepository;
+  dispatchRetryRepo: DispatchRetryRepository;
   unifiedEvaluator: UnifiedEvaluator;
   mergeConflictDetector?: MergeConflictDetector;
 }
@@ -324,6 +327,7 @@ export function initServices(config: ServiceConfig): void {
     // already filters via shouldProcessRepository() which correctly handles
     // both intexuraos/* and */intexuraos patterns. Adding it here would be
     // redundant and risks scope mismatch (see PR #997 review).
+    new CodeWorkerOutputRule(CODE_WORKER_BOTS),
     new ActionableEventRule(ALLOWED_BOTS),
     new ProtectedBaseBranchRule(),
     new SenderWhitelistRule(ALLOWED_BOTS),
@@ -345,6 +349,7 @@ export function initServices(config: ServiceConfig): void {
 
   const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
   const gitHubPRSummaryRepo = createFirestoreGitHubPRSummariesRepository({ logger });
+  const dispatchRetryRepo = createFirestoreDispatchRetryRepository({ logger });
 
   const mergeConflictDetector = createDetectMergeConflictsOnPush({
     logger,
@@ -380,6 +385,7 @@ export function initServices(config: ServiceConfig): void {
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
+    dispatchRetryRepo,
   });
 
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
@@ -471,6 +477,7 @@ export function initServices(config: ServiceConfig): void {
     toolCallingClient,
     dispatchService,
     eventDecisionRepo,
+    dispatchRetryRepo,
     unifiedEvaluator,
     mergeConflictDetector,
   };

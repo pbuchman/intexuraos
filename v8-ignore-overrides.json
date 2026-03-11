@@ -22,14 +22,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/bookmarks-agent"
     },
-    "PENDING-apps-calendar-agent": {
-      "files": [
-        "apps/calendar-agent/src/domain/useCases/generateCalendarPreview.ts",
-        "apps/calendar-agent/src/domain/useCases/processCalendarAction.ts",
-        "apps/calendar-agent/src/routes/internalRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/calendar-agent"
-    },
     "PENDING-apps-chat-agent": {
       "files": [
         "apps/chat-agent/src/domain/usecases/generateResponse.ts",
@@ -56,6 +48,7 @@
         "apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts",
         "apps/code-agent/src/infra/repositories/firestoreLogLineRepository.ts",
         "apps/code-agent/src/infra/services/taskDispatcherImpl.ts",
+        "apps/code-agent/src/infra/services/whatsappNotifierImpl.ts",
         "apps/code-agent/src/routes/code/github-pr-summaries.ts",
         "apps/code-agent/src/routes/code/github-pre-events.ts",
         "apps/code-agent/src/routes/codeRoutes.ts",
@@ -127,27 +120,15 @@
     },
     "PENDING-apps-whatsapp-service": {
       "files": [
-        "apps/whatsapp-service/src/infra/firestore/outboundMessageRepository.ts",
         "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
         "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
-        "apps/whatsapp-service/src/infra/whatsapp/sender.ts",
-        "apps/whatsapp-service/src/routes/messageRoutes.ts",
-        "apps/whatsapp-service/src/routes/pubsubRoutes.ts",
-        "apps/whatsapp-service/src/routes/webhookRoutes.ts"
+        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
       ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/whatsapp-service"
+      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
     },
-    "PENDING-packages-common-core": {
-      "files": ["packages/common-core/src/errors.ts"],
-      "description": "Write tests for tightened v8 ignore blocks in packages/common-core"
-    },
-    "PENDING-packages-llm-prompts": {
-      "files": [
-        "packages/llm-prompts/src/approvals/approvalIntentPrompt.ts",
-        "packages/llm-prompts/src/calendar/contextSchemas.ts",
-        "packages/llm-prompts/src/dataInsights/parseInsightResponse.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in packages/llm-prompts"
+    "PENDING-packages-internal-clients": {
+      "files": ["packages/internal-clients/src/user-service/client.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
     },
     "PENDING-workers-orchestrator": {
       "files": [

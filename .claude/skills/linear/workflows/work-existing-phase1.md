@@ -165,10 +165,11 @@ Use `mcp__linear__update_issue` to add labels array.
 For complex architectural decisions that need preserved reasoning:
 
 1. Create file: `docs/plans/{issue-id}-design.md`
-2. Create branch: `design/{issue-id}`
-3. Commit and push
-4. Create PR referencing Linear issue
-5. This preserves the design work in version control
+2. Update the Linear issue description to include: `Plan document: docs/plans/{issue-id}-design.md`
+3. Create branch: `design/{issue-id}`
+4. Commit and push
+5. Create PR referencing Linear issue
+6. This preserves the design work in version control
 
 **When to create design doc:**
 

@@ -35,8 +35,8 @@ import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
 import {
   extractPrNumber,
-  fetchLinearIssueDescription,
-  findPlanOnBranch,
+  fetchLinearIssueContext,
+  readPlanReferencedInLinearIssue,
 } from './deep-validator-helpers.js';
 
 const execAsync = promisify(exec);
@@ -312,7 +312,6 @@ export class TaskDispatcher {
         /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
         if (this.runningCount > 0) this.runningCount--;
         /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: ternary type narrowing for error message extraction @preserve */
         this.logger.error(
           {
             taskId,
@@ -324,7 +323,6 @@ export class TaskDispatcher {
           },
           'Failed to create worker container'
         );
-        /* v8 ignore stop @preserve */
         this.isolation.tokenRefresher.unregisterTask(taskId);
         this.logForwarder.unregisterTask(taskId);
         await this.isolation.provider.cleanupTaskSession?.(taskId);
@@ -359,16 +357,14 @@ export class TaskDispatcher {
           `Linear issue: ${task.linearIssueId}${task.linearIssueTitle !== undefined ? ` — ${task.linearIssueTitle}` : ''}`
         );
       }
-      /* v8 ignore start -- test-infra: short prompts don't hit truncation branch in integration tests @preserve */
       const promptPreview =
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
-      /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const isPRComment = task.linearIssueLabels.some(
-        (l) => l.trim().toLowerCase() === 'pr-comment'
-      );
+      const isPullRequestTask =
+        task.agentType === 'pull_request' ||
+        task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
       /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all agents @preserve */
-      const agentLabel = isPRComment
+      const agentLabel = isPullRequestTask
         ? 'Pull Request Agent'
         : task.agentType === 'review'
           ? 'Review Agent'
@@ -767,8 +763,10 @@ export class TaskDispatcher {
 
     const attempt = task.attemptCount ?? 1;
     const maxAttempts = task.maxAttempts ?? 5;
-    const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-    const completionAgentType: CompletionAgentType = isPRComment
+    const isPullRequestTask =
+      task.agentType === 'pull_request' ||
+      task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
+    const completionAgentType: CompletionAgentType = isPullRequestTask
       ? 'pull_request'
       : task.agentType === 'review'
         ? 'review'
@@ -1275,7 +1273,14 @@ export class TaskDispatcher {
       );
     }
 
-    const result = await this.checkForResult(task);
+    const checkResult = await this.checkForResult(task);
+    const effectiveResult = checkResult ?? task.lastSuccessResult;
+    if (checkResult === undefined && task.lastSuccessResult !== undefined) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        'checkForResult returned undefined, falling back to lastSuccessResult'
+      );
+    }
     const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
 
@@ -1318,7 +1323,7 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       delete task.resumedAfterSuccess;
-      const enrichedErrorResult = this.enrichResultForResumedTask(task, result);
+      const enrichedErrorResult = this.enrichResultForResumedTask(task, effectiveResult);
       await this.finalizeTask(task, 'failed', {
         ...(enrichedErrorResult !== undefined && { result: enrichedErrorResult }),
         error,
@@ -1368,7 +1373,7 @@ export class TaskDispatcher {
     const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
     const geminiSummary = await this.completionVerifier.extractResumeSummary(task.taskId, rawLogs);
 
-    const enrichedResult = this.enrichResultForResumedTask(task, result);
+    const enrichedResult = this.enrichResultForResumedTask(task, effectiveResult);
     if (enrichedResult !== undefined && geminiSummary !== undefined) {
       enrichedResult.summary = geminiSummary;
     }
@@ -1553,6 +1558,12 @@ export class TaskDispatcher {
     task.status = finalStatus;
     task.completedAt = new Date().toISOString();
     delete task.resumedAfterSuccess;
+    // Store result for resume-after-success fallback; clear on non-success
+    if (finalStatus === 'completed' && payload.result !== undefined) {
+      task.lastSuccessResult = payload.result;
+    } else {
+      delete task.lastSuccessResult;
+    }
     await this.saveTask(task);
 
     /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
@@ -1894,18 +1905,26 @@ export class TaskDispatcher {
       const formattedTranscript = formatTranscript(entries);
 
       let linearIssueBody = this.buildLinearIssueSummary(task);
+      let planContent: string | undefined;
       if (task.linearIssueId !== undefined) {
-        const description = await fetchLinearIssueDescription(
+        const issueContext = await fetchLinearIssueContext(
           task.linearIssueId,
           this.isolation.getSecrets().LINEAR_API_KEY,
           this.logger
         );
+        const description = issueContext?.description;
         if (description !== undefined) {
           linearIssueBody = `${linearIssueBody}\n\nDescription:\n${description}`;
         }
-      }
 
-      const planContent = await findPlanOnBranch(task.worktreePath, this.logger);
+        if (issueContext !== undefined) {
+          planContent = await readPlanReferencedInLinearIssue(
+            task.worktreePath,
+            issueContext,
+            this.logger
+          );
+        }
+      }
 
       return {
         taskId: task.taskId,
@@ -1939,17 +1958,12 @@ export class TaskDispatcher {
       const result = await this.executionDeepValidator?.validate(input, (message: string) => {
         this.appendOrchestratorTaskLog(taskId, `Deep validation: ${message}`);
       });
-      if (result !== undefined) {
-        this.appendOrchestratorTaskLog(
-          taskId,
-          `Deep validation complete: ${String(result.claimVerification.length)} claims, ${String(result.anomalies.length)} anomalies`
-        );
-        this.logger.info({ taskId }, 'Deep validation completed with result');
+      if (result) {
+        this.appendOrchestratorTaskLog(taskId, 'Deep validation comment posted');
+        this.logger.info({ taskId }, 'Deep validation completed with comment posted');
       } else {
-        this.logger.warn(
-          { taskId },
-          'Deep validation completed without result (check onProgress messages for details)'
-        );
+        this.appendOrchestratorTaskLog(taskId, 'Deep validation completed without comment');
+        this.logger.warn({ taskId }, 'Deep validation completed without comment');
       }
     } catch (error) {
       this.appendOrchestratorTaskLog(taskId, `Deep validation error: ${getErrorMessage(error)}`);
@@ -1982,9 +1996,7 @@ export class TaskDispatcher {
   private clearTaskTimers(taskId: string): void {
     const keys = [`${taskId}-warning`, `${taskId}-kill`, `${taskId}-monitor`];
     for (const key of keys) {
-      /* v8 ignore start -- test-infra: timer is always set before clearTaskTimers is called, else branch unreachable @preserve */
       const timer = this.activeTasks.get(key);
-      /* v8 ignore stop @preserve */
       if (timer !== undefined) {
         clearTimeout(timer);
         clearInterval(timer);
