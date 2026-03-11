@@ -22,7 +22,10 @@ import { randomUUID } from 'node:crypto';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
-import { postContinuationPrComment, resolveContinuationPr } from '../../domain/utils/continuationPr.js';
+import {
+  bootstrapContinuationPrTaskComment,
+  resolveExecutionContinuationPr,
+} from '../../domain/utils/continuationPr.js';
 
 /**
  * Request to submit feedback on a task.
@@ -215,41 +218,34 @@ ${feedback.trim()}
   const agentType = resolveTaskAgentType(originalTask, linearIssueLabelsForDispatch);
   const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabelsForDispatch, agentType);
 
-  let continuationPrNumber: number | undefined;
-  let continuationPrBranch: string | undefined;
-
   // resolveTaskAgentType() already routes legacy PR-linked tasks back to execution
   // when they only carry prNumber, prBranch, or result.prUrl metadata.
-  if (agentType === 'execution') {
-    const continuationResult = await resolveContinuationPr(
-      {
-        logger,
-        codeTaskRepo,
-        gitHubPRClient: deps.gitHubPRClient,
-        userServiceClient: deps.userServiceClient,
-      },
-      {
-        task: originalTask,
-        userId,
-      }
+  const continuationResult = await resolveExecutionContinuationPr(
+    {
+      logger,
+      codeTaskRepo,
+      gitHubPRClient: deps.gitHubPRClient,
+      userServiceClient: deps.userServiceClient,
+    },
+    {
+      agentType,
+      task: originalTask,
+      userId,
+    }
+  );
+
+  if (!continuationResult.ok) {
+    logger.error(
+      { originalTaskId, userId, error: continuationResult.error },
+      'Failed to resolve continuation PR for feedback task'
     );
-
-    if (!continuationResult.ok) {
-      logger.error(
-        { originalTaskId, userId, error: continuationResult.error },
-        'Failed to resolve continuation PR for feedback task'
-      );
-      return err({
-        code: 'internal_error',
-        message: continuationResult.error.message,
-      });
-    }
-
-    if (continuationResult.value !== null) {
-      continuationPrNumber = continuationResult.value.prNumber;
-      continuationPrBranch = continuationResult.value.prBranch;
-    }
+    return err({
+      code: 'internal_error',
+      message: continuationResult.error.message,
+    });
   }
+
+  const continuationPr = continuationResult.value;
 
   // Step 8: Create follow-up task with parentTaskId
   const createInput = {
@@ -272,8 +268,8 @@ ${feedback.trim()}
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.actionId !== undefined && { actionId: originalTask.actionId }),
     ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
-    ...(continuationPrNumber !== undefined && { prNumber: continuationPrNumber }),
-    ...(continuationPrBranch !== undefined && { prBranch: continuationPrBranch }),
+    ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
+    ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
     /* v8 ignore stop @preserve */
     agentType,
   };
@@ -290,41 +286,30 @@ ${feedback.trim()}
 
   const followUpTask = createResult.value;
 
-  if (continuationPrNumber !== undefined && continuationPrBranch !== undefined) {
-    const commentResult = await postContinuationPrComment(
-      {
-        logger,
-        gitHubPRClient: deps.gitHubPRClient,
-        userServiceClient: deps.userServiceClient,
-      },
-      {
-        repository: followUpTask.repository,
-        prNumber: continuationPrNumber,
-        taskId: followUpTask.id,
-        userId,
-        commentTitle: 'Execution Follow-up Task Created',
-        ...(followUpTask.linearIssueId !== undefined && { linearIssueId: followUpTask.linearIssueId }),
-      }
-    );
-
-    if (!commentResult.ok) {
-      await codeTaskRepo.update(followUpTask.id, {
-        status: 'failed',
-        error: {
-          code: 'PR_BOOTSTRAP_COMMENT_FAILED',
-          message: commentResult.error.message,
-        },
-      });
-
-      logger.error(
-        { taskId: followUpTask.id, originalTaskId, error: commentResult.error },
-        'Failed to post continuation PR bootstrap comment for feedback task'
-      );
-      return err({
-        code: 'internal_error',
-        message: commentResult.error.message,
-      });
+  const commentResult = await bootstrapContinuationPrTaskComment(
+    {
+      logger,
+      codeTaskRepo,
+      gitHubPRClient: deps.gitHubPRClient,
+      userServiceClient: deps.userServiceClient,
+    },
+    {
+      continuationPr,
+      task: followUpTask,
+      userId,
+      commentTitle: 'Execution Follow-up Task Created',
     }
+  );
+
+  if (!commentResult.ok) {
+    logger.error(
+      { taskId: followUpTask.id, originalTaskId, error: commentResult.error },
+      'Failed to post continuation PR bootstrap comment for feedback task'
+    );
+    return err({
+      code: 'internal_error',
+      message: commentResult.error.message,
+    });
   }
 
   logger.info(
@@ -411,8 +396,8 @@ ${feedback.trim()}
     linearIssueLabels: dispatchLabels,
     hasChildren: hasChildrenForDispatch,
     agentType: followUpTask.agentType ?? 'planning',
-    ...(continuationPrNumber !== undefined && { continuationPrNumber }),
-    ...(continuationPrBranch !== undefined && { continuationPrBranch }),
+    ...(continuationPr !== null && { continuationPrNumber: continuationPr.prNumber }),
+    ...(continuationPr !== null && { continuationPrBranch: continuationPr.prBranch }),
   };
 
   // Add optional fields if defined

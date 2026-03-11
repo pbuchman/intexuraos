@@ -7,6 +7,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import { getErrorMessage } from '@intexuraos/common-core';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import { verifyGitHubSignature } from '../../infra/github-webhook-auth.js';
@@ -209,6 +210,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
             title: parsedEvent.title,
             state: parsedEvent.state,
             mergedAt: parsedEvent.mergedAt ?? null,
+            baseBranch: parsedEvent.baseBranch,
           }),
         };
         /* v8 ignore start -- upstream: non-critical summary upsert, does not affect webhook response @preserve */
@@ -229,8 +231,14 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
+      const { unifiedEvaluator, mergeConflictDetector } = getServices();
+      if (parsedEvent.eventType === 'push' && mergeConflictDetector !== undefined) {
+        void mergeConflictDetector.detectOnPush(savedEvent, logger).catch((detectErr: unknown) => {
+          logger.error({ error: getErrorMessage(detectErr) }, 'Unhandled error in merge conflict detector');
+        });
+      }
+
       // INT-744: Unified evaluation — hard rules + optional LLM triage
-      const { unifiedEvaluator } = getServices();
       void unifiedEvaluator.evaluate(savedEvent, logger).catch((evalErr: unknown) => {
         logger.error({ evalErr }, 'Unhandled error in unified evaluator');
       });

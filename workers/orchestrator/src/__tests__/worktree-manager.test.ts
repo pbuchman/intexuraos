@@ -122,6 +122,26 @@ describe('WorktreeManager', () => {
       );
     });
 
+    it('should reject continuation branch names with shell metacharacters', async () => {
+      const commands: string[] = [];
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        commands.push(command);
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(
+        manager.createWorktree('task-bad-branch', 'development', 'task$(malicious)')
+      ).rejects.toThrow('Invalid continuation PR branch name');
+      expect(commands).toEqual([]);
+    });
+
     it('should create base directory if it does not exist', async () => {
       const WM = await loadWorktreeManager();
       const manager = new WM(mockConfig, mockLogger);
@@ -486,6 +506,29 @@ describe('WorktreeManager', () => {
       if (!result.ok) {
         expect(result.error).toContain('CONFLICT');
       }
+    });
+
+    it('should reject invalid planning branch names before running git commands', async () => {
+      const commands: string[] = [];
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        commands.push(command);
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      const result = await manager.mergePlanningBranch('/tmp/worktree', 'plan$(bad)');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Invalid planning branch name');
+      }
+      expect(commands).toEqual([]);
     });
 
     it('should return error when branch does not exist', async () => {

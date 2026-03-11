@@ -32,6 +32,25 @@ export interface PullRequestCommit {
   author: string;
 }
 
+export interface GitHubPullRequestListItem {
+  number: number;
+  title: string;
+  authorLogin: string;
+  baseBranch: string;
+  headBranch: string;
+}
+
+export interface GitHubPullRequestDetails {
+  number: number;
+  title: string;
+  body: string | null;
+  authorLogin: string;
+  baseBranch: string;
+  headBranch: string;
+  mergeable: boolean | null;
+  mergeableState: string | null;
+}
+
 export interface GitHubPRClient {
   /**
    * Update the title of a pull request.
@@ -98,6 +117,37 @@ export interface GitHubPRClient {
     owner: string,
     repo: string,
     prNumber: number,
+    body: string
+  ): Promise<Result<{ commentId: number }, GitHubPRClientError>>;
+
+  /**
+   * List open pull requests targeting a specific base branch.
+   */
+  listOpenPullRequestsByBaseBranch(
+    token: string,
+    owner: string,
+    repo: string,
+    baseBranch: string
+  ): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>>;
+
+  /**
+   * Get full pull request details, including mergeability.
+   */
+  getPullRequestDetails(
+    token: string,
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<Result<GitHubPullRequestDetails, GitHubPRClientError>>;
+
+  /**
+   * Update an existing issue comment.
+   */
+  updateIssueComment(
+    token: string,
+    owner: string,
+    repo: string,
+    commentId: number,
     body: string
   ): Promise<Result<{ commentId: number }, GitHubPRClientError>>;
 }

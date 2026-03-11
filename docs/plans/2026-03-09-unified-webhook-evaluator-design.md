@@ -397,9 +397,9 @@ Create the service that ties rules, GitHub Agent, decision recording, and dispat
   - **Standalone use case** — NOT a wrapper around `createTaskForPR`. Shares `CodeTaskRepository`, `TaskDispatcherService`, and `UserLookupService` but has its own:
     - **Prompt builder**: review-specific instructions with review types and PR context (not PR-comment-style)
     - **Label logic**: MUST NOT carry `pr-comment` label — if it did, `buildSystemPrompt()` would route to `pullRequestPrompt` instead of `reviewPrompt`
-    - **No PR task lock**: review tasks don't conflict with comment tasks for the same PR. Duplicate review tasks from rapid `synchronize` events are acceptable (LLM triage is cheap; orchestrator handles one task at a time per PR anyway)
+    - **PR-scoped review dedup**: before creating a review task, check for an active `agentType: 'review'` task with the same `repository` + `prNumber` and reuse it if found
     - **`systemPromptHash`**: `'review-auto'` (not `'pr-comment-auto'`)
-    - **No `LinearIssueService`**: review tasks are ephemeral — no Linear issue auto-creation
+    - **Best-effort Linear issue linking**: reuse the PR task's `linearIssueId` when available, otherwise fall back to title extraction or best-effort issue creation for UI grouping
   - Sets `agentType: 'review'` on the task dispatch request
   - Resolves user via `UserLookupService` (same as createTaskForPR)
 
