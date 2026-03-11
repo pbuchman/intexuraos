@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
+import { readFile } from 'node:fs/promises';
 
 const { createLlmClientMock, execFileMock } = vi.hoisted(() => ({
   createLlmClientMock: vi.fn(),
@@ -33,6 +34,7 @@ const logger: Logger = {
 };
 
 const generateMock = vi.fn();
+const postedCommentBodies: string[] = [];
 
 const defaultConfig = {
   model: 'gemini-2.5-flash' as const,
@@ -57,32 +59,129 @@ const defaultInput = {
 
 const markdownResponse = [
   '#### Overall',
-  '- Validation completed against the transcript.',
+  '| Result | Evidence |',
+  '| --- | --- |',
+  '| Passed | Validation completed against the transcript at MSG-001. |',
   '',
   '#### Claim Verification',
-  '- CI evidence is present at MSG-001.',
+  '| Claim | Result | Evidence |',
+  '| --- | --- | --- |',
+  '| CI ran | Verified | MSG-001 shows pnpm run ci:tracked. |',
   '',
   '#### Contract Verification',
-  '- Code review subagent usage is visible in the transcript.',
+  '| Obligation | Result | Evidence |',
+  '| --- | --- | --- |',
+  '| Code review subagent | Verified | MSG-010 shows a code-reviewer subagent dispatch. |',
   '',
   '#### Plan vs Reality',
-  '- Requirements were implemented with matching edits and tests.',
+  '| Requirement | Result | Evidence |',
+  '| --- | --- | --- |',
+  '| Header fix | Implemented | MSG-020 and MSG-021 show edits and tests. |',
   '',
   '#### Anomalies',
-  '- None.',
+  '| Type | Severity | Evidence | Detail |',
+  '| --- | --- | --- | --- |',
+  '| None | None | None | None |',
 ].join('\n');
+
+const verboseMarkdownResponse = [
+  '#### Overall',
+  '| Result | Evidence |',
+  '| --- | --- |',
+  `| Passed | ${'overall '.repeat(6000)} |`,
+  '',
+  '#### Claim Verification',
+  '| Claim | Result | Evidence |',
+  '| --- | --- | --- |',
+  `| CI ran | Verified | ${'claim '.repeat(6000)} |`,
+  '',
+  '#### Contract Verification',
+  '| Obligation | Result | Evidence |',
+  '| --- | --- | --- |',
+  `| Code review subagent | Verified | ${'contract '.repeat(6000)} |`,
+  '',
+  '#### Plan vs Reality',
+  '| Requirement | Result | Evidence |',
+  '| --- | --- | --- |',
+  `| Header fix | Implemented | ${'plan '.repeat(6000)} |`,
+  '',
+  '#### Anomalies',
+  '| Type | Severity | Evidence | Detail |',
+  '| --- | --- | --- | --- |',
+  `| Warning | Low | MSG-999 | ${'anomaly '.repeat(6000)} |`,
+].join('\n');
+
+function buildValidReport(overrides?: {
+  overall?: string[];
+  claimVerification?: string[];
+  contractVerification?: string[];
+  planVsReality?: string[];
+  anomalies?: string[];
+}): string {
+  return [
+    '#### Overall',
+    ...(overrides?.overall ?? ['| Result | Evidence |', '| --- | --- |', '| Passed | MSG-001 |']),
+    '',
+    '#### Claim Verification',
+    ...(overrides?.claimVerification ?? [
+      '| Claim | Result | Evidence |',
+      '| --- | --- | --- |',
+      '| CI ran | Verified | MSG-001 |',
+    ]),
+    '',
+    '#### Contract Verification',
+    ...(overrides?.contractVerification ?? [
+      '| Obligation | Result | Evidence |',
+      '| --- | --- | --- |',
+      '| Code review subagent | Verified | MSG-010 |',
+    ]),
+    '',
+    '#### Plan vs Reality',
+    ...(overrides?.planVsReality ?? [
+      '| Requirement | Result | Evidence |',
+      '| --- | --- | --- |',
+      '| Header fix | Implemented | MSG-020 |',
+    ]),
+    '',
+    '#### Anomalies',
+    ...(overrides?.anomalies ?? [
+      '| Type | Severity | Evidence | Detail |',
+      '| --- | --- | --- | --- |',
+      '| None | None | None | None |',
+    ]),
+  ].join('\n');
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
+  postedCommentBodies.length = 0;
   createLlmClientMock.mockReturnValue({ generate: generateMock });
   execFileMock.mockImplementation(
     (
       _cmd: string,
-      _args: string[],
+      args: string[],
       _opts: unknown,
-      cb: (err: null, result: { stdout: string }) => void
+      cb: (err: Error | null, result: { stdout: string }) => void
     ) => {
-      cb(null, { stdout: '' });
+      const bodyFileIndex = args.indexOf('--body-file');
+      if (bodyFileIndex === -1) {
+        cb(null, { stdout: '' });
+        return;
+      }
+
+      const bodyFilePath = args[bodyFileIndex + 1];
+      void readFile(String(bodyFilePath), 'utf8')
+        .then((body) => {
+          postedCommentBodies.push(body);
+          cb(null, { stdout: '' });
+        })
+        .catch((error: unknown) => {
+          cb(error as Error, { stdout: '' });
+        });
     }
   );
 });
@@ -103,8 +202,9 @@ describe('buildDeepValidationPrompt', () => {
 
     expect(prompt).toContain(`[deep-validation-prompt v${DEEP_VALIDATION_PROMPT_VERSION}]`);
     expect(prompt).toContain('Return ONLY markdown.');
-    expect(prompt).toContain('Do not return JSON, tables, or code fences.');
-    expect(prompt).toContain('Keep the entire response under 4000 characters.');
+    expect(prompt).toContain('Return the report explicitly as markdown tables.');
+    expect(prompt).toContain('Do not return bullet lists, numbered lists, JSON, or code fences.');
+    expect(prompt).toContain('Do not return a list anywhere in the response.');
     expect(prompt).toContain('#### Overall');
     expect(prompt).toContain('#### Claim Verification');
     expect(prompt).toContain('#### Contract Verification');
@@ -170,7 +270,7 @@ describe('buildDeepValidationPrompt', () => {
 });
 
 describe('OrchestratorExecutionDeepValidator', () => {
-  it('posts markdown comment and returns true on valid LLM response', async () => {
+  it('posts markdown comment via body-file and returns true on valid LLM response', async () => {
     generateMock.mockResolvedValue({
       ok: true,
       value: { content: markdownResponse, usage: { costUsd: 0.05 } },
@@ -182,14 +282,18 @@ describe('OrchestratorExecutionDeepValidator', () => {
 
     expect(result).toBe(true);
     expect(execFileMock).toHaveBeenCalledTimes(1);
-    expect(execFileMock).toHaveBeenCalledWith(
-      'gh',
-      ['pr', 'comment', '1071', '--repo', 'pbuchman/intexuraos', '--body', expect.any(String)],
-      {},
-      expect.any(Function)
-    );
+    expect(execFileMock.mock.calls[0]?.[0]).toBe('gh');
+    expect(execFileMock.mock.calls[0]?.[1]).toEqual([
+      'pr',
+      'comment',
+      '1071',
+      '--repo',
+      'pbuchman/intexuraos',
+      '--body-file',
+      expect.any(String),
+    ]);
 
-    const bodyArg = String(execFileMock.mock.calls[0]?.[1]?.[6] ?? '');
+    const bodyArg = postedCommentBodies[0] ?? '';
     expect(bodyArg).toContain('### Deep Validation Report');
     expect(bodyArg).toContain('**Cost:** $0.05');
     expect(bodyArg).toContain(markdownResponse);
@@ -258,25 +362,307 @@ describe('OrchestratorExecutionDeepValidator', () => {
     const result = await validator.validate(defaultInput);
 
     expect(result).toBe(true);
-    const bodyArg = String(execFileMock.mock.calls[0]?.[1]?.[6] ?? '');
+    const bodyArg = postedCommentBodies[0] ?? '';
     expect(bodyArg).toContain(markdownResponse);
     expect(bodyArg).not.toContain('```');
   });
 
-  it('truncates long responses before posting', async () => {
-    const longBody = `#### Overall\n- ${'A'.repeat(5000)}`;
+  it('allows leading blank lines before the first heading', async () => {
     generateMock.mockResolvedValue({
       ok: true,
-      value: { content: longBody, usage: { costUsd: 0.042 } },
+      value: {
+        content: `\n\n${markdownResponse}`,
+        usage: { costUsd: 0.042 },
+      },
     });
 
     const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
     const result = await validator.validate(defaultInput);
 
     expect(result).toBe(true);
-    const bodyArg = String(execFileMock.mock.calls[0]?.[1]?.[6] ?? '');
-    expect(bodyArg).toContain('[truncated by orchestrator]');
-    expect(bodyArg).toContain('### Deep Validation Report');
+    expect(postedCommentBodies[0]).toContain('### Deep Validation Report');
+    expect(postedCommentBodies[0]).toContain(markdownResponse);
+  });
+
+  it('rejects list output instead of posting it', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: ['#### Overall', '- this is a list', '', '#### Claim Verification'].join('\n'),
+        usage: { costUsd: 0.042 },
+      },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_abc',
+        reason: expect.stringContaining('bullet lists'),
+      }),
+      'Deep validation response rejected'
+    );
+  });
+
+  it('rejects reports with a preamble before the first heading', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: `Intro paragraph\n\n${buildValidReport()}`,
+        usage: { costUsd: 0.042 },
+      },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: expect.stringContaining('no preamble') }),
+      'Deep validation response rejected'
+    );
+  });
+
+  it('rejects reports with required headings out of order', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: [
+          '#### Overall',
+          '| Result | Evidence |',
+          '| --- | --- |',
+          '| Passed | MSG-001 |',
+          '',
+          '#### Contract Verification',
+          '| Obligation | Result | Evidence |',
+          '| --- | --- | --- |',
+          '| Code review subagent | Verified | MSG-010 |',
+          '',
+          '#### Claim Verification',
+          '| Claim | Result | Evidence |',
+          '| --- | --- | --- |',
+          '| CI ran | Verified | MSG-001 |',
+          '',
+          '#### Plan vs Reality',
+          '| Requirement | Result | Evidence |',
+          '| --- | --- | --- |',
+          '| Header fix | Implemented | MSG-020 |',
+          '',
+          '#### Anomalies',
+          '| Type | Severity | Evidence | Detail |',
+          '| --- | --- | --- | --- |',
+          '| None | None | None | None |',
+        ].join('\n'),
+        usage: { costUsd: 0.042 },
+      },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: expect.stringContaining('out of order') }),
+      'Deep validation response rejected'
+    );
+  });
+
+  it('rejects reports missing required sections', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: [
+          '#### Overall',
+          '| Result | Evidence |',
+          '| --- | --- |',
+          '| Passed | MSG-001 |',
+        ].join('\n'),
+        usage: { costUsd: 0.042 },
+      },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: expect.stringContaining('out of order') }),
+      'Deep validation response rejected'
+    );
+  });
+
+  it('rejects sections without a table data row', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: buildValidReport({
+          overall: ['| Result | Evidence |', '| --- | --- |'],
+        }),
+        usage: { costUsd: 0.042 },
+      },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: expect.stringContaining('at least one data row') }),
+      'Deep validation response rejected'
+    );
+  });
+
+  it('rejects sections that include prose lines outside the table', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: buildValidReport({
+          overall: [
+            'Summary text',
+            '| Result | Evidence |',
+            '| --- | --- |',
+            '| Passed | MSG-001 |',
+          ],
+        }),
+        usage: { costUsd: 0.042 },
+      },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: expect.stringContaining('no list or prose lines') }),
+      'Deep validation response rejected'
+    );
+  });
+
+  it('rejects sections with an invalid markdown table separator row', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: buildValidReport({
+          overall: ['| Result | Evidence |', '| not-a-separator | nope |', '| Passed | MSG-001 |'],
+        }),
+        usage: { costUsd: 0.042 },
+      },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: expect.stringContaining('header separator row') }),
+      'Deep validation response rejected'
+    );
+  });
+
+  it('splits long valid responses into multiple comments without breaking tables', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: verboseMarkdownResponse, usage: { costUsd: 0.042 } },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(true);
+    expect(execFileMock.mock.calls.length).toBeGreaterThan(1);
+
+    const postedBodies = [...postedCommentBodies];
+
+    expect(postedBodies[0]).toContain('### Deep Validation Report (Part 1/');
+    expect(postedBodies[0]).toContain('**Cost:** $0.042');
+    expect(postedBodies[1]).not.toContain('**Cost:**');
+    for (const body of postedBodies) {
+      expect(body.length).toBeLessThan(65_536);
+      expect(body).not.toContain('[truncated by orchestrator]');
+      expect(body.match(/^#### /gmu)?.length ?? 0).toBe(1);
+    }
+  });
+
+  it('fails when a single table section exceeds the GitHub comment limit', async () => {
+    const oversizedSection = [
+      '#### Overall',
+      '| Result | Evidence |',
+      '| --- | --- |',
+      `| Passed | ${'too-long '.repeat(9000)} |`,
+      '',
+      '#### Claim Verification',
+      '| Claim | Result | Evidence |',
+      '| --- | --- | --- |',
+      '| CI ran | Verified | MSG-001 |',
+      '',
+      '#### Contract Verification',
+      '| Obligation | Result | Evidence |',
+      '| --- | --- | --- |',
+      '| Code review subagent | Verified | MSG-010 |',
+      '',
+      '#### Plan vs Reality',
+      '| Requirement | Result | Evidence |',
+      '| --- | --- | --- |',
+      '| Header fix | Implemented | MSG-020 |',
+      '',
+      '#### Anomalies',
+      '| Type | Severity | Evidence | Detail |',
+      '| --- | --- | --- | --- |',
+      '| None | None | None | None |',
+    ].join('\n');
+
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: { content: oversizedSection, usage: { costUsd: 0.042 } },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task_abc',
+        reason: expect.stringContaining('single section'),
+      }),
+      'Deep validation response rejected'
+    );
+  });
+
+  it('fails when a later single section still exceeds the limit after splitting starts', async () => {
+    generateMock.mockResolvedValue({
+      ok: true,
+      value: {
+        content: buildValidReport({
+          claimVerification: [
+            '| Claim | Result | Evidence |',
+            '| --- | --- | --- |',
+            `| CI ran | Verified | ${'huge '.repeat(14000)} |`,
+          ],
+        }),
+        usage: { costUsd: 0.042 },
+      },
+    });
+
+    const validator = new OrchestratorExecutionDeepValidator(logger, defaultConfig);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBe(false);
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: expect.stringContaining('single section') }),
+      'Deep validation response rejected'
+    );
   });
 
   it('returns false when PR comment posting fails', async () => {
