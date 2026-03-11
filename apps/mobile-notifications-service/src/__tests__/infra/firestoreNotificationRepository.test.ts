@@ -328,35 +328,26 @@ describe('FirestoreNotificationRepository', () => {
     });
 
     it('handles pagination with valid cursor and returns nextCursor', async () => {
-      // Save multiple notifications to ensure we have data
       await repository.save(createTestInput({ userId: 'user-pagination', title: 'Notif 1' }));
       await repository.save(createTestInput({ userId: 'user-pagination', title: 'Notif 2' }));
       await repository.save(createTestInput({ userId: 'user-pagination', title: 'Notif 3' }));
 
-      // Get first page - this should trigger the lastDoc !== undefined check (lines 203-208)
       const firstPage = await repository.findByUserIdPaginated('user-pagination', { limit: 2 });
 
       expect(firstPage.ok).toBe(true);
       if (firstPage.ok) {
-        // Should have 2 notifications (limited)
-        expect(firstPage.value.notifications.length).toBeLessThanOrEqual(2);
-        // Should have a nextCursor if there are more results
-        // The v8-ignore block at lines 203-208 is for the lastDoc !== undefined check
-        // which is exercised when docs.length > 0 and we try to access the last doc
-        if (firstPage.value.notifications.length > 0) {
-          // This path exercises the v8-ignore block for lastDoc check
-          expect(firstPage.value.notifications[0]).toBeDefined();
-        }
+        expect(firstPage.value.notifications).toHaveLength(2);
+        expect(firstPage.value.notifications[0]?.title).toMatch(/^Notif \d$/);
+        expect(firstPage.value.notifications[1]?.title).toMatch(/^Notif \d$/);
+        expect(firstPage.value.nextCursor).toBeDefined();
       }
     });
 
-    it('decodeCursor returns undefined for undefined input', async () => {
-      // Test decodeCursor directly by not passing cursor (omit the property)
+    it('findByUserIdPaginated works without a cursor', async () => {
       const result = await repository.findByUserIdPaginated('user-test', {
         limit: 10,
       });
 
-      // Should work fine with undefined cursor
       expect(result.ok).toBe(true);
     });
 
