@@ -100,12 +100,7 @@
       "description": "Write tests for tightened v8 ignore blocks in apps/notion-service"
     },
     "PENDING-apps-todos-agent": {
-      "files": [
-        "apps/todos-agent/src/domain/usecases/reorderTodoItems.ts",
-        "apps/todos-agent/src/domain/usecases/updateTodoItem.ts",
-        "apps/todos-agent/src/infra/firestore/firestoreTodoRepository.ts",
-        "apps/todos-agent/src/routes/todoRoutes.ts"
-      ],
+      "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
       "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
     },
     "PENDING-apps-user-service": {
