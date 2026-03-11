@@ -123,6 +123,8 @@ const codeTaskSchema = {
         ciFailed: { type: 'boolean', nullable: true },
         partialWork: { type: 'boolean', nullable: true },
         rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'], nullable: true },
+        review_comments_posted: { type: 'string', nullable: true },
+        review_types: { type: 'string', nullable: true },
       },
     },
     error: {
@@ -216,6 +218,8 @@ function taskToApiResponse(task: {
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
+    review_comments_posted?: string;
+    review_types?: string;
   };
   error?: {
     code: string;
@@ -262,6 +266,8 @@ function taskToApiResponse(task: {
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
+    review_comments_posted?: string;
+    review_types?: string;
   };
   error?: {
     code: string;
@@ -1716,6 +1722,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       ciFailed: { type: 'boolean', nullable: true },
                       partialWork: { type: 'boolean', nullable: true },
                       rebaseResult: { type: 'string', nullable: true },
+                      review_comments_posted: { type: 'string', nullable: true },
+                      review_types: { type: 'string', nullable: true },
                     },
                   },
                   error: {
