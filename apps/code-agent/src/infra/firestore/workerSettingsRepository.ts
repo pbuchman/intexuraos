@@ -135,7 +135,6 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
 
-        /* v8 ignore start -- test-infra: decryption error path requires corrupted data @preserve */
         if (message.includes('decrypt') || message.includes('Invalid encrypted')) {
           logger.error({ error, userId }, 'Failed to decrypt worker settings');
           return err({
@@ -143,7 +142,6 @@ export function createWorkerSettingsRepository(
             message: `Failed to decrypt worker settings: ${message}`,
           });
         }
-        /* v8 ignore stop @preserve */
 
         logger.error({ error, userId }, 'Failed to get worker settings');
         return err({
@@ -159,11 +157,9 @@ export function createWorkerSettingsRepository(
     ): Promise<Result<WorkerConfig | null, WorkerSettingsError>> {
       const settingsResult = await this.getSettings(userId);
 
-      /* v8 ignore start -- ts-type: Result type error propagation @preserve */
       if (!settingsResult.ok) {
         return settingsResult;
       }
-      /* v8 ignore stop @preserve */
 
       const settings = settingsResult.value;
       if (settings === null) {
@@ -232,7 +228,7 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
 
-        /* v8 ignore start -- test-infra: encryption error path requires crypto failure @preserve */
+        /* v8 ignore start -- module-mock: encryption error requires vi.mock which v8 cannot track @preserve */
         if (message.includes('encrypt')) {
           logger.error({ error, userId }, 'Failed to encrypt worker config');
           return err({
@@ -296,11 +292,9 @@ export function createWorkerSettingsRepository(
               ? encryptToken(config.dispatchSigningSecret)
               : existingWorker.dispatchSigningSecret,
           enabled: config.enabled ?? existingWorker.enabled,
-          /* v8 ignore start -- ts-type: spread conditionals for optional field propagation @preserve */
           ...(existingWorker.lastTestedAt !== undefined && { lastTestedAt: existingWorker.lastTestedAt }),
           ...(existingWorker.testStatus !== undefined && { testStatus: existingWorker.testStatus }),
           ...(existingWorker.testMessage !== undefined && { testMessage: existingWorker.testMessage }),
-          /* v8 ignore stop @preserve */
         };
 
         const updatedWorkers = [...existingData.workers];
@@ -480,7 +474,6 @@ export function createWorkerSettingsRepository(
     ): Promise<Result<Record<string, WorkerHealthStatus> | null, WorkerSettingsError>> {
       try {
         const doc = await collection.doc(userId).get();
-        /* v8 ignore start -- test-infra: requires testing document existence edge case @preserve */
         if (!doc.exists) {
           return ok(null);
         }
@@ -488,7 +481,6 @@ export function createWorkerSettingsRepository(
         if (!data.workerHealthStatuses) {
           return ok(null);
         }
-        /* v8 ignore stop @preserve */
         return ok(data.workerHealthStatuses as Record<string, WorkerHealthStatus>);
       } catch (error) {
         const message = getErrorMessage(error);
