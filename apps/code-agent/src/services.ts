@@ -62,6 +62,9 @@ import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services
 import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
 import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
 import { createReviewTask } from './domain/usecases/createReviewTask.js';
+import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
+import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
+import { parseOwnerRepo } from './domain/utils/parseOwnerRepo.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -95,6 +98,7 @@ export interface ServiceContainer {
   // INT-744: Unified Webhook Evaluator
   eventDecisionRepo: EventDecisionRepository;
   unifiedEvaluator: UnifiedEvaluator;
+  mergeConflictDetector?: MergeConflictDetector;
 }
 
 // Configuration required to initialize services
@@ -340,6 +344,24 @@ export function initServices(config: ServiceConfig): void {
     : undefined;
 
   const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
+  const gitHubPRSummaryRepo = createFirestoreGitHubPRSummariesRepository({ logger });
+
+  const mergeConflictDetector = createDetectMergeConflictsOnPush({
+    logger,
+    gitHubPRClient,
+    gitHubPRSummaryRepo,
+    codeTaskRepo,
+    userServiceClient,
+    gitHubPREventRepo,
+    linearIssueService,
+    taskDispatcher,
+    logLineRepo,
+    workerSettingsRepo,
+    statusMirrorService,
+    whatsappNotifier,
+    serviceUrl: config.serviceUrl,
+    orchestratorSecret: config.orchestratorSecret,
+  });
 
   const dispatchService = createWebhookDispatchService({
     gitHubPREventRepo,
@@ -389,11 +411,17 @@ export function initServices(config: ServiceConfig): void {
       if (!tokenResult.ok) {
         return { ok: false, error: { code: 'TOKEN_NOT_AVAILABLE', message: `OAuth token unavailable for: ${resolvedUser.userId}` } };
       }
-      const [owner, repo] = repository.split('/');
-      if (owner === undefined || repo === undefined) {
+      const parsedRepository = parseOwnerRepo(repository);
+      if (parsedRepository === null) {
         return { ok: false, error: { code: 'INVALID_REPO', message: `Invalid repository: ${repository}` } };
       }
-      const commentResult = await gitHubPRClient.postPRComment(tokenResult.value.accessToken, owner, repo, prNumber, body); // @allow-result-access -- narrowed by !tokenResult.ok
+      const commentResult = await gitHubPRClient.postPRComment(
+        tokenResult.value.accessToken,
+        parsedRepository.owner,
+        parsedRepository.repo,
+        prNumber,
+        body
+      ); // @allow-result-access -- narrowed by !tokenResult.ok
       if (!commentResult.ok) {
         return { ok: false, error: { code: commentResult.error.code, message: commentResult.error.message } };
       }
@@ -434,7 +462,7 @@ export function initServices(config: ServiceConfig): void {
     workerSettingsRepo,
     workerHealthProbe,
     gitHubPREventRepo,
-    gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
+    gitHubPRSummaryRepo,
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
     userServiceClient,
     gitHubPRClient,
@@ -444,6 +472,7 @@ export function initServices(config: ServiceConfig): void {
     dispatchService,
     eventDecisionRepo,
     unifiedEvaluator,
+    mergeConflictDetector,
   };
 }
 

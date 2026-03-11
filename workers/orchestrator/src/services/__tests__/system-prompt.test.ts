@@ -244,6 +244,18 @@ describe('system-prompt', () => {
     expect(result).not.toContain('<must be exactly 1>');
   });
 
+  it('reuses an existing tracking comment when trackingCommentId is provided', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      trackingCommentId: '12345',
+    });
+
+    expect(result).toContain('A tracking comment already exists');
+    expect(result).toContain('issues/comments/12345');
+    expect(result).toContain('Do NOT post a new tracking comment');
+  });
+
   it('uses agentType=execution over missing code-task label', () => {
     const result = buildSystemPrompt({
       ...baseParams,

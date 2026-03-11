@@ -160,6 +160,24 @@ function createMockGitHubPRClient(): GitHubPRClient {
     async postPRComment(): ReturnType<GitHubPRClient['postPRComment']> {
       return ok({ commentId: 1 });
     },
+    async listOpenPullRequestsByBaseBranch(): ReturnType<GitHubPRClient['listOpenPullRequestsByBaseBranch']> {
+      return ok([]);
+    },
+    async getPullRequestDetails(): ReturnType<GitHubPRClient['getPullRequestDetails']> {
+      return ok({
+        number: 1,
+        title: 'Test PR',
+        body: null,
+        authorLogin: 'alice',
+        baseBranch: 'main',
+        headBranch: 'feature/test',
+        mergeable: true,
+        mergeableState: 'clean',
+      });
+    },
+    async updateIssueComment(): ReturnType<GitHubPRClient['updateIssueComment']> {
+      return ok({ commentId: 1 });
+    },
   };
 }
 
