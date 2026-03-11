@@ -327,7 +327,9 @@ describe('createReviewTask', () => {
   });
 
   it('returns error when dispatch fails', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
     const deps = createFakeDeps({
+      gitHubPRClient,
       taskDispatcher: {
         dispatch: vi.fn().mockResolvedValue(
           err({ code: 'QUEUE_FULL' as const, message: 'Queue full' })
@@ -356,6 +358,7 @@ describe('createReviewTask', () => {
         error: { code: 'dispatch_failed', message: 'Queue full' },
       }
     );
+    expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
   });
 
   describe('PR notification after dispatch', () => {
@@ -378,6 +381,13 @@ describe('createReviewTask', () => {
         'intexuraos',
         42,
         expect.stringContaining('@ignore')
+      );
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'pbuchman',
+        'intexuraos',
+        42,
+        expect.stringContaining('**Dispatch outcome:** Review task dispatched')
       );
     });
 

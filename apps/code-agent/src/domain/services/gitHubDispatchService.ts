@@ -18,6 +18,7 @@ import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { loadConfig } from '../../config.js';
+import { notifyPROfTaskDispatch } from '../utils/prTaskNotification.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
@@ -182,7 +183,7 @@ async function handleNewTask(
 async function handleExistingTask(
   deps: WebhookDispatchServiceDeps,
   event: GitHubPREvent,
-  task: { id: string; userId: string },
+  task: { id: string; userId: string; linearIssueId?: string },
   logger: Logger,
 ): Promise<WebhookDispatchResult> {
   const message = deps.messageBuilder.build(event);
@@ -232,6 +233,20 @@ async function handleExistingTask(
     );
     return { success: false, dispatched: false, taskId: task.id, error: sendResult.error.message };
   }
+
+  await notifyPROfTaskDispatch(
+    { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+    {
+      taskId: task.id,
+      repository: event.repository,
+      prNumber: event.pullRequestNumber,
+      userId: task.userId,
+      dispatchOutcome:
+        sendResult.value.action === 'resumed' ? 'existing_task_resumed' : 'existing_task_queued',
+      updateTitle: false,
+      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+    },
+  );
 
   logger.info(
     { taskId: task.id, action: sendResult.value.action },

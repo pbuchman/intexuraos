@@ -16,6 +16,11 @@ export interface TaskVerificationRecord {
   createdAt: string;
 }
 
+export interface PendingResumeStart {
+  prompt: string;
+  acceptedAt: string;
+}
+
 export interface Task {
   taskId: string;
   workerType: WorkerType;
@@ -76,6 +81,11 @@ export interface Task {
    * successful completion without a result.
    */
   lastSuccessResult?: TaskResult;
+  /**
+   * Set after a resume request is durably accepted but before the worker is ready.
+   * Allows startup recovery to restart the accepted resume instead of interrupting it.
+   */
+  pendingResumeStart?: PendingResumeStart;
 }
 
 export interface TaskResult {
