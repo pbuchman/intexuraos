@@ -247,6 +247,15 @@ describe('Todo Routes', () => {
       expect(response.statusCode).toBe(404);
     });
 
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/todos/any-id',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('returns 500 on storage error', async () => {
       ctx.todoRepository.simulateMethodError('findById', {
         code: 'STORAGE_ERROR',
