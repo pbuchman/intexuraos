@@ -8,9 +8,7 @@ import type {
   CreateSignatureConnectionInput,
   RepositoryError,
   SignatureConnection,
-/* v8 ignore start -- ts-type: query is performed with a specific document id @preserve */
   SignatureConnectionRepository,
-  /* v8 ignore stop @preserve */
 } from '../../domain/notifications/index.js';
 
 const COLLECTION_NAME = 'mobile_notification_signatures';
@@ -80,7 +78,8 @@ export class FirestoreSignatureConnectionRepository implements SignatureConnecti
       }
 
       const docSnap = snapshot.docs[0];
-      /* v8 ignore start -- ts-type: snapshot.empty check guarantees docs[0] exists @preserve */
+      // @allow-empty-if: v8-ignore block below for ts-type narrowing edge case
+      /* v8 ignore start -- ts-type: TypeScript narrows !snapshot.empty but array access returns T | undefined due to noUncheckedIndexedAccess @preserve */
       if (docSnap === undefined) {
         return ok(null);
       }

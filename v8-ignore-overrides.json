@@ -83,14 +83,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/linear-agent"
     },
-    "PENDING-apps-mobile-notifications-service": {
-      "files": [
-        "apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts",
-        "apps/mobile-notifications-service/src/infra/firestore/firestoreSignatureConnectionRepository.ts",
-        "apps/mobile-notifications-service/src/routes/notificationRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/mobile-notifications-service"
-    },
     "PENDING-apps-notion-service": {
       "files": [
         "apps/notion-service/src/infra/firestore/notionConnectionRepository.ts",
