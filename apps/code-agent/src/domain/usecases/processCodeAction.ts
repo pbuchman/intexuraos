@@ -103,7 +103,6 @@ export async function processCodeAction(
 
   // Step 1: Fetch user's worker settings (required for dispatch)
   const settingsResult = await workerSettingsRepo.getSettings(userId);
-  /* v8 ignore start -- test-infra: error path requires Firestore failure @preserve */
   if (!settingsResult.ok) {
     logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
     return err({
@@ -111,16 +110,12 @@ export async function processCodeAction(
       message: 'Failed to fetch worker settings',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const settings = settingsResult.value;
 
   // Build worker credentials from user's settings - NO FALLBACKS
-  /* v8 ignore start -- ts-type: nullish coalescing for when settings is null @preserve */
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- test-infra: requires user with no enabled workers fixture @preserve */
   if (enabledWorkers.length === 0) {
     logger.warn({ userId }, 'User has no workers configured');
     return err({
@@ -128,7 +123,6 @@ export async function processCodeAction(
       message: 'Please configure your workers in Settings before submitting code tasks',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const workerCredentials: DispatchWorkerCredentials = {
     workers: enabledWorkers.map((w) => ({
@@ -159,7 +153,6 @@ export async function processCodeAction(
   });
 
   // CRITICAL: If user provided an issue ID but we're in fallback mode, this is an error
-  /* v8 ignore start -- test-infra: requires linear-agent mock to return validation failure @preserve */
   if (linearIssueId !== undefined && issueResult.linearFallback) {
     logger.error({ linearIssueId }, 'User-provided Linear issue could not be validated');
     return err({
@@ -167,7 +160,6 @@ export async function processCodeAction(
       message: `The Linear issue "${linearIssueId}" could not be validated. Please check that it exists and you have access to it.`,
     });
   }
-  /* v8 ignore stop @preserve */
 
   const {
     linearIssueId: finalLinearIssueId,
@@ -233,11 +225,9 @@ export async function processCodeAction(
   };
 
   // Only include linear issue fields if we have them
-  /* v8 ignore start -- ts-type: type narrowing branch for optional linear issue fields, requires complex setup @preserve */
   if (finalLinearIssueId !== undefined) {
     createInput.linearIssueId = finalLinearIssueId;
   }
-  /* v8 ignore stop @preserve */
 
   const createResult = await codeTaskRepo.create(createInput);
 
@@ -324,11 +314,9 @@ export async function processCodeAction(
     // INT-619: Queue task when all workers are at capacity
     if (dispatchError.code === 'at_capacity') {
       const queueCountResult = await codeTaskRepo.countQueued();
-      /* v8 ignore start -- test-infra: Firestore countQueued failure fallback to fail-closed @preserve */
       if (!queueCountResult.ok) {
         logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
       }
-      /* v8 ignore stop @preserve */
       const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
 
       if (queueCount > config.queue.maxSize) {
