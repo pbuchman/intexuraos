@@ -17,8 +17,8 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomUUID } from 'node:crypto';
-import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
+import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { loadConfig } from '../../config.js';
 
@@ -207,6 +207,8 @@ export async function retryTask(
       );
     }
   }
+  const agentType = resolveTaskAgentType(originalTask, linearIssueLabelsForDispatch);
+  const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabelsForDispatch, agentType);
 
   // Step 5: Fetch user's worker settings
   const settingsResult = await workerSettingsRepo.getSettings(userId);
@@ -279,8 +281,7 @@ ${additionalContext.trim()}
     traceId: `retry-${String(Date.now())}`,
     webhookSecret,
     retriedFrom: originalTaskId,
-    agentType: originalTask.agentType
-      ?? (hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const)),
+    agentType,
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
   };
 
@@ -327,7 +328,7 @@ ${additionalContext.trim()}
     webhookSecret,
     workerCredentials,
     retriedFrom: originalTaskId,
-    linearIssueLabels: linearIssueLabelsForDispatch,
+    linearIssueLabels: dispatchLabels,
     hasChildren: hasChildrenForDispatch,
     agentType: retryTask.agentType ?? 'planning',
   };

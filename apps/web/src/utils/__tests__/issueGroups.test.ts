@@ -447,16 +447,18 @@ function makeGroup(overrides: {
   linearIssueId?: string | null;
   prNumber?: string | null;
   updatedAt?: string;
+  dispatchedAt?: string;
   aggregateStatus?: IssueGroup['aggregateStatus'];
 }): IssueGroup {
   const {
     linearIssueId = null,
     prNumber = null,
     updatedAt = '2024-01-01T00:00:00.000Z',
+    dispatchedAt,
     aggregateStatus = 'done',
   } = overrides;
 
-  const latestTask = createMockTask({ id: `task-${Math.random().toString(36).slice(2)}`, updatedAt });
+  const latestTask = createMockTask({ id: `task-${Math.random().toString(36).slice(2)}`, updatedAt, dispatchedAt });
 
   return {
     linearIssueId: linearIssueId ?? null,
@@ -631,9 +633,55 @@ describe('sortIssueGroups', () => {
     });
   });
 
+  describe('started-time', () => {
+    it('sorts by most recent dispatchedAt desc', () => {
+      const groups: IssueGroup[] = [
+        makeGroup({ linearIssueId: 'INT-1', dispatchedAt: '2024-01-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-2', dispatchedAt: '2024-06-01T00:00:00.000Z' }),
+      ];
+      const result = sortIssueGroups(groups, 'started-time');
+      expect(result[0]?.linearIssueId).toBe('INT-2');
+      expect(result[1]?.linearIssueId).toBe('INT-1');
+    });
+
+    it('groups with dispatchedAt sort before groups without dispatchedAt', () => {
+      const groups: IssueGroup[] = [
+        makeGroup({ linearIssueId: 'INT-1' }),
+        makeGroup({ linearIssueId: 'INT-2', dispatchedAt: '2024-06-01T00:00:00.000Z' }),
+      ];
+      const result = sortIssueGroups(groups, 'started-time');
+      expect(result[0]?.linearIssueId).toBe('INT-2');
+      expect(result[1]?.linearIssueId).toBe('INT-1');
+    });
+
+    it('falls back to updatedAt desc when neither has dispatchedAt', () => {
+      const groups: IssueGroup[] = [
+        makeGroup({ linearIssueId: 'INT-1', updatedAt: '2024-01-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-2', updatedAt: '2024-06-01T00:00:00.000Z' }),
+      ];
+      const result = sortIssueGroups(groups, 'started-time');
+      expect(result[0]?.linearIssueId).toBe('INT-2');
+      expect(result[1]?.linearIssueId).toBe('INT-1');
+    });
+
+    it('returns empty array for empty input', () => {
+      expect(sortIssueGroups([], 'started-time')).toEqual([]);
+    });
+
+    it('does not mutate the original array', () => {
+      const groups: IssueGroup[] = [
+        makeGroup({ linearIssueId: 'INT-1', dispatchedAt: '2024-01-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-2', dispatchedAt: '2024-06-01T00:00:00.000Z' }),
+      ];
+      const firstId = groups[0]?.linearIssueId;
+      sortIssueGroups(groups, 'started-time');
+      expect(groups[0]?.linearIssueId).toBe(firstId);
+    });
+  });
+
   describe('type coverage for all sort options', () => {
     it('accepts all valid SortOption values without throwing', () => {
-      const sortOptions: SortOption[] = ['linear-id', 'pr-number', 'finished-time'];
+      const sortOptions: SortOption[] = ['linear-id', 'pr-number', 'finished-time', 'started-time'];
       const groups: IssueGroup[] = [makeGroup({ linearIssueId: 'INT-1' })];
       for (const option of sortOptions) {
         expect(() => sortIssueGroups(groups, option)).not.toThrow();

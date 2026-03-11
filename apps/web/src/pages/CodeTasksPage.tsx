@@ -60,11 +60,12 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: 'linear-id', label: 'Linear ID' },
   { key: 'pr-number', label: 'PR #' },
   { key: 'finished-time', label: 'Finished' },
+  { key: 'started-time', label: 'Started At' },
 ];
 
 function loadSortFromStorage(): SortOption {
   const stored = localStorage.getItem(SORT_STORAGE_KEY);
-  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'finished-time') {
+  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'finished-time' || stored === 'started-time') {
     return stored;
   }
   return 'linear-id';
