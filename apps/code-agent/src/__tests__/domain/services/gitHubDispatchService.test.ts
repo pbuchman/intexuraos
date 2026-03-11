@@ -372,6 +372,44 @@ describe('GitHubDispatchService', () => {
     });
   });
 
+  describe('dispatch — retry queue for existing task message failure', () => {
+    it('queues retry when sendTaskMessage fails with retryable error and dispatchRetryRepo is available', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(
+        err({ code: 'worker_unavailable' as const, message: 'Worker timed out' })
+      );
+
+      const mockCreate = vi.fn().mockResolvedValue(ok({} as never));
+      deps = createMockDeps({
+        dispatchRetryRepo: {
+          create: mockCreate,
+          findOldest: vi.fn(),
+          delete: vi.fn(),
+          update: vi.fn(),
+        } as never,
+      });
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(existingTask as never));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'task-123',
+      });
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'task_message',
+          taskId: 'task-123',
+          userId: 'user-456',
+          lastError: 'Worker timed out',
+        })
+      );
+    });
+  });
+
   describe('dispatch — logging', () => {
     it('should log dispatch workflow start', async () => {
       vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));

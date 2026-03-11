@@ -14,6 +14,7 @@ import type { TaskDispatcherService } from '../../../domain/services/taskDispatc
 import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
+import type { DispatchRetryRepository } from '../../../domain/repositories/dispatchRetryRepository.js';
 
 const logger = pino({ level: 'silent' }) as unknown as Logger;
 
@@ -140,6 +141,9 @@ function createMockWhatsAppNotifier(): WhatsAppNotifier {
     async notifyTaskQueueExpired(): ReturnType<WhatsAppNotifier['notifyTaskQueueExpired']> {
       return ok(undefined);
     },
+    async notifyDispatchRetryExhausted(): ReturnType<WhatsAppNotifier['notifyDispatchRetryExhausted']> {
+      return ok(undefined);
+    },
   };
 }
 
@@ -197,6 +201,23 @@ function createMockFirestore(): CreateTaskForPRDeps['firestore'] {
       return fn(mockTransaction as never);
     },
     doc: mockDoc,
+  };
+}
+
+function createMockDispatchRetryRepo(): DispatchRetryRepository {
+  return {
+    async create(): ReturnType<DispatchRetryRepository['create']> {
+      return ok({} as never);
+    },
+    async findOldest(): ReturnType<DispatchRetryRepository['findOldest']> {
+      return ok(null);
+    },
+    async delete(): ReturnType<DispatchRetryRepository['delete']> {
+      return ok(undefined);
+    },
+    async update(): ReturnType<DispatchRetryRepository['update']> {
+      return ok(undefined);
+    },
   };
 }
 
@@ -974,6 +995,115 @@ describe('createTaskForPR', () => {
       expect(result.ok).toBe(true);
       // Verify lock was NOT deleted (task queued, not failed)
       expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('dispatch retry queue (retryable errors)', () => {
+    beforeEach(() => {
+      deps.taskDispatcher = {
+        ...createMockTaskDispatcher(),
+        async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+          return err({ code: 'worker_unavailable', message: 'Worker timed out' });
+        },
+      };
+      deps.dispatchRetryRepo = createMockDispatchRetryRepo();
+    });
+
+    it('queues for retry when dispatch fails with retryable error and dispatchRetryRepo is available', async () => {
+      let retryCaptured: Record<string, unknown> | undefined;
+      deps.dispatchRetryRepo = {
+        ...createMockDispatchRetryRepo(),
+        async create(input): ReturnType<DispatchRetryRepository['create']> {
+          retryCaptured = input as unknown as Record<string, unknown>;
+          return ok({} as never);
+        },
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.taskId).toMatch(/^task_/);
+      }
+      expect(retryCaptured).toBeDefined();
+      expect(retryCaptured?.['type']).toBe('new_task');
+      expect(retryCaptured?.['repository']).toBe('pbuchman/intexuraos');
+      expect(retryCaptured?.['lastError']).toBe('Worker timed out');
+    });
+
+    it('includes prTitle in retry entry when present in request', async () => {
+      let retryCaptured: Record<string, unknown> | undefined;
+      deps.dispatchRetryRepo = {
+        ...createMockDispatchRetryRepo(),
+        async create(input): ReturnType<DispatchRetryRepository['create']> {
+          retryCaptured = input as unknown as Record<string, unknown>;
+          return ok({} as never);
+        },
+      };
+
+      request.prTitle = 'My PR Title';
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(retryCaptured?.['prTitle']).toBe('My PR Title');
+    });
+
+    it('omits prTitle from retry entry when not present in request', async () => {
+      let retryCaptured: Record<string, unknown> | undefined;
+      deps.dispatchRetryRepo = {
+        ...createMockDispatchRetryRepo(),
+        async create(input): ReturnType<DispatchRetryRepository['create']> {
+          retryCaptured = input as unknown as Record<string, unknown>;
+          return ok({} as never);
+        },
+      };
+
+      delete (request as unknown as Record<string, unknown>)['prTitle'];
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(retryCaptured).not.toHaveProperty('prTitle');
+    });
+
+    it('includes baseBranch in retry entry when resolved', async () => {
+      let retryCaptured: Record<string, unknown> | undefined;
+      deps.dispatchRetryRepo = {
+        ...createMockDispatchRetryRepo(),
+        async create(input): ReturnType<DispatchRetryRepository['create']> {
+          retryCaptured = input as unknown as Record<string, unknown>;
+          return ok({} as never);
+        },
+      };
+
+      request.baseBranch = 'development';
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(retryCaptured?.['baseBranch']).toBe('development');
+    });
+
+    it('does NOT delete PR task lock when queued for retry', async () => {
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
+
+    it('updates task status to queued with queuedAt when queuing for retry', async () => {
+      const updateCalls: { id: string; data: Record<string, unknown> }[] = [];
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async update(id: string, data: Record<string, unknown>): ReturnType<CodeTaskRepository['update']> {
+          updateCalls.push({ id, data });
+          return ok({} as never);
+        },
+      };
+
+      await createTaskForPR(deps, request);
+
+      const statusUpdate = updateCalls.find(c => c.data['status'] === 'queued');
+      expect(statusUpdate).toBeDefined();
+      expect(statusUpdate?.data['queuedAt']).toBeInstanceOf(Date);
     });
   });
 });
