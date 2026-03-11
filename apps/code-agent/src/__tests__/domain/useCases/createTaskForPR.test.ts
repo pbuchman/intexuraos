@@ -540,6 +540,51 @@ describe('createTaskForPR', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('posts immediate PR comment only after dispatch is accepted', async () => {
+    const callOrder: string[] = [];
+
+    deps.taskDispatcher = {
+      ...createMockTaskDispatcher(),
+      async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+        callOrder.push('dispatch');
+        return ok({ dispatched: true, workerLocation: 'home-mac' });
+      },
+    };
+
+    deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
+      async postPRComment(): ReturnType<GitHubPRClient['postPRComment']> {
+        callOrder.push('comment');
+        return ok({ commentId: 1 });
+      },
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+    expect(callOrder).toEqual(['dispatch', 'comment']);
+  });
+
+  it('does not post immediate PR comment when dispatch fails', async () => {
+    deps.taskDispatcher = {
+      ...createMockTaskDispatcher(),
+      async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+        return err({ code: 'worker_unavailable', message: 'No workers available' });
+      },
+    };
+
+    const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
+    deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
+      postPRComment,
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(false);
+    expect(postPRComment).not.toHaveBeenCalled();
+  });
+
   it('returns task_creation_failed when dispatch fails', async () => {
     deps.taskDispatcher = {
       ...createMockTaskDispatcher(),
@@ -684,6 +729,12 @@ describe('createTaskForPR', () => {
         },
       };
 
+      const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        postPRComment,
+      };
+
       const result = await createTaskForPR(deps, request);
 
       expect(result.ok).toBe(true);
@@ -693,9 +744,21 @@ describe('createTaskForPR', () => {
       // Task already starts as 'queued' — no status update call in the at_capacity path
       const statusUpdates = updateCalls.filter(d => typeof d['status'] === 'string');
       expect(statusUpdates).toHaveLength(0);
+      expect(postPRComment).toHaveBeenCalledWith(
+        'ghp_test_token_123',
+        'pbuchman',
+        'intexuraos',
+        42,
+        expect.stringContaining('**Dispatch outcome:** Created and queued')
+      );
     });
 
     it('returns queue_full when at_capacity and queue is full', async () => {
+      const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        postPRComment,
+      };
       deps.codeTaskRepo = {
         ...createMockCodeTaskRepo(),
         async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
@@ -709,6 +772,7 @@ describe('createTaskForPR', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('queue_full');
       }
+      expect(postPRComment).not.toHaveBeenCalled();
     });
 
     it('returns queue_full when countQueued fails (fail-closed)', async () => {
