@@ -171,6 +171,23 @@ describe('FirestoreTodoRepository', () => {
         expect(result.value.items[0]?.dueDate?.toISOString()).toBe(dueDate.toISOString());
       }
     });
+
+    it('returns todo with null dueDate', async () => {
+      const createResult = await repository.create(
+        createTestInput({
+          dueDate: null,
+        })
+      );
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const result = await repository.findById(createResult.value.id);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.dueDate).toBeNull();
+      }
+    });
   });
 
   describe('findByUserId', () => {
