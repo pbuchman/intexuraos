@@ -1545,6 +1545,68 @@ describe('firestoreCodeTaskRepository', () => {
     });
   });
 
+  describe('findRecentTasksByLinearIssue', () => {
+    it('returns newest tasks first for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({
+        id: 'task-first',
+        linearIssueId: 'INT-700',
+        prompt: 'first prompt',
+      }));
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+      await repo.update(first.value.id, { status: 'failed' });
+
+      await repo.create(createTaskInput({
+        id: 'task-second',
+        linearIssueId: 'INT-700',
+        prompt: 'second prompt',
+      }));
+
+      const result = await repo.findRecentTasksByLinearIssue('INT-700', 10);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.map((task) => task.id)).toEqual(['task-second', 'task-first']);
+    });
+
+    it('limits results and excludes other Linear issues', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({
+        id: 'task-a',
+        linearIssueId: 'INT-701',
+        prompt: 'task a prompt',
+      }));
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+      await repo.update(first.value.id, { status: 'failed' });
+
+      await repo.create(createTaskInput({
+        id: 'task-b',
+        linearIssueId: 'INT-701',
+        prompt: 'task b prompt',
+      }));
+      await repo.create(createTaskInput({ id: 'task-c', linearIssueId: 'INT-999' }));
+
+      const result = await repo.findRecentTasksByLinearIssue('INT-701', 1);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]?.id).toBe('task-b');
+    });
+  });
+
   describe('deleteTask', () => {
     it('deletes task successfully', async () => {
       const repo = createFirestoreCodeTaskRepository({

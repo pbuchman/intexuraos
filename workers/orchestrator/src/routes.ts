@@ -164,6 +164,12 @@ export function registerRoutes(
       ...(parsed.slug !== undefined && { slug: parsed.slug }),
       ...(parsed.actionId !== undefined && { actionId: parsed.actionId }),
       ...(parsed.agentType !== undefined && { agentType: parsed.agentType }),
+      ...(parsed.continuationPrNumber !== undefined && {
+        continuationPrNumber: parsed.continuationPrNumber,
+      }),
+      ...(parsed.continuationPrBranch !== undefined && {
+        continuationPrBranch: parsed.continuationPrBranch,
+      }),
       ...(parsed.planningPrBranch !== undefined && { planningPrBranch: parsed.planningPrBranch }),
       ...(parsed.planningPrUrl !== undefined && { planningPrUrl: parsed.planningPrUrl }),
     };

@@ -101,6 +101,7 @@ describe('POST /webhooks/github', () => {
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       findOldestQueued: vi.fn().mockResolvedValue(ok(null)),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
+      findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
     };
 
@@ -1672,4 +1673,3 @@ describe('POST /webhooks/github', () => {
     });
   });
 });
-

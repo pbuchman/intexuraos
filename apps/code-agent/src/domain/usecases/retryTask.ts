@@ -16,10 +16,13 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
+import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { randomUUID } from 'node:crypto';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { postContinuationPrComment, resolveContinuationPr } from '../../domain/utils/continuationPr.js';
 import { loadConfig } from '../../config.js';
 
 /**
@@ -79,6 +82,8 @@ export interface RetryTaskDeps {
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  gitHubPRClient: GitHubPRClient;
+  userServiceClient: UserServiceClient;
   orchestratorSecret: string;
   serviceUrl: string;
 }
@@ -262,6 +267,40 @@ ${additionalContext.trim()}
   const retryTaskId = `task_${randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, retryTaskId);
 
+  let continuationPrNumber: number | undefined;
+  let continuationPrBranch: string | undefined;
+
+  if (agentType === 'execution') {
+    const continuationResult = await resolveContinuationPr(
+      {
+        logger,
+        codeTaskRepo,
+        gitHubPRClient: deps.gitHubPRClient,
+        userServiceClient: deps.userServiceClient,
+      },
+      {
+        task: originalTask,
+        userId,
+      }
+    );
+
+    if (!continuationResult.ok) {
+      logger.error(
+        { originalTaskId, userId, error: continuationResult.error },
+        'Failed to resolve continuation PR for retry'
+      );
+      return err({
+        code: 'internal_error',
+        message: continuationResult.error.message,
+      });
+    }
+
+    if (continuationResult.value !== null) {
+      continuationPrNumber = continuationResult.value.prNumber;
+      continuationPrBranch = continuationResult.value.prBranch;
+    }
+  }
+
   // Step 8: Create retry task with retriedFrom
   // Use provided workerType if specified, otherwise use original task's workerType
   const effectiveWorkerType = workerType ?? originalTask.workerType;
@@ -283,6 +322,8 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     agentType,
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
+    ...(continuationPrNumber !== undefined && { prNumber: continuationPrNumber }),
+    ...(continuationPrBranch !== undefined && { prBranch: continuationPrBranch }),
   };
 
   const createResult = await codeTaskRepo.create(createInput);
@@ -296,6 +337,43 @@ ${additionalContext.trim()}
   }
 
   const retryTask = createResult.value;
+
+  if (continuationPrNumber !== undefined && continuationPrBranch !== undefined) {
+    const commentResult = await postContinuationPrComment(
+      {
+        logger,
+        gitHubPRClient: deps.gitHubPRClient,
+        userServiceClient: deps.userServiceClient,
+      },
+      {
+        repository: retryTask.repository,
+        prNumber: continuationPrNumber,
+        taskId: retryTask.id,
+        userId,
+        commentTitle: 'Execution Retry Task Created',
+        ...(retryTask.linearIssueId !== undefined && { linearIssueId: retryTask.linearIssueId }),
+      }
+    );
+
+    if (!commentResult.ok) {
+      await codeTaskRepo.update(retryTask.id, {
+        status: 'failed',
+        error: {
+          code: 'PR_BOOTSTRAP_COMMENT_FAILED',
+          message: commentResult.error.message,
+        },
+      });
+
+      logger.error(
+        { taskId: retryTask.id, originalTaskId, error: commentResult.error },
+        'Failed to post continuation PR bootstrap comment for retry'
+      );
+      return err({
+        code: 'internal_error',
+        message: commentResult.error.message,
+      });
+    }
+  }
 
   // Step 9: Build webhook URL
   const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
@@ -317,6 +395,8 @@ ${additionalContext.trim()}
     linearIssueLabels: string[];
     hasChildren: boolean;
     agentType: 'planning' | 'execution' | 'pull_request' | 'review';
+    continuationPrNumber?: number;
+    continuationPrBranch?: string;
   } = {
     taskId: retryTask.id,
     prompt: retryTask.sanitizedPrompt,
@@ -331,6 +411,8 @@ ${additionalContext.trim()}
     linearIssueLabels: dispatchLabels,
     hasChildren: hasChildrenForDispatch,
     agentType: retryTask.agentType ?? 'planning',
+    ...(continuationPrNumber !== undefined && { continuationPrNumber }),
+    ...(continuationPrBranch !== undefined && { continuationPrBranch }),
   };
 
   // Only include optional fields if defined

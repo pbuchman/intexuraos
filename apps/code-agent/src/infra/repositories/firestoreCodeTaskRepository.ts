@@ -843,6 +843,31 @@ export const createFirestoreCodeTaskRepository = (deps: {
         });
       }
     },
+
+    findRecentTasksByLinearIssue: async (
+      linearIssueId: string,
+      limit: number
+    ): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('linearIssueId', '==', linearIssueId)
+          .orderBy('createdAt', 'desc')
+          .limit(limit)
+          .get();
+
+        const tasks = snapshot.docs.map((doc: any) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error, linearIssueId, limit }, 'Failed to find recent tasks by Linear issue');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
   };
 };
 

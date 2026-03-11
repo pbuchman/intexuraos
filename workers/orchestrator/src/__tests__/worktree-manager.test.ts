@@ -95,6 +95,33 @@ describe('WorktreeManager', () => {
       expect(worktreePath).toBe(join(worktreeBasePath, 'task-123'));
     });
 
+    it('should create a continuation worktree from the existing PR branch', async () => {
+      const commands: string[] = [];
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        commands.push(command);
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.createWorktree('task-continuation', 'development', 'task_existing_pr_branch');
+
+      expect(commands).toEqual(
+        expect.arrayContaining([
+          'git fetch origin "task_existing_pr_branch"',
+          `git worktree add -B "task-continuation" "${join(worktreeBasePath, 'task-continuation')}" "origin/task_existing_pr_branch"`,
+        ])
+      );
+    });
+
     it('should create base directory if it does not exist', async () => {
       const WM = await loadWorktreeManager();
       const manager = new WM(mockConfig, mockLogger);

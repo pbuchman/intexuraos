@@ -11,6 +11,12 @@ export interface GitHubPRClientError {
   message: string;
 }
 
+export interface PullRequestStatus {
+  state: 'open' | 'closed';
+  mergedAt: Date | null;
+  headRef: string;
+}
+
 /** A file changed in a pull request. */
 export interface PullRequestFile {
   filename: string;
@@ -71,6 +77,17 @@ export interface GitHubPRClient {
     repo: string,
     prNumber: number
   ): Promise<Result<string, GitHubPRClientError>>;
+
+  /**
+   * Get current PR state and head branch.
+   * Used to verify whether retries should continue on an existing PR.
+   */
+  getPullRequestStatus(
+    token: string,
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<Result<PullRequestStatus, GitHubPRClientError>>;
 
   /**
    * Post a comment on a pull request (via the issues API).

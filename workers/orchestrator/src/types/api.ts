@@ -23,6 +23,10 @@ export interface CreateTaskRequest {
   retriedFrom?: string;
   /** Agent type determined by code-agent routing analysis. */
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  /** Existing PR number to continue instead of creating a fresh PR. */
+  continuationPrNumber?: number;
+  /** Existing PR branch to continue instead of creating a fresh PR. */
+  continuationPrBranch?: string;
   /** Branch name of planning PR to merge into execution worktree. */
   planningPrBranch?: string;
   /** PR URL to close after successful execution. */

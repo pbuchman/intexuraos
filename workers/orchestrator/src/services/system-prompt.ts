@@ -10,6 +10,8 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   workerType?: WorkerType;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  continuationPrNumber?: number;
+  continuationPrBranch?: string;
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
@@ -154,9 +156,32 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '1.0.1',
+  version: '2.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+    const hasContinuationPr =
+      params.continuationPrNumber !== undefined && params.continuationPrBranch !== undefined;
+    const continuationPrNumber: number = params.continuationPrNumber ?? 0;
+    const continuationPrBranch: string = params.continuationPrBranch ?? '';
+    const prFlowSection = hasContinuationPr
+      ? `### Existing PR Continuation (must use \`gh\` CLI — LAST STEP after code review)
+This task inherits an existing PR and MUST continue that PR instead of creating a new one.
+- Existing PR: #${String(continuationPrNumber)}
+- Existing branch: \`${continuationPrBranch}\`
+- Do NOT run \`gh pr create\`
+- Do NOT open a second PR for this task
+- After review is clean, push updates with: \`git push origin HEAD:${continuationPrBranch}\`
+- Return the EXISTING PR URL in EXECUTION_AGENT_FINAL via \`gh pr view ${String(continuationPrNumber)} --json url\``
+      : `### GitHub / PR Flow (must use \`gh\` CLI — LAST STEP after code review)
+Use GitHub CLI for PR operations (auth depends on active \`gh\` session), not a git-only flow.
+Push and create PR ONLY after code review completes with zero issues:
+1. \`git push -u origin <branch>\`
+2. \`gh pr create --base development ...\`
+3. \`gh pr view --json url\`
+4. Return the PR URL immediately in EXECUTION_AGENT_FINAL.`;
+    const implementationFlowStep5 = hasContinuationPr
+      ? `AFTER review completes with ZERO issues: push updates to the existing PR branch as the LAST step with \`git push origin HEAD:${continuationPrBranch}\`.`
+      : 'AFTER review completes with ZERO issues: push and create PR as the LAST step.';
 
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
@@ -202,20 +227,14 @@ This is a SUBAGENT-FIRST environment. ALL execution MUST be optimized for parall
 - Every non-trivial task MUST use explicit subagents with clear role + scope ownership.
 - Trivial tasks (single-file, obvious fix) may skip subagents.
 
-### GitHub / PR Flow (must use \`gh\` CLI — LAST STEP after code review)
-Use GitHub CLI for PR operations (auth depends on active \`gh\` session), not a git-only flow.
-Push and create PR ONLY after code review completes with zero issues:
-1. \`git push -u origin <branch>\`
-2. \`gh pr create --base development ...\`
-3. \`gh pr view --json url\`
-4. Return the PR URL immediately in EXECUTION_AGENT_FINAL.
+${prFlowSection}
 
 ### Implementation Flow (strict order)
 1. Use TDD where practical (tests before behavior changes).
 2. Commit changes locally — do NOT push yet.
 3. Run \`pnpm run ci:tracked\` — must pass.
 4. Run the code review loop using \`superpowers:requesting-code-review\`.
-5. AFTER review completes with ZERO issues: push and create PR as the LAST step.
+5. ${implementationFlowStep5}
 
 ### MANDATORY Code Review (zero-tolerance loop)
 BEFORE creating the PR:

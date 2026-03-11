@@ -26,9 +26,11 @@ import { submitTaskFeedback, type SubmitTaskFeedbackDeps } from '../../domain/us
 describe('submitTaskFeedback use case', () => {
   let mockCodeTaskRepo: {
     findByIdForUser: ReturnType<typeof vi.fn>;
+    findById: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
+    findRecentTasksByLinearIssue: ReturnType<typeof vi.fn>;
   };
   let mockLinearAgentClient: {
     updateIssueState: ReturnType<typeof vi.fn>;
@@ -43,6 +45,13 @@ describe('submitTaskFeedback use case', () => {
   };
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
+  };
+  let mockGitHubPRClient: {
+    getPullRequestStatus: ReturnType<typeof vi.fn>;
+    postPRComment: ReturnType<typeof vi.fn>;
+  };
+  let mockUserServiceClient: {
+    getOAuthToken: ReturnType<typeof vi.fn>;
   };
   let mockLogger: Logger;
   let mockMetricsClient: {
@@ -72,9 +81,11 @@ describe('submitTaskFeedback use case', () => {
     // Mock code task repo
     mockCodeTaskRepo = {
       findByIdForUser: vi.fn(),
+      findById: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       hasActiveTaskForLinearIssue: vi.fn(),
+      findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
     };
 
     // Mock Linear agent client
@@ -97,6 +108,15 @@ describe('submitTaskFeedback use case', () => {
     // Mock worker settings repo
     mockWorkerSettingsRepo = {
       getSettings: vi.fn(),
+    };
+
+    mockGitHubPRClient = {
+      getPullRequestStatus: vi.fn(),
+      postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
+    };
+
+    mockUserServiceClient = {
+      getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'gh-token' })),
     };
 
     // Mock metrics client
@@ -146,6 +166,8 @@ describe('submitTaskFeedback use case', () => {
       whatsappNotifier: mockWhatsAppNotifier as unknown as SubmitTaskFeedbackDeps['whatsappNotifier'],
       metricsClient: mockMetricsClient as unknown as SubmitTaskFeedbackDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitTaskFeedbackDeps['workerSettingsRepo'],
+      gitHubPRClient: mockGitHubPRClient as unknown as SubmitTaskFeedbackDeps['gitHubPRClient'],
+      userServiceClient: mockUserServiceClient as unknown as SubmitTaskFeedbackDeps['userServiceClient'],
       orchestratorSecret: 'test-orchestrator-secret',
       serviceUrl: 'https://test.example.com',
     };

@@ -58,6 +58,8 @@ interface WorkerTaskRequest {
   linearIssueId?: string;
   traceId?: string;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  continuationPrNumber?: number;
+  continuationPrBranch?: string;
   planningPrBranch?: string;
   planningPrUrl?: string;
 }
@@ -124,6 +126,12 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
     if (request.agentType !== undefined) {
       taskRequest.agentType = request.agentType;
+    }
+    if (request.continuationPrNumber !== undefined) {
+      taskRequest.continuationPrNumber = request.continuationPrNumber;
+    }
+    if (request.continuationPrBranch !== undefined) {
+      taskRequest.continuationPrBranch = request.continuationPrBranch;
     }
     if (request.planningPrBranch !== undefined) {
       taskRequest.planningPrBranch = request.planningPrBranch;
