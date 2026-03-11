@@ -1254,6 +1254,29 @@ describe('TaskDispatcher', () => {
       expect(task?.slug).toBeUndefined();
       expect(task?.actionId).toBeUndefined();
     });
+
+    it('should persist trackingCommentId when provided', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-task-tracking-comment',
+        workerType: 'auto',
+        prompt: 'Test prompt with tracking comment',
+        trackingCommentId: '12345',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['pr-comment'],
+        hasChildren: false,
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const task = await dispatcher.getTask('test-task-tracking-comment');
+      expect(task).not.toBeNull();
+      expect(task?.trackingCommentId).toBe('12345');
+    });
   });
 
   describe('Error handling edge cases', () => {

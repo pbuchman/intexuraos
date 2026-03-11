@@ -291,6 +291,9 @@ export class TaskDispatcher {
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
         ...(request.agentType !== undefined && { agentType: request.agentType }),
+        ...(request.trackingCommentId !== undefined && {
+          trackingCommentId: request.trackingCommentId,
+        }),
         ...(request.planningPrBranch !== undefined && {
           planningPrBranch: request.planningPrBranch,
         }),
@@ -1424,6 +1427,9 @@ export class TaskDispatcher {
           linearIssueLabels: task.linearIssueLabels,
           workerType: task.workerType,
           ...(task.agentType !== undefined && { agentType: task.agentType }),
+          ...(task.trackingCommentId !== undefined && {
+            trackingCommentId: task.trackingCommentId,
+          }),
         }) +
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),

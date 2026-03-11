@@ -267,6 +267,7 @@ export async function createTaskForPR(
         approvalEventId: eventId,
         prNumber,
         webhookSecret,
+        agentType: 'pull_request',
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
         /* v8 ignore stop @preserve */
@@ -370,6 +371,7 @@ export async function createTaskForPR(
     workerCredentials,
     linearIssueLabels: dispatchLabels,
     hasChildren: linearResult.hasChildren,
+    agentType: 'pull_request',
     ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
   });
 
