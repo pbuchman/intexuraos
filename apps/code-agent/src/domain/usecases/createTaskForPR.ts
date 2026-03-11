@@ -21,7 +21,6 @@ import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../models/codeTask.js';
-import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
 import { buildLockDocPath, deletePRTaskLock } from '../utils/prTaskLock.js';
@@ -29,6 +28,7 @@ import { fetchGitHubToken, notifyPROfTaskCreation } from '../utils/prTaskNotific
 import { sanitizePrompt } from '../utils/promptSanitization.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
+import { generateWebhookSecret } from '../utils/secrets.js';
 
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
@@ -119,13 +119,6 @@ function buildTaskPrompt(request: CreateTaskForPRRequest): string {
     `8. Reply to the comment: gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
   );
   return lines.join('\n');
-}
-
-/**
- * Generate HMAC-SHA256 webhook secret for task.
- */
-function generateWebhookSecret(sharedSecret: string, taskId: string): string {
-  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
 }
 
 /**

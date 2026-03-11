@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto';
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../models/codeTask.js';
@@ -18,6 +17,7 @@ import type { DispatchWorkerCredentials, TaskDispatcherService } from '../servic
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import { fetchGitHubToken } from '../utils/prTaskNotification.js';
 import { parseOwnerRepo } from '../utils/parseOwnerRepo.js';
+import { generateWebhookSecret } from '../utils/secrets.js';
 import { sendTaskMessage } from './sendTaskMessage.js';
 
 const BRANCH_REF_PREFIX = 'refs/heads/';
@@ -25,6 +25,15 @@ const SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
 const DEFAULT_WEB_URL = 'https://intexuraos.cloud';
 const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_MERGEABILITY_RETRIES = 2;
+const TERMINAL_OR_PLANNED_TASK_STATUSES = new Set<CodeTask['status']>([
+  'planned',
+  'implemented',
+  'reviewed',
+  'failed',
+  'interrupted',
+  'cancelled',
+  'archived',
+]);
 
 type MergeConflictStatus = GitHubPRSummary['mergeConflictStatus'];
 
@@ -45,6 +54,11 @@ interface GitHubAccessContext {
   token: string;
 }
 
+interface ParsedRepository {
+  owner: string;
+  repo: string;
+}
+
 interface CreateTaskDeps {
   codeTaskRepo: CodeTaskRepository;
   linearIssueService: LinearIssueService;
@@ -62,6 +76,26 @@ interface CreateTaskParams {
   existingTask: CodeTask | null;
   ownerUserId: string;
   worker: WorkerConfig;
+}
+
+interface ConflictWorkflowParams {
+  deps: DetectMergeConflictsOnPushDeps;
+  logger: Logger;
+  repository: string;
+  parsedRepository: ParsedRepository;
+  eventId: string;
+  existingSummary: GitHubPRSummary;
+  details: GitHubPullRequestDetails;
+  accessContext: GitHubAccessContext;
+  taskResolution: ExistingConflictTaskResolution;
+}
+
+interface SummaryUpdateParams {
+  event: GitHubPREvent;
+  existingSummary: GitHubPRSummary;
+  details: GitHubPullRequestDetails;
+  status: MergeConflictStatus;
+  workflowResult: ConflictWorkflowResult;
 }
 
 export interface DetectMergeConflictsOnPushDeps {
@@ -118,13 +152,8 @@ function classifyMergeConflictStatus(mergeable: boolean | null): MergeConflictSt
 
 function shouldEnsureConflictWorkflow(
   existingSummary: GitHubPRSummary,
-  status: MergeConflictStatus,
   staleSummaryTaskId: boolean
 ): boolean {
-  if (status !== 'conflicting') {
-    return false;
-  }
-
   if (existingSummary.mergeConflictStatus !== 'conflicting') {
     return true;
   }
@@ -519,13 +548,7 @@ async function createMergeConflictTask(
   const linkedLinearIssueId = linearResult.linearIssueId;
   const shouldOmitLinearIssueId =
     params.existingTask?.linearIssueId !== undefined &&
-    params.existingTask.status !== 'planned' &&
-    params.existingTask.status !== 'implemented' &&
-    params.existingTask.status !== 'reviewed' &&
-    params.existingTask.status !== 'failed' &&
-    params.existingTask.status !== 'interrupted' &&
-    params.existingTask.status !== 'cancelled' &&
-    params.existingTask.status !== 'archived' &&
+    !TERMINAL_OR_PLANNED_TASK_STATUSES.has(params.existingTask.status) &&
     params.existingTask.agentType !== 'pull_request';
 
   const prompt = buildConflictInstruction({
@@ -535,7 +558,7 @@ async function createMergeConflictTask(
     commentId: params.commentId,
   });
   const taskId = `task_${crypto.randomUUID()}`;
-  const webhookSecret = createHmac('sha256', deps.orchestratorSecret).update(taskId).digest('hex');
+  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, taskId);
 
   let createResult = await deps.codeTaskRepo.create(buildCreateTaskInput({
     taskId,
@@ -617,6 +640,412 @@ async function createMergeConflictTask(
   return ok({ taskId, ownerUserId: params.ownerUserId });
 }
 
+function shouldResolveTaskState(
+  status: MergeConflictStatus,
+  existingSummary: GitHubPRSummary
+): boolean {
+  return status === 'conflicting' || (
+    status === 'unknown' &&
+    existingSummary.mergeConflictStatus === 'conflicting'
+  );
+}
+
+function buildInitialWorkflowResult(
+  existingSummary: GitHubPRSummary,
+  taskResolution: ExistingConflictTaskResolution
+): ConflictWorkflowResult {
+  return {
+    commentId: existingSummary.managedConflictCommentId,
+    taskId:
+      taskResolution.reusableTask?.id ??
+      (taskResolution.staleSummaryTaskId ? null : existingSummary.managedConflictTaskId),
+    ownerUserId:
+      taskResolution.reusableTask?.userId ??
+      existingSummary.managedConflictTaskOwnerUserId,
+  };
+}
+
+async function reuseConflictTask(
+  params: ConflictWorkflowParams,
+  reusableTask: CodeTask,
+  commentId: number
+): Promise<ConflictWorkflowResult> {
+  const sendResult = await sendTaskMessage(
+    {
+      logger: params.logger,
+      codeTaskRepo: params.deps.codeTaskRepo,
+      logLineRepo: params.deps.logLineRepo,
+      taskDispatcher: params.deps.taskDispatcher,
+      workerSettingsRepo: params.deps.workerSettingsRepo,
+      statusMirrorService: params.deps.statusMirrorService,
+      whatsappNotifier: params.deps.whatsappNotifier,
+    },
+    {
+      taskId: reusableTask.id,
+      userId: reusableTask.userId,
+      message: buildConflictInstruction({
+        repository: params.repository,
+        prNumber: params.existingSummary.pullRequestNumber,
+        baseBranch: params.details.baseBranch,
+        commentId,
+      }),
+    }
+  );
+
+  const phase = sendResult.ok
+    ? sendResult.value.action === 'queued' ? 'queued' : 'resumed'
+    : 'failed';
+
+  await updateManagedComment(
+    params.deps.gitHubPRClient,
+    params.accessContext.token,
+    params.parsedRepository.owner,
+    params.parsedRepository.repo,
+    params.existingSummary.pullRequestNumber,
+    commentId,
+    buildConflictCommentBody({
+      phase,
+      repository: params.repository,
+      prNumber: params.existingSummary.pullRequestNumber,
+      baseBranch: params.details.baseBranch,
+      ...(sendResult.ok ? { taskId: reusableTask.id } : {}),
+    }),
+    params.logger
+  );
+
+  return {
+    commentId,
+    taskId: sendResult.ok ? reusableTask.id : null,
+    ownerUserId: reusableTask.userId,
+  };
+}
+
+async function createConflictTaskWorkflow(
+  params: ConflictWorkflowParams & { commentId: number }
+): Promise<ConflictWorkflowResult> {
+  const workerResult = await resolveEnabledWorker(
+    params.deps.workerSettingsRepo,
+    params.accessContext.userId,
+    params.logger
+  );
+
+  if (!workerResult.ok) {
+    const phase = workerResult.error.code === 'NO_ENABLED_WORKER' ? 'no-worker' : 'failed';
+    await updateManagedComment(
+      params.deps.gitHubPRClient,
+      params.accessContext.token,
+      params.parsedRepository.owner,
+      params.parsedRepository.repo,
+      params.existingSummary.pullRequestNumber,
+      params.commentId,
+      buildConflictCommentBody({
+        phase,
+        repository: params.repository,
+        prNumber: params.existingSummary.pullRequestNumber,
+        baseBranch: params.details.baseBranch,
+      }),
+      params.logger
+    );
+    return {
+      commentId: params.commentId,
+      taskId: null,
+      ownerUserId: params.accessContext.userId,
+    };
+  }
+
+  const taskResult = await createMergeConflictTask(
+    {
+      codeTaskRepo: params.deps.codeTaskRepo,
+      linearIssueService: params.deps.linearIssueService,
+      taskDispatcher: params.deps.taskDispatcher,
+      serviceUrl: params.deps.serviceUrl,
+      orchestratorSecret: params.deps.orchestratorSecret,
+    },
+    {
+      logger: params.logger,
+      repository: params.repository,
+      eventId: params.eventId,
+      details: params.details,
+      commentId: params.commentId,
+      existingTask: params.taskResolution.latestTask,
+      ownerUserId: params.accessContext.userId,
+      worker: workerResult.value,
+    }
+  );
+
+  if (!taskResult.ok) {
+    await updateManagedComment(
+      params.deps.gitHubPRClient,
+      params.accessContext.token,
+      params.parsedRepository.owner,
+      params.parsedRepository.repo,
+      params.existingSummary.pullRequestNumber,
+      params.commentId,
+      buildConflictCommentBody({
+        phase: 'failed',
+        repository: params.repository,
+        prNumber: params.existingSummary.pullRequestNumber,
+        baseBranch: params.details.baseBranch,
+      }),
+      params.logger
+    );
+    return {
+      commentId: params.commentId,
+      taskId: null,
+      ownerUserId: params.accessContext.userId,
+    };
+  }
+
+  const taskPhase = params.taskResolution.latestTask === null ? 'starting' : 'queued';
+  await updateManagedComment(
+    params.deps.gitHubPRClient,
+    params.accessContext.token,
+    params.parsedRepository.owner,
+    params.parsedRepository.repo,
+    params.existingSummary.pullRequestNumber,
+    params.commentId,
+    buildConflictCommentBody({
+      phase: taskPhase,
+      repository: params.repository,
+      prNumber: params.existingSummary.pullRequestNumber,
+      baseBranch: params.details.baseBranch,
+      taskId: taskResult.value.taskId,
+    }),
+    params.logger
+  );
+
+  return {
+    commentId: params.commentId,
+    taskId: taskResult.value.taskId,
+    ownerUserId: taskResult.value.ownerUserId,
+  };
+}
+
+async function executeConflictWorkflow(
+  params: ConflictWorkflowParams
+): Promise<ConflictWorkflowResult> {
+  const initialWorkflowResult = buildInitialWorkflowResult(
+    params.existingSummary,
+    params.taskResolution
+  );
+
+  if (!shouldEnsureConflictWorkflow(
+    params.existingSummary,
+    params.taskResolution.staleSummaryTaskId
+  )) {
+    return initialWorkflowResult;
+  }
+
+  const commentId = await updateManagedComment(
+    params.deps.gitHubPRClient,
+    params.accessContext.token,
+    params.parsedRepository.owner,
+    params.parsedRepository.repo,
+    params.existingSummary.pullRequestNumber,
+    params.existingSummary.managedConflictCommentId,
+    buildConflictCommentBody({
+      phase: 'starting',
+      repository: params.repository,
+      prNumber: params.existingSummary.pullRequestNumber,
+      baseBranch: params.details.baseBranch,
+    }),
+    params.logger
+  );
+
+  if (commentId === null) {
+    return initialWorkflowResult;
+  }
+
+  const reusableTask = params.taskResolution.reusableTask;
+  if (reusableTask !== null) {
+    return await reuseConflictTask(params, reusableTask, commentId);
+  }
+
+  return await createConflictTaskWorkflow({ ...params, commentId });
+}
+
+async function resolveConflictWorkflow(
+  params: ConflictWorkflowParams
+): Promise<ConflictWorkflowResult> {
+  await updateManagedComment(
+    params.deps.gitHubPRClient,
+    params.accessContext.token,
+    params.parsedRepository.owner,
+    params.parsedRepository.repo,
+    params.existingSummary.pullRequestNumber,
+    params.existingSummary.managedConflictCommentId,
+    buildConflictCommentBody({
+      phase: 'resolved',
+      repository: params.repository,
+      prNumber: params.existingSummary.pullRequestNumber,
+      baseBranch: params.details.baseBranch,
+    }),
+    params.logger
+  );
+
+  return {
+    commentId: null,
+    taskId: null,
+    ownerUserId: null,
+  };
+}
+
+function resolveConflictEpisodeStartedAt(
+  existingSummary: GitHubPRSummary,
+  status: MergeConflictStatus,
+  now: Date
+): Date | null {
+  if (status === 'conflicting') {
+    return existingSummary.conflictEpisodeStartedAt ?? now;
+  }
+
+  if (status === 'unknown' && existingSummary.mergeConflictStatus === 'conflicting') {
+    // Preserve the active conflict window when GitHub temporarily reports mergeability as unknown.
+    return existingSummary.conflictEpisodeStartedAt ?? null;
+  }
+
+  return null;
+}
+
+function buildSummaryUpdateInput(params: SummaryUpdateParams): UpsertGitHubPRSummaryInput {
+  const now = new Date();
+
+  return {
+    repository: params.event.repository,
+    pullRequestNumber: params.existingSummary.pullRequestNumber,
+    title: params.details.title,
+    state: 'open',
+    mergedAt: null,
+    baseBranch: params.details.baseBranch,
+    authorLogin: params.details.authorLogin,
+    headBranch: params.details.headBranch,
+    mergeConflictStatus: params.status,
+    lastConflictCheckedAt: now,
+    conflictEpisodeStartedAt: resolveConflictEpisodeStartedAt(
+      params.existingSummary,
+      params.status,
+      now
+    ),
+    conflictResolvedAt:
+      params.status === 'clean' &&
+      params.existingSummary.mergeConflictStatus === 'conflicting'
+        ? now
+        : null,
+    managedConflictCommentId:
+      params.status === 'conflicting' || params.status === 'unknown'
+        ? params.workflowResult.commentId
+        : null,
+    managedConflictTaskId:
+      params.status === 'conflicting' || params.status === 'unknown'
+        ? params.workflowResult.taskId
+        : null,
+    managedConflictTaskOwnerUserId:
+      params.status === 'conflicting' || params.status === 'unknown'
+        ? params.workflowResult.ownerUserId
+        : null,
+    lastActivityAt: params.event.createdAt,
+    firstSeenAt: params.existingSummary.firstSeenAt,
+  };
+}
+
+async function processOpenSummaryOnPush(
+  deps: DetectMergeConflictsOnPushDeps,
+  event: GitHubPREvent,
+  logger: Logger,
+  parsedRepository: ParsedRepository,
+  existingSummary: GitHubPRSummary
+): Promise<void> {
+  const accessContext = await resolveGitHubAccessContext(
+    {
+      userServiceClient: deps.userServiceClient,
+      gitHubPREventRepo: deps.gitHubPREventRepo,
+    },
+    existingSummary,
+    logger
+  );
+  if (accessContext === null) {
+    logger.info(
+      { repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
+      'Skipping conflict detection for PR without an OAuth-backed user'
+    );
+    return;
+  }
+
+  const detailsResult = await loadPullRequestDetails(
+    deps,
+    accessContext.token,
+    parsedRepository.owner,
+    parsedRepository.repo,
+    existingSummary.pullRequestNumber,
+    deps.mergeabilityRetries ?? DEFAULT_MERGEABILITY_RETRIES,
+    deps.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS
+  );
+  if (!detailsResult.ok) {
+    logger.warn(
+      { error: detailsResult.error, prNumber: existingSummary.pullRequestNumber },
+      'Failed to load PR details for conflict detection'
+    );
+    return;
+  }
+
+  const details = detailsResult.value;
+  const status = classifyMergeConflictStatus(details.mergeable);
+  let taskResolution: ExistingConflictTaskResolution = {
+    latestTask: null,
+    reusableTask: null,
+    staleSummaryTaskId: false,
+  };
+
+  if (shouldResolveTaskState(status, existingSummary)) {
+    const resolutionResult = await resolveExistingConflictTask(
+      deps.codeTaskRepo,
+      existingSummary,
+      event.repository,
+      existingSummary.pullRequestNumber,
+      logger
+    );
+    if (!resolutionResult.ok) {
+      return;
+    }
+    taskResolution = resolutionResult.value;
+  }
+
+  const workflowParams: ConflictWorkflowParams = {
+    deps,
+    logger,
+    repository: event.repository,
+    parsedRepository,
+    eventId: event.id,
+    existingSummary,
+    details,
+    accessContext,
+    taskResolution,
+  };
+
+  let workflowResult = buildInitialWorkflowResult(existingSummary, taskResolution);
+  if (status === 'conflicting') {
+    workflowResult = await executeConflictWorkflow(workflowParams);
+  } else if (
+    status === 'clean' &&
+    existingSummary.mergeConflictStatus === 'conflicting' &&
+    existingSummary.managedConflictCommentId !== null
+  ) {
+    workflowResult = await resolveConflictWorkflow(workflowParams);
+  }
+
+  await upsertSummary(
+    deps.gitHubPRSummaryRepo,
+    buildSummaryUpdateInput({
+      event,
+      existingSummary,
+      details,
+      status,
+      workflowResult,
+    }),
+    logger
+  );
+}
+
 export function createDetectMergeConflictsOnPush(
   deps: DetectMergeConflictsOnPushDeps
 ): MergeConflictDetector {
@@ -649,320 +1078,12 @@ export function createDetectMergeConflictsOnPush(
       }
 
       for (const existingSummary of openSummariesResult.value) {
-        const accessContext = await resolveGitHubAccessContext(
-          {
-            userServiceClient: deps.userServiceClient,
-            gitHubPREventRepo: deps.gitHubPREventRepo,
-          },
-          existingSummary,
-          logger
-        );
-        if (accessContext === null) {
-          logger.info(
-            { repository: existingSummary.repository, prNumber: existingSummary.pullRequestNumber },
-            'Skipping conflict detection for PR without an OAuth-backed user'
-          );
-          continue;
-        }
-
-        const detailsResult = await loadPullRequestDetails(
+        await processOpenSummaryOnPush(
           deps,
-          accessContext.token,
-          parsedRepository.owner,
-          parsedRepository.repo,
-          existingSummary.pullRequestNumber,
-          deps.mergeabilityRetries ?? DEFAULT_MERGEABILITY_RETRIES,
-          deps.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS
-        );
-        if (!detailsResult.ok) {
-          logger.warn(
-            { error: detailsResult.error, prNumber: existingSummary.pullRequestNumber },
-            'Failed to load PR details for conflict detection'
-          );
-          continue;
-        }
-
-        const details = detailsResult.value;
-        const status = classifyMergeConflictStatus(details.mergeable);
-        let taskResolution: ExistingConflictTaskResolution = {
-          latestTask: null,
-          reusableTask: null,
-          staleSummaryTaskId: false,
-        };
-
-        const shouldResolveTaskState =
-          status === 'conflicting' ||
-          (status === 'unknown' && existingSummary.mergeConflictStatus === 'conflicting');
-        if (shouldResolveTaskState) {
-          const resolutionResult = await resolveExistingConflictTask(
-            deps.codeTaskRepo,
-            existingSummary,
-            event.repository,
-            existingSummary.pullRequestNumber,
-            logger
-          );
-          if (!resolutionResult.ok) {
-            continue;
-          }
-          taskResolution = resolutionResult.value;
-        }
-
-        let workflowResult: ConflictWorkflowResult = {
-          commentId: existingSummary.managedConflictCommentId,
-          taskId:
-            taskResolution.reusableTask?.id ??
-            (taskResolution.staleSummaryTaskId ? null : existingSummary.managedConflictTaskId),
-          ownerUserId:
-            taskResolution.reusableTask?.userId ??
-            existingSummary.managedConflictTaskOwnerUserId,
-        };
-
-        if (shouldEnsureConflictWorkflow(existingSummary, status, taskResolution.staleSummaryTaskId)) {
-          const commentId = await updateManagedComment(
-            deps.gitHubPRClient,
-            accessContext.token,
-            parsedRepository.owner,
-            parsedRepository.repo,
-            existingSummary.pullRequestNumber,
-            existingSummary.managedConflictCommentId,
-            buildConflictCommentBody({
-              phase: 'starting',
-              repository: event.repository,
-              prNumber: existingSummary.pullRequestNumber,
-              baseBranch: details.baseBranch,
-            }),
-            logger
-          );
-
-          if (commentId !== null && taskResolution.reusableTask !== null) {
-            const sendResult = await sendTaskMessage(
-              {
-                logger,
-                codeTaskRepo: deps.codeTaskRepo,
-                logLineRepo: deps.logLineRepo,
-                taskDispatcher: deps.taskDispatcher,
-                workerSettingsRepo: deps.workerSettingsRepo,
-                statusMirrorService: deps.statusMirrorService,
-                whatsappNotifier: deps.whatsappNotifier,
-              },
-              {
-                taskId: taskResolution.reusableTask.id,
-                userId: taskResolution.reusableTask.userId,
-                message: buildConflictInstruction({
-                  repository: event.repository,
-                  prNumber: existingSummary.pullRequestNumber,
-                  baseBranch: details.baseBranch,
-                  commentId,
-                }),
-              }
-            );
-
-            if (sendResult.ok) {
-              await updateManagedComment(
-                deps.gitHubPRClient,
-                accessContext.token,
-                parsedRepository.owner,
-                parsedRepository.repo,
-                existingSummary.pullRequestNumber,
-                commentId,
-                buildConflictCommentBody({
-                  phase: sendResult.value.action === 'queued' ? 'queued' : 'resumed',
-                  repository: event.repository,
-                  prNumber: existingSummary.pullRequestNumber,
-                  baseBranch: details.baseBranch,
-                  taskId: taskResolution.reusableTask.id,
-                }),
-                logger
-              );
-              workflowResult = {
-                commentId,
-                taskId: taskResolution.reusableTask.id,
-                ownerUserId: taskResolution.reusableTask.userId,
-              };
-            } else {
-              await updateManagedComment(
-                deps.gitHubPRClient,
-                accessContext.token,
-                parsedRepository.owner,
-                parsedRepository.repo,
-                existingSummary.pullRequestNumber,
-                commentId,
-                buildConflictCommentBody({
-                  phase: 'failed',
-                  repository: event.repository,
-                  prNumber: existingSummary.pullRequestNumber,
-                  baseBranch: details.baseBranch,
-                }),
-                logger
-              );
-              workflowResult = {
-                commentId,
-                taskId: null,
-                ownerUserId: taskResolution.reusableTask.userId,
-              };
-            }
-          } else if (commentId !== null) {
-            const workerResult = await resolveEnabledWorker(
-              deps.workerSettingsRepo,
-              accessContext.userId,
-              logger
-            );
-
-            if (!workerResult.ok) {
-              const phase = workerResult.error.code === 'NO_ENABLED_WORKER' ? 'no-worker' : 'failed';
-              await updateManagedComment(
-                deps.gitHubPRClient,
-                accessContext.token,
-                parsedRepository.owner,
-                parsedRepository.repo,
-                existingSummary.pullRequestNumber,
-                commentId,
-                buildConflictCommentBody({
-                  phase,
-                  repository: event.repository,
-                  prNumber: existingSummary.pullRequestNumber,
-                  baseBranch: details.baseBranch,
-                }),
-                logger
-              );
-              workflowResult = {
-                commentId,
-                taskId: null,
-                ownerUserId: accessContext.userId,
-              };
-            } else {
-              const taskResult = await createMergeConflictTask(
-                {
-                  codeTaskRepo: deps.codeTaskRepo,
-                  linearIssueService: deps.linearIssueService,
-                  taskDispatcher: deps.taskDispatcher,
-                  serviceUrl: deps.serviceUrl,
-                  orchestratorSecret: deps.orchestratorSecret,
-                },
-                {
-                  logger,
-                  repository: event.repository,
-                  eventId: event.id,
-                  details,
-                  commentId,
-                  existingTask: taskResolution.latestTask,
-                  ownerUserId: accessContext.userId,
-                  worker: workerResult.value,
-                }
-              );
-
-              if (taskResult.ok) {
-                const taskPhase =
-                  taskResolution.latestTask === null ? 'starting' : 'queued';
-                await updateManagedComment(
-                  deps.gitHubPRClient,
-                  accessContext.token,
-                  parsedRepository.owner,
-                  parsedRepository.repo,
-                  existingSummary.pullRequestNumber,
-                  commentId,
-                  buildConflictCommentBody({
-                    phase: taskPhase,
-                    repository: event.repository,
-                    prNumber: existingSummary.pullRequestNumber,
-                    baseBranch: details.baseBranch,
-                    taskId: taskResult.value.taskId,
-                  }),
-                  logger
-                );
-                workflowResult = {
-                  commentId,
-                  taskId: taskResult.value.taskId,
-                  ownerUserId: taskResult.value.ownerUserId,
-                };
-              } else {
-                await updateManagedComment(
-                  deps.gitHubPRClient,
-                  accessContext.token,
-                  parsedRepository.owner,
-                  parsedRepository.repo,
-                  existingSummary.pullRequestNumber,
-                  commentId,
-                  buildConflictCommentBody({
-                    phase: 'failed',
-                    repository: event.repository,
-                    prNumber: existingSummary.pullRequestNumber,
-                    baseBranch: details.baseBranch,
-                  }),
-                  logger
-                );
-                workflowResult = {
-                  commentId,
-                  taskId: null,
-                  ownerUserId: accessContext.userId,
-                };
-              }
-            }
-          }
-        } else if (
-          status === 'clean' &&
-          existingSummary.mergeConflictStatus === 'conflicting' &&
-          existingSummary.managedConflictCommentId !== null
-        ) {
-          await updateManagedComment(
-            deps.gitHubPRClient,
-            accessContext.token,
-            parsedRepository.owner,
-            parsedRepository.repo,
-            existingSummary.pullRequestNumber,
-            existingSummary.managedConflictCommentId,
-            buildConflictCommentBody({
-              phase: 'resolved',
-              repository: event.repository,
-              prNumber: existingSummary.pullRequestNumber,
-              baseBranch: details.baseBranch,
-            }),
-            logger
-          );
-          workflowResult = {
-            commentId: null,
-            taskId: null,
-            ownerUserId: null,
-          };
-        }
-
-        const now = new Date();
-        const preserveActiveEpisode =
-          status !== 'clean' && existingSummary.mergeConflictStatus === 'conflicting';
-        const preservedConflictEpisodeStartedAt = existingSummary.conflictEpisodeStartedAt ?? null;
-        await upsertSummary(
-          deps.gitHubPRSummaryRepo,
-          {
-            repository: event.repository,
-            pullRequestNumber: existingSummary.pullRequestNumber,
-            title: details.title,
-            state: 'open',
-            mergedAt: null,
-            baseBranch: details.baseBranch,
-            authorLogin: details.authorLogin,
-            headBranch: details.headBranch,
-            mergeConflictStatus: status,
-            lastConflictCheckedAt: now,
-            conflictEpisodeStartedAt:
-              status === 'conflicting'
-                ? existingSummary.conflictEpisodeStartedAt ?? now
-                : preserveActiveEpisode
-                  ? preservedConflictEpisodeStartedAt
-                  : null,
-            conflictResolvedAt:
-              status === 'clean' && existingSummary.mergeConflictStatus === 'conflicting' ? now : null,
-            managedConflictCommentId:
-              status === 'conflicting' || status === 'unknown' ? workflowResult.commentId : null,
-            managedConflictTaskId:
-              status === 'conflicting' || status === 'unknown' ? workflowResult.taskId : null,
-            managedConflictTaskOwnerUserId:
-              status === 'conflicting' || status === 'unknown'
-                ? workflowResult.ownerUserId
-                : null,
-            lastActivityAt: event.createdAt,
-            firstSeenAt: existingSummary.firstSeenAt,
-          },
-          logger
+          event,
+          logger,
+          parsedRepository,
+          existingSummary
         );
       }
     },
