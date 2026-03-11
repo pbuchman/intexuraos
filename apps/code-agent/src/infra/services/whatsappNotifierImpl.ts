@@ -415,5 +415,32 @@ Task ID: ${task.id}`;
 
       return ok(undefined);
     },
+
+    async notifyDispatchRetryExhausted(
+      userId: string,
+      info: { repository: string; pullRequestNumber: number; lastError: string }
+    ): Promise<Result<void, NotificationError>> {
+      const message = `⚠️ Dispatch retry failed: ${info.repository}#${String(info.pullRequestNumber)}
+
+All retry attempts exhausted. The message could not be delivered to the worker.
+
+Error: ${info.lastError}
+
+Please check worker availability and retry manually if needed.`;
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
   };
 }

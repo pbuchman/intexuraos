@@ -27,6 +27,8 @@ import { loadConfig } from '../../config.js';
 import { buildLockDocPath, deletePRTaskLock } from '../utils/prTaskLock.js';
 import { fetchGitHubToken, notifyPROfTaskCreation } from '../utils/prTaskNotification.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
+import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
+import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
@@ -69,6 +71,7 @@ export interface CreateTaskForPRDeps {
   serviceUrl: string;
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
+  dispatchRetryRepo?: DispatchRetryRepository;
   firestore: {
     runTransaction: <T>(fn: (transaction: FirebaseFirestore.Transaction) => Promise<T>) => Promise<T>;
     doc: (path: string) => FirebaseFirestore.DocumentReference;
@@ -429,6 +432,30 @@ export async function createTaskForPR(
       return ok({ taskId });
     }
 
+    // Retryable errors: queue for retry, keep task queued, keep PR lock
+    if (isRetryableErrorCode(dispatchError.code) && deps.dispatchRetryRepo !== undefined) {
+      const retryConfig = loadConfig();
+      await codeTaskRepo.update(taskId, { status: 'queued', queuedAt: new Date() });
+      await deps.dispatchRetryRepo.create({
+        type: 'new_task',
+        eventId,
+        repository,
+        pullRequestNumber: prNumber,
+        senderLogin,
+        taskId,
+        comment: request.comment,
+        ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+        ...(resolvedBaseBranch !== undefined && { baseBranch: resolvedBaseBranch }),
+        attempts: 0,
+        maxAttempts: retryConfig.retryQueue.maxAttempts,
+        lastError: dispatchError.message,
+        ttlMinutes: retryConfig.retryQueue.ttlMinutes,
+      });
+      logger.info({ taskId }, 'Dispatch failed with retryable error, queued for retry');
+      return ok({ taskId });
+    }
+
+    // Non-retryable: existing behavior (mark failed, delete lock)
     logger.error({ taskId, error: dispatchError }, 'Failed to dispatch PR comment task');
     await codeTaskRepo.update(taskId, {
       status: 'failed',

@@ -240,6 +240,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -269,6 +270,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -3782,6 +3784,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -3811,6 +3814,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -4135,6 +4139,7 @@ describe('POST /internal/logs', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -4164,6 +4169,7 @@ describe('POST /internal/logs', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -4711,6 +4717,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -4740,6 +4747,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });

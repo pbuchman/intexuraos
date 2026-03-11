@@ -1297,4 +1297,42 @@ describe('WhatsAppNotifier', () => {
       }
     });
   });
+
+  describe('notifyDispatchRetryExhausted', () => {
+    it('sends retry exhaustion notification with error details', async () => {
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyDispatchRetryExhausted('user-123', {
+        repository: 'test/repo',
+        pullRequestNumber: 42,
+        lastError: 'Connection refused',
+      });
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0] as { message: string };
+      expect(callArgs.message).toContain('test/repo#42');
+      expect(callArgs.message).toContain('Connection refused');
+      expect(callArgs.message).toContain('retry');
+    });
+
+    it('returns err on publish failure', async () => {
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'PubSub down' })
+      );
+
+      const result = await notifier.notifyDispatchRetryExhausted('user-123', {
+        repository: 'test/repo',
+        pullRequestNumber: 42,
+        lastError: 'Connection refused',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('PubSub down');
+      }
+    });
+  });
 });

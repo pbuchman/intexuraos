@@ -149,6 +149,7 @@ describe('POST /webhooks/github', () => {
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
       toolCallingClient: undefined,
       eventDecisionRepo: { save: vi.fn().mockResolvedValue({ ok: true, value: {} }) },
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
     };
 
