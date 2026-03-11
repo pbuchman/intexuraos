@@ -721,6 +721,24 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "github-pr-summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "repository",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "baseBranch",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

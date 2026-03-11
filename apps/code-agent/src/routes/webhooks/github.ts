@@ -7,6 +7,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import { getErrorMessage } from '@intexuraos/common-core';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import { verifyGitHubSignature } from '../../infra/github-webhook-auth.js';
@@ -233,7 +234,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
       const { unifiedEvaluator, mergeConflictDetector } = getServices();
       if (parsedEvent.eventType === 'push' && mergeConflictDetector !== undefined) {
         void mergeConflictDetector.detectOnPush(savedEvent, logger).catch((detectErr: unknown) => {
-          logger.error({ detectErr }, 'Unhandled error in merge conflict detector');
+          logger.error({ error: getErrorMessage(detectErr) }, 'Unhandled error in merge conflict detector');
         });
       }
 
