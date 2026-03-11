@@ -349,6 +349,7 @@ export async function createTaskForPR(
       ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
       ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
       titleAlreadyTagged: existingLinearIssueId !== undefined,
+      workerType: 'auto',
     },
   );
 
