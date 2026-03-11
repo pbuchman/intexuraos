@@ -87,32 +87,21 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
   );
   const review = reviewTask !== undefined ? deriveStepState(reviewTask.status) : null;
 
-  // PR step — extract from any task's result.prUrl
+  // PR step — extract from latest non-archived task's result.prUrl
   let pr: PipelineState['pr'] = null;
-  for (const task of tasks) {
-    const prUrl = task.result?.prUrl;
+  const nonArchivedTasks = tasks.filter((t) => t.status !== 'archived');
+  if (nonArchivedTasks.length > 0) {
+    // Find the latest task by updatedAt
+    const latestTask = nonArchivedTasks.reduce((latest, task) =>
+      new Date(task.updatedAt) > new Date(latest.updatedAt) ? task : latest
+    );
+    const prUrl = latestTask.result?.prUrl;
     if (prUrl !== undefined) {
       const match = PR_URL_REGEX.exec(prUrl);
       if (match !== null) {
         const prNumber = match[1];
         if (prNumber !== undefined) {
           pr = { url: prUrl, number: prNumber };
-          break;
-        }
-      }
-    }
-  }
-
-  // Fallback: extract PR URL from task prompts (e.g., review tasks may have PR URL in prompt)
-  if (pr === null) {
-    for (const task of tasks) {
-      const match = PR_URL_REGEX.exec(task.prompt);
-      if (match !== null) {
-        const prNumber = match[1];
-        if (prNumber !== undefined) {
-          const prUrl = `https://github.com/org/repo/pull/${prNumber}`;
-          pr = { url: prUrl, number: prNumber };
-          break;
         }
       }
     }
