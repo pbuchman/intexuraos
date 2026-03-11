@@ -472,7 +472,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '2.2.0',
+  version: '2.3.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -554,6 +554,12 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
 \`\`\`
 
 Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
+
+When composing the review summary body:
+
+- Keep the title, scope, findings, and overall assessment in the single review body.
+${taskUrl !== undefined ? `- Append a final standalone markdown link line exactly as: \`[View in IntexuraOS](${taskUrl})\`` : ''}
+${taskUrl !== undefined ? '- Include that line in the same `POST /reviews` body, not as a separate PR comment.' : ''}
 
 ### Rules
 

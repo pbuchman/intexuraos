@@ -96,7 +96,7 @@ describe('notifyPROfTaskCreation', () => {
     );
   });
 
-  it('comment includes task ID and link', async () => {
+  it('comment includes task ID and exact View in IntexuraOS link label', async () => {
     const deps = createFakeDeps();
     const request = createFakeRequest();
 
@@ -104,8 +104,10 @@ describe('notifyPROfTaskCreation', () => {
 
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).toContain('task_abc123');
-    expect(body).toContain('intexuraos.cloud/#/code-tasks/task_abc123');
     expect(body).toContain('Automated Code Review Task Created');
+    expect(body).toContain(
+      '[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task_abc123)'
+    );
   });
 
   it('comment includes Linear issue ID when provided', async () => {
