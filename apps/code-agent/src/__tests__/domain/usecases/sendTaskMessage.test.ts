@@ -3,7 +3,7 @@
  *
  * Test Requirements:
  * 1. Returns task_not_found when task doesn't exist
- * 2. Returns invalid_status for queued task
+ * 2. Queues message locally for queued task
  * 3. Queues message locally for dispatched task (stores in pendingUserMessages, no worker contact)
  * 4. Queues message for running task (writes log line, forwards to worker, returns { action: 'queued' })
  * 5. Resumes completed task with message (writes log line, forwards to worker, returns { action: 'resumed' })
@@ -175,19 +175,23 @@ describe('sendTaskMessage', () => {
       );
     });
 
-    it('should return invalid_status for queued task', async () => {
+    it('should queue message locally for queued task without contacting worker', async () => {
       const queuedTask = createMockTask({ status: 'queued' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(queuedTask));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
 
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('invalid_status');
-        expect(result.error.message).toContain('queued');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('queued');
       }
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId, status: 'queued' }),
+
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { pendingUserMessages: [message] });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId, action: 'queued', status: 'queued' }),
         expect.any(String)
       );
     });
