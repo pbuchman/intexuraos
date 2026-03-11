@@ -26,6 +26,7 @@ import type FirebaseFirestore from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
 import { buildLockDocPath, deletePRTaskLock } from '../utils/prTaskLock.js';
 import { fetchGitHubToken, notifyPROfTaskCreation } from '../utils/prTaskNotification.js';
+import { sanitizePrompt } from '../utils/promptSanitization.js';
 
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
@@ -262,12 +263,13 @@ export async function createTaskForPR(
       // Step 4: Create the task
       const taskId = `task_${crypto.randomUUID()}`;
       const webhookSecret = generateWebhookSecret(orchestratorSecret, taskId);
+      const taskPrompt = buildTaskPrompt(request);
 
       const createInput: CreateTaskInput = {
         id: taskId,
         userId,
-        prompt: buildTaskPrompt(request),
-        sanitizedPrompt: request.comment.slice(0, 1000),
+        prompt: taskPrompt,
+        sanitizedPrompt: sanitizePrompt(taskPrompt),
         systemPromptHash: 'pr-comment-auto',
         workerType: 'auto',
         workerLocation: worker.name,
@@ -278,6 +280,7 @@ export async function createTaskForPR(
         approvalEventId: eventId,
         prNumber,
         webhookSecret,
+        agentType: 'pull_request',
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
         /* v8 ignore stop @preserve */
