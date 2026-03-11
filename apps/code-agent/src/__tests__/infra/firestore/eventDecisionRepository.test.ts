@@ -174,6 +174,39 @@ describe('createFirestoreEventDecisionRepository', () => {
       }
     });
 
+    it('should save with dispatch result fields', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreEventDecisionRepository({ logger: mockLogger });
+      const input = createDecisionInput({
+        dispatchSuccess: false,
+        dispatchError: 'Worker returned 503',
+      });
+
+      const result = await repo.save(input);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.dispatchSuccess).toBe(false);
+        expect(result.value.dispatchError).toBe('Worker returned 503');
+      }
+
+      // Verify Firestore data includes the fields
+      const savedData = mockDocRef.set.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(savedData['dispatchSuccess']).toBe(false);
+      expect(savedData['dispatchError']).toBe('Worker returned 503');
+    });
+
     it('should save with dispatch params for task creation', async () => {
       const mockDocRef = {
         set: vi.fn().mockResolvedValue(undefined),

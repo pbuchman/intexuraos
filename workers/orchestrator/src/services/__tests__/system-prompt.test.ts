@@ -188,6 +188,19 @@ describe('system-prompt', () => {
     expect(result).not.toContain('[AGENT:PLANNING]');
   });
 
+  it('builds pull request agent prompt when agentType is pull_request without pr-comment label', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['bug'],
+      agentType: 'pull_request',
+    });
+
+    expect(result).toContain('[AGENT:PULL_REQUEST]');
+    expect(result).toContain('[PULL REQUEST AGENT MODE]');
+    expect(result).not.toContain('[AGENT:EXECUTION]');
+    expect(result).not.toContain('[AGENT:PLANNING]');
+  });
+
   it('requires gathering feedback from both PR and issue comments', () => {
     const result = buildSystemPrompt({
       ...baseParams,

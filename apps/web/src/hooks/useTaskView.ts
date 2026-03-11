@@ -1,17 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  collection,
-  doc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  type Unsubscribe,
-} from 'firebase/firestore';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import {
-  getCodeTask as getCodeTaskApi,
   cancelCodeTask as cancelCodeTaskApi,
   retryCodeTask as retryCodeTaskApi,
   sendTaskMessage as sendTaskMessageApi,
@@ -19,18 +9,8 @@ import {
   deleteCodeTask as deleteCodeTaskApi,
 } from '@/services/codeAgentApi';
 import { ApiError } from '@/services/apiClient';
-import type { CodeTask, CodeTaskStatus, CodeTaskWorkerType, RetryCodeTaskRequest } from '@/types';
-import {
-  getFirestoreClient,
-  authenticateFirebase,
-  isFirebaseAuthenticated,
-  initializeFirebase,
-} from '@/services/firebase';
-
-export interface LogLine {
-  sequence: number;
-  text: string;
-}
+import type { CodeTask, CodeTaskWorkerType, RetryCodeTaskRequest } from '@/types';
+import { useCodeTaskLogs, type LogLine } from './useCodeTaskLogs.js';
 
 export type MessageStatus = 'idle' | 'queued' | 'delivered';
 
@@ -59,22 +39,17 @@ export interface TaskViewState {
   clearDeleteError: () => void;
 }
 
-const ACTIVE_STATUSES: CodeTaskStatus[] = ['dispatched', 'running', 'queued'];
-
-/**
- * Single hook for the Code Task View page.
- * Manages HTTP task fetch + Firestore log streaming.
- *
- * - Active tasks: onSnapshot on task doc (status changes) + log_lines subcollection
- * - Terminal tasks: one-time getDocs for log_lines
- * - Cancellation guards on all async paths
- */
 export function useTaskView(taskId: string): TaskViewState {
-  const { getAccessToken, isAuthenticated, user } = useAuth();
-  const [task, setTask] = useState<CodeTask | null>(null);
-  const [logs, setLogs] = useState<LogLine[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { getAccessToken } = useAuth();
+  const {
+    task,
+    logs,
+    loading,
+    error,
+    listenerHealthy,
+    refreshTask,
+    setTaskState,
+  } = useCodeTaskLogs(taskId);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
@@ -86,212 +61,17 @@ export function useTaskView(taskId: string): TaskViewState {
   const [implementError, setImplementError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [listenerHealthy, setListenerHealthy] = useState(false);
 
   const isMountedRef = useRef(true);
   const getAccessTokenRef = useRef(getAccessToken);
   getAccessTokenRef.current = getAccessToken;
 
-  // Track latest task status to avoid redundant fetches
-  const lastStatusRef = useRef<string | null>(null);
-
-  // --- Fetch task via HTTP ---
-  const fetchTask = useCallback(async (): Promise<CodeTask | null> => {
-    if (taskId === '') return null;
-    const token = await getAccessTokenRef.current();
-    return await getCodeTaskApi(token, taskId);
-  }, [taskId]);
-
-  // --- Initial load ---
   useEffect(() => {
     isMountedRef.current = true;
-    let cancelled = false;
-
-    const load = async (): Promise<void> => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchTask();
-        if (cancelled) return;
-        setTask(data);
-        if (data !== null) {
-          lastStatusRef.current = data.status;
-        }
-      } catch (err) {
-        if (cancelled) return;
-        setError(getErrorMessage(err, 'Failed to load code task'));
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
     return (): void => {
-      cancelled = true;
       isMountedRef.current = false;
     };
-  }, [fetchTask]);
-
-  // --- Firestore: task status listener + log streaming ---
-  useEffect(() => {
-    if (!isAuthenticated || user === undefined || taskId === '' || task === null) {
-      return;
-    }
-
-    let cancelled = false;
-    const unsubs: Unsubscribe[] = [];
-    const isActive = ACTIVE_STATUSES.includes(task.status);
-
-    const setup = async (): Promise<void> => {
-      try {
-        // Authenticate Firebase if needed
-        if (!isFirebaseAuthenticated()) {
-          initializeFirebase();
-          const token = await getAccessTokenRef.current();
-          if (cancelled) return;
-          await authenticateFirebase(token);
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated by cleanup closure after await yields
-          if (cancelled) return;
-        }
-
-        const db = getFirestoreClient();
-
-        if (isActive) {
-          // Live: listen for status changes on task doc
-          const taskRef = doc(db, 'code_tasks', taskId);
-          const taskUnsub = onSnapshot(
-            taskRef,
-            (snapshot) => {
-              if (cancelled) return;
-              if (snapshot.exists()) {
-                const newStatus = snapshot.data()['status'] as string | undefined;
-                if (newStatus !== undefined && newStatus !== lastStatusRef.current) {
-                  lastStatusRef.current = newStatus;
-                  // Re-fetch task via HTTP for full data
-                  void fetchTask().then((data) => {
-                    if (!cancelled && data !== null) {
-                      setTask(data);
-                    }
-                  }).catch((err: unknown) => {
-                    if (!cancelled) {
-                      setError(getErrorMessage(err, 'Failed to refresh task'));
-                    }
-                  });
-                }
-              }
-            },
-            () => {
-              if (!cancelled) {
-                setListenerHealthy(false);
-              }
-            }
-          );
-          if (cancelled) {
-            taskUnsub();
-            return;
-          }
-          unsubs.push(taskUnsub);
-
-          // Live: stream log lines
-          const linesRef = collection(db, 'code_tasks', taskId, 'log_lines');
-          const linesQuery = query(linesRef, orderBy('sequence', 'asc'));
-          let isFirstSnapshot = true;
-          const logsUnsub = onSnapshot(
-            linesQuery,
-            (snapshot) => {
-              if (cancelled) return;
-
-              // First snapshot after (re-)attaching: replace all logs so resumed
-              // tasks don't miss lines when the orchestrator restarts sequencing.
-              if (isFirstSnapshot) {
-                isFirstSnapshot = false;
-                const all: LogLine[] = [];
-                for (const docSnap of snapshot.docs) {
-                  const data = docSnap.data() as LogLine;
-                  all.push({ sequence: data.sequence, text: data.text });
-                }
-                setLogs(all);
-                return;
-              }
-
-              const added: LogLine[] = [];
-              const modified: LogLine[] = [];
-              for (const change of snapshot.docChanges()) {
-                if (change.type === 'added') {
-                  const data = change.doc.data() as LogLine;
-                  added.push({ sequence: data.sequence, text: data.text });
-                } else if (change.type === 'modified') {
-                  const data = change.doc.data() as LogLine;
-                  modified.push({ sequence: data.sequence, text: data.text });
-                }
-              }
-              if (added.length > 0 || modified.length > 0) {
-                added.sort((a, b) => a.sequence - b.sequence);
-                setLogs((prev) => {
-                  let updated = prev;
-                  // Apply modifications (replace existing lines by sequence)
-                  if (modified.length > 0) {
-                    const modMap = new Map(modified.map((l) => [l.sequence, l]));
-                    updated = updated.map((l) => modMap.get(l.sequence) ?? l);
-                  }
-                  // Append new lines
-                  if (added.length > 0) {
-                    const maxSeq = updated.length > 0 ? (updated[updated.length - 1]?.sequence ?? -1) : -1;
-                    const newLines = added.filter((l) => l.sequence > maxSeq);
-                    if (newLines.length > 0) {
-                      updated = [...updated, ...newLines];
-                    }
-                  }
-                  return updated !== prev ? updated : prev;
-                });
-              }
-            },
-            () => {
-              if (!cancelled) {
-                setListenerHealthy(false);
-              }
-            }
-          );
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- guard for cleanup during synchronous listener setup
-          if (cancelled) {
-            logsUnsub();
-            return;
-          }
-          unsubs.push(logsUnsub);
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated by cleanup closure after await yields
-          if (!cancelled) setListenerHealthy(true);
-        } else {
-          // Terminal: one-time fetch of log lines
-          const linesRef = collection(db, 'code_tasks', taskId, 'log_lines');
-          const linesQuery = query(linesRef, orderBy('sequence', 'asc'));
-          const snapshot = await getDocs(linesQuery);
-          if (cancelled) return;
-          const lines: LogLine[] = [];
-          for (const docSnap of snapshot.docs) {
-            const data = docSnap.data() as LogLine;
-            lines.push({ sequence: data.sequence, text: data.text });
-          }
-          setLogs(lines);
-        }
-      } catch {
-        if (!cancelled) {
-          setListenerHealthy(false);
-        }
-      }
-    };
-
-    void setup();
-
-    return (): void => {
-      cancelled = true;
-      setListenerHealthy(false);
-      for (const unsub of unsubs) {
-        unsub();
-      }
-    };
-  }, [isAuthenticated, user, taskId, task?.status, fetchTask]);
+  }, []);
 
   // --- Actions ---
   const cancelTask = useCallback(async (): Promise<void> => {
@@ -301,10 +81,9 @@ export function useTaskView(taskId: string): TaskViewState {
     try {
       const token = await getAccessTokenRef.current();
       await cancelCodeTaskApi(token, task.id);
-      const data = await fetchTask();
+      const data = await refreshTask();
       if (isMountedRef.current && data !== null) {
-        setTask(data);
-        lastStatusRef.current = data.status;
+        setTaskState(data);
       }
     } catch (err) {
       if (isMountedRef.current) {
@@ -315,7 +94,7 @@ export function useTaskView(taskId: string): TaskViewState {
         setCancelling(false);
       }
     }
-  }, [task, fetchTask]);
+  }, [refreshTask, setTaskState, task]);
 
   const retryTask = useCallback(async (workerType?: string, additionalContext?: string): Promise<string> => {
     if (task === null) throw new Error('No task to retry');
@@ -359,8 +138,7 @@ export function useTaskView(taskId: string): TaskViewState {
         // When a terminal task is resumed, update local status so the
         // Firestore effect re-runs and attaches live onSnapshot listeners.
         if (result.action === 'resumed') {
-          setTask({ ...task, status: 'running' });
-          lastStatusRef.current = 'running';
+          setTaskState({ ...task, status: 'running' });
         }
 
         // Reset status after 3 seconds so user can send another message
@@ -380,7 +158,7 @@ export function useTaskView(taskId: string): TaskViewState {
         setSending(false);
       }
     }
-  }, [task]);
+  }, [task, setTaskState]);
 
   const startImplementation = useCallback(async (workerType?: string): Promise<string> => {
     if (task === null) throw new Error('No task to implement');

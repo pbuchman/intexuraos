@@ -15,6 +15,7 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import { githubAgentPrompt } from '../prompts/githubAgentPrompt.js';
+import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.js';
 
 const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
@@ -108,19 +109,22 @@ async function evaluatePREventInternal(
   owner: string,
   repo: string,
 ): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> {
-  const { logger, gitHubPRClient, toolCallingClient, userServiceClient } = deps;
+  const { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots } = deps;
+
+  // Resolve bot login to repo owner before user lookup (e.g. intexuraos-code-worker[bot] → pbuchman)
+  const resolvedLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, allowedBots);
 
   // Resolve user and OAuth token
-  const userResult = await userServiceClient.resolveGitHubUsername(event.senderLogin);
+  const userResult = await userServiceClient.resolveGitHubUsername(resolvedLogin);
   if (!userResult.ok) {
-    logger.warn({ senderLogin: event.senderLogin, error: userResult.error.code }, 'GitHub Agent: user resolution failed');
-    return { ok: false, error: { code: 'USER_NOT_FOUND', message: `Failed to resolve GitHub user: ${event.senderLogin}` } };
+    logger.warn({ senderLogin: resolvedLogin, error: userResult.error.code }, 'GitHub Agent: user resolution failed');
+    return { ok: false, error: { code: 'USER_NOT_FOUND', message: `Failed to resolve GitHub user: ${resolvedLogin}` } };
   }
 
   const resolvedUser = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
   if (resolvedUser === null) {
-    logger.info({ senderLogin: event.senderLogin }, 'GitHub Agent: sender has no linked IntexuraOS account');
-    return { ok: false, error: { code: 'USER_NOT_FOUND', message: `No IntexuraOS account linked for GitHub user: ${event.senderLogin}` } };
+    logger.info({ senderLogin: resolvedLogin }, 'GitHub Agent: sender has no linked IntexuraOS account');
+    return { ok: false, error: { code: 'USER_NOT_FOUND', message: `No IntexuraOS account linked for GitHub user: ${resolvedLogin}` } };
   }
 
   const tokenResult = await userServiceClient.getOAuthToken(resolvedUser.userId, 'github');

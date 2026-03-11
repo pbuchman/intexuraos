@@ -99,6 +99,7 @@ const codeTaskSchema = {
     callbackReceived: { type: 'boolean' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
+    dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
     actionId: { type: 'string', nullable: true },
     approvalEventId: { type: 'string', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
@@ -198,6 +199,7 @@ function taskToApiResponse(task: {
   callbackReceived: boolean;
   createdAt: unknown;
   updatedAt: unknown;
+  dispatchedAt?: unknown;
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
@@ -224,7 +226,6 @@ function taskToApiResponse(task: {
     };
   };
   completedAt?: unknown;
-  dispatchedAt?: unknown;
   logChunksDropped?: number;
   statusSummary?: unknown;
   retriedFrom?: string;
@@ -244,6 +245,7 @@ function taskToApiResponse(task: {
   callbackReceived: boolean;
   createdAt: string;
   updatedAt: string;
+  dispatchedAt?: string;
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
@@ -289,6 +291,9 @@ function taskToApiResponse(task: {
     createdAt: timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '',
     /* v8 ignore stop @preserve */
     updatedAt: timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '',
+    /* v8 ignore start -- ts-type: spread operators create type narrowing branches @preserve */
+    ...(task.dispatchedAt !== undefined && { dispatchedAt: timestampToIso(task.dispatchedAt as { toDate: () => Date } | string | undefined) as string }),
+    /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: spread operators create type narrowing branches @preserve */
     ...(task.actionId !== undefined && { actionId: task.actionId }),
     /* v8 ignore stop @preserve */

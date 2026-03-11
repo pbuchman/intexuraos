@@ -49,10 +49,10 @@ import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
-import { ALLOWED_BOTS } from './routes/webhooks/github.js';
+import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
 import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
@@ -320,6 +320,7 @@ export function initServices(config: ServiceConfig): void {
     // already filters via shouldProcessRepository() which correctly handles
     // both intexuraos/* and */intexuraos patterns. Adding it here would be
     // redundant and risks scope mismatch (see PR #997 review).
+    new CodeWorkerOutputRule(CODE_WORKER_BOTS),
     new ActionableEventRule(ALLOWED_BOTS),
     new ProtectedBaseBranchRule(),
     new SenderWhitelistRule(ALLOWED_BOTS),

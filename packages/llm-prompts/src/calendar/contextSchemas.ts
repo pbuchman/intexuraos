@@ -16,23 +16,23 @@ function isValidDateString(val: string): boolean {
   if (isNaN(date.getTime())) return false;
 
   const datePart = val.split('T')[0];
-  /* v8 ignore start -- ts-type: split undefined check @preserve */
+  /* v8 ignore start -- upstream: split() always returns at least one element, undefined unreachable @preserve */
   if (datePart === undefined)
     /* v8 ignore stop @preserve */
-    /* v8 ignore start -- ts-type: split() always returns at least one element @preserve */
+    /* v8 ignore start -- upstream: String.split() guarantees minimum one element array @preserve */
     return false;
   /* v8 ignore stop @preserve */
 
   const parts = datePart.split('-');
-  /* v8 ignore start -- schema: regex pattern above guarantees YYYY-MM-DD format, so split always produces 3 parts @preserve */
+  /* v8 ignore start -- upstream: regex pattern above guarantees YYYY-MM-DD format, length always 3 @preserve */
   if (parts.length !== 3) return false;
   /* v8 ignore stop @preserve */
 
   const [yearStr, monthStr, dayStr] =
-    /* v8 ignore start -- ts-type: length check above guarantees 3 elements exist @preserve */
+    /* v8 ignore start -- upstream: regex guarantees format, split always produces 3 elements @preserve */
     parts;
   /* v8 ignore stop @preserve */
-  /* v8 ignore start -- ts-type: destructure undefined check @preserve */
+  /* v8 ignore start -- upstream: regex guarantees format, destructured elements always defined @preserve */
   if (yearStr === undefined || monthStr === undefined || dayStr === undefined) return false;
   /* v8 ignore stop @preserve */
 
