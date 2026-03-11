@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { DockerProvider, type DockerProviderConfig } from '../docker-provider.js';
@@ -206,6 +206,10 @@ describe('DockerProvider', () => {
     mockLogger = createMockLogger();
     mocks = createMockDocker();
     provider = new TestableDockerProvider({}, mockLogger, mocks.mockDocker);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('createWorker', () => {
@@ -1307,60 +1311,112 @@ describe('DockerProvider', () => {
     });
   });
 
-  describe('cleanupOrphanedContainers', () => {
-    it('removes containers older than 24 hours', async () => {
-      const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
-      const orphanContainer = {
-        Id: 'orphan-container-id',
-        Names: ['/claude-worker-orphan-task'],
-        State: 'running',
-        Created: twoDaysAgo,
-      };
+  describe('runCleanupCycle', () => {
+    it('removes preserved containers after 3 hours', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'preserved-task' }));
+      await provider.preserveWorker('preserved-task');
+      (
+        (
+          provider as unknown as {
+            preservedWorkers: Map<
+              string,
+              { containerId: string; taskId: string; preservedAt: string }
+            >;
+          }
+        ).preservedWorkers.get('preserved-task') as { preservedAt: string }
+      ).preservedAt = new Date(Date.now() - 3 * 60 * 60 * 1000 - 1000).toISOString();
 
-      mocks.mockDocker.listContainers.mockResolvedValueOnce([orphanContainer]);
+      vi.clearAllMocks();
 
-      await provider.cleanupOrphanedContainers();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'test-container-id',
+          Names: ['/claude-worker-preserved-task'],
+          State: 'running',
+          Created: Math.floor((Date.now() - 1000) / 1000),
+        },
+      ]);
 
-      expect(mocks.mockDocker.listContainers).toHaveBeenCalledWith({
-        all: true,
-        filters: { name: ['claude-worker-'] },
-      });
+      await provider.runCleanupCycle();
+
+      expect(mocks.mockContainer.stop).toHaveBeenCalledWith({ t: 5 });
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+      expect(await provider.listPreservedWorkers()).toEqual([]);
+    });
+
+    it('keeps preserved containers available for reuse before 3 hours', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'preserved-task' }));
+      await provider.preserveWorker('preserved-task');
+
+      vi.clearAllMocks();
+
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'test-container-id',
+          Names: ['/claude-worker-preserved-task'],
+          State: 'running',
+          Created: Math.floor(Date.now() / 1000),
+        },
+      ]);
+
+      await provider.runCleanupCycle();
+
+      expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
+      expect(await provider.listPreservedWorkers()).toHaveLength(1);
+    });
+
+    it('removes unrelated running containers older than 3 hours', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'orphan-container-id',
+          Names: ['/claude-worker-orphan-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
+
+      await provider.runCleanupCycle();
+
       expect(mocks.mockDocker.getContainer).toHaveBeenCalledWith('orphan-container-id');
       expect(mocks.mockContainer.stop).toHaveBeenCalledWith({ t: 5 });
       expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
     });
 
-    it('handles stopped old containers', async () => {
-      const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
-      const orphanContainer = {
-        Id: 'orphan-container-id',
-        Names: ['/claude-worker-orphan-task'],
-        State: 'exited',
-        Created: twoDaysAgo,
-      };
+    it('removes unrelated exited containers older than 3 hours', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'exited-container-id',
+          Names: ['/claude-worker-exited-task'],
+          State: 'exited',
+          Created: fourHoursAgo,
+        },
+      ]);
 
-      mocks.mockDocker.listContainers.mockResolvedValueOnce([orphanContainer]);
-
-      await provider.cleanupOrphanedContainers();
+      await provider.runCleanupCycle();
 
       expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
       expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
     });
 
-    it('skips containers younger than 24 hours', async () => {
-      const oneHourAgo = Math.floor(Date.now() / 1000) - 60 * 60;
-      const recentContainer = {
-        Id: 'recent-container-id',
-        Names: ['/claude-worker-recent-task'],
-        State: 'exited',
-        Created: oneHourAgo,
-      };
+    it('skips active workers even if their containers are older than 3 hours', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'active-task' }));
 
-      mocks.mockDocker.listContainers.mockResolvedValueOnce([recentContainer]);
+      vi.clearAllMocks();
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'test-container-id',
+          Names: ['/claude-worker-active-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
 
-      await provider.cleanupOrphanedContainers();
+      await provider.runCleanupCycle();
 
-      expect(mocks.mockDocker.getContainer).not.toHaveBeenCalled();
       expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
       expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
     });
@@ -1368,14 +1424,152 @@ describe('DockerProvider', () => {
     it('handles empty container list gracefully', async () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
 
-      await expect(provider.cleanupOrphanedContainers()).resolves.not.toThrow();
+      await expect(provider.runCleanupCycle()).resolves.not.toThrow();
     });
 
     it('handles list error gracefully', async () => {
       mocks.mockDocker.listContainers.mockRejectedValueOnce(new Error('Docker not available'));
 
-      await expect(provider.cleanupOrphanedContainers()).resolves.not.toThrow();
+      await expect(provider.runCleanupCycle()).resolves.not.toThrow();
       expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it.each(['No such container', 'container is not running', 'container already stopped'])(
+      'ignores benign stale-container stop error: %s',
+      async (message) => {
+        const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+        mocks.mockDocker.listContainers.mockResolvedValueOnce([
+          {
+            Id: 'orphan-container-id',
+            Names: ['/claude-worker-orphan-task'],
+            State: 'running',
+            Created: fourHoursAgo,
+          },
+        ]);
+        mocks.mockContainer.stop.mockRejectedValueOnce(new Error(message));
+
+        await provider.runCleanupCycle();
+
+        expect(mockLogger.warn).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'orphan-task',
+            containerId: 'orphan-container-id',
+          }),
+          'Failed to stop stale container'
+        );
+        expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+      }
+    );
+
+    it('warns when stopping a stale container fails for another Error', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'orphan-container-id',
+          Names: ['/claude-worker-orphan-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
+      mocks.mockContainer.stop.mockRejectedValueOnce(new Error('Docker daemon crashed'));
+
+      await provider.runCleanupCycle();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'orphan-task',
+          containerId: 'orphan-container-id',
+          error: expect.any(Error),
+        }),
+        'Failed to stop stale container'
+      );
+    });
+
+    it('warns when stopping a stale container fails with a non-Error throw', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'orphan-container-id',
+          Names: ['/claude-worker-orphan-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
+      mocks.mockContainer.stop.mockRejectedValueOnce('stop failed');
+
+      await provider.runCleanupCycle();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'orphan-task',
+          containerId: 'orphan-container-id',
+          error: 'stop failed',
+        }),
+        'Failed to stop stale container'
+      );
+    });
+
+    it('does not remove containers when keepContainersAlive is enabled', async () => {
+      const keepProvider = new TestableDockerProvider(
+        { keepContainersAlive: true },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'orphan-container-id',
+          Names: ['/claude-worker-orphan-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
+
+      await keepProvider.runCleanupCycle();
+
+      expect(mocks.mockDocker.listContainers).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('periodic cleanup lifecycle', () => {
+    it('runs cleanup on the 5 minute interval after startup', async () => {
+      vi.useFakeTimers();
+      const cleanupSpy = vi.spyOn(provider, 'runCleanupCycle').mockResolvedValue(undefined);
+
+      provider.startPeriodicCleanup();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+      provider.stopPeriodicCleanup();
+    });
+
+    it('stops the periodic cleanup interval', async () => {
+      vi.useFakeTimers();
+      const cleanupSpy = vi.spyOn(provider, 'runCleanupCycle').mockResolvedValue(undefined);
+
+      provider.startPeriodicCleanup();
+      provider.stopPeriodicCleanup();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(cleanupSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not start cleanup when keepContainersAlive is enabled', async () => {
+      vi.useFakeTimers();
+      const keepProvider = new TestableDockerProvider(
+        { keepContainersAlive: true },
+        mockLogger,
+        mocks.mockDocker
+      );
+      const cleanupSpy = vi.spyOn(keepProvider, 'runCleanupCycle').mockResolvedValue(undefined);
+
+      keepProvider.startPeriodicCleanup();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(cleanupSpy).not.toHaveBeenCalled();
     });
   });
 

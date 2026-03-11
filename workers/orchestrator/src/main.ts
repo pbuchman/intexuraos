@@ -92,6 +92,7 @@ export async function main(
       statePersistence,
       heartbeatManager,
       logger,
+      isolationProvider,
     });
 
     logger.info({ message: 'Orchestrator ready' });
@@ -160,12 +161,10 @@ async function runStartupRecovery(
     const taskIdsInState = new Set(Object.keys(state.tasks));
     for (const [taskId] of containerMap) {
       if (!taskIdsInState.has(taskId)) {
-        try {
-          await isolationProvider.destroyWorker(taskId);
-          logger.info({ taskId }, 'Removed stateless orphan container');
-        } catch (error) {
-          logger.error({ taskId, error }, 'Failed to remove orphan container');
-        }
+        logger.info(
+          { taskId },
+          'Found stateless orphan container; periodic cleanup will remove it if stale'
+        );
       }
     }
   }
@@ -222,14 +221,11 @@ async function runStartupRecovery(
           logger.error({ taskId: task.taskId, error }, 'Adoption threw, marking as interrupted');
         }
       } else if (container !== undefined && isolationProvider !== undefined) {
-        // Non-running states (exited, paused, created, dead, restarting) are treated as terminated.
-        // Container is destroyed and task is marked interrupted.
-        try {
-          await isolationProvider.destroyWorker(task.taskId);
-          logger.info({ taskId: task.taskId }, 'Removed exited container');
-        } catch (error) {
-          logger.error({ taskId: task.taskId, error }, 'Failed to remove exited container');
-        }
+        // Non-running states are left in place for periodic cleanup if they become stale.
+        logger.info(
+          { taskId: task.taskId, state: container.state },
+          'Found non-running container during startup recovery; periodic cleanup will remove it if stale'
+        );
       }
 
       // Send interrupted webhook (no container, exited container, or failed adoption)
@@ -298,6 +294,7 @@ interface ShutdownHandlers {
   statePersistence: StatePersistence;
   heartbeatManager: HeartbeatManager;
   logger: Logger;
+  isolationProvider: IsolationProvider | undefined;
 }
 
 function setupShutdownHandlers(handlers: ShutdownHandlers): void {
@@ -315,6 +312,7 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     // Clear intervals
     clearInterval(handlers.tokenRefreshInterval);
     clearInterval(handlers.webhookRetryInterval);
+    handlers.isolationProvider?.stopPeriodicCleanup?.();
     handlers.heartbeatManager.stop();
 
     // Wait for running tasks (up to timeout)
