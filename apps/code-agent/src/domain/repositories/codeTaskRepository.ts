@@ -98,7 +98,7 @@ export interface CodeTaskRepository {
    * 0. approvalEventId (prevents approval replays) - lines 1532-1536
    * 1. actionId (prevents Pub/Sub retries) - lines 1538-1541
    * 2. dedupKey (prevents UI double-taps) - lines 1543-1554
-   * 3. linearIssueId active check - lines 448-458
+   * 3. linearIssueId active check for non-review tasks - lines 448-458
    */
   create(input: CreateTaskInput, options?: { transaction?: FirebaseFirestore.Transaction }): Promise<Result<CodeTask, RepositoryError>>;
 
@@ -117,7 +117,9 @@ export interface CodeTaskRepository {
   list(input: ListTasksInput): Promise<Result<ListTasksOutput, RepositoryError>>;
 
   /**
-   * Check if Linear issue has active task.
+   * Check if Linear issue has an active blocking task.
+   * Review tasks are ignored because they should not block
+   * execution, retry, feedback, or generic issue-lifecycle checks.
    * Design reference: Lines 448-458
    */
   hasActiveTaskForLinearIssue(
@@ -157,6 +159,16 @@ export interface CodeTaskRepository {
    * Used for PR comment auto-response to link back to original task (INT-465).
    */
   findByPR(
+    repository: string,
+    prNumber: number
+  ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * Find an active review task for a PR.
+   * Used to deduplicate review-task creation for rapid synchronize events.
+   * Returns null if no queued/dispatched/running review task exists.
+   */
+  findActiveReviewForPR(
     repository: string,
     prNumber: number
   ): Promise<Result<CodeTask | null, RepositoryError>>;
