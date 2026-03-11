@@ -50,4 +50,31 @@ describe('buildIssueCommentTriageSection', () => {
 
     expect(result).toContain('edited');
   });
+
+  it('includes review triage instructions and examples for @review comments', () => {
+    const result = buildIssueCommentTriageSection({
+      commentBody: '@review architecture, security with qwen',
+      isEdit: false,
+      isBotSender: false,
+      senderLogin: 'user',
+    });
+
+    expect(result).toContain('Review Command Instructions');
+    expect(result).toContain('Allowed worker types');
+    expect(result).toContain('@review architecture, security with qwen');
+    expect(result).toContain('qwen3.5-plus');
+    expect(result).toContain('@review with minimax');
+  });
+
+  it('shows bot sender and edited action in the @review branch', () => {
+    const result = buildIssueCommentTriageSection({
+      commentBody: '@review architecture',
+      isEdit: true,
+      isBotSender: true,
+      senderLogin: 'claude[bot]',
+    });
+
+    expect(result).toContain('Comment by: @claude[bot] (bot)');
+    expect(result).toContain('Action: edited');
+  });
 });

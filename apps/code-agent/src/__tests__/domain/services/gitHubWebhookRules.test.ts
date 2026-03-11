@@ -247,6 +247,23 @@ describe('GitHubWebhookRules', () => {
       });
     });
 
+    it('should pass through for created issue_comment events from non-whitelisted senders', () => {
+      const event = {
+        ...mockEvent,
+        senderLogin: 'random-user',
+        eventType: 'issue_comment' as const,
+        action: 'created' as const,
+      };
+      const allowedBots = new Set(['bot1', 'bot2']);
+      const rule = new SenderWhitelistRule(allowedBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({
+        action: 'dispatch',
+        reason: 'ISSUE_COMMENT_CREATED_PASS_THROUGH',
+      });
+    });
+
     it('should pass through for pull_request events', () => {
       const event = { ...mockEvent, eventType: 'pull_request' as const, senderLogin: 'random-user' };
       const allowedBots = new Set(['bot1']);
@@ -602,13 +619,8 @@ describe('GitHubWebhookRules', () => {
       const result = service.evaluate(event);
 
       expect(result).toEqual({
-        action: 'skip',
-        reason: 'SENDER_NOT_WHITELISTED',
-        context: {
-          sender: 'test-user',
-          repoOwner: 'test-org',
-          allowedBots: ['random-user']
-        }
+        action: 'dispatch',
+        reason: 'ALL_RULES_PASSED'
       });
     });
 
@@ -635,7 +647,7 @@ describe('GitHubWebhookRules', () => {
       });
     });
 
-    it('should let skip win over needs_triage (unauthorized sender)', () => {
+    it('should let created issue_comment from unauthorized sender reach triage', () => {
       const event = {
         ...mockEvent,
         eventType: 'issue_comment' as const,
@@ -652,8 +664,10 @@ describe('GitHubWebhookRules', () => {
       const service = new GitHubWebhookRules(rules);
       const result = service.evaluate(event);
 
-      expect(result.action).toBe('skip');
-      expect(result.reason).toBe('SENDER_NOT_WHITELISTED');
+      expect(result).toEqual({
+        action: 'needs_triage',
+        reason: 'TRIAGE_REQUIRED',
+      });
     });
 
     it('should let skip prefix win over needs_triage', () => {
