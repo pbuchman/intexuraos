@@ -133,7 +133,7 @@ describe('buildDeepValidationPrompt', () => {
     expect(prompt).toContain('Update tests first');
   });
 
-  it('indicates when no plan file was found', () => {
+  it('indicates when no referenced plan document was found', () => {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: 'transcript here',
       agentClaims: {
@@ -146,7 +146,7 @@ describe('buildDeepValidationPrompt', () => {
       planContent: undefined,
     });
 
-    expect(prompt).toContain('No plan file found on branch.');
+    expect(prompt).toContain('No plan document referenced in Linear issue');
   });
 
   it('truncates transcript exceeding MAX_TRANSCRIPT_CHARS', () => {

@@ -55,6 +55,7 @@ describe('system-prompt', () => {
     expect(result).toContain('Parallel work breakdown');
     expect(result).toContain('service/package');
     expect(result).toContain('PLANNING_AGENT_FINAL:');
+    expect(result).toContain('Plan document: docs/plans/<file>.md');
   });
 
   it('requires archiving issue content before editing in planning prompt', () => {
