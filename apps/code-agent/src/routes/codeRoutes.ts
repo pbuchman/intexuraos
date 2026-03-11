@@ -13,6 +13,7 @@ import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { drainRetryQueue } from '../domain/usecases/drainRetryQueue.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
@@ -3840,7 +3841,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               data: {
                 type: 'object',
                 properties: {
-                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped', 'failed'] },
+                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped', 'failed', 'message_sent', 'exhausted', 'retry_failed'] },
                   taskId: { type: 'string' },
                 },
                 required: ['action'],
@@ -3913,6 +3914,27 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const services = getServices();
 
+      // Step 1: Retry queue (front-of-line priority)
+      const retryResult = await drainRetryQueue({
+        logger: services.logger,
+        dispatchRetryRepo: services.dispatchRetryRepo,
+        codeTaskRepo: services.codeTaskRepo,
+        taskDispatcher: services.taskDispatcher,
+        linearAgentClient: services.linearAgentClient,
+        whatsappNotifier: services.whatsappNotifier,
+        workerSettingsRepo: services.workerSettingsRepo,
+        logLineRepo: services.logLineRepo,
+        statusMirrorService: services.statusMirrorService,
+      });
+
+      if (retryResult.ok && retryResult.value.action !== 'empty' && retryResult.value.action !== 'failed') {
+        for (const lock of retryResult.value.locksToCleanup ?? []) {
+          await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+        }
+        return await reply.ok(retryResult.value);
+      }
+
+      // Step 2: Regular task queue (existing behavior)
       const result = await drainTaskQueue({
         logger: services.logger,
         codeTaskRepo: services.codeTaskRepo,
