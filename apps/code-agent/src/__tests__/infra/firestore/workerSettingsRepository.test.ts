@@ -688,4 +688,195 @@ describe('workerSettingsRepository', () => {
     });
   });
 
+  describe('decryption error path', () => {
+    it('should return error when decrypting corrupted encrypted data', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Write corrupted (non-base64) encrypted data directly to FakeFirestore
+      const collection = fakeFirestore.collection('code_worker_settings');
+      await collection.doc('corrupted-user').set({
+        userId: 'corrupted-user',
+        workers: [{
+          name: 'corrupted-worker',
+          url: 'https://example.com',
+          cfAccessClientId: 'not-valid-base64!!!',
+          cfAccessClientSecret: 'also-not-valid@@@',
+          dispatchSigningSecret: 'invalid###',
+          enabled: true,
+        }],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result = await repo.getSettings('corrupted-user');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('decrypt');
+      }
+    });
+
+    it('should propagate decryption error from getWorkerByName', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Write corrupted data directly to FakeFirestore
+      const collection = fakeFirestore.collection('code_worker_settings');
+      await collection.doc('corrupted-user-2').set({
+        userId: 'corrupted-user-2',
+        workers: [{
+          name: 'corrupted-worker',
+          url: 'https://example.com',
+          cfAccessClientId: 'not-valid-base64!!!',
+          cfAccessClientSecret: 'also-not-valid@@@',
+          dispatchSigningSecret: 'invalid###',
+          enabled: true,
+        }],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result = await repo.getWorkerByName('corrupted-user-2', 'corrupted-worker');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('decrypt');
+      }
+    });
+  });
+
+  describe('encryption error path', () => {
+    it('should return error when encryption fails in addWorker', async () => {
+      // Spy on encryptToken to make it throw
+      const encryptTokenSpy = vi.spyOn(await import('../../../infra/firestore/encryption.js'), 'encryptToken');
+      encryptTokenSpy.mockImplementation(() => {
+        throw new Error('Encryption failed');
+      });
+
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message.toLowerCase()).toContain('encrypt');
+      }
+
+      // Restore the spy
+      encryptTokenSpy.mockRestore();
+    });
+  });
+
+  describe('conditional spreads in updateWorker', () => {
+    it('should preserve test fields when updating worker', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // First add a worker
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+
+      // Update test result to set lastTestedAt, testStatus, testMessage
+      await repo.updateTestResult('user-1', 'home-mac', {
+        status: 'success',
+        message: 'Test passed',
+      });
+
+      // Now update the worker with new URL
+      await repo.updateWorker('user-1', 'home-mac', {
+        url: 'https://updated.example.com',
+      });
+
+      // Verify test fields are preserved
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        const worker = settings.value.workers.find((w) => w.name === 'home-mac');
+        expect(worker?.url).toBe('https://updated.example.com');
+        expect(worker?.testStatus).toBe('success');
+        expect(worker?.testMessage).toBe('Test passed');
+        expect(worker?.lastTestedAt).toBeDefined();
+      }
+    });
+  });
+
+  describe('getHealthStatuses', () => {
+    it('should return null for non-existent user', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.getHealthStatuses('non-existent-user');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should return null for user without workerHealthStatuses field', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Add a worker (which creates the document without workerHealthStatuses)
+      await repo.addWorker('user-no-health', createWorkerConfig({ name: 'home-mac' }));
+
+      const result = await repo.getHealthStatuses('user-no-health');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should return health statuses for user with workerHealthStatuses', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Add a worker first
+      await repo.addWorker('user-with-health', createWorkerConfig({ name: 'home-mac' }));
+
+      // Update health status
+      await repo.updateHealthStatus('user-with-health', 'home-mac', {
+        state: {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 10,
+          running: 2,
+          available: 8,
+          responseTimeMs: 150,
+        },
+        checkedAt: new Date().toISOString(),
+        stale: false,
+      });
+
+      const result = await repo.getHealthStatuses('user-with-health');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value['home-mac']).toBeDefined();
+        expect(result.value['home-mac']?.state._tag).toBe('healthy');
+        expect(result.value['home-mac']?.state.healthy).toBe(true);
+        expect(result.value['home-mac']?.stale).toBe(false);
+      }
+    });
+  });
+
 });
