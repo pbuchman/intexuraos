@@ -505,6 +505,20 @@ describe('system-prompt', () => {
     expect(result).toContain('review_types');
   });
 
+  it('review agent prompt requires View in IntexuraOS link in review body when taskUrl is present', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+      taskUrl: 'https://intexuraos.cloud/#/code-tasks/task-123',
+    });
+
+    expect(result).toContain('Append a final standalone markdown link line exactly as:');
+    expect(result).toContain(
+      '[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task-123)'
+    );
+    expect(result).toContain('not as a separate PR comment');
+  });
+
   it('review agent prompt omits Linear section when linearIssueId is undefined', () => {
     const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
     const result = buildSystemPrompt({
@@ -516,6 +530,16 @@ describe('system-prompt', () => {
     expect(result).not.toContain('mcp__linear__get_issue');
     expect(result).toContain('No Linear issue is associated');
     expect(result).toContain('[AGENT:REVIEW]');
+  });
+
+  it('review agent prompt omits View in IntexuraOS review-body instruction when taskUrl is undefined', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).not.toContain('append a final standalone markdown link line exactly as:');
+    expect(result).not.toContain('[View in IntexuraOS](');
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
