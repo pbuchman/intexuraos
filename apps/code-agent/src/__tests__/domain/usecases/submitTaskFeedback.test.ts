@@ -18,8 +18,10 @@ import type { TaskDispatcherService } from '../../../domain/services/taskDispatc
 import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
 import type { MetricsClient } from '../../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
+import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { UserWorkerSettings } from '../../../domain/models/workerSettings.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { Timestamp } from '@google-cloud/firestore';
 
 // Mock logger
@@ -87,6 +89,8 @@ describe('submitTaskFeedback', () => {
   let mockWhatsappNotifier: Partial<WhatsAppNotifier>;
   let mockMetricsClient: Partial<MetricsClient>;
   let mockWorkerSettingsRepo: Partial<WorkerSettingsRepository>;
+  let mockGitHubPRClient: Partial<GitHubPRClient>;
+  let mockUserServiceClient: Partial<UserServiceClient>;
   let deps: SubmitTaskFeedbackDeps;
 
   const mockRequest: SubmitTaskFeedbackRequest = {
@@ -101,7 +105,9 @@ describe('submitTaskFeedback', () => {
     // Default mocks - all successful
     mockCodeTaskRepo = {
       findByIdForUser: vi.fn().mockResolvedValue(ok(createMockCompletedTask())),
+      findById: vi.fn(),
       hasActiveTaskForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
+      findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       create: vi.fn().mockResolvedValue(ok(createMockCompletedTask({ id: 'task_followup-456', status: 'dispatched' }))),
       update: vi.fn().mockResolvedValue(ok(createMockCompletedTask({ id: 'task_followup-456' }))),
     };
@@ -140,6 +146,15 @@ describe('submitTaskFeedback', () => {
       getSettings: vi.fn().mockResolvedValue(ok(createMockWorkerSettings())),
     };
 
+    mockGitHubPRClient = {
+      getPullRequestStatus: vi.fn(),
+      postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 987 })),
+    };
+
+    mockUserServiceClient = {
+      getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'gh-token' })),
+    };
+
     deps = {
       logger: mockLogger,
       codeTaskRepo: mockCodeTaskRepo as CodeTaskRepository,
@@ -148,6 +163,8 @@ describe('submitTaskFeedback', () => {
       whatsappNotifier: mockWhatsappNotifier as WhatsAppNotifier,
       metricsClient: mockMetricsClient as MetricsClient,
       workerSettingsRepo: mockWorkerSettingsRepo as WorkerSettingsRepository,
+      gitHubPRClient: mockGitHubPRClient as GitHubPRClient,
+      userServiceClient: mockUserServiceClient as UserServiceClient,
       orchestratorSecret: MOCK_ORCHESTRATOR_SECRET,
       serviceUrl: MOCK_SERVICE_URL,
     };
@@ -182,6 +199,127 @@ describe('submitTaskFeedback', () => {
 
       // Verify WhatsApp notification was sent
       expect(mockWhatsappNotifier.notifyTaskStarted).toHaveBeenCalled();
+    });
+
+    it('reuses the existing execution PR when feedback continues an open PR', async () => {
+      mockCodeTaskRepo.findByIdForUser = vi.fn().mockResolvedValue(
+        ok(
+          createMockCompletedTask({
+            prNumber: 1139,
+            prBranch: 'task_old_branch',
+          })
+        )
+      );
+      mockGitHubPRClient.getPullRequestStatus = vi.fn().mockResolvedValue(
+        ok({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'task_existing_pr_branch',
+        })
+      );
+
+      const result = await submitTaskFeedback(deps, mockRequest);
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parentTaskId: 'task_original-123',
+          prNumber: 1139,
+          prBranch: 'task_existing_pr_branch',
+        })
+      );
+      expect(mockGitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'gh-token',
+        'pbuchman',
+        'intexuraos',
+        1139,
+        expect.stringContaining('Execution Follow-up Task Created')
+      );
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          continuationPrNumber: 1139,
+          continuationPrBranch: 'task_existing_pr_branch',
+        })
+      );
+    });
+
+    it('reuses the existing PR for legacy execution tasks identified only by PR URL', async () => {
+      const legacyTask = createMockCompletedTask({
+        result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/1144' },
+      });
+      const legacyTaskRecord = legacyTask as unknown as Record<string, unknown>;
+      delete legacyTaskRecord['agentType'];
+      delete legacyTaskRecord['prNumber'];
+      delete legacyTaskRecord['prBranch'];
+      mockCodeTaskRepo.findByIdForUser = vi.fn().mockResolvedValue(
+        ok(legacyTask)
+      );
+      mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(
+        ok({
+          id: 'issue-uuid',
+          identifier: 'INT-100',
+          title: 'Test Issue',
+          url: 'https://linear.app/test/issue/INT-100',
+          labels: ['bug'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+      mockGitHubPRClient.getPullRequestStatus = vi.fn().mockResolvedValue(
+        ok({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'task_existing_pr_branch',
+        })
+      );
+
+      const result = await submitTaskFeedback(deps, mockRequest);
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+          prNumber: 1144,
+          prBranch: 'task_existing_pr_branch',
+        })
+      );
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+          continuationPrNumber: 1144,
+          continuationPrBranch: 'task_existing_pr_branch',
+        })
+      );
+    });
+
+    it('fails before creating follow-up work when continuation PR verification cannot fetch a GitHub token', async () => {
+      mockCodeTaskRepo.findByIdForUser = vi.fn().mockResolvedValue(
+        ok(
+          createMockCompletedTask({
+            prNumber: 1139,
+            prBranch: 'task_existing_pr_branch',
+          })
+        )
+      );
+      mockUserServiceClient.getOAuthToken = vi.fn().mockResolvedValue(
+        err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' })
+      );
+
+      const result = await submitTaskFeedback(deps, mockRequest);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe(
+          'GitHub OAuth token is required to verify continuation PR state'
+        );
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ originalTaskId: 'task_original-123', userId: 'user-123' }),
+        'Failed to resolve continuation PR for feedback task'
+      );
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
     });
   });
 
@@ -427,6 +565,46 @@ describe('submitTaskFeedback', () => {
           },
         })
       );
+    });
+
+    it('fails before dispatch when continuation bootstrap comment cannot be posted', async () => {
+      mockCodeTaskRepo.findByIdForUser = vi.fn().mockResolvedValue(
+        ok(
+          createMockCompletedTask({
+            prNumber: 1144,
+            prBranch: 'task_old_branch',
+          })
+        )
+      );
+      mockGitHubPRClient.getPullRequestStatus = vi.fn().mockResolvedValue(
+        ok({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'task_existing_pr_branch',
+        })
+      );
+      mockGitHubPRClient.postPRComment = vi.fn().mockResolvedValue(
+        err({ code: 'API_ERROR', message: 'Failed to post PR bootstrap comment' })
+      );
+
+      const result = await submitTaskFeedback(deps, mockRequest);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Failed to post PR bootstrap comment');
+      }
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'task_followup-456',
+        expect.objectContaining({
+          status: 'failed',
+          error: {
+            code: 'PR_BOOTSTRAP_COMMENT_FAILED',
+            message: 'Failed to post PR bootstrap comment',
+          },
+        })
+      );
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
     });
   });
 });

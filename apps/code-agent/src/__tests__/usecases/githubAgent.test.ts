@@ -57,6 +57,9 @@ function createFakeGitHubPRClient(): GitHubPRClient {
       { sha: 'abc123', message: 'feat: add feature', author: 'dev-user' },
     ])),
     getPullRequestBaseBranch: vi.fn().mockResolvedValue(ok('main')),
+    getPullRequestStatus: vi.fn().mockResolvedValue(
+      ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })
+    ),
     postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
   };
 }

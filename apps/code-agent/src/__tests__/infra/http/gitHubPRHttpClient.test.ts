@@ -104,6 +104,93 @@ describe('GitHubPRHttpClient', () => {
     });
   });
 
+  describe('getPullRequestStatus', () => {
+    it('returns PR state, mergedAt, and headRef on success', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, {
+          state: 'open',
+          merged_at: null,
+          head: { ref: 'task_existing_pr_branch' },
+        });
+
+      const result = await client.getPullRequestStatus('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({
+          state: 'open',
+          mergedAt: null,
+          headRef: 'task_existing_pr_branch',
+        });
+      }
+    });
+
+    it('returns NOT_FOUND on 404', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/404')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.getPullRequestStatus('test-token', 'owner', 'repo', 404);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .replyWithError('connection refused');
+
+      const result = await client.getPullRequestStatus('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+
+    it('returns API_ERROR when the PR status response is missing state or head ref', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/42')
+        .reply(200, {
+          state: 'draft',
+          merged_at: null,
+          head: {},
+        });
+
+      const result = await client.getPullRequestStatus('test-token', 'owner', 'repo', 42);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toBe('PR response missing state or head.ref');
+      }
+    });
+
+    it('parses merged_at into a Date when the PR has already been merged', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/pulls/43')
+        .reply(200, {
+          state: 'closed',
+          merged_at: '2026-03-10T09:15:00Z',
+          head: { ref: 'task_existing_pr_branch' },
+        });
+
+      const result = await client.getPullRequestStatus('test-token', 'owner', 'repo', 43);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.state).toBe('closed');
+        expect(result.value.mergedAt?.toISOString()).toBe('2026-03-10T09:15:00.000Z');
+        expect(result.value.headRef).toBe('task_existing_pr_branch');
+      }
+    });
+  });
+
   describe('getPullRequestFiles', () => {
     it('returns file list on success', async () => {
       nock('https://api.github.com')

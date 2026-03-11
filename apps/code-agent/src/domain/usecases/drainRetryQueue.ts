@@ -260,6 +260,10 @@ async function handleNewTaskRetry(
     linearIssueLabels: dispatchLabels,
     hasChildren,
     agentType,
+    ...(task.prNumber !== undefined && task.prBranch !== undefined && {
+      continuationPrNumber: task.prNumber,
+      continuationPrBranch: task.prBranch,
+    }),
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
   });
 
@@ -304,6 +308,17 @@ async function handleNewTaskRetry(
   });
 
   if (updateResult.ok) {
+    if (task.retriedFrom !== undefined) {
+      const archiveResult = await codeTaskRepo.update(task.retriedFrom, {
+        status: 'archived',
+      });
+      if (!archiveResult.ok) {
+        logger.warn(
+          { originalTaskId: task.retriedFrom, retryTaskId: task.id, error: archiveResult.error },
+          'Failed to archive original task after retry drain dispatch'
+        );
+      }
+    }
     await whatsappNotifier.notifyTaskStarted(task.userId, updateResult.value);
   }
 

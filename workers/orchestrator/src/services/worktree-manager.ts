@@ -50,10 +50,14 @@ export class WorktreeManager {
     }
   }
 
-  async createWorktree(taskId: string, baseBranch: string): Promise<string> {
+  async createWorktree(
+    taskId: string,
+    baseBranch: string,
+    continuationPrBranch?: string
+  ): Promise<string> {
     return await this.withGitLock(async () => {
       const worktreePath = join(this.config.worktreeBasePath, taskId);
-      this.logger.info({ taskId, baseBranch }, 'Creating worktree');
+      this.logger.info({ taskId, baseBranch, continuationPrBranch }, 'Creating worktree');
 
       // Check if worktree already exists
       if (await this.worktreeExists(taskId)) {
@@ -67,12 +71,25 @@ export class WorktreeManager {
         // Create worktree with a new branch for the task
         // Using -b creates a local branch, avoiding detached HEAD state
         // which is required for Claude to create commits and PRs
-        const { stderr } = await execAsync(
-          `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
-          {
+        let stderr: string;
+        if (continuationPrBranch === undefined) {
+          ({ stderr } = await execAsync(
+            `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
+            {
+              cwd: this.config.repositoryPath,
+            }
+          ));
+        } else {
+          await execAsync(`git fetch origin "${continuationPrBranch}"`, {
             cwd: this.config.repositoryPath,
-          }
-        );
+          });
+          ({ stderr } = await execAsync(
+            `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`,
+            {
+              cwd: this.config.repositoryPath,
+            }
+          ));
+        }
 
         // git worktree add outputs to stderr even on success
         /* v8 ignore start -- test-infra: git worktree add outputs to stderr on success (e @preserve */

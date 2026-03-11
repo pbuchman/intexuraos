@@ -162,6 +162,15 @@ export interface CodeTaskRepository {
   ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
+   * Find newest tasks for a Linear issue.
+   * Used to recover open PR continuity across retries and follow-ups.
+   */
+  findRecentTasksByLinearIssue(
+    linearIssueId: string,
+    limit: number
+  ): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
    * Delete a task by ID, scoped to a user.
    * Returns NOT_FOUND if the task does not exist or belongs to a different user.
    */

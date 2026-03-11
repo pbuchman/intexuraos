@@ -446,6 +446,36 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('should reuse the continuation PR branch when provided', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-task-continuation-pr',
+        workerType: 'auto',
+        prompt: 'Continue existing PR work',
+        repository: 'custom/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        continuationPrNumber: 1139,
+        continuationPrBranch: 'task_existing_pr_branch',
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(mockWorktreeManager.createWorktree).toHaveBeenCalledWith(
+        'test-task-continuation-pr',
+        'main',
+        'task_existing_pr_branch'
+      );
+
+      const task = await dispatcher.getTask('test-task-continuation-pr');
+      expect(task?.continuationPrNumber).toBe(1139);
+      expect(task?.continuationPrBranch).toBe('task_existing_pr_branch');
+    });
+
     it('should use default baseBranch when not provided', async () => {
       const request: CreateTaskRequest = {
         taskId: 'test-task-default-branch',
@@ -4197,13 +4227,27 @@ describe('TaskDispatcher', () => {
       const preamble = internal.buildResumePreamble();
 
       expect(preamble).toContain('[RESUME PRE-FLIGHT');
-      expect(preamble).toContain('gh pr view --json state,merged,number');
+      expect(preamble).toContain('gh pr view --json state,mergedAt,number');
       expect(preamble).toContain('MERGED or CLOSED or NO_PR');
       expect(preamble).toContain('git checkout -b followup/');
       expect(preamble).toContain('If PR is OPEN:');
       expect(preamble).toContain('unaddressed PR comments');
       expect(preamble).toContain('---');
       expect(preamble.endsWith('\n')).toBe(true);
+    });
+
+    it('uses the inherited PR number and branch in continuation mode', () => {
+      const internal = dispatcher as unknown as {
+        buildResumePreamble: (task?: Task) => string;
+      };
+      const preamble = internal.buildResumePreamble({
+        continuationPrNumber: 1139,
+        continuationPrBranch: 'task_existing_pr_branch',
+      } as unknown as Task);
+
+      expect(preamble).toContain('gh pr view 1139 --json state,mergedAt,number');
+      expect(preamble).toContain('git push origin HEAD:task_existing_pr_branch');
+      expect(preamble).not.toContain('gh pr view --json state,mergedAt,number');
     });
   });
 
