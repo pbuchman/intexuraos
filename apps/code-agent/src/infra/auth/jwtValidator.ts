@@ -51,12 +51,10 @@ export function createJwtValidator(
   logger: Logger
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
   // In E2E mode, use mock validator that accepts any token
-  /* v8 ignore start -- test-infra: E2E mode path uses different validator, tested in E2E tests @preserve */
   if (process.env['E2E_MODE'] === 'true') {
     logger.info('E2E_MODE enabled - using mock JWT validator');
     return createE2eJwtValidator(logger);
   }
-  /* v8 ignore stop @preserve */
 
   const jwks = jose.createRemoteJWKSet(new URL(config.jwksUri));
 

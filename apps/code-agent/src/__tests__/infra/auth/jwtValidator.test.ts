@@ -187,6 +187,32 @@ describe('createJwtValidator', () => {
       });
     });
   });
+
+  describe('E2E mode', () => {
+    beforeEach(() => {
+      vi.stubEnv('E2E_MODE', 'true');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('should return E2E validator when E2E_MODE is enabled', () => {
+      const validator = createJwtValidator(mockConfig, logger);
+      // The validator should be the E2E variant - test by calling it
+      const request: TestRequest = {
+        headers: { authorization: 'Bearer any-token' },
+        url: '/code/submit',
+      };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
+
+      // E2E validator should accept any token and use E2E_TEST_USER_ID
+      validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]).then(() => {
+        // Should not call fail for valid Bearer token
+        expect(reply.fail).not.toHaveBeenCalled();
+      });
+    });
+  });
 });
 
 describe('createE2eJwtValidator', () => {
