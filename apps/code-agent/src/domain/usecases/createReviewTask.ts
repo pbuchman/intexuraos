@@ -260,6 +260,7 @@ export async function createReviewTask(
       ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
       titleAlreadyTagged,
       reviewTypes: request.reviewTypes,
+      workerType: 'auto',
     },
   );
 
