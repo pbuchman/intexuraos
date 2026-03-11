@@ -190,6 +190,10 @@
     "event_decisions": {
       "owner": "code-agent",
       "description": "Audit trail of webhook event evaluation decisions (hard rules or LLM triage)"
+    },
+    "dispatch_retries": {
+      "owner": "code-agent",
+      "description": "Failed webhook dispatch retry queue with TTL and max-attempts bounds"
     }
   }
 }

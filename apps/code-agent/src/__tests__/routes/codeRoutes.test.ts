@@ -50,6 +50,9 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { Timestamp } from '@google-cloud/firestore';
+import type { DispatchRetry } from '../../domain/models/dispatchRetry.js';
+import type { DispatchRetryRepository } from '../../domain/repositories/dispatchRetryRepository.js';
 
 // Helper function to generate orchestrator HMAC signature for heartbeat endpoint
 function generateOrchestratorSignature(payload: object, secret: string): { timestamp: string; signature: string } {
@@ -215,6 +218,12 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {
+        async findOldest() { return ok(null); },
+        async create() { return ok({} as never); },
+        async delete() { return ok(undefined); },
+        async update() { return ok(undefined); },
+      },
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -244,6 +253,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -3125,6 +3135,52 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
+    });
+
+    it('returns retry queue result when retry entry is non-empty', async () => {
+      const services = getServices();
+      const expiredEntry: DispatchRetry = {
+        id: 'dr_expired-1',
+        type: 'task_message',
+        eventId: 'event-1',
+        repository: 'test/repo',
+        pullRequestNumber: 10,
+        senderLogin: 'tester',
+        taskId: 'task-expired-1',
+        userId: 'user-123',
+        message: 'hello',
+        attempts: 0,
+        maxAttempts: 3,
+        lastError: 'Worker timed out',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 999_999_999)),
+        ttlMinutes: 1,
+      };
+      let deleted = false;
+      const retryRepo: DispatchRetryRepository = {
+        async findOldest() { return ok(expiredEntry); },
+        async create() { return ok({} as never); },
+        async delete() { deleted = true; return ok(undefined); },
+        async update() { return ok(undefined); },
+      };
+      setServices({
+        ...services,
+        dispatchRetryRepo: retryRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('expired');
+      expect(deleted).toBe(true);
     });
 
     it('returns 500 when drain use case fails', async () => {
