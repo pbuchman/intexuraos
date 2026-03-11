@@ -538,26 +538,16 @@ export class TaskDispatcher {
         message.length > 200 ? message.slice(0, 200) + '\u2026' : message
       );
 
-      const preamble = this.buildResumePreamble();
-      const resumeResult = await this.startWorkerAttempt(task, {
-        prompt: preamble + message,
-        continueSession: true,
-        injectActiveGoal: true,
-      });
-
-      if (!resumeResult.ok) {
-        this.logger.error(
-          { taskId, error: resumeResult.error },
-          'Failed to resume task with message'
-        );
-        return { ok: false, error: { type: 'service_error', message: 'Failed to resume task' } };
-      }
-
+      const prompt = this.buildResumePreamble() + message;
       task.status = 'running';
-      task.containerId = resumeResult.containerId;
+      task.containerId = '';
       task.startedAt = new Date().toISOString();
       task.attemptCount = 1;
       task.verificationHistory = [];
+      task.pendingResumeStart = {
+        prompt,
+        acceptedAt: new Date().toISOString(),
+      };
       delete task.completedAt;
       if (wasCompleted) {
         task.resumedAfterSuccess = true;
@@ -567,11 +557,10 @@ export class TaskDispatcher {
       await this.saveTask(task);
 
       this.runningCount++;
-      this.scheduleTimeoutWarning(taskId);
-      this.scheduleTimeoutKill(taskId);
-      this.startCompletionMonitoring(taskId);
-
-      this.logger.info({ taskId }, 'Task resumed with user message');
+      void this.resumeTaskWithUserMessage(task).catch((error: unknown) => {
+        void this.failAcceptedResume(task, error);
+      });
+      this.logger.info({ taskId }, 'Task resume accepted with user message');
       return { ok: true, value: { action: 'resumed' } };
     }
 
@@ -588,6 +577,27 @@ export class TaskDispatcher {
   async getTask(taskId: string): Promise<Task | null> {
     const state = await this.statePersistence.load();
     return state.tasks[taskId] ?? null;
+  }
+
+  async recoverPendingResumeTask(task: Task): Promise<Result<void, DispatchError>> {
+    if (task.status !== 'running' || task.pendingResumeStart === undefined) {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_status',
+          message: 'Task does not have an accepted resume pending startup',
+        },
+      };
+    }
+
+    this.logForwarder.registerTask(task.taskId, task.webhookSecret);
+    this.runningCount++;
+    // `ok: true` here means startup recovery took ownership of the accepted resume.
+    // Worker startup may still fail, in which case resumeTaskWithUserMessage finalizes the task.
+    await this.resumeTaskWithUserMessage(task);
+
+    this.logger.info({ taskId: task.taskId }, 'Recovering pending accepted resume after restart');
+    return { ok: true, value: undefined };
   }
 
   getRunningCount(): number {
@@ -614,6 +624,44 @@ export class TaskDispatcher {
     await this.statePersistence.modify((state) => {
       state.tasks[task.taskId] = task;
     });
+  }
+
+  private async resumeTaskWithUserMessage(task: Task): Promise<void> {
+    const prompt = task.pendingResumeStart?.prompt;
+    /* v8 ignore start -- async-timing: sendMessage and recoverPendingResumeTask validate pendingResumeStart before invoking the async helper; this only guards against unexpected in-flight mutation @preserve */
+    if (prompt === undefined) {
+      await this.failAcceptedResume(
+        task,
+        new Error('Accepted resume is missing the persisted startup prompt')
+      );
+      return;
+    }
+    /* v8 ignore stop @preserve */
+
+    try {
+      const resumeResult = await this.startWorkerAttempt(task, {
+        prompt,
+        continueSession: true,
+        injectActiveGoal: true,
+      });
+
+      if (!resumeResult.ok) {
+        await this.failAcceptedResume(task, resumeResult.error);
+        return;
+      }
+
+      task.containerId = resumeResult.containerId;
+      delete task.pendingResumeStart;
+      await this.saveTask(task);
+
+      this.scheduleTimeoutWarning(task.taskId);
+      this.scheduleTimeoutKill(task.taskId);
+      this.startCompletionMonitoring(task.taskId);
+
+      this.logger.info({ taskId: task.taskId }, 'Task resumed with user message');
+    } catch (error) {
+      await this.failAcceptedResume(task, error);
+    }
   }
 
   private scheduleTimeoutWarning(taskId: string): void {
@@ -1501,6 +1549,28 @@ export class TaskDispatcher {
     }
   }
 
+  private async failAcceptedResume(task: Task, error: unknown): Promise<void> {
+    this.logger.error(
+      { taskId: task.taskId, error },
+      'Accepted task resume failed during worker startup'
+    );
+
+    const resumeError: TaskError = {
+      code: 'RESUME_ATTEMPT_FAILED',
+      message: `Failed to resume task: ${error instanceof Error ? error.message : String(error)}`,
+      remediation: { action: 'retry' },
+    };
+
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Terminal failure: resume start failed (${resumeError.message})`
+    );
+
+    await this.finalizeTask(task, 'failed', {
+      error: resumeError,
+    });
+  }
+
   private async finalizeTask(
     task: Task,
     statusParam: TaskStatus,
@@ -1558,6 +1628,7 @@ export class TaskDispatcher {
     } else {
       delete task.lastSuccessResult;
     }
+    delete task.pendingResumeStart;
     await this.saveTask(task);
 
     /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
