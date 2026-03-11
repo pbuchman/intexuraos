@@ -22,6 +22,7 @@ const {
   buildResumeSummaryPrompt,
   getLast50Lines,
   getLast20Lines,
+  detectFatalExitCode,
 } = await import('../completion-verifier.js');
 
 const loggerInfo = vi.fn();
@@ -717,6 +718,127 @@ describe('OrchestratorCompletionVerifier', () => {
         response: wrappedResponse,
       });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectFatalExitCode
+// ---------------------------------------------------------------------------
+
+describe('detectFatalExitCode', () => {
+  it('returns 137 when logs contain SIGKILL exit code', () => {
+    const logs =
+      'some output\n[entrypoint] Claude attempt finished with exit code: 137\nfinal line';
+    expect(detectFatalExitCode(logs)).toBe(137);
+  });
+
+  it('returns 139 when logs contain SIGSEGV exit code', () => {
+    const logs = 'output\n[entrypoint] Claude attempt finished with exit code: 139';
+    expect(detectFatalExitCode(logs)).toBe(139);
+  });
+
+  it('returns undefined for normal exit code 0', () => {
+    const logs = '[entrypoint] Claude attempt finished with exit code: 0\ndone';
+    expect(detectFatalExitCode(logs)).toBeUndefined();
+  });
+
+  it('returns undefined for exit code 1 (normal failure)', () => {
+    const logs = '[entrypoint] Claude attempt finished with exit code: 1';
+    expect(detectFatalExitCode(logs)).toBeUndefined();
+  });
+
+  it('returns undefined when no exit code pattern is present', () => {
+    const logs = 'just some logs\nno exit code here';
+    expect(detectFatalExitCode(logs)).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// verify — fatal exit code pre-check
+// ---------------------------------------------------------------------------
+
+describe('verify — fatal exit code pre-check', () => {
+  it.each([
+    { exitCode: 137, signal: 'SIGKILL' },
+    { exitCode: 139, signal: 'SIGSEGV' },
+  ])(
+    'returns passed=false for exit code $exitCode ($signal) without calling Gemini',
+    async ({ exitCode }) => {
+      const verifier = createVerifier();
+      const taskId = `task-fatal-${String(exitCode)}`;
+      const result = await verifier.verify({
+        taskId,
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: `working...\n[entrypoint] Claude attempt finished with exit code: ${String(exitCode)}\n`,
+      });
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toEqual([`fatal_exit_code_${String(exitCode)}`]);
+      expect(result.verifierFailure).toBe(false);
+      expect(result.agentData).toBeUndefined();
+      expect(result.trace).toEqual({ transcript: expect.any(String), prompt: '', response: '' });
+      expect(result.trace.transcript).toContain(`exit code: ${String(exitCode)}`);
+      expect(generateMock).not.toHaveBeenCalled();
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId, agentType: 'planning', exitCode }),
+        'Fatal exit code detected — skipping Gemini verification'
+      );
+    }
+  );
+
+  it('proceeds to Gemini verification for normal exit code 0', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          outcome: 'planned',
+          superpowers_writing_plans: 'used',
+          linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+          is_complex: '0',
+          subtask_urls: '',
+          pr_url: '',
+          summary: 'Planned.',
+          unclear_clarification: '',
+        }),
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+      },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.verify({
+      taskId: 'task-ok',
+      attempt: 1,
+      maxAttempts: 5,
+      agentType: 'planning',
+      rawLogs: 'output\n[entrypoint] Claude attempt finished with exit code: 0\n',
+    });
+    expect(result.passed).toBe(true);
+    expect(generateMock).toHaveBeenCalledOnce();
+  });
+
+  it('proceeds to Gemini verification for exit code 1 (normal failure)', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          superpowers_executing_plans: 'used',
+          superpowers_requesting_code_review: 'not used',
+          gh_pr_url: '',
+          summary: 'Failed normally.',
+        }),
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+      },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.verify({
+      taskId: 'task-normal-fail',
+      attempt: 1,
+      maxAttempts: 5,
+      agentType: 'execution',
+      rawLogs: 'output\n[entrypoint] Claude attempt finished with exit code: 1\n',
+    });
+    expect(result.passed).toBe(true);
+    expect(generateMock).toHaveBeenCalledOnce();
   });
 });
 
