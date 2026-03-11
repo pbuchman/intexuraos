@@ -1270,7 +1270,14 @@ export class TaskDispatcher {
       );
     }
 
-    const result = await this.checkForResult(task);
+    const checkResult = await this.checkForResult(task);
+    const effectiveResult = checkResult ?? task.lastSuccessResult;
+    if (checkResult === undefined && task.lastSuccessResult !== undefined) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        'checkForResult returned undefined, falling back to lastSuccessResult'
+      );
+    }
     const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
 
@@ -1313,7 +1320,7 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       delete task.resumedAfterSuccess;
-      const enrichedErrorResult = this.enrichResultForResumedTask(task, result);
+      const enrichedErrorResult = this.enrichResultForResumedTask(task, effectiveResult);
       await this.finalizeTask(task, 'failed', {
         ...(enrichedErrorResult !== undefined && { result: enrichedErrorResult }),
         error,
@@ -1363,7 +1370,7 @@ export class TaskDispatcher {
     const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
     const geminiSummary = await this.completionVerifier.extractResumeSummary(task.taskId, rawLogs);
 
-    const enrichedResult = this.enrichResultForResumedTask(task, result);
+    const enrichedResult = this.enrichResultForResumedTask(task, effectiveResult);
     if (enrichedResult !== undefined && geminiSummary !== undefined) {
       enrichedResult.summary = geminiSummary;
     }
@@ -1545,6 +1552,12 @@ export class TaskDispatcher {
     task.status = finalStatus;
     task.completedAt = new Date().toISOString();
     delete task.resumedAfterSuccess;
+    // Store result for resume-after-success fallback; clear on non-success
+    if (finalStatus === 'completed' && payload.result !== undefined) {
+      task.lastSuccessResult = payload.result;
+    } else {
+      delete task.lastSuccessResult;
+    }
     await this.saveTask(task);
 
     /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
