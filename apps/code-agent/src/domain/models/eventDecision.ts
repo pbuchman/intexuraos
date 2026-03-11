@@ -6,6 +6,7 @@
  */
 
 import type { GitHubEventType } from './gitHubPREvent.js';
+import type { WorkerType } from './codeTask.js';
 
 export interface EventDecision {
   id: string;
@@ -27,6 +28,7 @@ export interface EventDecision {
     taskId?: string;
     messageTemplate?: string;
     reviewTypes?: string[];
+    workerType?: WorkerType;
   };
 
   llmModel?: string;
@@ -63,6 +65,7 @@ export interface CreateEventDecisionInput {
     taskId?: string;
     messageTemplate?: string;
     reviewTypes?: string[];
+    workerType?: WorkerType;
   };
 
   llmModel?: string;

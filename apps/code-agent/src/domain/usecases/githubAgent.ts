@@ -13,9 +13,11 @@ import type { Logger, Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { ToolCallingClient, ToolDefinition } from '@intexuraos/llm-contract';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
+import type { WorkerType } from '../models/codeTask.js';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import { githubAgentPrompt } from '../prompts/githubAgentPrompt.js';
 import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.js';
+import { isReviewCommandComment, normalizeReviewWorkerType, SUPPORTED_REVIEW_WORKER_TYPES } from '../utils/reviewTriage.js';
 
 const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
@@ -33,7 +35,7 @@ export interface GitHubAgentDeps {
  */
 export type GitHubAgentTriageResult =
   | { action: 'dispatch'; template: 'pr_comment' | 'bot_review_edit' }
-  | { action: 'request_review'; reviewTypes: string[] }
+  | { action: 'request_review'; reviewTypes: string[]; workerType?: WorkerType }
   | { action: 'skip'; reason: string };
 
 export interface GitHubAgentError {
@@ -266,12 +268,80 @@ async function evaluateCommentEventInternal(
   event: GitHubPREvent,
 ): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> {
   const { logger, toolCallingClient, allowedBots } = deps;
-
-  const state = { dispatchTemplate: undefined as 'pr_comment' | 'bot_review_edit' | undefined, skipped: false, skipReason: undefined as string | undefined };
+  const commentBody = event.body ?? '';
+  const isReviewCommand = isReviewCommandComment(commentBody);
+  const state = {
+    dispatchTemplate: undefined as 'pr_comment' | 'bot_review_edit' | undefined,
+    reviewTypes: [] as string[],
+    reviewWorkerType: undefined as WorkerType | undefined,
+    skipped: false,
+    skipReason: undefined as string | undefined,
+  };
   const toolCalls: { tool: string; args: Record<string, unknown> }[] = [];
+  const tools: ToolDefinition[] = [];
 
-  const tools: ToolDefinition[] = [
-    {
+  if (isReviewCommand) {
+    tools.push({
+      name: 'request_review',
+      description: 'Request a review for this @review comment. Call once per review type, always with a worker type.',
+      parameters: {
+        type: 'object',
+        properties: {
+          review_type: {
+            type: 'string',
+            enum: [...VALID_REVIEW_TYPES],
+            description: 'The review scope to request',
+          },
+          worker_type: {
+            type: 'string',
+            enum: ['qwen', ...SUPPORTED_REVIEW_WORKER_TYPES],
+            description: 'The worker type to use. Normalize qwen to qwen3.5-plus.',
+          },
+        },
+        required: ['review_type', 'worker_type'],
+      },
+      run(args: Record<string, unknown>): Promise<string> {
+        toolCalls.push({ tool: 'request_review', args });
+        const rawReviewType = args['review_type'];
+        const rawWorkerType = args['worker_type'];
+        const reviewType = typeof rawReviewType === 'string' ? rawReviewType : '';
+        const workerType = typeof rawWorkerType === 'string' ? rawWorkerType : '';
+
+        if (!(VALID_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
+          logger.warn({ reviewType }, 'GitHub Agent requested unknown review type');
+          return Promise.resolve(JSON.stringify({ error: `Unknown review type: ${reviewType}` }));
+        }
+
+        const normalizedWorkerType = normalizeReviewWorkerType(workerType);
+        if (normalizedWorkerType === undefined) {
+          logger.warn({ workerType }, 'GitHub Agent used unknown review worker type');
+          return Promise.resolve(JSON.stringify({ error: `Unknown worker type: ${workerType}` }));
+        }
+
+        if (state.reviewWorkerType !== undefined && state.reviewWorkerType !== normalizedWorkerType) {
+          logger.warn(
+            { existingWorkerType: state.reviewWorkerType, workerType: normalizedWorkerType },
+            'GitHub Agent requested conflicting review worker types'
+          );
+          return Promise.resolve(JSON.stringify({ error: `Conflicting worker type: ${normalizedWorkerType}` }));
+        }
+
+        state.reviewWorkerType = normalizedWorkerType;
+        state.reviewTypes.push(reviewType);
+        logger.info(
+          { repository: event.repository, prNumber: event.pullRequestNumber, reviewType, workerType: normalizedWorkerType },
+          'GitHub Agent requested review from comment'
+        );
+        return Promise.resolve(JSON.stringify({
+          success: true,
+          reviewType,
+          workerType: normalizedWorkerType,
+          message: `Review recorded: ${reviewType} on ${normalizedWorkerType}`,
+        }));
+      },
+    });
+  } else {
+    tools.push({
       name: 'dispatch_to_task',
       description: 'Forward this comment to a task for processing.',
       parameters: {
@@ -299,33 +369,34 @@ async function evaluateCommentEventInternal(
         logger.info({ repository: event.repository, prNumber: event.pullRequestNumber, template }, 'GitHub Agent dispatching comment');
         return Promise.resolve(JSON.stringify({ success: true, template, message: `Dispatch queued: ${template}` }));
       },
-    },
-    {
-      name: 'skip',
-      description: 'Skip this comment. Use when the comment is not actionable.',
-      parameters: {
-        type: 'object',
-        properties: {
-          reason: {
-            type: 'string',
-            description: 'Why this comment is being skipped',
-          },
+    });
+  }
+
+  tools.push({
+    name: 'skip',
+    description: 'Skip this comment. Use when the comment is not actionable.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: {
+          type: 'string',
+          description: 'Why this comment is being skipped',
         },
-        required: ['reason'],
       },
-      run(args: Record<string, unknown>): Promise<string> {
-        toolCalls.push({ tool: 'skip', args });
-        const rawReason = args['reason'];
-        /* v8 ignore start -- schema: type guard for unknown tool arg @preserve */
-        const reason = typeof rawReason === 'string' ? rawReason : '(no reason provided)';
-        /* v8 ignore stop @preserve */
-        state.skipped = true;
-        state.skipReason = reason;
-        logger.info({ repository: event.repository, prNumber: event.pullRequestNumber, reason }, 'GitHub Agent skipped comment');
-        return Promise.resolve(JSON.stringify({ success: true, message: `Skipped: ${reason}` }));
-      },
+      required: ['reason'],
     },
-  ];
+    run(args: Record<string, unknown>): Promise<string> {
+      toolCalls.push({ tool: 'skip', args });
+      const rawReason = args['reason'];
+      /* v8 ignore start -- schema: type guard for unknown tool arg @preserve */
+      const reason = typeof rawReason === 'string' ? rawReason : '(no reason provided)';
+      /* v8 ignore stop @preserve */
+      state.skipped = true;
+      state.skipReason = reason;
+      logger.info({ repository: event.repository, prNumber: event.pullRequestNumber, reason }, 'GitHub Agent skipped comment');
+      return Promise.resolve(JSON.stringify({ success: true, message: `Skipped: ${reason}` }));
+    },
+  });
 
   const isBotSender = allowedBots.has(event.senderLogin);
 
@@ -340,7 +411,7 @@ async function evaluateCommentEventInternal(
     /* v8 ignore stop @preserve */
     senderLogin: event.senderLogin,
     eventType: 'issue_comment',
-    commentBody: event.body ?? '',
+    commentBody,
     /* v8 ignore stop @preserve */
     isEdit: event.action === 'edited',
     isBotSender,
@@ -369,8 +440,15 @@ async function evaluateCommentEventInternal(
   /* v8 ignore start -- ts-type: null coalescing for optional skip reason @preserve */
   const commentSkipReason = state.skipReason ?? '(no reason)';
   /* v8 ignore stop @preserve */
+  const dedupedReviewTypes = [...new Set(state.reviewTypes)];
   const triage: GitHubAgentTriageResult = state.skipped
     ? { action: 'skip', reason: commentSkipReason }
+    : dedupedReviewTypes.length > 0
+      ? {
+          action: 'request_review',
+          reviewTypes: dedupedReviewTypes,
+          ...(state.reviewWorkerType !== undefined && { workerType: state.reviewWorkerType }),
+        }
     : state.dispatchTemplate !== undefined
       ? { action: 'dispatch', template: state.dispatchTemplate }
       : { action: 'skip', reason: 'No tool called' };

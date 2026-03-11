@@ -493,6 +493,62 @@ describe('evaluateEvent', () => {
   });
 
   describe('issue_comment events', () => {
+    it('evaluates @review comment and returns request_review triage with normalized worker type', async () => {
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 'architecture', worker_type: 'qwen' });
+            await requestReview.run({ review_type: 'security', worker_type: 'qwen' });
+          }
+          return ok({
+            content: 'The user explicitly asked for architecture and security review with qwen.',
+            toolCallsMade: 2,
+            iterationCount: 1,
+            usage: { inputTokens: 120, outputTokens: 40, totalTokens: 160, costUsd: 0.002 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture, security with qwen',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'request_review',
+          reviewTypes: ['architecture', 'security'],
+          workerType: 'qwen3.5-plus',
+        });
+      }
+    });
+
+    it('returns skip when @review comment does not call request_review', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'skip',
+          reason: 'No tool called',
+        });
+      }
+    });
+
     it('evaluates a comment and returns dispatch triage', async () => {
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({
@@ -723,6 +779,111 @@ describe('evaluateEvent', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ template: 'unknown_template' }),
         'GitHub Agent used unknown dispatch template'
+      );
+    });
+
+    it('logs warning for invalid worker type in @review request', async () => {
+      const logger = createFakeLogger();
+      const deps = createDeps({
+        logger,
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'request_review',
+          toolArgs: { review_type: 'architecture', worker_type: 'invalid-worker' },
+        }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'invalid-worker' }),
+        'GitHub Agent used unknown review worker type'
+      );
+    });
+
+    it('logs warning for non-string review and worker types in @review request', async () => {
+      const logger = createFakeLogger();
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 42, worker_type: 7 });
+          }
+          return ok({
+            content: 'Tried to request review with invalid argument types.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 80, outputTokens: 20, totalTokens: 100, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ logger, toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ reviewType: '' }),
+        'GitHub Agent requested unknown review type'
+      );
+    });
+
+    it('logs warning for conflicting worker types in @review request', async () => {
+      const logger = createFakeLogger();
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 'architecture', worker_type: 'qwen' });
+            await requestReview.run({ review_type: 'security', worker_type: 'opus' });
+          }
+          return ok({
+            content: 'The comment asked for multiple scopes but the worker types conflicted.',
+            toolCallsMade: 2,
+            iterationCount: 1,
+            usage: { inputTokens: 120, outputTokens: 40, totalTokens: 160, costUsd: 0.002 },
+          });
+        },
+      };
+      const deps = createDeps({ logger, toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture with qwen and security with opus',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'request_review',
+          reviewTypes: ['architecture'],
+          workerType: 'qwen3.5-plus',
+        });
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          existingWorkerType: 'qwen3.5-plus',
+          workerType: 'opus',
+        }),
+        'GitHub Agent requested conflicting review worker types'
       );
     });
   });
