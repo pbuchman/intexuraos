@@ -87,6 +87,7 @@ describe('main.ts', () => {
   } as unknown as TaskDispatcher;
 
   const mockListWorkerContainers = vi.fn<() => Promise<DiscoveredContainer[]>>();
+  const mockStopPeriodicCleanup = vi.fn<() => void>();
   const mockIsolationProvider: IsolationProvider = {
     createWorker: vi.fn(),
     destroyWorker: vi.fn(),
@@ -97,6 +98,7 @@ describe('main.ts', () => {
     getResourceUsage: vi.fn(),
     listWorkers: vi.fn(),
     listWorkerContainers: mockListWorkerContainers,
+    stopPeriodicCleanup: mockStopPeriodicCleanup,
   } as unknown as IsolationProvider;
 
   const mockTokenService: GitHubTokenService = {
@@ -142,6 +144,7 @@ describe('main.ts', () => {
     });
     mockListWorkerContainers.mockResolvedValue([]);
     vi.mocked(mockIsolationProvider.destroyWorker).mockResolvedValue(undefined);
+    mockStopPeriodicCleanup.mockReset();
   });
 
   afterEach(() => {
@@ -769,7 +772,7 @@ describe('main.ts', () => {
         // Expected
       }
 
-      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('task-1');
+      expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalled();
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
@@ -811,7 +814,7 @@ describe('main.ts', () => {
         // Expected
       }
 
-      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('orphan-task');
+      expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalled();
       expect(mockWebhookClient.send).not.toHaveBeenCalled();
     });
 
@@ -1336,6 +1339,42 @@ describe('main.ts', () => {
       expect(clearIntervalSpy).toHaveBeenCalledTimes(2);
 
       // mockExit doesn't need restore - it's cleared in beforeEach
+    });
+
+    it('should stop provider periodic cleanup on shutdown', async () => {
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      const onCalls = vi.mocked(process.on).mock.calls;
+      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
+      const sigtermHandler = sigtermCall?.[1];
+
+      if (typeof sigtermHandler === 'function') {
+        vi.mocked(mockDispatcher.getRunningCount).mockReturnValue(0);
+
+        try {
+          await sigtermHandler();
+        } catch {
+          // exit(0) will throw
+        }
+      }
+
+      expect(mockStopPeriodicCleanup).toHaveBeenCalledTimes(1);
     });
 
     it('should wait for running tasks to complete before exit', async () => {
