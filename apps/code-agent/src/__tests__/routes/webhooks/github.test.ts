@@ -98,6 +98,7 @@ describe('POST /webhooks/github', () => {
       findArchivableTasks: vi.fn().mockResolvedValue(ok([])),
       archiveTaskLogs: vi.fn().mockResolvedValue(ok(undefined)),
       findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       findOldestQueued: vi.fn().mockResolvedValue(ok(null)),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
@@ -1672,4 +1673,3 @@ describe('POST /webhooks/github', () => {
     });
   });
 });
-

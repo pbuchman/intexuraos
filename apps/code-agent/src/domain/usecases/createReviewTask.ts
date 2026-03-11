@@ -4,7 +4,7 @@
  * Standalone use case — NOT a wrapper around createTaskForPR.
  * Key differences:
  * - No pr-comment label (would route to wrong prompt)
- * - No PR task lock (review tasks don't conflict with comment tasks)
+ * - PR-scoped review dedup (reuse active review task for the same PR)
  * - Best-effort Linear issue linking for UI grouping
  * - Sets agentType: 'review' on dispatch
  * - systemPromptHash: 'review-auto'
@@ -35,6 +35,10 @@ export interface CreateReviewTaskError {
   code: 'user_not_found' | 'no_workers_configured' | 'task_creation_failed' | 'dispatch_failed' | 'internal_error';
   message: string;
 }
+
+export type CreateReviewTaskResult =
+  | { status: 'created'; taskId: string }
+  | { status: 'already_running'; taskId: string };
 
 export interface CreateReviewTaskDeps {
   logger: Logger;
@@ -141,7 +145,7 @@ function buildReviewPrompt(request: CreateReviewTaskRequest): string {
 export async function createReviewTask(
   deps: CreateReviewTaskDeps,
   request: CreateReviewTaskRequest
-): Promise<Result<{ taskId: string }, CreateReviewTaskError>> {
+): Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>> {
   const { logger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, orchestratorSecret, serviceUrl } = deps;
   const { repository, prNumber, senderLogin, eventId } = request;
 
@@ -149,6 +153,23 @@ export async function createReviewTask(
     { repository, prNumber, senderLogin, reviewTypes: request.reviewTypes, eventId },
     'Creating review task'
   );
+
+  const activeReviewResult = await codeTaskRepo.findActiveReviewForPR(repository, prNumber);
+  if (!activeReviewResult.ok) {
+    logger.error(
+      { repository, prNumber, error: activeReviewResult.error },
+      'Failed to check for active review task'
+    );
+    return err({ code: 'task_creation_failed', message: activeReviewResult.error.message });
+  }
+
+  if (activeReviewResult.value !== null) {
+    logger.info(
+      { repository, prNumber, taskId: activeReviewResult.value.id },
+      'Active review task already exists for PR'
+    );
+    return ok({ status: 'already_running', taskId: activeReviewResult.value.id });
+  }
 
   // Resolve user
   const userResult = await userLookupService.resolveByGitHubUsername(senderLogin);
@@ -263,5 +284,5 @@ export async function createReviewTask(
     },
   );
 
-  return ok({ taskId: task.id });
+  return ok({ status: 'created', taskId: task.id });
 }
