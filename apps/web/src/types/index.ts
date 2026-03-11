@@ -1171,6 +1171,7 @@ export interface CodeTask {
   callbackReceived: boolean;
   createdAt: string;
   updatedAt: string;
+  dispatchedAt?: string;
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;

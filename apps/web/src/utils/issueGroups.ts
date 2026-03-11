@@ -21,7 +21,7 @@ export interface IssueGroup {
   aggregateStatus: GroupStatus;
 }
 
-export type SortOption = 'linear-id' | 'pr-number' | 'finished-time';
+export type SortOption = 'linear-id' | 'pr-number' | 'finished-time' | 'started-time';
 
 const PR_URL_REGEX = /\/pull\/(\d+)/;
 const LINEAR_ID_REGEX = /\w+-(\d+)/;
@@ -274,16 +274,40 @@ export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): Issue
   }
 
   // finished-time
-  sorted.sort((a, b) => {
-    const aDone = a.aggregateStatus === 'done';
-    const bDone = b.aggregateStatus === 'done';
+  if (sortBy === 'finished-time') {
+    sorted.sort((a, b) => {
+      const aDone = a.aggregateStatus === 'done';
+      const bDone = b.aggregateStatus === 'done';
 
-    // Done groups sort first, by updatedAt desc
-    if (aDone && bDone) return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
-    if (aDone) return -1;
-    if (bDone) return 1;
-    // Non-done: fall back to updatedAt desc
-    return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
-  });
+      // Done groups sort first, by updatedAt desc
+      if (aDone && bDone) return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+      if (aDone) return -1;
+      if (bDone) return 1;
+      // Non-done: fall back to updatedAt desc
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
+    return sorted;
+  }
+
+  // started-time: sort by most recent dispatchedAt desc (groups with dispatchedAt first, then by issue number)
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (sortBy === 'started-time') {
+    sorted.sort((a, b) => {
+      const aDispatched = a.latestTask.dispatchedAt;
+      const bDispatched = b.latestTask.dispatchedAt;
+
+      // Both have dispatchedAt: sort desc
+      if (aDispatched !== undefined && bDispatched !== undefined) {
+        return bDispatched.localeCompare(aDispatched);
+      }
+      // Only one has dispatchedAt: the one with dispatchedAt sorts first
+      if (aDispatched !== undefined) return -1;
+      if (bDispatched !== undefined) return 1;
+      // Neither has dispatchedAt: fall back to updatedAt desc
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
+    return sorted;
+  }
+
   return sorted;
 }
