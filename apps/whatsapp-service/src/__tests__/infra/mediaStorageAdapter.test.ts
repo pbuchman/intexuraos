@@ -100,7 +100,7 @@ describe('GcsMediaStorageAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
-        expect(result.error.message).toContain('Unknown GCS error');
+        expect(result.error.message).toContain('string error');
       }
     });
   });

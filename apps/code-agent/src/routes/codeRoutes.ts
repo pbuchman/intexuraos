@@ -13,6 +13,7 @@ import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { drainRetryQueue } from '../domain/usecases/drainRetryQueue.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
@@ -99,6 +100,7 @@ const codeTaskSchema = {
     callbackReceived: { type: 'boolean' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
+    dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
     actionId: { type: 'string', nullable: true },
     approvalEventId: { type: 'string', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
@@ -198,6 +200,7 @@ function taskToApiResponse(task: {
   callbackReceived: boolean;
   createdAt: unknown;
   updatedAt: unknown;
+  dispatchedAt?: unknown;
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
@@ -224,7 +227,6 @@ function taskToApiResponse(task: {
     };
   };
   completedAt?: unknown;
-  dispatchedAt?: unknown;
   logChunksDropped?: number;
   statusSummary?: unknown;
   retriedFrom?: string;
@@ -244,6 +246,7 @@ function taskToApiResponse(task: {
   callbackReceived: boolean;
   createdAt: string;
   updatedAt: string;
+  dispatchedAt?: string;
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
@@ -289,6 +292,9 @@ function taskToApiResponse(task: {
     createdAt: timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '',
     /* v8 ignore stop @preserve */
     updatedAt: timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '',
+    /* v8 ignore start -- ts-type: spread operators create type narrowing branches @preserve */
+    ...(task.dispatchedAt !== undefined && { dispatchedAt: timestampToIso(task.dispatchedAt as { toDate: () => Date } | string | undefined) as string }),
+    /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: spread operators create type narrowing branches @preserve */
     ...(task.actionId !== undefined && { actionId: task.actionId }),
     /* v8 ignore stop @preserve */
@@ -866,14 +872,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
-  // GET /internal/code-tasks/linear/:linearIssueId/active - Check for active task
+  // GET /internal/code-tasks/linear/:linearIssueId/active - Check for active blocking task
   fastify.get<{ Params: { linearIssueId: string } }>(
     '/internal/code-tasks/linear/:linearIssueId/active',
     {
       schema: {
         operationId: 'hasActiveCodeTaskForLinearIssue',
-        summary: 'Check if active task exists for Linear issue',
-        description: 'Internal endpoint for checking if a Linear issue has an active (non-completed) task.',
+        summary: 'Check if blocking task exists for Linear issue',
+        description: 'Internal endpoint for checking if a Linear issue has an active non-review task.',
         tags: ['internal'],
         params: {
           type: 'object',
@@ -934,16 +940,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo } = getServices();
       const { linearIssueId } = request.params;
 
-      request.log.info({ linearIssueId }, 'Checking for active code task');
+      request.log.info({ linearIssueId }, 'Checking for active blocking code task');
 
       const result = await codeTaskRepo.hasActiveTaskForLinearIssue(linearIssueId);
 
       if (!result.ok) {
-        request.log.error({ linearIssueId, error: result.error }, 'Failed to check active code task');
+        request.log.error({ linearIssueId, error: result.error }, 'Failed to check active blocking code task');
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active code task check complete'); // @allow-result-access -- .ok checked at line 891
+      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active blocking code task check complete'); // @allow-result-access -- .ok checked at line 891
       return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 891
     }
   );
@@ -3835,7 +3841,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               data: {
                 type: 'object',
                 properties: {
-                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped', 'failed'] },
+                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped', 'failed', 'message_sent', 'exhausted', 'retry_failed'] },
                   taskId: { type: 'string' },
                 },
                 required: ['action'],
@@ -3908,6 +3914,27 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const services = getServices();
 
+      // Step 1: Retry queue (front-of-line priority)
+      const retryResult = await drainRetryQueue({
+        logger: services.logger,
+        dispatchRetryRepo: services.dispatchRetryRepo,
+        codeTaskRepo: services.codeTaskRepo,
+        taskDispatcher: services.taskDispatcher,
+        linearAgentClient: services.linearAgentClient,
+        whatsappNotifier: services.whatsappNotifier,
+        workerSettingsRepo: services.workerSettingsRepo,
+        logLineRepo: services.logLineRepo,
+        statusMirrorService: services.statusMirrorService,
+      });
+
+      if (retryResult.ok && retryResult.value.action !== 'empty' && retryResult.value.action !== 'failed') {
+        for (const lock of retryResult.value.locksToCleanup ?? []) {
+          await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+        }
+        return await reply.ok(retryResult.value);
+      }
+
+      // Step 2: Regular task queue (existing behavior)
       const result = await drainTaskQueue({
         logger: services.logger,
         codeTaskRepo: services.codeTaskRepo,

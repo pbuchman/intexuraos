@@ -25,21 +25,21 @@ vi.mock('../services/transcript-reader.js', () => ({
 
 vi.mock('../services/deep-validator-helpers.js', () => ({
   extractPrNumber: vi.fn(),
-  fetchLinearIssueDescription: vi.fn(),
-  findPlanOnBranch: vi.fn(),
+  fetchLinearIssueContext: vi.fn(),
+  readPlanReferencedInLinearIssue: vi.fn(),
 }));
 
 import { readSessionTranscript } from '../services/transcript-reader.js';
 import {
   extractPrNumber,
-  fetchLinearIssueDescription,
-  findPlanOnBranch,
+  fetchLinearIssueContext,
+  readPlanReferencedInLinearIssue,
 } from '../services/deep-validator-helpers.js';
 
 const mockReadSessionTranscript = vi.mocked(readSessionTranscript);
 const mockExtractPrNumber = vi.mocked(extractPrNumber);
-const mockFetchLinearIssueDescription = vi.mocked(fetchLinearIssueDescription);
-const mockFindPlanOnBranch = vi.mocked(findPlanOnBranch);
+const mockFetchLinearIssueContext = vi.mocked(fetchLinearIssueContext);
+const mockReadPlanReferencedInLinearIssue = vi.mocked(readPlanReferencedInLinearIssue);
 
 const flushAsync = async (): Promise<void> => {
   await new Promise((resolve) => {
@@ -1892,6 +1892,28 @@ describe('TaskDispatcher', () => {
       expect(log).toContain('Planning Agent');
     });
 
+    it('uses agentType=pull_request over missing pr-comment label', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
+      const request: CreateTaskRequest = {
+        taskId: 'pull-request-phase-override-task',
+        workerType: 'auto',
+        prompt: 'Test pull request phase override',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['bug'],
+        hasChildren: false,
+        agentType: 'pull_request',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Pull Request Agent');
+    });
+
     it('falls back to label detection when agentType is absent', async () => {
       vi.mocked(mockLogForwarder.appendChunk).mockClear();
 
@@ -3592,12 +3614,13 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput returns correct input shape', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(123);
       mockReadSessionTranscript.mockResolvedValue([mockTranscriptEntry]);
-      mockFindPlanOnBranch.mockResolvedValue('# Plan');
+      mockFetchLinearIssueContext.mockResolvedValue(undefined);
+      mockReadPlanReferencedInLinearIssue.mockResolvedValue('# Plan');
 
       const deepValDispatcher = new TaskDispatcher(
         mockConfig,
@@ -3628,18 +3651,21 @@ describe('TaskDispatcher', () => {
       expect(input?.repository).toBe('pbuchman/intexuraos');
       expect(input?.agentClaims.superpowers_executing_plans).toBe('used');
       expect(mockReadSessionTranscript).toHaveBeenCalled();
-      expect(mockFindPlanOnBranch).toHaveBeenCalled();
+      expect(mockReadPlanReferencedInLinearIssue).not.toHaveBeenCalled();
     });
 
     it('prepareDeepValidationInput enriches linearIssueBody with description when available', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(123);
       mockReadSessionTranscript.mockResolvedValue([mockTranscriptEntry]);
-      mockFindPlanOnBranch.mockResolvedValue(undefined);
-      mockFetchLinearIssueDescription.mockResolvedValue('## Requirements\n1. Fix bug');
+      mockFetchLinearIssueContext.mockResolvedValue({
+        description: '## Requirements\n1. Fix bug',
+        comments: [],
+      });
+      mockReadPlanReferencedInLinearIssue.mockResolvedValue(undefined);
 
       const deepValDispatcher = new TaskDispatcher(
         mockConfig,
@@ -3672,24 +3698,24 @@ describe('TaskDispatcher', () => {
       );
 
       expect(input).toBeDefined();
-      expect(mockFetchLinearIssueDescription).toHaveBeenCalledWith(
+      expect(mockFetchLinearIssueContext).toHaveBeenCalledWith(
         'INT-999',
         expect.any(String),
         expect.anything()
       );
       expect(input?.linearIssueBody).toContain('Linear Issue: INT-999');
       expect(input?.linearIssueBody).toContain('Description:\n## Requirements\n1. Fix bug');
+      expect(mockReadPlanReferencedInLinearIssue).toHaveBeenCalledWith(
+        '/tmp/worktrees/deep-val-test',
+        {
+          description: '## Requirements\n1. Fix bug',
+          comments: [],
+        },
+        expect.anything()
+      );
     });
 
-    it('executeDeepValidation calls validate with onProgress and logs completion', async () => {
-      const mockResult = {
-        claimVerification: [{ claim: 'CI', verdict: 'verified', evidence: 'MSG-001' }],
-        contractVerification: [],
-        planVsReality: { planFound: false, requirements: [] },
-        anomalies: [
-          { type: 'laziness', severity: 'warning', evidence: 'MSG-002', detail: 'skipped' },
-        ],
-      };
+    it('executeDeepValidation calls validate with onProgress and logs comment posted', async () => {
       const mockValidator: ExecutionDeepValidator = {
         validate: vi
           .fn()
@@ -3702,7 +3728,7 @@ describe('TaskDispatcher', () => {
               onProgress?.('validation response received');
               onProgress?.('posting PR comment...');
               onProgress?.('PR comment posted');
-              return mockResult;
+              return true;
             }
           ),
       };
@@ -3751,16 +3777,16 @@ describe('TaskDispatcher', () => {
         .map((c) => c[1]);
       expect(appendCalls.some((c) => c.includes('Deep validation starting'))).toBe(true);
       expect(appendCalls.some((c) => c.includes('calling Gemini for analysis...'))).toBe(true);
-      expect(appendCalls.some((c) => c.includes('1 claims, 1 anomalies'))).toBe(true);
+      expect(appendCalls.some((c) => c.includes('Deep validation comment posted'))).toBe(true);
       expect(mockLogger.info).toHaveBeenCalledWith(
         { taskId: 'deep-val-test' },
-        'Deep validation completed with result'
+        'Deep validation completed with comment posted'
       );
     });
 
-    it('executeDeepValidation does not log summary when validate returns undefined', async () => {
+    it('executeDeepValidation logs coarse status when validate returns false', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       const deepValDispatcher = new TaskDispatcher(
@@ -3804,10 +3830,12 @@ describe('TaskDispatcher', () => {
         .mock.calls.filter((c) => c[0] === 'undef-val-test')
         .map((c) => c[1]);
       expect(appendCalls.some((c) => c.includes('Deep validation starting'))).toBe(true);
-      expect(appendCalls.some((c) => c.includes('claims'))).toBe(false);
+      expect(appendCalls.some((c) => c.includes('Deep validation completed without comment'))).toBe(
+        true
+      );
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { taskId: 'undef-val-test' },
-        'Deep validation completed without result (check onProgress messages for details)'
+        'Deep validation completed without comment'
       );
     });
 
@@ -3828,7 +3856,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput returns undefined for non-execution agent types', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       const deepValDispatcher = new TaskDispatcher(
@@ -3878,7 +3906,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput skips and logs warning when no PR number', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(undefined);
@@ -3915,7 +3943,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput skips and logs warning when transcript is empty', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(123);
@@ -3953,7 +3981,7 @@ describe('TaskDispatcher', () => {
 
     it('prepareDeepValidationInput failure does not block finalization', async () => {
       const mockValidator: ExecutionDeepValidator = {
-        validate: vi.fn().mockResolvedValue(undefined),
+        validate: vi.fn().mockResolvedValue(false),
       };
 
       mockExtractPrNumber.mockReturnValue(123);
@@ -4642,6 +4670,237 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('falls back to lastSuccessResult when checkForResult returns undefined', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-fallback-result-test',
+        workerType: 'auto',
+        prompt: 'Test fallback to lastSuccessResult',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'planning',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue(undefined);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-fallback-result-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        planning_outcome_label: 'planned',
+        planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('resumed-fallback-result-test');
+      expect(finalTask?.status).toBe('completed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              planning_outcome_label: 'planned',
+              planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('checkForResult PR result takes priority over lastSuccessResult', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-pr-priority-test',
+        workerType: 'auto',
+        prompt: 'Test PR result priority',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'fix/something',
+        commits: 1,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/999',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-pr-priority-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        planning_outcome_label: 'planned',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              prUrl: 'https://github.com/pbuchman/intexuraos/pull/999',
+            }),
+          }),
+        })
+      );
+
+      const webhookCall = vi.mocked(mockWebhookClient.send).mock.calls.at(-1);
+      expect(webhookCall?.[0]?.payload).not.toHaveProperty('result.planning_outcome_label');
+    });
+
+    it('lastSuccessResult is stored on successful completion', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'store-success-result-test',
+        workerType: 'auto',
+        prompt: 'Test storing lastSuccessResult',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'fix/store-test',
+        commits: 1,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/1000',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['store-success-result-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('store-success-result-test');
+      expect(finalTask?.status).toBe('completed');
+      expect(finalTask?.lastSuccessResult).toBeDefined();
+      expect(finalTask?.lastSuccessResult?.prUrl).toBe(
+        'https://github.com/pbuchman/intexuraos/pull/1000'
+      );
+    });
+
+    it('falls back to lastSuccessResult in failure webhook when checkForResult returns undefined', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-fallback-error-test',
+        workerType: 'auto',
+        prompt: 'Test fallback to lastSuccessResult on error path',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'planning',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue(undefined);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onComplete).toBeDefined();
+      onComplete?.(1);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-fallback-error-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        planning_outcome_label: 'planned',
+        planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('resumed-fallback-error-test');
+      expect(finalTask?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            result: expect.objectContaining({
+              planning_outcome_label: 'planned',
+              planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+            }),
+            error: expect.objectContaining({
+              code: 'TASK_RESUMED_HARD_ERROR',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('lastSuccessResult is cleared on failure', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'clear-result-on-fail-test',
+        workerType: 'auto',
+        prompt: 'Test clearing lastSuccessResult on failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onComplete).toBeDefined();
+      onComplete?.(1);
+
+      // Pre-set lastSuccessResult and resumedAfterSuccess
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['clear-result-on-fail-test'];
+      if (!task) throw new Error('Task not found');
+      task.lastSuccessResult = { planning_outcome_label: 'planned' };
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('clear-result-on-fail-test');
+      expect(finalTask?.status).toBe('failed');
+      expect(finalTask?.lastSuccessResult).toBeUndefined();
+    });
+
     it('does not send resumedCompletion in webhook payload on failure', async () => {
       const request: CreateTaskRequest = {
         taskId: 'resumed-failure-no-flag-test',
@@ -5109,6 +5368,163 @@ describe('TaskDispatcher', () => {
         expect(result.error.message).toBe('Task at max attempts');
       }
       expect(dispatcher.getRunningCount()).toBe(0);
+    });
+  });
+
+  describe('prompt truncation in task log', () => {
+    it('should truncate prompt longer than 500 characters in the log', async () => {
+      const longPrompt = 'A'.repeat(600);
+      const request: CreateTaskRequest = {
+        taskId: 'truncate-long-prompt',
+        workerType: 'auto',
+        prompt: longPrompt,
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const appendCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const promptLogCall = appendCalls.find(
+        ([id, msg]) =>
+          id === 'truncate-long-prompt' && typeof msg === 'string' && msg.includes('[prompt]')
+      );
+      expect(promptLogCall).toBeDefined();
+      const promptLogMessage = promptLogCall?.[1] ?? '';
+      // Should contain exactly 500 A's followed by ellipsis, NOT the full 600
+      expect(promptLogMessage).toContain('A'.repeat(500) + '\u2026');
+      expect(promptLogMessage).not.toContain('A'.repeat(501));
+    });
+
+    it('should use full prompt when 500 characters or shorter in the log', async () => {
+      const shortPrompt = 'B'.repeat(500);
+      const request: CreateTaskRequest = {
+        taskId: 'truncate-short-prompt',
+        workerType: 'auto',
+        prompt: shortPrompt,
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const appendCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const promptLogCall = appendCalls.find(
+        ([id, msg]) =>
+          id === 'truncate-short-prompt' && typeof msg === 'string' && msg.includes('[prompt]')
+      );
+      expect(promptLogCall).toBeDefined();
+      const promptLogMessage = promptLogCall?.[1] ?? '';
+      // Should contain the full 500-char prompt without ellipsis
+      expect(promptLogMessage).toContain(shortPrompt);
+      expect(promptLogMessage).not.toContain('\u2026');
+    });
+  });
+
+  describe('createWorker failure error logging', () => {
+    it('should log error with Error message when createWorker rejects with Error', async () => {
+      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
+        new Error('Docker daemon not responding')
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'worker-fail-error',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'worker-fail-error',
+          errorMessage: 'Docker daemon not responding',
+        }),
+        'Failed to create worker container'
+      );
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    it('should log error with stringified message when createWorker rejects with non-Error', async () => {
+      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce('raw string rejection');
+
+      const request: CreateTaskRequest = {
+        taskId: 'worker-fail-string',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'worker-fail-string',
+          errorMessage: 'raw string rejection',
+        }),
+        'Failed to create worker container'
+      );
+      expect(dispatcher.getRunningCount()).toBe(0);
+    });
+  });
+
+  describe('clearTaskTimers', () => {
+    it('should handle clearing timers when no timers are registered for the task', async () => {
+      // Submit a task so it's in state, then cancel it (which calls clearTaskTimers internally)
+      const request: CreateTaskRequest = {
+        taskId: 'clear-timers-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      // Cancel calls clearTaskTimers internally — first cancel clears timers
+      const result1 = await dispatcher.cancelTask('clear-timers-test');
+      expect(result1.ok).toBe(true);
+
+      // Access the private activeTasks map to verify keys were removed
+      const internal = dispatcher as unknown as { activeTasks: Map<string, NodeJS.Timeout> };
+      expect(internal.activeTasks.has('clear-timers-test-warning')).toBe(false);
+      expect(internal.activeTasks.has('clear-timers-test-kill')).toBe(false);
+      expect(internal.activeTasks.has('clear-timers-test-monitor')).toBe(false);
+    });
+
+    it('should not throw when activeTasks.get returns undefined for timer keys', async () => {
+      // Directly call clearTaskTimers on a task that was never started (no timers registered)
+      const internal = dispatcher as unknown as {
+        clearTaskTimers: (taskId: string) => void;
+        activeTasks: Map<string, NodeJS.Timeout>;
+      };
+
+      // Ensure no timers exist for this task
+      expect(internal.activeTasks.has('nonexistent-task-warning')).toBe(false);
+      expect(internal.activeTasks.has('nonexistent-task-kill')).toBe(false);
+      expect(internal.activeTasks.has('nonexistent-task-monitor')).toBe(false);
+
+      // Should not throw
+      expect(() => {
+        internal.clearTaskTimers('nonexistent-task');
+      }).not.toThrow();
     });
   });
 });

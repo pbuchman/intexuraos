@@ -144,9 +144,9 @@ describe('linearApiClient helper functions', () => {
       const error = 'string error';
       const result = mapLinearError(error);
 
-      // getErrorMessage returns default for non-Error types
+      // getErrorMessage returns the string directly for string errors
       expect(result.code).toBe('API_ERROR');
-      expect(result.message).toBe('Unknown Linear API error');
+      expect(result.message).toBe('string error');
     });
 
     it('handles null error', () => {
@@ -167,9 +167,9 @@ describe('linearApiClient helper functions', () => {
       const error = { message: 'custom error object' };
       const result = mapLinearError(error);
 
-      // getErrorMessage returns default for non-Error objects
+      // getErrorMessage returns .message from plain objects with a message property
       expect(result.code).toBe('API_ERROR');
-      expect(result.message).toBe('Unknown Linear API error');
+      expect(result.message).toBe('custom error object');
     });
   });
 

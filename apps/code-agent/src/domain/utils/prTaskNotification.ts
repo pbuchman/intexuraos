@@ -27,6 +27,7 @@ export interface PRTaskNotificationRequest {
   prTitle?: string;
   titleAlreadyTagged: boolean;
   reviewTypes?: string[];
+  workerType?: string;
 }
 
 /**
@@ -66,6 +67,10 @@ function buildTaskCreatedComment(request: PRTaskNotificationRequest): string {
   if (request.reviewTypes !== undefined && request.reviewTypes.length > 0) {
     const reviewTypesStr = request.reviewTypes.map((t) => `\`${t}\``).join(', ');
     lines.push(`**Review types:** ${reviewTypesStr}`);
+  }
+
+  if (request.workerType !== undefined) {
+    lines.push(`**Reviewer:** \`${request.workerType}\``);
   }
 
   lines.push(

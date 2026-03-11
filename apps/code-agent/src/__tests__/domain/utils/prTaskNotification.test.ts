@@ -285,4 +285,24 @@ describe('notifyPROfTaskCreation', () => {
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).not.toContain('**Review types:**');
   });
+
+  it('includes reviewer line when workerType is provided', async () => {
+    const deps = createFakeDeps();
+    const request = createFakeRequest({ workerType: 'auto' });
+
+    await notifyPROfTaskCreation(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('**Reviewer:** `auto`');
+  });
+
+  it('omits reviewer line when workerType is undefined', async () => {
+    const deps = createFakeDeps();
+    const request = createFakeRequest();
+
+    await notifyPROfTaskCreation(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).not.toContain('**Reviewer:**');
+  });
 });

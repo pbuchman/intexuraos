@@ -145,6 +145,16 @@ describe('TurnMetricsCollector', () => {
       expect(result).toBe(expected);
     });
 
+    it('falls back to os.availableParallelism when period is zero', async () => {
+      mockReadFile.mockResolvedValueOnce('200000 0\n');
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/test');
+
+      const os = await import('node:os');
+      const expected = os.availableParallelism();
+      expect(result).toBe(expected);
+    });
+
     it('falls back to os.availableParallelism when content is malformed', async () => {
       mockReadFile.mockResolvedValueOnce('garbage data\n');
 

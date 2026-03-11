@@ -123,6 +123,16 @@ const VERIFIER_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
   },
 };
 
+const FATAL_EXIT_CODE_PATTERN = /\[entrypoint\] Claude attempt finished with exit code: (137|139)/;
+
+export function detectFatalExitCode(rawLogs: string): number | undefined {
+  const match = FATAL_EXIT_CODE_PATTERN.exec(rawLogs);
+  if (match?.[1] !== undefined) {
+    return Number(match[1]);
+  }
+  return undefined;
+}
+
 export function getLast50Lines(rawLogs: string): string {
   return stripDockerHeaders(rawLogs).split('\n').slice(-50).join('\n');
 }
@@ -336,6 +346,26 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
 
   async verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
     const transcript = getLast50Lines(input.rawLogs);
+
+    const fatalExitCode = detectFatalExitCode(input.rawLogs);
+    if (fatalExitCode !== undefined) {
+      this.logger.warn(
+        {
+          taskId: input.taskId,
+          attempt: input.attempt,
+          agentType: input.agentType,
+          exitCode: fatalExitCode,
+        },
+        'Fatal exit code detected — skipping Gemini verification'
+      );
+      return {
+        passed: false,
+        missingFields: [`fatal_exit_code_${String(fatalExitCode)}`],
+        verifierFailure: false,
+        trace: { transcript, prompt: '', response: '' },
+      };
+    }
+
     const { schema, prompt } = selectSchemaAndPrompt(input.agentType, transcript);
 
     this.logger.info(

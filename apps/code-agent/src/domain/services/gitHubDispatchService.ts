@@ -15,6 +15,9 @@ import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepos
 import type { WebhookMessageBuilder } from './gitHubMessageBuilder.js';
 import { createTaskForPR } from '../usecases/createTaskForPR.js';
 import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
+import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
+import { isRetryableErrorCode } from '../utils/retryableErrors.js';
+import { loadConfig } from '../../config.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
@@ -53,6 +56,7 @@ export interface WebhookDispatchServiceDeps {
   allowedBots: Set<string>;
   orchestratorSecret: string;
   serviceUrl: string;
+  dispatchRetryRepo?: DispatchRetryRepository;
 }
 
 export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
@@ -201,6 +205,27 @@ async function handleExistingTask(
   );
 
   if (!sendResult.ok) {
+    // Queue retry for retryable errors
+    if (isRetryableErrorCode(sendResult.error.code) && deps.dispatchRetryRepo !== undefined) {
+      const retryConfig = loadConfig();
+      await deps.dispatchRetryRepo.create({
+        type: 'task_message',
+        eventId: event.id,
+        repository: event.repository,
+        pullRequestNumber: event.pullRequestNumber,
+        senderLogin: event.senderLogin,
+        taskId: task.id,
+        userId: task.userId,
+        message,
+        attempts: 0,
+        maxAttempts: retryConfig.retryQueue.maxAttempts,
+        lastError: sendResult.error.message,
+        ttlMinutes: retryConfig.retryQueue.ttlMinutes,
+      });
+      logger.info({ taskId: task.id }, 'Message delivery failed, queued for retry');
+      return { success: true, dispatched: true, taskId: task.id };
+    }
+    // Non-retryable: existing behavior
     logger.error(
       { taskId: task.id, error: sendResult.error },
       'Failed to send message to task'

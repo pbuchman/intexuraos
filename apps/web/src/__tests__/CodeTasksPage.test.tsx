@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { CodeTasksPage, DEFAULT_VISIBLE_STATUSES } from '../pages/CodeTasksPage.js';
 import type { CodeTask, CodeTaskStatus } from '../types/index.js';
 
@@ -68,6 +68,18 @@ vi.mock('@/components', () => ({
   Layout: ({ children }: { children: React.ReactNode }): React.JSX.Element => (
     <div>{children}</div>
   ),
+  CodeTaskLogsModal: ({
+    taskId,
+    onClose,
+  }: {
+    taskId: string;
+    onClose: () => void;
+  }): React.JSX.Element => (
+    <div>
+      <span>{`Logs modal: ${taskId}`}</span>
+      <button type="button" onClick={onClose}>Close logs</button>
+    </div>
+  ),
 }));
 
 vi.mock('lucide-react', () => {
@@ -76,6 +88,7 @@ vi.mock('lucide-react', () => {
       return <span>{name}</span>;
     };
   return {
+    ArrowUpDown: icon('ArrowUpDown'),
     Check: icon('Check'),
     ChevronDown: icon('ChevronDown'),
     ChevronRight: icon('ChevronRight'),
@@ -87,6 +100,7 @@ vi.mock('lucide-react', () => {
     RotateCcw: icon('RotateCcw'),
     Trash2: icon('Trash2'),
     X: icon('X'),
+    ScrollText: icon('ScrollText'),
   };
 });
 
@@ -193,5 +207,32 @@ describe('CodeTasksPage', () => {
     }
 
     expect(DEFAULT_VISIBLE_STATUSES).not.toContain('archived');
+  });
+
+  it('opens the logs modal for the latest task in a row', () => {
+    mockUseCodeTasks.mockReturnValue({
+      tasks: [
+        createTask({
+          id: 'task-logs-123',
+          prompt: 'Prompt only task',
+          sanitizedPrompt: 'Prompt only task',
+        }),
+      ],
+      loading: false,
+      loadingMore: false,
+      error: null,
+      hasMore: false,
+      loadMore: vi.fn(),
+      deleteTask: vi.fn(),
+    });
+    mockUseWorkersStatus.mockReturnValue({
+      status: { workers: [] },
+    });
+
+    render(<CodeTasksPage />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Preview logs for task-logs-123' })[0]);
+
+    expect(screen.getByText('Logs modal: task-logs-123')).toBeInTheDocument();
   });
 });

@@ -69,12 +69,15 @@ describe('Pub/Sub Routes', () => {
   let mediaStorage: FakeMediaStorage;
   let messageRepository: FakeWhatsAppMessageRepository;
   let userMappingRepository: FakeWhatsAppUserMappingRepository;
+  let outboundMessageRepository: FakeOutboundMessageRepository;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
     mediaStorage = new FakeMediaStorage();
     messageRepository = new FakeWhatsAppMessageRepository();
     userMappingRepository = new FakeWhatsAppUserMappingRepository();
+
+    outboundMessageRepository = new FakeOutboundMessageRepository();
 
     setServices({
       webhookEventRepository: new FakeWhatsAppWebhookEventRepository(),
@@ -86,7 +89,7 @@ describe('Pub/Sub Routes', () => {
       whatsappCloudApi: new FakeWhatsAppCloudApiPort(),
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
-      outboundMessageRepository: new FakeOutboundMessageRepository(),
+      outboundMessageRepository,
       phoneVerificationRepository: new FakePhoneVerificationRepository(),
     });
 
@@ -540,6 +543,39 @@ describe('Pub/Sub Routes', () => {
       expect(response.statusCode).toBe(502);
       const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(responseBody.error.message).toBe('WhatsApp API error for CTA URL');
+    });
+
+    it('logs warning when outbound message save fails (non-fatal)', async () => {
+      await userMappingRepository.saveMapping('user-save-fail', ['+48123456789']);
+      outboundMessageRepository.setFail(true, {
+        code: 'PERSISTENCE_ERROR',
+        message: 'Simulated Firestore write failure',
+      });
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-save-fail',
+        message: 'Hello save fail',
+        correlationId: 'corr-save-fail',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      // Should still succeed — outbound save failure is non-fatal
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      // Message should still have been sent
+      const sentMessages = messageSender.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.phoneNumber).toBe('48123456789');
     });
 
     it('prefers ctaUrl over buttons when both are provided', async () => {

@@ -61,6 +61,7 @@ INPUT ISSUE == OUTPUT ISSUE. No exceptions.
 - ALWAYS edit the issue in-place (update its description with the plan).
 - BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text. This preserves the original context.
 - NEVER create a child issue to hold the plan. Work on the issue you were given.
+- If you create a plan document, the issue description MUST contain a line exactly in this format: \`Plan document: docs/plans/<file>.md\`
 - The Linear URL you report in PLANNING_AGENT_FINAL MUST match the issue you received.
 
 Violation of these rules causes the task to be REJECTED (HTTP 400). The system validates this contract.
@@ -101,7 +102,8 @@ Note: The volume of test code does NOT influence complexity. A task with 500 lin
 1. BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text.
 2. Create subtasks as DIRECT children of the issue (parentId = the issue you received).
 3. Create/update a plan document in \`docs/plans/\`.
-4. Open a planning PR on branch \`plan/<short-slug>\`.
+4. Update the issue description to include \`Plan document: docs/plans/<file>.md\` for the plan you created.
+5. Open a planning PR on branch \`plan/<short-slug>\`.
 
 **Subtask delivery rules (MANDATORY — NON-NEGOTIABLE):**
 - Every subtask MUST be a DIRECT child of the input issue (parentId = input issue).
@@ -264,7 +266,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '2.1.0',
+  version: '2.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, trackingCommentId } =
       params;
@@ -595,10 +597,10 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 };
 
 export function buildSystemPrompt(params: SystemPromptParams): string {
-  const isPRComment = params.linearIssueLabels.some(
-    (label) => label.trim().toLowerCase() === 'pr-comment'
-  );
-  if (isPRComment) {
+  const isPullRequestTask =
+    params.agentType === 'pull_request' ||
+    params.linearIssueLabels.some((label) => label.trim().toLowerCase() === 'pr-comment');
+  if (isPullRequestTask) {
     return pullRequestPrompt.build(params);
   }
 
