@@ -35,8 +35,8 @@ import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
 import {
   extractPrNumber,
-  fetchLinearIssueDescription,
-  findPlanOnBranch,
+  fetchLinearIssueContext,
+  readPlanReferencedInLinearIssue,
 } from './deep-validator-helpers.js';
 
 const execAsync = promisify(exec);
@@ -1886,18 +1886,26 @@ export class TaskDispatcher {
       const formattedTranscript = formatTranscript(entries);
 
       let linearIssueBody = this.buildLinearIssueSummary(task);
+      let planContent: string | undefined;
       if (task.linearIssueId !== undefined) {
-        const description = await fetchLinearIssueDescription(
+        const issueContext = await fetchLinearIssueContext(
           task.linearIssueId,
           this.isolation.getSecrets().LINEAR_API_KEY,
           this.logger
         );
+        const description = issueContext?.description;
         if (description !== undefined) {
           linearIssueBody = `${linearIssueBody}\n\nDescription:\n${description}`;
         }
-      }
 
-      const planContent = await findPlanOnBranch(task.worktreePath, this.logger);
+        if (issueContext !== undefined) {
+          planContent = await readPlanReferencedInLinearIssue(
+            task.worktreePath,
+            issueContext,
+            this.logger
+          );
+        }
+      }
 
       return {
         taskId: task.taskId,
