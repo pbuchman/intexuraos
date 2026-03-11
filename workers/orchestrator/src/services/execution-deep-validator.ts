@@ -77,8 +77,8 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
   const claimsJson = JSON.stringify(input.agentClaims, null, 2);
   const planSection =
     input.planContent !== undefined
-      ? `Plan file content:\n${input.planContent}`
-      : 'No plan file found on branch.';
+      ? `Plan document content:\n${input.planContent}`
+      : 'No plan document referenced in Linear issue.';
 
   // Cap transcript to avoid exceeding LLM context / cost limits
   const transcript =
@@ -212,7 +212,7 @@ export function formatPrComment(result: DeepValidationResult, costUsd: number): 
   // Section 3
   lines.push('#### Plan vs Reality');
   lines.push(
-    `Plan found: ${result.planVsReality.planFound ? '✅' : '❌ No plan file found on branch'}`
+    `Plan found: ${result.planVsReality.planFound ? '✅' : '❌ No plan document referenced in Linear issue'}`
   );
   if (result.planVsReality.requirements.length > 0) {
     lines.push('');

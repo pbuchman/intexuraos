@@ -25,21 +25,21 @@ vi.mock('../services/transcript-reader.js', () => ({
 
 vi.mock('../services/deep-validator-helpers.js', () => ({
   extractPrNumber: vi.fn(),
-  fetchLinearIssueDescription: vi.fn(),
-  findPlanOnBranch: vi.fn(),
+  fetchLinearIssueContext: vi.fn(),
+  readPlanReferencedInLinearIssue: vi.fn(),
 }));
 
 import { readSessionTranscript } from '../services/transcript-reader.js';
 import {
   extractPrNumber,
-  fetchLinearIssueDescription,
-  findPlanOnBranch,
+  fetchLinearIssueContext,
+  readPlanReferencedInLinearIssue,
 } from '../services/deep-validator-helpers.js';
 
 const mockReadSessionTranscript = vi.mocked(readSessionTranscript);
 const mockExtractPrNumber = vi.mocked(extractPrNumber);
-const mockFetchLinearIssueDescription = vi.mocked(fetchLinearIssueDescription);
-const mockFindPlanOnBranch = vi.mocked(findPlanOnBranch);
+const mockFetchLinearIssueContext = vi.mocked(fetchLinearIssueContext);
+const mockReadPlanReferencedInLinearIssue = vi.mocked(readPlanReferencedInLinearIssue);
 
 const flushAsync = async (): Promise<void> => {
   await new Promise((resolve) => {
@@ -3574,7 +3574,8 @@ describe('TaskDispatcher', () => {
 
       mockExtractPrNumber.mockReturnValue(123);
       mockReadSessionTranscript.mockResolvedValue([mockTranscriptEntry]);
-      mockFindPlanOnBranch.mockResolvedValue('# Plan');
+      mockFetchLinearIssueContext.mockResolvedValue(undefined);
+      mockReadPlanReferencedInLinearIssue.mockResolvedValue('# Plan');
 
       const deepValDispatcher = new TaskDispatcher(
         mockConfig,
@@ -3605,7 +3606,7 @@ describe('TaskDispatcher', () => {
       expect(input?.repository).toBe('pbuchman/intexuraos');
       expect(input?.agentClaims.superpowers_executing_plans).toBe('used');
       expect(mockReadSessionTranscript).toHaveBeenCalled();
-      expect(mockFindPlanOnBranch).toHaveBeenCalled();
+      expect(mockReadPlanReferencedInLinearIssue).not.toHaveBeenCalled();
     });
 
     it('prepareDeepValidationInput enriches linearIssueBody with description when available', async () => {
@@ -3615,8 +3616,11 @@ describe('TaskDispatcher', () => {
 
       mockExtractPrNumber.mockReturnValue(123);
       mockReadSessionTranscript.mockResolvedValue([mockTranscriptEntry]);
-      mockFindPlanOnBranch.mockResolvedValue(undefined);
-      mockFetchLinearIssueDescription.mockResolvedValue('## Requirements\n1. Fix bug');
+      mockFetchLinearIssueContext.mockResolvedValue({
+        description: '## Requirements\n1. Fix bug',
+        comments: [],
+      });
+      mockReadPlanReferencedInLinearIssue.mockResolvedValue(undefined);
 
       const deepValDispatcher = new TaskDispatcher(
         mockConfig,
@@ -3649,13 +3653,21 @@ describe('TaskDispatcher', () => {
       );
 
       expect(input).toBeDefined();
-      expect(mockFetchLinearIssueDescription).toHaveBeenCalledWith(
+      expect(mockFetchLinearIssueContext).toHaveBeenCalledWith(
         'INT-999',
         expect.any(String),
         expect.anything()
       );
       expect(input?.linearIssueBody).toContain('Linear Issue: INT-999');
       expect(input?.linearIssueBody).toContain('Description:\n## Requirements\n1. Fix bug');
+      expect(mockReadPlanReferencedInLinearIssue).toHaveBeenCalledWith(
+        '/tmp/worktrees/deep-val-test',
+        {
+          description: '## Requirements\n1. Fix bug',
+          comments: [],
+        },
+        expect.anything()
+      );
     });
 
     it('executeDeepValidation calls validate with onProgress and logs completion', async () => {
