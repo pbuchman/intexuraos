@@ -127,7 +127,7 @@ export async function fetchLinearIssueContext(
         query: `query IssueByIdentifier($id: String!) {
           issueByIdentifier(identifier: $id) {
             description
-            comments {
+            comments(first: 100) {
               nodes {
                 body
                 createdAt
