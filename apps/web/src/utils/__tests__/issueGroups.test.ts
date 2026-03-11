@@ -439,6 +439,77 @@ describe('groupByLinearIssue', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]?.pipeline.pr).toBeNull();
   });
+
+  it('extracts PR from latest non-archived task result', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        result: { prUrl: 'https://github.com/org/repo/pull/123' },
+        updatedAt: '2026-03-07T16:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/123', number: '123' });
+  });
+
+  it('extracts PR from latest task by updatedAt', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        updatedAt: '2026-03-07T16:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        result: { prUrl: 'https://github.com/org/repo/pull/999' },
+        updatedAt: '2026-03-07T17:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // Should use the latest task's result.prUrl (t2 with updatedAt 17:00)
+    expect(groups[0]?.pipeline.pr).toEqual({ url: 'https://github.com/org/repo/pull/999', number: '999' });
+  });
+
+  it('does not extract PR from archived tasks', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'archived',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        updatedAt: '2026-03-07T16:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        updatedAt: '2026-03-07T17:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    // Latest non-archived task (t2) has no result.prUrl, so no PR shown
+    expect(groups[0]?.pipeline.pr).toBeNull();
+  });
 });
 
 // --- Helper for sortIssueGroups tests ---

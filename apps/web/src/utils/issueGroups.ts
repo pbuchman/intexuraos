@@ -87,17 +87,21 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
   );
   const review = reviewTask !== undefined ? deriveStepState(reviewTask.status) : null;
 
-  // PR step — extract from any task's result.prUrl
+  // PR step — extract from latest non-archived task's result.prUrl
   let pr: PipelineState['pr'] = null;
-  for (const task of tasks) {
-    const prUrl = task.result?.prUrl;
+  const nonArchivedTasks = tasks.filter((t) => t.status !== 'archived');
+  if (nonArchivedTasks.length > 0) {
+    // Find the latest task by updatedAt
+    const latestTask = nonArchivedTasks.reduce((latest, task) =>
+      new Date(task.updatedAt) > new Date(latest.updatedAt) ? task : latest
+    );
+    const prUrl = latestTask.result?.prUrl;
     if (prUrl !== undefined) {
       const match = PR_URL_REGEX.exec(prUrl);
       if (match !== null) {
         const prNumber = match[1];
         if (prNumber !== undefined) {
           pr = { url: prUrl, number: prNumber };
-          break;
         }
       }
     }
