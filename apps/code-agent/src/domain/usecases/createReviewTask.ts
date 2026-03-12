@@ -18,7 +18,7 @@ import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import { notifyPROfTaskDispatch } from '../utils/prTaskNotification.js';
+import { notifyPROfTaskDispatch, notifyReviewSkipped, notifyDispatchFailed } from '../utils/prTaskNotification.js';
 import { createHmac } from 'node:crypto';
 
 export interface CreateReviewTaskRequest {
@@ -180,11 +180,27 @@ export async function createReviewTask(
   }
 
   if (activeReviewResult.value !== null) {
+    const existingTask = activeReviewResult.value;
     logger.info(
-      { repository, prNumber, taskId: activeReviewResult.value.id },
+      { repository, prNumber, taskId: existingTask.id },
       'Active review task already exists for PR'
     );
-    return ok({ status: 'already_running', taskId: activeReviewResult.value.id });
+
+    // Post skip comment with existing worker metadata (best-effort)
+    await notifyReviewSkipped(
+      { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+      {
+        taskId: `task_for_pr_${String(prNumber)}`,
+        repository,
+        prNumber,
+        userId: existingTask.userId,
+        existingTaskId: existingTask.id,
+        existingWorkerType: existingTask.workerType,
+        existingWorkerLocation: existingTask.workerLocation,
+      },
+    );
+
+    return ok({ status: 'already_running', taskId: existingTask.id });
   }
 
   // Resolve user
@@ -275,6 +291,20 @@ export async function createReviewTask(
       status: 'failed',
       error: { code: 'dispatch_failed', message: dispatchResult.error.message },
     });
+
+    // Post dispatch failure comment (best-effort)
+    await notifyDispatchFailed(
+      { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+      {
+        taskId: task.id,
+        repository,
+        prNumber,
+        userId,
+        failureType: 'review',
+        errorCode: dispatchResult.error.code,
+      },
+    );
+
     return err({ code: 'dispatch_failed', message: dispatchResult.error.message });
   }
 

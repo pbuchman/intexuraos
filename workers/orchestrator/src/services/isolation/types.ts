@@ -23,7 +23,7 @@ export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3
 
 export interface WorkerTypeConfig {
   apiBaseUrl: string;
-  apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'ZAI_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
+  apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
   model?: string;
 }
 
@@ -48,8 +48,9 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     model: 'MiniMax-M2.5',
   },
   glm: {
-    apiBaseUrl: 'https://api.z.ai/api/anthropic',
-    apiKeyEnvVar: 'ZAI_API_KEY',
+    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
+    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
+    model: 'glm-5',
   },
   'qwen3.5-plus': {
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
@@ -62,7 +63,6 @@ export interface WorkerSecrets {
   ANTHROPIC_API_KEY: string;
   LINEAR_API_KEY: string;
   SENTRY_AUTH_TOKEN: string;
-  ZAI_API_KEY: string;
   MINIMAX_API_KEY: string;
   DASHSCOPE_API_KEY: string;
 }

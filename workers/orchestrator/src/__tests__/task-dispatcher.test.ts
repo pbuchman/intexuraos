@@ -229,7 +229,6 @@ describe('TaskDispatcher', () => {
       ANTHROPIC_API_KEY: 'test-anthropic-key',
       LINEAR_API_KEY: 'test-linear-key',
       SENTRY_AUTH_TOKEN: 'test-sentry-token',
-      ZAI_API_KEY: 'test-zai-key',
       MINIMAX_API_KEY: 'test-minimax-key',
       DASHSCOPE_API_KEY: 'test-dashscope-key',
     }),
