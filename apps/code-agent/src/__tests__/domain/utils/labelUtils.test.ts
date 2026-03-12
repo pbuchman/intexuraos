@@ -83,6 +83,10 @@ describe('labelUtils', () => {
       expect(getWorkerTypeFromLabels(['glm'])).toBe('glm');
     });
 
+    it('returns kimi for single kimi label', () => {
+      expect(getWorkerTypeFromLabels(['kimi'])).toBe('kimi');
+    });
+
     it('returns worker type when mixed with non-worker labels', () => {
       expect(getWorkerTypeFromLabels(['bug', 'opus', 'feature'])).toBe('opus');
     });

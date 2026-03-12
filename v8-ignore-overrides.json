@@ -39,8 +39,6 @@
         "apps/code-agent/src/domain/usecases/sendTaskMessage.ts",
         "apps/code-agent/src/domain/usecases/submitTaskFeedback.ts",
         "apps/code-agent/src/domain/usecases/submitToExecutionAgent.ts",
-        "apps/code-agent/src/infra/auth/jwtValidator.ts",
-        "apps/code-agent/src/infra/firestore/encryption.ts",
         "apps/code-agent/src/infra/firestore/gitHubPREventsRepository.ts",
         "apps/code-agent/src/infra/firestore/gitHubPRSummariesRepository.ts",
         "apps/code-agent/src/infra/firestore/userUsageFirestoreRepository.ts",

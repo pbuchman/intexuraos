@@ -1,18 +1,20 @@
+import { CODE_TASK_WORKER_TYPES, type CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
 import type { CodeTaskStatus, WorkerStatusTag } from '@/types';
 
 // --- Worker types (shared by V2TaskActions + V2NextSteps) ---
 
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
+export type WorkerType = CodeTaskWorkerType;
 
-export const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm-5', 'qwen3.5-plus'];
+export const WORKER_TYPES: WorkerType[] = [...CODE_TASK_WORKER_TYPES];
 
 export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   auto: 'Auto',
   opus: 'Opus',
   sonnet: 'Sonnet',
   minimax: 'Minimax',
-  'glm-5': 'GLM-5',
-  'qwen3.5-plus': 'Qwen 3.5 Plus',
+  glm: 'GLM',
+  qwen: 'Qwen',
+  kimi: 'Kimi',
 };
 
 // --- Status badge config ---
