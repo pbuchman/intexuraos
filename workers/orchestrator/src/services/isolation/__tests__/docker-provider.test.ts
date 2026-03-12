@@ -175,7 +175,6 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     ANTHROPIC_API_KEY: 'test-anthropic-key',
     LINEAR_API_KEY: 'test-linear-key',
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
-    ZAI_API_KEY: 'test-zai-key',
     MINIMAX_API_KEY: 'test-minimax-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
   },
@@ -1017,7 +1016,7 @@ describe('DockerProvider', () => {
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
-      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-zai-key');
+      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-dashscope-key');
     });
 
     it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for sonnet worker', async () => {
@@ -1113,7 +1112,9 @@ describe('DockerProvider', () => {
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
-      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic');
+      expect(baseUrlEntry).toBe(
+        'ANTHROPIC_BASE_URL=https://coding-intl.dashscope.aliyuncs.com/apps/anthropic'
+      );
     });
 
     it('sets ANTHROPIC_API_KEY env var when sharedCredsPath is NOT configured', async () => {
