@@ -151,7 +151,6 @@ describe('createUserServiceClient', () => {
         openai: 'openai-key',
         anthropic: 'anthropic-key',
         perplexity: 'perplexity-key',
-        zai: 'zai-key',
       };
 
       nock('http://localhost:3000')
@@ -167,7 +166,6 @@ describe('createUserServiceClient', () => {
         expect(result.value.openai).toBe('openai-key');
         expect(result.value.anthropic).toBe('anthropic-key');
         expect(result.value.perplexity).toBe('perplexity-key');
-        expect(result.value.zai).toBe('zai-key');
       } else {
         expect.fail('Expected successful result');
       }
@@ -613,7 +611,7 @@ describe('createUserServiceClient', () => {
 
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Glm47Flash,
+          defaultModel: LlmModels.ClaudeSonnet45,
         },
       };
 
@@ -639,103 +637,8 @@ describe('createUserServiceClient', () => {
         expect(mockLogger.warn).toHaveBeenCalledWith(
           {
             userId: 'user123',
-            provider: LlmProviders.Zai,
-            requestedModel: LlmModels.Glm47Flash,
-          },
-          'No API key for provider, falling back to platform Gemini25Flash'
-        );
-        expect(mockLogger.info).toHaveBeenCalledWith(
-          { userId: 'user123', model: LlmModels.Gemini25Flash, provider: LlmProviders.Google },
-          'LLM client created successfully'
-        );
-      } else {
-        expect.fail('Expected successful result');
-      }
-    });
-
-    it('falls back to platform Glm47Flash when no Gemini key and platformZaiApiKey is configured', async () => {
-      const configWithZaiKey = {
-        ...config,
-        platformZaiApiKey: 'platform-zai-key',
-      };
-
-      const mockSettings = {
-        llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
-        },
-      };
-
-      const mockKeys = {
-        openai: 'openai-key',
-      };
-
-      nock('http://localhost:3000')
-        .get('/internal/users/user123/settings')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { success: true, data: mockSettings });
-
-      nock('http://localhost:3000')
-        .get('/internal/users/user123/llm-keys')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { success: true, data: mockKeys });
-
-      const client = createUserServiceClient(configWithZaiKey);
-      const result = await client.getLlmClient('user123');
-
-      if (result.ok) {
-        expect(result.value).toBeDefined();
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          {
-            userId: 'user123',
-            provider: LlmProviders.Google,
-            requestedModel: LlmModels.Gemini25Flash,
-          },
-          'No API key for provider, falling back to platform Glm47Flash'
-        );
-        expect(mockLogger.info).toHaveBeenCalledWith(
-          { userId: 'user123', model: LlmModels.Glm47Flash, provider: LlmProviders.Zai },
-          'LLM client created successfully'
-        );
-      } else {
-        expect.fail('Expected successful result');
-      }
-    });
-
-    it('prefers Gemini fallback over ZAI when both platform keys are configured', async () => {
-      const configWithBothKeys = {
-        ...config,
-        platformGeminiApiKey: 'platform-gemini-key',
-        platformZaiApiKey: 'platform-zai-key',
-      };
-
-      const mockSettings = {
-        llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
-        },
-      };
-
-      const mockKeys = {};
-
-      nock('http://localhost:3000')
-        .get('/internal/users/user123/settings')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { success: true, data: mockSettings });
-
-      nock('http://localhost:3000')
-        .get('/internal/users/user123/llm-keys')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { success: true, data: mockKeys });
-
-      const client = createUserServiceClient(configWithBothKeys);
-      const result = await client.getLlmClient('user123');
-
-      if (result.ok) {
-        expect(result.value).toBeDefined();
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          {
-            userId: 'user123',
-            provider: LlmProviders.Google,
-            requestedModel: LlmModels.Gemini25Flash,
+            provider: LlmProviders.Anthropic,
+            requestedModel: LlmModels.ClaudeSonnet45,
           },
           'No API key for provider, falling back to platform Gemini25Flash'
         );
@@ -777,41 +680,6 @@ describe('createUserServiceClient', () => {
         expect(result.error.message).toContain('google');
       } else {
         expect.fail('Expected error result');
-      }
-    });
-
-    it('creates Zai client when user has Zai model preference', async () => {
-      const mockSettings = {
-        llmPreferences: {
-          defaultModel: LlmModels.Glm47Flash,
-        },
-      };
-
-      const mockKeys = {
-        zai: 'zai-key',
-      };
-
-      nock('http://localhost:3000')
-        .get('/internal/users/user123/settings')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { success: true, data: mockSettings });
-
-      nock('http://localhost:3000')
-        .get('/internal/users/user123/llm-keys')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { success: true, data: mockKeys });
-
-      const client = createUserServiceClient(config);
-      const result = await client.getLlmClient('user123');
-
-      if (result.ok) {
-        expect(result.value).toBeDefined();
-        expect(mockLogger.info).toHaveBeenCalledWith(
-          { userId: 'user123', model: LlmModels.Glm47Flash, provider: LlmProviders.Zai },
-          'LLM client created successfully'
-        );
-      } else {
-        expect.fail('Expected successful result');
       }
     });
   });

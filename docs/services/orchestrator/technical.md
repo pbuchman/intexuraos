@@ -585,9 +585,8 @@ Appends LLM audit records to a local JSONL file:
 | `INTEXURAOS_LINEAR_API_KEY`         | Linear API key (passed to workers)         |
 | `INTEXURAOS_SENTRY_AUTH_TOKEN`      | Sentry auth token (passed to workers)      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`     | Gemini API key for completion verifier     |
-| `INTEXURAOS_ZAI_APP_API_KEY`        | ZAI API key for GLM workers                |
 | `INTEXURAOS_MINIMAX_APP_API_KEY`    | MiniMax API key for MiniMax workers        |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`  | DashScope API key for qwen3.5-plus workers |
+| `INTEXURAOS_DASHSCOPE_APP_API_KEY`  | DashScope API key for glm-5 workers        |
 | `GOOGLE_APPLICATION_CREDENTIALS`    | GCP service account key path               |
 
 #### Optional

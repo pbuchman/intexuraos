@@ -442,8 +442,8 @@ describe('codeAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
     });
 
-    it('handles different worker types (opus, glm, auto)', async () => {
-      const workerTypes: ('opus' | 'auto' | 'sonnet' | 'minimax' | 'glm')[] = ['opus', 'auto', 'sonnet', 'minimax', 'glm'];
+    it('handles different worker types (opus, glm-5, auto)', async () => {
+      const workerTypes: ('opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5')[] = ['opus', 'auto', 'sonnet', 'minimax', 'glm-5'];
 
       for (const workerType of workerTypes) {
         nock(baseUrl)

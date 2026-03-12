@@ -3217,11 +3217,11 @@ describe('TaskDispatcher', () => {
       );
     });
 
-    it('should skip API key validation for GLM tasks', async () => {
+    it('should skip API key validation for GLM-5 tasks', async () => {
       const request: CreateTaskRequest = {
-        taskId: 'glm-skip-validation',
-        workerType: 'glm',
-        prompt: 'Test GLM task',
+        taskId: 'glm-5-skip-validation',
+        workerType: 'glm-5',
+        prompt: 'Test GLM-5 task',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
         linearIssueLabels: [],

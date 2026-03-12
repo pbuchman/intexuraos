@@ -330,7 +330,6 @@ describe('Research Routes - Authenticated', () => {
       openai: 'test-openai-key',
       anthropic: 'test-anthropic-key',
       perplexity: 'test-perplexity-key',
-      zai: 'test-zai-key',
     });
     fakeUserServiceClient.setApiKeys(OTHER_USER_ID, {
       google: 'other-google-key',
@@ -5165,7 +5164,6 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       openai: 'test-openai-key',
       anthropic: 'test-anthropic-key',
       perplexity: 'test-perplexity-key',
-      zai: 'test-zai-key',
     });
     fakeUserServiceClient.setApiKeys(OTHER_USER_ID, {
       google: 'other-google-key',

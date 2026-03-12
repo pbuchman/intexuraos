@@ -23,14 +23,12 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'openai', name: 'OpenAI (GPT)' },
   { id: 'anthropic', name: 'Anthropic (Claude)' },
   { id: 'perplexity', name: 'Perplexity (Sonar)' },
-  { id: 'zai', name: 'Zai (GLM)' },
 ];
 
 const PROVIDER_GROUP_LABELS: Record<string, string> = {
   google: 'Google',
   openai: 'OpenAI',
   anthropic: 'Anthropic',
-  zai: 'Zai',
 };
 
 /**
@@ -66,8 +64,6 @@ function validateApiKeyFormat(provider: LlmProvider, key: string): string | null
         return 'Perplexity API key should start with "pplx-"';
       }
       break;
-    case 'zai':
-      break;
   }
 
   return null;
@@ -78,7 +74,6 @@ interface TestResults {
   openai: LlmTestResult | null;
   anthropic: LlmTestResult | null;
   perplexity: LlmTestResult | null;
-  zai: LlmTestResult | null;
 }
 
 /**
@@ -142,7 +137,6 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
   if (keys?.openai !== null && keys?.openai !== undefined) configuredProviders.add(LlmProviders.OpenAI);
   if (keys?.anthropic !== null && keys?.anthropic !== undefined) configuredProviders.add(LlmProviders.Anthropic);
   if (keys?.perplexity !== null && keys?.perplexity !== undefined) configuredProviders.add(LlmProviders.Perplexity);
-  if (keys?.zai !== null && keys?.zai !== undefined) configuredProviders.add(LlmProviders.Zai);
 
   const modelGroups = groupModelsByProvider(configuredProviders, keys?.testResults);
 

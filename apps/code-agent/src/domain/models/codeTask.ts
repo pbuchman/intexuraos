@@ -7,10 +7,10 @@ import { Timestamp } from '@google-cloud/firestore';
  * - auto: Automatic model selection (default)
  * - sonnet: Force Sonnet model
  * - minimax: Use MiniMax M2.5 model
- * - glm: Use Z.ai GLM model
+ * - glm-5: Use DashScope GLM-5 model
  * - qwen3.5-plus: Use Qwen 3.5 Plus model
  */
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
 
 /**
  * Worker location for routing.

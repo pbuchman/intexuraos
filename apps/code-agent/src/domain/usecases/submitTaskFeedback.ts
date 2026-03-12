@@ -371,7 +371,7 @@ ${feedback.trim()}
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;

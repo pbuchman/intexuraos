@@ -746,7 +746,6 @@ export interface AllProvidersPricing {
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
-  zai: ProviderPricing;
 }
 
 /**
@@ -1104,7 +1103,7 @@ export interface CalendarPreview {
 /**
  * Worker type determines which model Claude uses.
  */
-export type CodeTaskWorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type CodeTaskWorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
 
 /**
  * Worker location for routing.

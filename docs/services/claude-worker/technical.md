@@ -141,7 +141,7 @@ Network: `claude-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquera
 | `auto`         | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | None            |
 | `sonnet`       | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | `sonnet`        |
 | `minimax`      | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`   | `MiniMax-M2.5`  |
-| `glm`          | `https://api.z.ai/api/anthropic`                            | `ZAI_API_KEY`       | None            |
+| `glm-5`        | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `glm-5`         |
 | `qwen3.5-plus` | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `qwen3.5-plus`  |
 
 ## Entrypoint Flow

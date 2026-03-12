@@ -4,6 +4,7 @@
     "PENDING-apps-actions-agent": {
       "files": [
         "apps/actions-agent/src/domain/models/approvalMessage.ts",
+        "apps/actions-agent/src/domain/usecases/executeCodeAction.ts",
         "apps/actions-agent/src/domain/usecases/handleApprovalReply.ts",
         "apps/actions-agent/src/infra/firestore/approvalMessageRepository.ts",
         "apps/actions-agent/src/infra/http/calendarServiceHttpClient.ts",

@@ -6,7 +6,7 @@ export const WorkerTypeSchema = z.enum([
   'auto',
   'sonnet',
   'minimax',
-  'glm',
+  'glm-5',
   'qwen3.5-plus',
 ]);
 
