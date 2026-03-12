@@ -3022,7 +3022,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.data.workerLocation).toBe('mac');
     });
 
-    it('accepts qwen as workerType without 400 validation error', async () => {
+    it('accepts kimi as workerType without 400 validation error', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -3037,7 +3037,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         workerLocation: 'home-dev',
         repository: 'test/repo',
         baseBranch: 'main',
-        traceId: 'trace-planning-qwen',
+        traceId: 'trace-planning-kimi',
         agentType: 'planning',
         linearIssueId: 'INT-200',
       });
@@ -3087,21 +3087,21 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'POST',
         url: `/code/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
-        body: { workerType: 'qwen' },
+        body: { workerType: 'kimi' },
       });
 
-      // Must NOT return 400 validation error — schema must accept qwen
+      // Must NOT return 400 validation error — schema must accept kimi
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toMatch(/^task_/);
       expect(body.data.implementationOf).toBe(created.value.id);
 
-      // Verify qwen actually flows through the runtime guard to the stored task
+      // Verify kimi actually flows through the runtime guard to the stored task
       const executionTask = await repo.findById(body.data.codeTaskId);
       expect(executionTask.ok).toBe(true);
       if (!executionTask.ok) return;
-      expect(executionTask.value.workerType).toBe('qwen');
+      expect(executionTask.value.workerType).toBe('kimi');
     });
   });
 

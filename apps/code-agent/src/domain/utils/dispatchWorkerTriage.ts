@@ -12,6 +12,7 @@ const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   minimax: 'minimax',
   glm: 'glm',
   qwen: 'qwen',
+  kimi: 'kimi',
 };
 
 // Build regex from patterns for maintainability

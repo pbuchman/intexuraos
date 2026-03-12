@@ -20,6 +20,10 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.qwen.model).toBe('qwen3.5-plus');
   });
 
+  it('uses kimi as the worker key and preserves kimi-k2.5 as the provider model id', () => {
+    expect(WORKER_TYPES.kimi.model).toBe('kimi-k2.5');
+  });
+
   it('does not set a model for auto worker type', () => {
     expect(WORKER_TYPES.auto.model).toBeUndefined();
   });

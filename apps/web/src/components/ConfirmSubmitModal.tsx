@@ -37,7 +37,7 @@ export function ConfirmSubmitModal({
   };
 
   const WORKER_TYPE_LABELS: Record<string, string> = {
-    auto: 'Auto', opus: 'Opus', sonnet: 'Sonnet', minimax: 'MiniMax', glm: 'GLM', qwen: 'Qwen',
+    auto: 'Auto', opus: 'Opus', sonnet: 'Sonnet', minimax: 'MiniMax', glm: 'GLM', qwen: 'Qwen', kimi: 'Kimi',
   };
   const workerTypeLabel = WORKER_TYPE_LABELS[workerType] ?? workerType;
 
