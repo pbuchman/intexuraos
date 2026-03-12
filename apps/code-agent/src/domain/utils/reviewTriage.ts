@@ -28,3 +28,22 @@ export function isReviewCommandComment(commentBody: string): boolean {
 export function normalizeReviewWorkerType(workerType: string): WorkerType | undefined {
   return REVIEW_WORKER_TYPE_ALIASES[workerType.trim().toLowerCase()];
 }
+
+/**
+ * Extract worker type from a review command comment.
+ * Searches for any supported worker alias token and returns the first match.
+ * Returns undefined if no recognized worker type is found.
+ */
+export function extractReviewWorkerType(commentBody: string): WorkerType | undefined {
+  const lowerBody = commentBody.toLowerCase();
+  const tokens = lowerBody.split(/\s+/);
+
+  for (const token of tokens) {
+    const normalized = REVIEW_WORKER_TYPE_ALIASES[token];
+    if (normalized !== undefined) {
+      return normalized;
+    }
+  }
+
+  return undefined;
+}
