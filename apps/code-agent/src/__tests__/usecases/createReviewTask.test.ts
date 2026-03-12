@@ -315,6 +315,48 @@ describe('createReviewTask', () => {
     expect(deps.taskDispatcher.dispatch).toHaveBeenCalled();
   });
 
+  it('creates new review task when worker settings are null', async () => {
+    const deps = createFakeDeps({
+      workerSettingsRepo: {
+        getSettings: vi.fn().mockResolvedValue(ok(null)),
+        saveSettings: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as WorkerSettingsRepository,
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          workerType: 'auto',
+          workerLocation: 'worker-1',
+          status: 'dispatched',
+        })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-null-settings',
+    });
+
+    // Should still succeed
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.status).toBe('created');
+    expect(result.value.taskId).toBe('task-review-new');
+
+    // Verify new task was still created
+    expect(deps.codeTaskRepo.create).toHaveBeenCalled();
+    expect(deps.taskDispatcher.dispatch).toHaveBeenCalled();
+  });
+
   it('creates new review task even if replacement comment fails to post', async () => {
     const gitHubPRClient = createFakeGitHubPRClient();
     vi.mocked(gitHubPRClient.postPRComment).mockRejectedValue(new Error('GitHub API down'));
