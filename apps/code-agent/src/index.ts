@@ -18,11 +18,6 @@ const REQUIRED_ENV = [
   'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
   'INTEXURAOS_GITHUB_WEBHOOK_SECRET', // For GitHub webhook signature verification
   'INTEXURAOS_SERVICE_URL', // Webhook callback URL — orchestrator calls this to report task status
-  'INTEXURAOS_DASHSCOPE_APP_API_KEY',
-  'INTEXURAOS_GEMINI_APP_API_KEY',
-  'INTEXURAOS_AUTH_AUDIENCE',
-  'INTEXURAOS_AUTH_ISSUER',
-  'INTEXURAOS_AUTH_JWKS_URL',
 ];
 
 /**

@@ -163,11 +163,6 @@ jobs:
           INTEXURAOS_TOKEN_ENCRYPTION_KEY=test-encryption-key-must-be-32chars \
           INTEXURAOS_GITHUB_WEBHOOK_SECRET=test-github-webhook-secret \
           INTEXURAOS_SERVICE_URL=http://127.0.0.1:8128 \
-          INTEXURAOS_DASHSCOPE_APP_API_KEY=test-dashscope-key \
-          INTEXURAOS_GEMINI_APP_API_KEY=test-gemini-key \
-          INTEXURAOS_AUTH_AUDIENCE=test-audience \
-          INTEXURAOS_AUTH_ISSUER=test-issuer \
-          INTEXURAOS_AUTH_JWKS_URL=http://localhost:8090/.well-known/jwks.json \
           FIRESTORE_EMULATOR_HOST=127.0.0.1:8081 \
           PUBSUB_EMULATOR_HOST=127.0.0.1:8085 \
           pnpm tsx src/index.ts > /tmp/code-agent.log 2>&1 &

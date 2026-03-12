@@ -27,8 +27,6 @@ const REQUIRED_ENV = [
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL',
   'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
-  'INTEXURAOS_DASHSCOPE_APP_API_KEY',
-  'INTEXURAOS_GEMINI_APP_API_KEY',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -66,7 +64,7 @@ async function main(): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger,
-    platformDashscopeApiKey: process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'],
+    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
