@@ -23,7 +23,6 @@ interface WorkerSecrets {
   ANTHROPIC_API_KEY: string;
   LINEAR_API_KEY: string;
   SENTRY_AUTH_TOKEN: string;
-  ZAI_API_KEY: string;
   MINIMAX_API_KEY: string;
   DASHSCOPE_API_KEY: string;
 }
@@ -33,7 +32,7 @@ interface WorkerConfig {
   worktreePath: string;
   prompt: string; // User prompt content (written to secrets/user-prompt.txt)
   systemPrompt: string; // System prompt content (written to secrets/system-prompt.txt)
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
@@ -99,13 +98,13 @@ interface IsolationProvider {
 ### Worker Types
 
 ```typescript
-type WorkerType = 'opus' | 'auto' | 'glm';
+type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
 
 const WORKER_TYPES: Record<
   WorkerType,
   {
     apiBaseUrl: string;
-    apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'ZAI_API_KEY';
+    apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY';
     model?: string;
   }
 > = {
@@ -118,9 +117,25 @@ const WORKER_TYPES: Record<
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
   },
-  glm: {
-    apiBaseUrl: 'https://api.z.ai/api/anthropic',
-    apiKeyEnvVar: 'ZAI_API_KEY',
+  sonnet: {
+    apiBaseUrl: 'https://api.anthropic.com',
+    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+    model: 'claude-sonnet-4-20250514',
+  },
+  minimax: {
+    apiBaseUrl: 'https://api.minimax.io/anthropic',
+    apiKeyEnvVar: 'MINIMAX_API_KEY',
+    model: 'MiniMax-M2.5',
+  },
+  'glm-5': {
+    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
+    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
+    model: 'glm-5',
+  },
+  'qwen3.5-plus': {
+    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
+    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
+    model: 'qwen3.5-plus',
   },
 };
 ```
@@ -218,7 +233,6 @@ const handle = await provider.createWorker({
     ANTHROPIC_API_KEY: 'sk-ant-...',
     LINEAR_API_KEY: 'lin_api_...',
     SENTRY_AUTH_TOKEN: 'sntrys_...',
-    ZAI_API_KEY: '',
   },
   gcpSaKeyPath: '/home/user/.config/gcloud/sa-key.json',
   githubAppKeyPath: '/home/user/.claude-orchestrator/secrets/INT-500/github-token',

@@ -19,7 +19,7 @@ export type OAuthState =
   | { status: 'expired'; message: string }
   | { status: 'not_configured'; message: string };
 
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
 
 export interface WorkerTypeConfig {
   apiBaseUrl: string;
@@ -47,7 +47,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     model: 'MiniMax-M2.5',
   },
-  glm: {
+  'glm-5': {
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'glm-5',

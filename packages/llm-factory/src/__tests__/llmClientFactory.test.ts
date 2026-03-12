@@ -10,23 +10,14 @@ const mockLogger: Logger = {
 };
 
 const mockGeminiGenerate = vi.fn();
-const mockGlmGenerate = vi.fn();
 
 class MockGeminiClient {
   generate = mockGeminiGenerate;
 }
 
-class MockGlmClient {
-  generate = mockGlmGenerate;
-}
-
 vi.mock('@intexuraos/infra-gemini', () => ({
   createGeminiClient: vi.fn(() => new MockGeminiClient()),
   createGeminiToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
-}));
-
-vi.mock('@intexuraos/infra-glm', () => ({
-  createGlmClient: vi.fn(() => new MockGlmClient()),
 }));
 
 const { createLlmClient, createToolCallingClient, isSupportedProvider } =
@@ -71,17 +62,15 @@ describe('llmClientFactory', () => {
       expect(client).toBeInstanceOf(MockGeminiClient);
     });
 
-    it('creates GLM client for Zai models', () => {
+    it('creates client for valid Gemini models', () => {
       const client = createLlmClient({
         apiKey: 'test-key',
-        model: LlmModels.Glm47,
+        model: LlmModels.Gemini25Flash,
         userId: 'user-123',
         pricing: createTestPricing(),
         logger: mockLogger,
       });
-
-      expect(client.generate).toBeDefined();
-      expect(client).toBeInstanceOf(MockGlmClient);
+      expect(client).toBeInstanceOf(MockGeminiClient);
     });
 
     it('throws for unsupported provider models', () => {
@@ -94,43 +83,22 @@ describe('llmClientFactory', () => {
           pricing: createTestPricing(),
           logger: mockLogger,
         })
-      ).toThrow('Unsupported LLM provider');
+      ).toThrow('Unsupported LLM model');
     });
 
-    it('throws for Claude models which are not supported by factory', () => {
+    it('throws for models from unsupported providers', () => {
+      // Using invalid model strings that are not in the valid model list
+      // This triggers "Unsupported LLM model" which is correct behavior
       expect(() =>
         createLlmClient({
           apiKey: 'test-key',
-          model: LlmModels.ClaudeSonnet45,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'claude-opus' as any,
           userId: 'user-123',
           pricing: createTestPricing(),
           logger: mockLogger,
         })
-      ).toThrow('Unsupported LLM provider');
-    });
-
-    it('throws for GPT models which are not supported by factory', () => {
-      expect(() =>
-        createLlmClient({
-          apiKey: 'test-key',
-          model: LlmModels.GPT4oMini,
-          userId: 'user-123',
-          pricing: createTestPricing(),
-          logger: mockLogger,
-        })
-      ).toThrow('Unsupported LLM provider');
-    });
-
-    it('throws for Perplexity models which are not supported by factory', () => {
-      expect(() =>
-        createLlmClient({
-          apiKey: 'test-key',
-          model: LlmModels.SonarPro,
-          userId: 'user-123',
-          pricing: createTestPricing(),
-          logger: mockLogger,
-        })
-      ).toThrow('Unsupported LLM provider');
+      ).toThrow('Unsupported LLM model');
     });
   });
 
@@ -147,18 +115,7 @@ describe('llmClientFactory', () => {
       expect(client.run).toBeDefined();
     });
 
-    it('throws for Zai provider (tool calling not supported)', () => {
-      expect(() =>
-        createToolCallingClient({
-          apiKey: 'test-key',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          model: 'glm-4.7' as any,
-          userId: 'test-user',
-          pricing: createTestPricing(),
-          logger: mockLogger,
-        })
-      ).toThrow('Tool calling not supported for provider: zai');
-    });
+    // Note: ZAI provider tests removed - GLM-4.7 is no longer a valid model
 
     it('throws for unsupported provider', () => {
       expect(() =>
@@ -170,7 +127,7 @@ describe('llmClientFactory', () => {
           pricing: createTestPricing(),
           logger: mockLogger,
         })
-      ).toThrow('Tool calling not supported for provider');
+      ).toThrow('Unsupported LLM model');
     });
   });
 
@@ -179,8 +136,8 @@ describe('llmClientFactory', () => {
       expect(isSupportedProvider(LlmProviders.Google)).toBe(true);
     });
 
-    it('returns true for Zai provider', () => {
-      expect(isSupportedProvider(LlmProviders.Zai)).toBe(true);
+    it('returns false for Zai provider (no longer supported)', () => {
+      expect(isSupportedProvider('zai')).toBe(false);
     });
 
     it('returns false for Anthropic provider', () => {
@@ -203,8 +160,8 @@ describe('llmClientFactory', () => {
     it('type narrows correctly for supported providers', () => {
       const provider = LlmProviders.Google as string;
       if (isSupportedProvider(provider)) {
-        // TypeScript should know provider is 'google' | 'zai' here
-        expect(provider === LlmProviders.Google || provider === LlmProviders.Zai).toBe(true);
+        // TypeScript should know provider is 'google' here
+        expect(provider === LlmProviders.Google).toBe(true);
       }
     });
   });

@@ -583,7 +583,6 @@ function CouncilSection(): React.JSX.Element {
     { name: 'OPENAI', models: '4 models: research, reasoning, images', role: 'Deep research, synthesis, embeddings', icon: Zap },
     { name: 'GOOGLE', models: '4 models: analysis, classification, images', role: 'Classification, routing, image gen', icon: Layers },
     { name: 'PERPLEXITY', models: '3 models: search, synthesis, deep dive', role: 'Real-time web search, citations', icon: Eye },
-    { name: 'ZAI', models: '2 models: multilingual, fast', role: 'Multilingual, cost-efficient, guest access', icon: MessageSquare },
   ];
 
   return (
@@ -594,7 +593,7 @@ function CouncilSection(): React.JSX.Element {
             The Council of AI
           </p>
           <h2 className="mb-6 max-w-3xl text-4xl font-bold tracking-tight md:text-5xl">
-            Five models debate.{' '}
+            Four models debate.{' '}
             <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
               You get the truth.
             </span>
@@ -606,7 +605,7 @@ function CouncilSection(): React.JSX.Element {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {providers.map((provider) => (
             <motion.div
               key={provider.name}

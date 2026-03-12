@@ -46,7 +46,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   openai: { type: 'string', nullable: true },
                   anthropic: { type: 'string', nullable: true },
                   perplexity: { type: 'string', nullable: true },
-                  zai: { type: 'string', nullable: true },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },
@@ -94,7 +93,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           openai: null,
           anthropic: null,
           perplexity: null,
-          zai: null,
         });
       }
 
@@ -116,7 +114,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         openai: getDecryptedKey('openai'),
         anthropic: getDecryptedKey('anthropic'),
         perplexity: getDecryptedKey('perplexity'),
-        zai: getDecryptedKey('zai'),
       });
     }
   );
@@ -137,7 +134,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-              enum: ['google', 'openai', 'anthropic', 'perplexity', 'zai'],
+              enum: ['google', 'openai', 'anthropic', 'perplexity'],
               description: 'LLM provider',
             },
           },

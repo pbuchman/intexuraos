@@ -75,21 +75,6 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
   },
 }));
 
-vi.mock('../../../infra/llm/GlmAdapter.js', () => ({
-  GlmAdapter: class MockGlmAdapter {
-    apiKey: string;
-    model: string;
-    userId: string;
-    logger: Logger;
-    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
-      this.apiKey = apiKey;
-      this.model = model;
-      this.userId = userId;
-      this.logger = _logger;
-    }
-  },
-}));
-
 const { createSynthesizer, createTitleGenerator, createResearchProvider } =
   await import('../../../infra/llm/LlmAdapterFactory.js');
 
@@ -146,19 +131,6 @@ describe('LlmAdapterFactory', () => {
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.SonarPro);
     });
-
-    it('creates GlmAdapter for zai model', () => {
-      const provider = createResearchProvider(
-        LlmModels.Glm47,
-        'zai-key',
-        'test-user-id',
-        testPricing,
-        mockLogger
-      );
-
-      expect((provider as unknown as { apiKey: string }).apiKey).toBe('zai-key');
-      expect((provider as unknown as { model: string }).model).toBe(LlmModels.Glm47);
-    });
   });
 
   describe('createSynthesizer', () => {
@@ -200,19 +172,6 @@ describe('LlmAdapterFactory', () => {
       expect(() =>
         createSynthesizer(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing, mockLogger)
       ).toThrow('Perplexity does not support synthesis');
-    });
-
-    it('creates GlmAdapter for zai model', () => {
-      const synthesizer = createSynthesizer(
-        LlmModels.Glm47,
-        'zai-key',
-        'test-user-id',
-        testPricing,
-        mockLogger
-      );
-
-      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('zai-key');
-      expect((synthesizer as unknown as { model: string }).model).toBe(LlmModels.Glm47);
     });
   });
 

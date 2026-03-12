@@ -9,7 +9,7 @@ export interface TriggerCodeTaskRequest {
   userId: string;
   linearIssueId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5';
   actionId: string;
   approvalEventId: string;
 }

@@ -79,8 +79,12 @@ describe('labelUtils', () => {
       expect(getWorkerTypeFromLabels(['minimax'])).toBe('minimax');
     });
 
-    it('returns glm for single glm label', () => {
-      expect(getWorkerTypeFromLabels(['glm'])).toBe('glm');
+    it('normalizes legacy glm label to glm-5', () => {
+      expect(getWorkerTypeFromLabels(['glm'])).toBe('glm-5');
+    });
+
+    it('returns glm-5 for single glm-5 label', () => {
+      expect(getWorkerTypeFromLabels(['glm-5'])).toBe('glm-5');
     });
 
     it('returns worker type when mixed with non-worker labels', () => {
@@ -104,7 +108,7 @@ describe('labelUtils', () => {
     });
 
     it('returns undefined for conflicting worker labels', () => {
-      expect(getWorkerTypeFromLabels(['opus', 'glm'])).toBeUndefined();
+      expect(getWorkerTypeFromLabels(['opus', 'glm-5'])).toBeUndefined();
     });
 
     it('returns undefined for multiple worker labels among others', () => {

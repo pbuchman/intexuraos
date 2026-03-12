@@ -98,9 +98,9 @@ Every task runs in its own world:
 
 ## The Council of AI
 
-When IntexuraOS needs to research a topic, it does not ask one model and hope for the best. It asks five.
+When IntexuraOS needs to research a topic, it does not ask one model and hope for the best. It asks multiple models.
 
-**19 models across 7 providers** — Google, OpenAI, Anthropic, Perplexity, Zai, MiniMax, and Alibaba Cloud — each queried in parallel, each reasoning independently, then synthesized into a single report with source attribution and confidence scoring.
+**14 models across 4 providers** — Google, OpenAI, Anthropic, and Perplexity — each queried in parallel, each reasoning independently, then synthesized into a single report with source attribution and confidence scoring.
 
 ```mermaid
 graph TB
@@ -110,9 +110,8 @@ graph TB
     P --> Claude[Claude Opus 4.5]
     P --> GPT[GPT-5.2]
     P --> Sonar[Perplexity Sonar Pro]
-    P --> GLM[GLM-4.7]
 
-    Gemini & Claude & GPT & Sonar & GLM --> S[Synthesis Engine]
+    Gemini & Claude & GPT & Sonar --> S[Synthesis Engine]
     S --> R[Research Report with Citations]
     R --> Share[Public URL]
     R --> WA2[WhatsApp Delivery]
@@ -196,7 +195,7 @@ graph TD
 | ------------------ | ---------------------------------------------------------------------------- |
 | **Runtime**        | Node.js 22, TypeScript 5.7 (strict mode)                                     |
 | **Framework**      | Fastify (web framework)                                                      |
-| **AI Providers**   | Anthropic, OpenAI, Google AI, Perplexity, Zai                                |
+| **AI Providers**   | Anthropic, OpenAI, Google AI, Perplexity                                     |
 | **AI Tooling**     | Claude Code (autonomous worker), OpenAI (semantic document search)           |
 | **Data**           | Firestore, Google Cloud Storage                                              |
 | **Messaging**      | Cloud Pub/Sub (real-time message delivery)                                   |
@@ -213,7 +212,6 @@ graph TD
 | **OpenAI**     | GPT-5.2, O4 Mini Deep Research, GPT-4o Mini, GPT Image 1 | Deep research, synthesis, fast classification, document matching |
 | **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5                   | Analysis, validation, autonomous coding                          |
 | **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research                    | Real-time web search with citations                              |
-| **Zai**        | GLM-4.7, GLM-4.7-Flash                                   | Multilingual, cost-efficient, guest access                       |
 
 ---
 

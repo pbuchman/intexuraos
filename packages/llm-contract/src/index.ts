@@ -58,10 +58,6 @@ export type {
   OpenAI,
   Anthropic,
   Perplexity,
-  Zai,
-  // Individual model types - Zai
-  Glm47,
-  Glm47Flash,
 } from './supportedModels.js';
 
 export type { ImageSize, ModelPricing, ProviderPricing, CostCalculator } from './pricing.js';

@@ -146,21 +146,18 @@ describe('Internal Routes', () => {
           openai: string | null;
           anthropic: string | null;
           perplexity: string | null;
-          zai: string | null;
         };
       };
       expect(body.data.google).toBeNull();
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBeNull();
       expect(body.data.perplexity).toBeNull();
-      expect(body.data.zai).toBeNull();
     });
 
     it('returns decrypted keys for configured providers', async () => {
       const userId = 'user-with-keys';
       const googleKey = 'AIzaSyB1234567890abcdefghij';
       const anthropicKey = 'sk-ant-api1234567890abcd';
-      const zaiKey = 'zai_test_key_1234567890';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
@@ -171,7 +168,6 @@ describe('Internal Routes', () => {
             tag: 'tag',
             ciphertext: Buffer.from(anthropicKey).toString('base64'),
           },
-          zai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(zaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -195,14 +191,12 @@ describe('Internal Routes', () => {
           openai: string | null;
           anthropic: string | null;
           perplexity: string | null;
-          zai: string | null;
         };
       };
       expect(body.data.google).toBe(googleKey);
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBe(anthropicKey);
       expect(body.data.perplexity).toBeNull();
-      expect(body.data.zai).toBe(zaiKey);
     });
 
     it('returns empty when repository fails', async () => {
@@ -226,14 +220,12 @@ describe('Internal Routes', () => {
           openai: string | null;
           anthropic: string | null;
           perplexity: string | null;
-          zai: string | null;
         };
       };
       expect(body.data.google).toBeNull();
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBeNull();
       expect(body.data.perplexity).toBeNull();
-      expect(body.data.zai).toBeNull();
     });
 
     it('returns 401 when INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured', async () => {

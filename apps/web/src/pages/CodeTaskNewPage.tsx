@@ -17,7 +17,7 @@ const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string 
   { id: 'opus', name: 'Opus', description: 'Claude Opus - most capable for complex tasks' },
   { id: 'sonnet', name: 'Sonnet', description: 'Claude Sonnet - fast and capable' },
   { id: 'minimax', name: 'MiniMax', description: 'MiniMax M2.5 - alternative model' },
-  { id: 'glm', name: 'GLM', description: 'GLM - alternative model' },
+  { id: 'glm-5', name: 'GLM-5', description: 'GLM-5 - DashScope model' },
   { id: 'qwen3.5-plus', name: 'Qwen 3.5 Plus', description: 'Qwen 3.5 Plus - alternative model' },
 ];
 

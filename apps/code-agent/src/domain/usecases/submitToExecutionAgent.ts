@@ -31,7 +31,7 @@ export interface SubmitToExecutionAgentRequest {
   /** User ID submitting the request */
   userId: string;
   /** Optional worker type to use for the implementation */
-  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
 }
 
 /**

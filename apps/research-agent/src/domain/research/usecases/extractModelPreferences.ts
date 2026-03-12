@@ -48,8 +48,6 @@ const RESEARCH_MODELS: ResearchModel[] = [
   LlmModels.Sonar,
   LlmModels.SonarPro,
   LlmModels.SonarDeepResearch,
-  LlmModels.Glm47,
-  LlmModels.Glm47Flash,
 ];
 
 /**
@@ -65,8 +63,6 @@ const MODEL_DISPLAY_NAMES: Record<ResearchModel, string> = {
   [LlmModels.Sonar]: 'Sonar',
   [LlmModels.SonarPro]: 'Sonar Pro',
   [LlmModels.SonarDeepResearch]: 'Sonar Deep Research',
-  [LlmModels.Glm47]: 'GLM 4.7',
-  [LlmModels.Glm47Flash]: 'GLM 4.7 Flash',
 };
 
 /**
@@ -78,7 +74,6 @@ const PROVIDER_KEY_MAP: Record<string, keyof ApiKeyStore> = {
   openai: 'openai',
   anthropic: 'anthropic',
   perplexity: 'perplexity',
-  zai: 'zai',
 };
 
 function providerToKeyField(provider: string): keyof ApiKeyStore {

@@ -38,8 +38,12 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@model sonnet')).toBe('sonnet');
   });
 
-  it('extracts glm from @worker glm', () => {
-    expect(extractDispatchWorkerType('@worker glm')).toBe('glm');
+  it('normalizes glm alias to glm-5', () => {
+    expect(extractDispatchWorkerType('@worker glm')).toBe('glm-5');
+  });
+
+  it('handles glm-5 explicit form', () => {
+    expect(extractDispatchWorkerType('@worker glm-5')).toBe('glm-5');
   });
 
   it('extracts auto from @model auto', () => {

@@ -7,7 +7,7 @@ export const SUPPORTED_DISPATCH_WORKER_TYPES = [
   'opus',
   'sonnet',
   'minimax',
-  'glm',
+  'glm-5',
   'qwen3.5-plus',
 ] as const satisfies readonly WorkerType[];
 
@@ -16,7 +16,8 @@ const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   opus: 'opus',
   sonnet: 'sonnet',
   minimax: 'minimax',
-  glm: 'glm',
+  glm: 'glm-5',
+  'glm-5': 'glm-5',
   qwen: 'qwen3.5-plus',
   'qwen3.5-plus': 'qwen3.5-plus',
 };

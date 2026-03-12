@@ -1097,7 +1097,7 @@ describe('processCodeAction', () => {
     vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
       linearIssueId: 'INT-123',
       linearIssueTitle: 'Test Issue',
-      linearIssueLabels: ['opus', 'glm'],
+      linearIssueLabels: ['opus', 'glm-5'],
       hasChildren: false,
       linearFallback: false,
     });
@@ -1165,7 +1165,7 @@ describe('processCodeAction', () => {
 
     expect(result.ok).toBe(true);
 
-    // Conflicting labels (opus + glm) → fall back to request's 'auto'
+    // Conflicting labels (opus + glm-5) → fall back to request's 'auto'
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         workerType: 'auto',
