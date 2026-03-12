@@ -174,7 +174,9 @@ function buildReviewSkipComment(request: ReviewSkipCommentRequest): string {
  */
 function buildDispatchFailedComment(request: DispatchFailedCommentRequest): string {
   const workType = request.failureType === 'review' ? 'review' : 'requested work';
+  /* v8 ignore start -- ts-type: split always returns at least one element but TypeScript noUncheckedIndexedAccess narrows @preserve */
   const safeErrorCode = request.errorCode.split('/')[0]?.toUpperCase() ?? 'UNKNOWN_ERROR';
+  /* v8 ignore stop @preserve */
 
   return [
     '@ignore',
@@ -194,7 +196,7 @@ function buildDispatchFailedComment(request: DispatchFailedCommentRequest): stri
 /**
  * Build comment for task completion outcome (success or failure).
  */
-function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): string {
+export function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): string {
   const isReview = request.outcome.startsWith('review_');
   const isFailure = request.outcome.endsWith('_failed');
 
@@ -220,19 +222,22 @@ function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): string {
   }
 
   if (isFailure && request.errorCode !== undefined) {
+    /* v8 ignore start -- ts-type: split always returns at least one element but TypeScript noUncheckedIndexedAccess narrows @preserve */
     const safeErrorCode = request.errorCode.split('/')[0]?.toUpperCase() ?? 'UNKNOWN_ERROR';
+    /* v8 ignore stop @preserve */
     lines.push(`**Error:** ${safeErrorCode}`);
 
     if (request.outcome === 'review_failed') {
       lines.push('', '**Review output did not complete.** Check internal logs for details.');
     }
   } else {
-    // Success case
+    // Success case - all non-failure outcomes
     if (isReview) {
       lines.push('', '**Review finished.** Check the PR files tab for review comments.');
     } else if (request.outcome === 'implementation_completed') {
       lines.push('', '**Implementation finished.** Changes have been pushed to the PR.');
-    } else if (request.outcome === 'reply_completed') {
+    } else {
+      // reply_completed is the only remaining success outcome
       lines.push('', '**Reply posted.** Check the PR comments for the response.');
     }
   }
