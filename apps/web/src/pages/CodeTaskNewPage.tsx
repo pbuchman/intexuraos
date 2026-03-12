@@ -1,3 +1,4 @@
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core/code-task-worker-types';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Play, Link2, Sparkles, Pencil } from 'lucide-react';
@@ -12,14 +13,19 @@ import { ApiError, parseConflictError } from '@/services/apiClient';
 import { listCodeTasks } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
 
-const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = [
-  { id: 'auto', name: 'Auto', description: 'Automatically select the best model' },
-  { id: 'opus', name: 'Opus', description: 'Claude Opus - most capable for complex tasks' },
-  { id: 'sonnet', name: 'Sonnet', description: 'Claude Sonnet - fast and capable' },
-  { id: 'minimax', name: 'MiniMax', description: 'MiniMax M2.5 - alternative model' },
-  { id: 'glm', name: 'GLM', description: 'GLM - alternative model' },
-  { id: 'qwen3.5-plus', name: 'Qwen 3.5 Plus', description: 'Qwen 3.5 Plus - alternative model' },
-];
+const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; description: string }> = {
+  auto: { name: 'Auto', description: 'Automatically select the best available model for the task' },
+  opus: { name: 'Opus', description: 'Anthropic\'s most capable model for complex reasoning and coding tasks' },
+  sonnet: { name: 'Sonnet', description: 'Anthropic\'s daily coding model with the best balance of speed and intelligence' },
+  minimax: { name: 'MiniMax', description: 'MiniMax\'s coding and agent model with strong reasoning at lower cost' },
+  glm: { name: 'GLM', description: 'Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks' },
+  qwen: { name: 'Qwen', description: 'Advanced Qwen model with thinking enabled' },
+};
+
+const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = CODE_TASK_WORKER_TYPES.map((id) => ({
+  id,
+  ...WORKER_TYPE_METADATA[id],
+}));
 
 type LinearMode = 'create' | 'link';
 

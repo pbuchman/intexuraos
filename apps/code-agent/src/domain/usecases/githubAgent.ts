@@ -294,8 +294,8 @@ async function evaluateCommentEventInternal(
           },
           worker_type: {
             type: 'string',
-            enum: ['qwen', ...SUPPORTED_REVIEW_WORKER_TYPES],
-            description: 'The worker type to use. Normalize qwen to qwen3.5-plus.',
+            enum: [...SUPPORTED_REVIEW_WORKER_TYPES],
+            description: 'The worker type to use.',
           },
         },
         required: ['review_type', 'worker_type'],

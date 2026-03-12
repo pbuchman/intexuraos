@@ -7,11 +7,11 @@ describe('extractDispatchWorkerType', () => {
   });
 
   it('extracts worker type from @model directive', () => {
-    expect(extractDispatchWorkerType('@model qwen fix tests')).toBe('qwen3.5-plus');
+    expect(extractDispatchWorkerType('@model qwen fix tests')).toBe('qwen');
   });
 
-  it('normalizes qwen alias to qwen3.5-plus', () => {
-    expect(extractDispatchWorkerType('@worker qwen')).toBe('qwen3.5-plus');
+  it('normalizes qwen alias to qwen', () => {
+    expect(extractDispatchWorkerType('@worker qwen')).toBe('qwen');
   });
 
   it('returns undefined when no directive found', () => {
@@ -46,8 +46,8 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@model auto')).toBe('auto');
   });
 
-  it('handles qwen3.5-plus explicit form', () => {
-    expect(extractDispatchWorkerType('@worker qwen3.5-plus')).toBe('qwen3.5-plus');
+  it('rejects qwen3.5-plus explicit form', () => {
+    expect(extractDispatchWorkerType('@worker qwen3.5-plus')).toBeUndefined();
   });
 
   it('returns undefined for @worker without type', () => {

@@ -5,6 +5,7 @@
  */
 
 import type { Result, Logger } from '@intexuraos/common-core';
+import type { WorkerType } from '../models/codeTask.js';
 import type { WorkerLocation } from '../models/worker.js';
 import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
 
@@ -37,7 +38,7 @@ export interface DispatchRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: WorkerType;
   webhookUrl: string;
   webhookSecret: string;
   traceId?: string;
