@@ -35,7 +35,7 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
 import crypto from 'node:crypto';
-import { fetchWithAuth } from '@intexuraos/internal-clients';
+import { fetchWithAuth, type UserServiceClient } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
@@ -52,6 +52,7 @@ import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js'
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -291,6 +292,34 @@ describe('POST /internal/webhooks/task-complete', () => {
     const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
 
     return { timestamp, signature };
+  }
+
+  function installPRNotificationServices(): {
+    gitHubPRClient: GitHubPRClient;
+    userServiceClient: UserServiceClient;
+  } {
+    const gitHubPRClient = {
+      postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 42 })),
+      updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
+      getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
+      getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
+      getPullRequestBaseBranch: vi.fn().mockResolvedValue(ok('development')),
+      getPullRequestStatus: vi.fn().mockResolvedValue(
+        ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })
+      ),
+    } as unknown as GitHubPRClient;
+    const userServiceClient = {
+      ...mockUserServiceClient,
+      getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'ghp_test_token', email: 'test@example.com' })),
+    } as UserServiceClient;
+
+    setServices({
+      ...getServices(),
+      gitHubPRClient,
+      userServiceClient,
+    });
+
+    return { gitHubPRClient, userServiceClient };
   }
 
   describe('authentication', () => {
@@ -1876,6 +1905,92 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.result?.execution_linear_issue_url).toContain('/INT-123');
     });
 
+    it('does not post implementation completion comment when the final update fails', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Implement the task',
+        sanitizedPrompt: 'Implement the task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        prNumber: 901,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'execution',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      validateIssueSpy.mockReset();
+      validateIssueSpy
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/intexuraos/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'routed-uuid',
+            identifier: 'INT-123',
+            title: 'Routed issue',
+            url: 'https://linear.app/intexuraos/issue/INT-123',
+            labels: ['code-task'],
+            childCount: 0,
+            parentId: null,
+          })
+        );
+
+      const updateSpy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'Update failed' })
+      );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/901',
+          branch: 'feat/execution-agent',
+          commits: 2,
+          summary: 'Implemented execution task',
+          execution_outcome_label: 'implemented' as const,
+          execution_superpowers_executing_plans_used: '1' as const,
+          execution_superpowers_requesting_code_review_used: '1' as const,
+          execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+
+      updateSpy.mockRestore();
+    });
+
     it('handles markdown-wrapped execution_linear_issue_url in execution completion', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
@@ -2325,6 +2440,74 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('implemented');
     });
 
+    it('does not post reply completion comment when the final update fails', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Respond to PR comment',
+        sanitizedPrompt: 'Respond to PR comment',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-456',
+        prNumber: 100,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'pull_request',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      validateIssueSpy.mockReset();
+      validateIssueSpy.mockResolvedValueOnce(
+        ok({
+          id: 'routed-uuid-456',
+          identifier: 'INT-456',
+          title: 'Pull request issue',
+          url: 'https://linear.app/intexuraos/issue/INT-456',
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      const updateSpy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'Update failed' })
+      );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/100',
+          comment_replied: true,
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+
+      updateSpy.mockRestore();
+    });
+
     it('review task rejects empty review_types in completed payload', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
@@ -2433,6 +2616,114 @@ describe('POST /internal/webhooks/task-complete', () => {
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.status).toBe('reviewed');
       expect(getResult.value.error).toBeUndefined();
+    });
+
+    it('does not post review completion comment when the final update fails', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const updateSpy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'Update failed' })
+      );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Reviewed the PR and posted two comments.',
+          review_comments_posted: '2',
+          review_types: 'code_quality,architecture',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+
+      updateSpy.mockRestore();
+    });
+
+    it('posts review completion comment after the task update succeeds', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const updateSpy = vi.spyOn(codeTaskRepo, 'update');
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Reviewed the PR and posted two comments.',
+          review_comments_posted: '2',
+          review_types: 'code_quality,architecture',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledTimes(1);
+      expect(updateSpy).toHaveBeenCalled();
+      expect(updateSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(gitHubPRClient.postPRComment).mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+      );
+
+      updateSpy.mockRestore();
     });
 
     it('handles execution-agent failed webhook without any Linear mutations', async () => {
