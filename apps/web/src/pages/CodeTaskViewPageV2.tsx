@@ -40,7 +40,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
 
   useEffect(() => {
     if (task?.workerType !== undefined) {
-      setSelectedWorkerType(task.workerType as WorkerType);
+      setSelectedWorkerType(task.workerType);
     }
   }, [task?.workerType]);
 
@@ -149,7 +149,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         implementError={implementError}
         {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
         selectedWorkerType={selectedWorkerType}
-        originalWorkerType={task.workerType as WorkerType}
+        originalWorkerType={task.workerType}
         showDropdown={showImplementDropdown}
         onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowImplementDropdown(false); }}
@@ -167,7 +167,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         retrying={retrying}
         retryError={retryError}
         selectedWorkerType={selectedWorkerType}
-        originalWorkerType={task.workerType as WorkerType}
+        originalWorkerType={task.workerType}
         showDropdown={showRetryDropdown}
         onToggleDropdown={(): void => { setShowRetryDropdown(!showRetryDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowRetryDropdown(false); }}

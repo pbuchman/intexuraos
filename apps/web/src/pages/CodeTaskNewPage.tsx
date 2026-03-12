@@ -1,3 +1,4 @@
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core/code-task-worker-types';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Play, Link2, Sparkles, Pencil } from 'lucide-react';
@@ -12,14 +13,19 @@ import { ApiError, parseConflictError } from '@/services/apiClient';
 import { listCodeTasks } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
 
-const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = [
-  { id: 'auto', name: 'Auto', description: 'Automatically select the best model' },
-  { id: 'opus', name: 'Opus', description: 'Claude Opus - most capable for complex tasks' },
-  { id: 'sonnet', name: 'Sonnet', description: 'Claude Sonnet - fast and capable' },
-  { id: 'minimax', name: 'MiniMax', description: 'MiniMax M2.5 - alternative model' },
-  { id: 'glm', name: 'GLM', description: 'GLM - alternative model' },
-  { id: 'qwen3.5-plus', name: 'Qwen 3.5 Plus', description: 'Qwen 3.5 Plus - alternative model' },
-];
+const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; description: string }> = {
+  auto: { name: 'Auto', description: 'Automatically select the best model' },
+  opus: { name: 'Opus', description: 'Claude Opus - most capable for complex tasks' },
+  sonnet: { name: 'Sonnet', description: 'Claude Sonnet - fast and capable' },
+  minimax: { name: 'MiniMax', description: 'MiniMax M2.5 - alternative model' },
+  glm: { name: 'GLM', description: 'GLM - alternative model' },
+  'qwen3.5-plus': { name: 'Qwen 3.5 Plus', description: 'Qwen 3.5 Plus - alternative model' },
+};
+
+const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = CODE_TASK_WORKER_TYPES.map((id) => ({
+  id,
+  ...WORKER_TYPE_METADATA[id],
+}));
 
 type LinearMode = 'create' | 'link';
 
