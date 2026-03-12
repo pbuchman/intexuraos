@@ -318,6 +318,53 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.data.id).toBe(created.value.id);
     });
 
+    it('returns review result fields when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review PR',
+        sanitizedPrompt: 'review pr',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-review-123',
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const updateResult = await repo.update(created.value.id, {
+        status: 'reviewed',
+        result: {
+          summary: 'Reviewed the PR and posted two comments.',
+          review_comments_posted: '2',
+          review_types: 'code_quality,architecture',
+        } as typeof created.value.result,
+      });
+      expect(updateResult.ok).toBe(true);
+      if (!updateResult.ok) return;
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/code/tasks/${created.value.id}`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.result.review_comments_posted).toBe('2');
+      expect(body.data.result.review_types).toBe('code_quality,architecture');
+    });
+
     it('returns 404 for other user\'s task', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -501,6 +548,53 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(true);
       expect(body.data.tasks).toBeInstanceOf(Array);
       expect(body.data.tasks.length).toBe(2);
+    });
+
+    it('returns review result fields in list responses when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-review-list-123',
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const updateResult = await repo.update(created.value.id, {
+        status: 'reviewed',
+        result: {
+          summary: 'Reviewed the PR and posted one comment.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        } as typeof created.value.result,
+      });
+      expect(updateResult.ok).toBe(true);
+      if (!updateResult.ok) return;
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/tasks',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.tasks[0].result.review_comments_posted).toBe('1');
+      expect(body.data.tasks[0].result.review_types).toBe('code_quality');
     });
 
     it('filters tasks by status', async () => {
