@@ -18,7 +18,8 @@ import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import { notifyPROfTaskDispatch, notifyReviewSkipped, notifyDispatchFailed } from '../utils/prTaskNotification.js';
+import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import { notifyPROfTaskDispatch, notifyReviewReplaced, notifyDispatchFailed } from '../utils/prTaskNotification.js';
 import { createHmac } from 'node:crypto';
 
 export interface CreateReviewTaskRequest {
@@ -39,9 +40,7 @@ export interface CreateReviewTaskError {
   message: string;
 }
 
-export type CreateReviewTaskResult =
-  | { status: 'created'; taskId: string }
-  | { status: 'already_running'; taskId: string };
+export type CreateReviewTaskResult = { status: 'created'; taskId: string; workerType: WorkerType };
 
 export interface CreateReviewTaskDeps {
   logger: Logger;
@@ -51,6 +50,7 @@ export interface CreateReviewTaskDeps {
   linearAgentClient?: LinearAgentClient;
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
+  workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
   serviceUrl: string;
 }
@@ -162,7 +162,7 @@ export async function createReviewTask(
   deps: CreateReviewTaskDeps,
   request: CreateReviewTaskRequest
 ): Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>> {
-  const { logger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, orchestratorSecret, serviceUrl } = deps;
+  const { logger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, orchestratorSecret, serviceUrl, workerSettingsRepo } = deps;
   const { repository, prNumber, senderLogin, eventId } = request;
 
   logger.info(
@@ -179,28 +179,66 @@ export async function createReviewTask(
     return err({ code: 'task_creation_failed', message: activeReviewResult.error.message });
   }
 
+  // Resolve effective worker type early
+  const effectiveWorkerType = request.workerType ?? 'auto';
+
   if (activeReviewResult.value !== null) {
     const existingTask = activeReviewResult.value;
     logger.info(
-      { repository, prNumber, taskId: existingTask.id },
-      'Active review task already exists for PR'
+      { repository, prNumber, taskId: existingTask.id, effectiveWorkerType },
+      'Active review task exists for PR, replacing with fresh review'
     );
 
-    // Post skip comment with existing worker metadata (best-effort)
-    await notifyReviewSkipped(
+    // Post replacement comment first (best-effort)
+    await notifyReviewReplaced(
       { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
       {
         taskId: `task_for_pr_${String(prNumber)}`,
         repository,
         prNumber,
         userId: existingTask.userId,
-        existingTaskId: existingTask.id,
-        existingWorkerType: existingTask.workerType,
-        existingWorkerLocation: existingTask.workerLocation,
+        replacedTaskId: existingTask.id,
+        replacedWorkerType: existingTask.workerType,
       },
     );
 
-    return ok({ status: 'already_running', taskId: existingTask.id });
+    // Cancel the old task locally (authoritative)
+    const cancelResult = await codeTaskRepo.update(existingTask.id, {
+      status: 'cancelled',
+      completedAt: new Date(),
+      error: {
+        code: 'review_replaced',
+        message: 'Review task was cancelled because a fresh review was requested',
+      },
+    });
+
+    if (!cancelResult.ok) {
+      logger.error(
+        { taskId: existingTask.id, error: cancelResult.error },
+        'Failed to cancel existing review task - aborting replacement'
+      );
+      return err({ code: 'task_creation_failed', message: 'Failed to cancel existing review task' });
+    }
+
+    // Best-effort: notify worker to cancel
+    try {
+      const settingsResult = await workerSettingsRepo.getSettings(existingTask.userId);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        const settings = settingsResult.value;
+        const workerConfig = settings.workers.find((w) => w.name === existingTask.workerLocation);
+        if (workerConfig?.enabled === true) {
+          await taskDispatcher.cancelOnWorker(existingTask.id, existingTask.workerLocation, {
+            url: workerConfig.url,
+            cfAccessClientId: workerConfig.cfAccessClientId,
+            cfAccessClientSecret: workerConfig.cfAccessClientSecret,
+          });
+        }
+      }
+    } catch (error) {
+      logger.warn({ taskId: existingTask.id, error }, 'Worker cancellation failed (best-effort)');
+    }
+
+    // Continue with creating a new review task (fall through to normal creation flow)
   }
 
   // Resolve user
@@ -227,7 +265,6 @@ export async function createReviewTask(
   }
 
   // Create task
-  const effectiveWorkerType = request.workerType ?? 'auto';
   const prompt = buildReviewPrompt({ ...request, workerType: effectiveWorkerType });
   const webhookSecret = createHmac('sha256', orchestratorSecret).update(eventId).digest('hex');
 
@@ -334,5 +371,5 @@ export async function createReviewTask(
     },
   );
 
-  return ok({ status: 'created', taskId: task.id });
+  return ok({ status: 'created', taskId: task.id, workerType: effectiveWorkerType });
 }
