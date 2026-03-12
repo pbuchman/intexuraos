@@ -21,6 +21,7 @@ import type {
   CreateReviewTaskResult,
 } from '../usecases/createReviewTask.js';
 import { isReviewCommandComment, extractReviewWorkerType } from '../utils/reviewTriage.js';
+import type { WorkerType } from '../models/codeTask.js';
 
 export interface UnifiedEvaluatorDeps {
   webhookRules: WebhookRulesService;
@@ -376,7 +377,7 @@ async function handleReviewTriageFailure(
   deps: UnifiedEvaluatorDeps,
   event: GitHubPREvent,
   errorMessage: string,
-  workerType: string | undefined,
+  workerType: WorkerType | undefined,
   startTime: number,
   logger: Logger,
 ): Promise<void> {
@@ -427,7 +428,7 @@ async function recordDecision(
     decision: 'dispatch' | 'skip' | 'request_review';
     reason: string;
     dispatchAction?: 'create_task' | 'send_message' | 'create_review_task';
-    dispatchParams?: { taskId?: string; reviewTypes?: string[] };
+    dispatchParams?: { taskId?: string; reviewTypes?: string[]; workerType?: WorkerType };
     llmCostUsd?: number;
     llmModel?: string;
     llmToolCalls?: { tool: string; args: Record<string, unknown> }[];

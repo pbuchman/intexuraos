@@ -40,7 +40,7 @@ export interface CreateReviewTaskError {
   message: string;
 }
 
-export type CreateReviewTaskResult = { status: 'created'; taskId: string; workerType: WorkerType };
+export interface CreateReviewTaskResult { status: 'created'; taskId: string; workerType: WorkerType }
 
 export interface CreateReviewTaskDeps {
   logger: Logger;

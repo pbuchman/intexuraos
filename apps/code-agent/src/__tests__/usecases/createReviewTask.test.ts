@@ -260,7 +260,7 @@ describe('createReviewTask', () => {
     });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) return;
+    if (result.ok) return;
 
     expect(result.error.code).toBe('task_creation_failed');
 
