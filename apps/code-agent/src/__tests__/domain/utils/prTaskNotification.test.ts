@@ -9,8 +9,15 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import {
   notifyPROfTaskDispatch,
   fetchGitHubToken,
+  notifyReviewSkipped,
+  notifyDispatchFailed,
+  notifyTaskOutcome,
+  buildTaskOutcomeComment,
   type PRTaskNotificationDeps,
   type PRTaskNotificationRequest,
+  type ReviewSkipCommentRequest,
+  type DispatchFailedCommentRequest,
+  type TaskOutcomeCommentRequest,
 } from '../../../domain/utils/prTaskNotification.js';
 
 function createFakeLogger(): Logger {
@@ -373,5 +380,477 @@ describe('notifyPROfTaskDispatch', () => {
 
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).not.toContain('**Reviewer:**');
+  });
+});
+
+describe('notifyReviewSkipped', () => {
+  function createReviewSkipRequest(overrides: Partial<ReviewSkipCommentRequest> = {}): ReviewSkipCommentRequest {
+    return {
+      taskId: 'task_skip_test',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      existingTaskId: 'task_existing_123',
+      ...overrides,
+    };
+  }
+
+  it('posts skip comment with @ignore prefix', async () => {
+    const deps = createFakeDeps();
+    const request = createReviewSkipRequest();
+
+    await notifyReviewSkipped(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+      'ghp_test_token',
+      'pbuchman',
+      'intexuraos',
+      42,
+      expect.stringContaining('@ignore')
+    );
+  });
+
+  it('comment includes existing task ID and skip message', async () => {
+    const deps = createFakeDeps();
+    const request = createReviewSkipRequest();
+
+    await notifyReviewSkipped(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### Automated Code Review Request Skipped');
+    expect(body).toContain('**Existing Task ID:** `task_existing_123`');
+    expect(body).toContain('The new request has been skipped to avoid duplicate reviews.');
+  });
+
+  it('includes worker type when existingWorkerType is provided', async () => {
+    const deps = createFakeDeps();
+    const request = createReviewSkipRequest({ existingWorkerType: 'claude-code' });
+
+    await notifyReviewSkipped(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('**Worker Type:** `claude-code`');
+  });
+
+  it('includes worker location when existingWorkerLocation is provided', async () => {
+    const deps = createFakeDeps();
+    const request = createReviewSkipRequest({ existingWorkerLocation: 'us-central1' });
+
+    await notifyReviewSkipped(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('**Worker:** `us-central1`');
+  });
+
+  it('returns early when repository format is invalid', async () => {
+    const deps = createFakeDeps();
+    const request = createReviewSkipRequest({ repository: 'noslash' });
+
+    await notifyReviewSkipped(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.logger.warn).toHaveBeenCalled();
+  });
+
+  it('returns early when GitHub token is not available', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.userServiceClient.getOAuthToken).mockResolvedValue(
+      err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' }) as never
+    );
+    const request = createReviewSkipRequest();
+
+    await notifyReviewSkipped(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.logger.info).toHaveBeenCalled();
+  });
+
+  it('logs warning when comment posting fails (best-effort)', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.gitHubPRClient.postPRComment).mockResolvedValue(
+      err({ code: 'UNAUTHORIZED', message: 'Bad token' })
+    );
+    const request = createReviewSkipRequest();
+
+    await notifyReviewSkipped(deps, request);
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ prNumber: 42 }),
+      expect.stringContaining('review skip comment')
+    );
+  });
+
+  it('swallows unexpected exceptions (best-effort)', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.userServiceClient.getOAuthToken).mockRejectedValue(new Error('Network crash'));
+    const request = createReviewSkipRequest();
+
+    await expect(notifyReviewSkipped(deps, request)).resolves.toBeUndefined();
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_existing_123' }),
+      expect.stringContaining('Unexpected error')
+    );
+  });
+});
+
+describe('notifyDispatchFailed', () => {
+  function createDispatchFailedRequest(overrides: Partial<DispatchFailedCommentRequest> = {}): DispatchFailedCommentRequest {
+    return {
+      taskId: 'task_fail_test',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      failureType: 'review',
+      errorCode: 'QUEUE_FULL',
+      ...overrides,
+    };
+  }
+
+  it('posts failure comment with @ignore prefix for review failure', async () => {
+    const deps = createFakeDeps();
+    const request = createDispatchFailedRequest({ failureType: 'review' });
+
+    await notifyDispatchFailed(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('@ignore');
+    expect(body).toContain('### Review Dispatch Failed');
+    expect(body).toContain('**Task ID:** `task_fail_test`');
+    expect(body).toContain('**Error:** QUEUE_FULL');
+  });
+
+  it('posts failure comment with pr_task failure type', async () => {
+    const deps = createFakeDeps();
+    const request = createDispatchFailedRequest({ failureType: 'pr_task', errorCode: 'RATE_LIMITED' });
+
+    await notifyDispatchFailed(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### Task Dispatch Failed');
+    expect(body).toContain('**Error:** RATE_LIMITED');
+  });
+
+  it('extracts first part of error code before slash', async () => {
+    const deps = createFakeDeps();
+    const request = createDispatchFailedRequest({ errorCode: 'UPSTREAM_ERROR/network_timeout' });
+
+    await notifyDispatchFailed(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('**Error:** UPSTREAM_ERROR');
+  });
+
+  it('returns early when repository format is invalid', async () => {
+    const deps = createFakeDeps();
+    const request = createDispatchFailedRequest({ repository: 'noslash' });
+
+    await notifyDispatchFailed(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.logger.warn).toHaveBeenCalled();
+  });
+
+  it('returns early when GitHub token is not available', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.userServiceClient.getOAuthToken).mockResolvedValue(
+      err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' }) as never
+    );
+    const request = createDispatchFailedRequest();
+
+    await notifyDispatchFailed(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.logger.info).toHaveBeenCalled();
+  });
+
+  it('logs warning when comment posting fails (best-effort)', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.gitHubPRClient.postPRComment).mockResolvedValue(
+      err({ code: 'UNAUTHORIZED', message: 'Bad token' })
+    );
+    const request = createDispatchFailedRequest();
+
+    await notifyDispatchFailed(deps, request);
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ prNumber: 42 }),
+      expect.stringContaining('dispatch failure comment')
+    );
+  });
+
+  it('swallows unexpected exceptions (best-effort)', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.userServiceClient.getOAuthToken).mockRejectedValue(new Error('Network crash'));
+    const request = createDispatchFailedRequest();
+
+    await expect(notifyDispatchFailed(deps, request)).resolves.toBeUndefined();
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_fail_test' }),
+      expect.stringContaining('Unexpected error')
+    );
+  });
+});
+
+describe('notifyTaskOutcome', () => {
+  function createTaskOutcomeRequest(overrides: Partial<TaskOutcomeCommentRequest> = {}): TaskOutcomeCommentRequest {
+    return {
+      taskId: 'task_outcome_test',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'review_completed',
+      ...overrides,
+    };
+  }
+
+  it('posts review completed comment with review types', async () => {
+    const deps = createFakeDeps();
+    const request = createTaskOutcomeRequest({
+      outcome: 'review_completed',
+      reviewTypes: ['code_quality', 'security'],
+    });
+
+    await notifyTaskOutcome(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### Automated Review Completed');
+    expect(body).toContain('**Task ID:** `task_outcome_test`');
+    expect(body).toContain('**Review types:** `code_quality`, `security`');
+    expect(body).toContain('Review finished.');
+  });
+
+  it('posts review failed comment with error code', async () => {
+    const deps = createFakeDeps();
+    const request = createTaskOutcomeRequest({
+      outcome: 'review_failed',
+      errorCode: 'TIMEOUT',
+    });
+
+    await notifyTaskOutcome(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### Automated Review Failed');
+    expect(body).toContain('**Error:** TIMEOUT');
+    expect(body).toContain('Review output did not complete.');
+  });
+
+  it('posts implementation completed comment', async () => {
+    const deps = createFakeDeps();
+    const request = createTaskOutcomeRequest({ outcome: 'implementation_completed' });
+
+    await notifyTaskOutcome(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### Implementation Completed');
+    expect(body).toContain('Implementation finished.');
+    expect(body).toContain('Changes have been pushed to the PR.');
+  });
+
+  it('posts implementation failed comment', async () => {
+    const deps = createFakeDeps();
+    const request = createTaskOutcomeRequest({
+      outcome: 'implementation_failed',
+      errorCode: 'EXECUTION_ERROR',
+    });
+
+    await notifyTaskOutcome(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### Implementation Failed');
+    expect(body).toContain('**Error:** EXECUTION_ERROR');
+  });
+
+  it('posts reply completed comment', async () => {
+    const deps = createFakeDeps();
+    const request = createTaskOutcomeRequest({ outcome: 'reply_completed' });
+
+    await notifyTaskOutcome(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### Reply Posted');
+    expect(body).toContain('Reply posted.');
+    expect(body).toContain('Check the PR comments for the response.');
+  });
+
+  it('posts reply failed comment with error code', async () => {
+    const deps = createFakeDeps();
+    const request = createTaskOutcomeRequest({
+      outcome: 'reply_failed',
+      errorCode: 'COMMENT_ERROR',
+    });
+
+    await notifyTaskOutcome(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### Reply Failed');
+    expect(body).toContain('**Error:** COMMENT_ERROR');
+  });
+
+  it('returns early when repository format is invalid', async () => {
+    const deps = createFakeDeps();
+    const request = createTaskOutcomeRequest({ repository: 'noslash' });
+
+    await notifyTaskOutcome(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.logger.warn).toHaveBeenCalled();
+  });
+
+  it('returns early when GitHub token is not available', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.userServiceClient.getOAuthToken).mockResolvedValue(
+      err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' }) as never
+    );
+    const request = createTaskOutcomeRequest();
+
+    await notifyTaskOutcome(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.logger.info).toHaveBeenCalled();
+  });
+
+  it('logs warning when comment posting fails (best-effort)', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.gitHubPRClient.postPRComment).mockResolvedValue(
+      err({ code: 'UNAUTHORIZED', message: 'Bad token' })
+    );
+    const request = createTaskOutcomeRequest();
+
+    await notifyTaskOutcome(deps, request);
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ prNumber: 42 }),
+      expect.stringContaining('task outcome comment')
+    );
+  });
+
+  it('swallows unexpected exceptions (best-effort)', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.userServiceClient.getOAuthToken).mockRejectedValue(new Error('Network crash'));
+    const request = createTaskOutcomeRequest();
+
+    await expect(notifyTaskOutcome(deps, request)).resolves.toBeUndefined();
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_outcome_test' }),
+      expect.stringContaining('Unexpected error')
+    );
+  });
+});
+
+describe('buildTaskOutcomeComment', () => {
+  it('builds review completed comment with review types', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'review_completed',
+      reviewTypes: ['code_quality', 'security'],
+    });
+
+    expect(comment).toContain('### Automated Review Completed');
+    expect(comment).toContain('**Review types:** `code_quality`, `security`');
+    expect(comment).toContain('Review finished.');
+  });
+
+  it('builds review completed comment without review types', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'review_completed',
+    });
+
+    expect(comment).toContain('### Automated Review Completed');
+    expect(comment).toContain('Review finished.');
+    expect(comment).not.toContain('**Review types:**');
+  });
+
+  it('builds review failed comment with error code', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'review_failed',
+      errorCode: 'TIMEOUT',
+    });
+
+    expect(comment).toContain('### Automated Review Failed');
+    expect(comment).toContain('**Error:** TIMEOUT');
+    expect(comment).toContain('Review output did not complete.');
+  });
+
+  it('builds review failed comment without error code', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'review_failed',
+    });
+
+    expect(comment).toContain('### Automated Review Failed');
+    expect(comment).not.toContain('**Error:**');
+  });
+
+  it('builds implementation completed comment', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'implementation_completed',
+    });
+
+    expect(comment).toContain('### Implementation Completed');
+    expect(comment).toContain('Implementation finished.');
+    expect(comment).toContain('Changes have been pushed to the PR.');
+  });
+
+  it('builds implementation failed comment', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'implementation_failed',
+      errorCode: 'EXECUTION_ERROR',
+    });
+
+    expect(comment).toContain('### Implementation Failed');
+    expect(comment).toContain('**Error:** EXECUTION_ERROR');
+  });
+
+  it('builds reply completed comment', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'reply_completed',
+    });
+
+    expect(comment).toContain('### Reply Posted');
+    expect(comment).toContain('Reply posted.');
+    expect(comment).toContain('Check the PR comments for the response.');
+  });
+
+  it('builds reply failed comment', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'reply_failed',
+      errorCode: 'COMMENT_ERROR',
+    });
+
+    expect(comment).toContain('### Reply Failed');
+    expect(comment).toContain('**Error:** COMMENT_ERROR');
   });
 });
