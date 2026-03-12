@@ -405,6 +405,57 @@ describe('GitHubDispatchService', () => {
       const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
       expect(requestArg).not.toHaveProperty('baseBranch');
     });
+
+    it('should extract workerType from @worker directive in comment', async () => {
+      const workerCommentEvent = { ...mockEvent, body: 'Fix this @worker minimax' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: workerCommentEvent });
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg?.workerType).toBe('minimax');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ workerType: 'minimax', prNumber: 42 }),
+        'Extracted worker type from comment'
+      );
+    });
+
+    it('should extract workerType from @model directive in comment', async () => {
+      const modelCommentEvent = { ...mockEvent, body: '@model qwen fix the tests' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-model' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: modelCommentEvent });
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg?.workerType).toBe('qwen3.5-plus');
+    });
+
+    it('should not pass workerType when no @worker/@model directive found', async () => {
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-no-worker' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch(context);
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('workerType');
+    });
+
+    it('should not pass workerType when directive has unknown type', async () => {
+      const unknownTypeEvent = { ...mockEvent, body: '@worker unknown-model' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-unknown' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: unknownTypeEvent });
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg).not.toHaveProperty('workerType');
+    });
   });
 
   describe('dispatch — error handling', () => {
