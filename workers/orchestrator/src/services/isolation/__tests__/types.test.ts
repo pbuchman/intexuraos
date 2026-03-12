@@ -16,6 +16,10 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.sonnet.model).toBe('sonnet');
   });
 
+  it('uses qwen as the worker key and preserves qwen3.5-plus as the provider model id', () => {
+    expect(WORKER_TYPES.qwen.model).toBe('qwen3.5-plus');
+  });
+
   it('does not set a model for auto worker type', () => {
     expect(WORKER_TYPES.auto.model).toBeUndefined();
   });

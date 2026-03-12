@@ -11,8 +11,7 @@ const REVIEW_WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   sonnet: 'sonnet',
   minimax: 'minimax',
   glm: 'glm',
-  qwen: 'qwen3.5-plus',
-  'qwen3.5-plus': 'qwen3.5-plus',
+  qwen: 'qwen',
 };
 
 export function isReviewCommandComment(commentBody: string): boolean {

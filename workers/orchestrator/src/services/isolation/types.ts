@@ -54,7 +54,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'glm-5',
   },
-  'qwen3.5-plus': {
+  qwen: {
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'qwen3.5-plus',

@@ -14,12 +14,12 @@ import { listCodeTasks } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
 
 const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; description: string }> = {
-  auto: { name: 'Auto', description: 'Automatically select the best model' },
-  opus: { name: 'Opus', description: 'Claude Opus - most capable for complex tasks' },
-  sonnet: { name: 'Sonnet', description: 'Claude Sonnet - fast and capable' },
-  minimax: { name: 'MiniMax', description: 'MiniMax M2.5 - alternative model' },
-  glm: { name: 'GLM', description: 'GLM - alternative model' },
-  'qwen3.5-plus': { name: 'Qwen 3.5 Plus', description: 'Qwen 3.5 Plus - alternative model' },
+  auto: { name: 'Auto', description: 'Automatically select the best available model for the task' },
+  opus: { name: 'Opus', description: 'Anthropic\'s most capable model for complex reasoning and coding tasks' },
+  sonnet: { name: 'Sonnet', description: 'Anthropic\'s daily coding model with the best balance of speed and intelligence' },
+  minimax: { name: 'MiniMax', description: 'MiniMax\'s coding and agent model with strong reasoning at lower cost' },
+  glm: { name: 'GLM', description: 'Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks' },
+  qwen: { name: 'Qwen', description: 'Advanced Qwen model with thinking enabled' },
 };
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = CODE_TASK_WORKER_TYPES.map((id) => ({

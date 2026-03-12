@@ -3022,7 +3022,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.data.workerLocation).toBe('mac');
     });
 
-    it('accepts qwen3.5-plus as workerType without 400 validation error', async () => {
+    it('accepts qwen as workerType without 400 validation error', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -3087,21 +3087,21 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'POST',
         url: `/code/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
-        body: { workerType: 'qwen3.5-plus' },
+        body: { workerType: 'qwen' },
       });
 
-      // Must NOT return 400 validation error — schema must accept qwen3.5-plus
+      // Must NOT return 400 validation error — schema must accept qwen
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toMatch(/^task_/);
       expect(body.data.implementationOf).toBe(created.value.id);
 
-      // Verify qwen3.5-plus actually flows through the runtime guard to the stored task
+      // Verify qwen actually flows through the runtime guard to the stored task
       const executionTask = await repo.findById(body.data.codeTaskId);
       expect(executionTask.ok).toBe(true);
       if (!executionTask.ok) return;
-      expect(executionTask.value.workerType).toBe('qwen3.5-plus');
+      expect(executionTask.value.workerType).toBe('qwen');
     });
   });
 
