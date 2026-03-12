@@ -941,7 +941,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   userId: task.userId,
                   outcome: 'review_failed',
                   errorCode: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
-                  ...(task.workerType !== undefined && { workerType: task.workerType }),
+                  ...(task.workerType != null && { workerType: task.workerType }),
                 },
               );
             }
@@ -993,7 +993,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   outcome: 'review_failed',
                   errorCode: reviewEnforcement.code,
                   ...(reviewTypes !== undefined && { reviewTypes }),
-                  ...(task.workerType !== undefined && { workerType: task.workerType }),
+                  ...(task.workerType != null && { workerType: task.workerType }),
                 },
               );
             }
@@ -1013,7 +1013,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               userId: task.userId,
               outcome: 'review_completed',
               ...(reviewTypes !== undefined && { reviewTypes }),
-              ...(task.workerType !== undefined && { workerType: task.workerType }),
+              ...(task.workerType != null && { workerType: task.workerType }),
             };
           }
         }

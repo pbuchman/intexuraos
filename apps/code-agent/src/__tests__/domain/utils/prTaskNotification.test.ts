@@ -9,7 +9,6 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import {
   notifyPROfTaskDispatch,
   fetchGitHubToken,
-  notifyReviewSkipped,
   notifyDispatchFailed,
   notifyTaskOutcome,
   buildTaskOutcomeComment,
@@ -17,7 +16,6 @@ import {
   notifyReviewReplaced,
   type PRTaskNotificationDeps,
   type PRTaskNotificationRequest,
-  type ReviewSkipCommentRequest,
   type DispatchFailedCommentRequest,
   type TaskOutcomeCommentRequest,
   type ReviewReplacementCommentRequest,
@@ -383,117 +381,6 @@ describe('notifyPROfTaskDispatch', () => {
 
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).not.toContain('**Reviewer:**');
-  });
-});
-
-describe('notifyReviewSkipped', () => {
-  function createReviewSkipRequest(overrides: Partial<ReviewSkipCommentRequest> = {}): ReviewSkipCommentRequest {
-    return {
-      taskId: 'task_skip_test',
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      userId: 'user-1',
-      existingTaskId: 'task_existing_123',
-      ...overrides,
-    };
-  }
-
-  it('posts skip comment with @ignore prefix', async () => {
-    const deps = createFakeDeps();
-    const request = createReviewSkipRequest();
-
-    await notifyReviewSkipped(deps, request);
-
-    expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledWith(
-      'ghp_test_token',
-      'pbuchman',
-      'intexuraos',
-      42,
-      expect.stringContaining('@ignore')
-    );
-  });
-
-  it('comment includes existing task ID and skip message', async () => {
-    const deps = createFakeDeps();
-    const request = createReviewSkipRequest();
-
-    await notifyReviewSkipped(deps, request);
-
-    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(body).toContain('### Automated Code Review Request Skipped');
-    expect(body).toContain('**Existing Task ID:** `task_existing_123`');
-    expect(body).toContain('The new request has been skipped to avoid duplicate reviews.');
-  });
-
-  it('includes worker type when existingWorkerType is provided', async () => {
-    const deps = createFakeDeps();
-    const request = createReviewSkipRequest({ existingWorkerType: 'claude-code' });
-
-    await notifyReviewSkipped(deps, request);
-
-    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(body).toContain('**Worker Type:** `claude-code`');
-  });
-
-  it('includes worker location when existingWorkerLocation is provided', async () => {
-    const deps = createFakeDeps();
-    const request = createReviewSkipRequest({ existingWorkerLocation: 'us-central1' });
-
-    await notifyReviewSkipped(deps, request);
-
-    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(body).toContain('**Worker:** `us-central1`');
-  });
-
-  it('returns early when repository format is invalid', async () => {
-    const deps = createFakeDeps();
-    const request = createReviewSkipRequest({ repository: 'noslash' });
-
-    await notifyReviewSkipped(deps, request);
-
-    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
-    expect(deps.logger.warn).toHaveBeenCalled();
-  });
-
-  it('returns early when GitHub token is not available', async () => {
-    const deps = createFakeDeps();
-    vi.mocked(deps.userServiceClient.getOAuthToken).mockResolvedValue(
-      err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' }) as never
-    );
-    const request = createReviewSkipRequest();
-
-    await notifyReviewSkipped(deps, request);
-
-    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
-    expect(deps.logger.info).toHaveBeenCalled();
-  });
-
-  it('logs warning when comment posting fails (best-effort)', async () => {
-    const deps = createFakeDeps();
-    vi.mocked(deps.gitHubPRClient.postPRComment).mockResolvedValue(
-      err({ code: 'UNAUTHORIZED', message: 'Bad token' })
-    );
-    const request = createReviewSkipRequest();
-
-    await notifyReviewSkipped(deps, request);
-
-    expect(deps.logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ prNumber: 42 }),
-      expect.stringContaining('review skip comment')
-    );
-  });
-
-  it('swallows unexpected exceptions (best-effort)', async () => {
-    const deps = createFakeDeps();
-    vi.mocked(deps.userServiceClient.getOAuthToken).mockRejectedValue(new Error('Network crash'));
-    const request = createReviewSkipRequest();
-
-    await expect(notifyReviewSkipped(deps, request)).resolves.toBeUndefined();
-
-    expect(deps.logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: 'task_existing_123' }),
-      expect.stringContaining('Unexpected error')
-    );
   });
 });
 

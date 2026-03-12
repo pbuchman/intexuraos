@@ -2726,6 +2726,165 @@ describe('POST /internal/webhooks/task-complete', () => {
       updateSpy.mockRestore();
     });
 
+    it('includes workerType in review completion comment when task has workerType', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'qwen3.5-plus',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Reviewed the PR.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'pbuchman',
+        'intexuraos',
+        42,
+        expect.stringContaining('**Reviewer:** `qwen3.5-plus`')
+      );
+    });
+
+    it('includes workerType in review failure comment when task has workerType', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Review failed due to enforcement.',
+          review_comments_posted: '0',
+          review_types: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'pbuchman',
+        'intexuraos',
+        42,
+        expect.stringContaining('**Reviewer:** `opus`')
+      );
+    });
+
+    it('omits workerType in review comment when task has no workerType', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      // Create task, then update to remove workerType (simulating legacy data)
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Simulate legacy task by setting workerType to undefined via raw update
+      // This tests the webhook handler's handling of undefined workerType
+      await fakeFirestore.collection('code_tasks').doc(task.id).update({ workerType: null });
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Reviewed the PR.',
+          review_comments_posted: '1',
+          review_types: 'security',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const commentBody = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+      expect(commentBody).not.toContain('**Reviewer:**');
+    });
+
     it('handles execution-agent failed webhook without any Linear mutations', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',

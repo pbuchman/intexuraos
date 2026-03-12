@@ -55,6 +55,11 @@ describe('extractReviewWorkerType', () => {
     const workerType = extractReviewWorkerType('@review with opus and sonnet');
     expect(workerType).toBe('opus');
   });
+
+  it('extracts worker type from multi-review comment with worker specifier', () => {
+    const workerType = extractReviewWorkerType('@review architecture, security with qwen');
+    expect(workerType).toBe('qwen3.5-plus');
+  });
 });
 
 describe('isReviewCommandComment', () => {
@@ -76,6 +81,18 @@ describe('isReviewCommandComment', () => {
 
   it('returns false for text before @review', () => {
     expect(isReviewCommandComment('please @review')).toBe(false);
+  });
+
+  it('returns false for @review on line 2', () => {
+    expect(isReviewCommandComment('Some text\n@review')).toBe(false);
+  });
+
+  it('returns false for @reviewer (not exact word boundary)', () => {
+    expect(isReviewCommandComment('@reviewer')).toBe(false);
+  });
+
+  it('returns true for @review at end of string', () => {
+    expect(isReviewCommandComment('@review')).toBe(true);
   });
 });
 
