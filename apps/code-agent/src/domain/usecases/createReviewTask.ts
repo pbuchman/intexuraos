@@ -193,7 +193,7 @@ export async function createReviewTask(
         taskId: `task_for_pr_${String(prNumber)}`,
         repository,
         prNumber,
-        userId: '', // User not resolved in skip path
+        userId: existingTask.userId,
         existingTaskId: existingTask.id,
         existingWorkerType: existingTask.workerType,
         existingWorkerLocation: existingTask.workerLocation,
