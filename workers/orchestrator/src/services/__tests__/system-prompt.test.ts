@@ -55,6 +55,7 @@ describe('system-prompt', () => {
     expect(result).toContain('Parallel work breakdown');
     expect(result).toContain('service/package');
     expect(result).toContain('PLANNING_AGENT_FINAL:');
+    expect(result).toContain('Plan document: docs/plans/<file>.md');
   });
 
   it('requires archiving issue content before editing in planning prompt', () => {
@@ -175,6 +176,22 @@ describe('system-prompt', () => {
     expect(result).not.toContain('- Turn summary:');
   });
 
+  it('builds execution continuation instructions when an open PR is inherited', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      continuationPrNumber: 1139,
+      continuationPrBranch: 'task_existing_pr_branch',
+    });
+
+    expect(result).toContain('Existing PR: #1139');
+    expect(result).toContain('Do NOT run `gh pr create`');
+    expect(result).toContain('Do NOT open a second PR for this task');
+    expect(result).toContain('git push origin HEAD:task_existing_pr_branch');
+    expect(result).toContain('gh pr view 1139 --json url');
+    expect(result).not.toContain('gh pr create --base development');
+  });
+
   it('builds pull request agent prompt when pr-comment label is present', () => {
     const result = buildSystemPrompt({
       ...baseParams,
@@ -255,6 +272,18 @@ describe('system-prompt', () => {
 
     expect(result).toContain('- Total PR comments posted: 1');
     expect(result).not.toContain('<must be exactly 1>');
+  });
+
+  it('reuses an existing tracking comment when trackingCommentId is provided', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      trackingCommentId: '12345',
+    });
+
+    expect(result).toContain('A tracking comment already exists');
+    expect(result).toContain('issues/comments/12345');
+    expect(result).toContain('Do NOT post a new tracking comment');
   });
 
   it('uses agentType=execution over missing code-task label', () => {
@@ -504,6 +533,20 @@ describe('system-prompt', () => {
     expect(result).toContain('review_types');
   });
 
+  it('review agent prompt requires View in IntexuraOS link in review body when taskUrl is present', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+      taskUrl: 'https://intexuraos.cloud/#/code-tasks/task-123',
+    });
+
+    expect(result).toContain('Append a final standalone markdown link line exactly as:');
+    expect(result).toContain(
+      '[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task-123)'
+    );
+    expect(result).toContain('not as a separate PR comment');
+  });
+
   it('review agent prompt omits Linear section when linearIssueId is undefined', () => {
     const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
     const result = buildSystemPrompt({
@@ -515,6 +558,16 @@ describe('system-prompt', () => {
     expect(result).not.toContain('mcp__linear__get_issue');
     expect(result).toContain('No Linear issue is associated');
     expect(result).toContain('[AGENT:REVIEW]');
+  });
+
+  it('review agent prompt omits View in IntexuraOS review-body instruction when taskUrl is undefined', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).not.toContain('append a final standalone markdown link line exactly as:');
+    expect(result).not.toContain('[View in IntexuraOS](');
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {

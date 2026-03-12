@@ -16,6 +16,8 @@ vi.mock('../../../domain/usecases/sendTaskMessage.js', () => ({
 
 import { createTaskForPR } from '../../../domain/usecases/createTaskForPR.js';
 import { sendTaskMessage } from '../../../domain/usecases/sendTaskMessage.js';
+import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 
 const mockedCreateTaskForPR = vi.mocked(createTaskForPR);
 const mockedSendTaskMessage = vi.mocked(sendTaskMessage);
@@ -26,6 +28,28 @@ const mockLogger: Logger = {
   error: vi.fn(),
   debug: vi.fn(),
 };
+
+function createMockGitHubPRClient(): GitHubPRClient {
+  return {
+    updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
+    getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
+    getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
+    getPullRequestBaseBranch: vi.fn().mockResolvedValue(ok('main')),
+    postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
+  } as unknown as GitHubPRClient;
+}
+
+function createMockUserServiceClient(): UserServiceClient {
+  return {
+    getApiKeys: vi.fn().mockResolvedValue(ok({})),
+    getLlmClient: vi.fn().mockResolvedValue(err({ code: 'NO_API_KEY', message: 'mock' })),
+    reportLlmSuccess: vi.fn().mockResolvedValue(undefined),
+    getOAuthToken: vi.fn().mockResolvedValue(
+      ok({ accessToken: 'ghp_test_token', email: 'test@example.com' })
+    ),
+    resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+  } as unknown as UserServiceClient;
+}
 
 const mockEvent: GitHubPREvent = {
   id: 'event-123',
@@ -87,8 +111,8 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
     whatsappNotifier: {} as never,
     workerSettingsRepo: {} as never,
     statusMirrorService: {} as never,
-    gitHubPRClient: {} as never,
-    userServiceClient: {} as never,
+    gitHubPRClient: createMockGitHubPRClient(),
+    userServiceClient: createMockUserServiceClient(),
     firestore: {} as never,
     messageBuilder: {
       build: vi.fn().mockReturnValue('built-message'),
@@ -112,7 +136,7 @@ describe('GitHubDispatchService', () => {
 
   describe('dispatch — existing task path', () => {
     it('should send message to existing task via sendTaskMessage', async () => {
-      const existingTask = { id: 'task-123', userId: 'user-456' };
+      const existingTask = { id: 'task-123', userId: 'user-456', linearIssueId: 'INT-100' };
       vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(existingTask as never));
       mockedSendTaskMessage.mockResolvedValue(ok({ action: 'queued' }));
 
@@ -129,6 +153,36 @@ describe('GitHubDispatchService', () => {
         expect.objectContaining({ logger: mockLogger }),
         { taskId: 'task-123', userId: 'user-456', message: 'built-message' }
       );
+      expect(vi.mocked(deps.gitHubPRClient.postPRComment)).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'test-owner',
+        'test-repo',
+        42,
+        expect.stringContaining('**Dispatch outcome:** Existing task queued')
+      );
+      expect(vi.mocked(deps.gitHubPRClient.updatePRTitle)).not.toHaveBeenCalled();
+    });
+
+    it('should post immediate PR comment when existing task is resumed', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456', linearIssueId: 'INT-100' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(ok({ action: 'resumed' }));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'task-123',
+      });
+      expect(vi.mocked(deps.gitHubPRClient.postPRComment)).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'test-owner',
+        'test-repo',
+        42,
+        expect.stringContaining('**Dispatch outcome:** Existing task resumed')
+      );
     });
 
     it('should return failure when sendTaskMessage fails', async () => {
@@ -144,6 +198,25 @@ describe('GitHubDispatchService', () => {
         dispatched: false,
         taskId: 'task-123',
         error: 'Worker timeout',
+      });
+      expect(vi.mocked(deps.gitHubPRClient.postPRComment)).not.toHaveBeenCalled();
+    });
+
+    it('should keep dispatch successful when PR comment posting fails', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456', linearIssueId: 'INT-100' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(ok({ action: 'queued' }));
+      vi.mocked(deps.gitHubPRClient.postPRComment).mockResolvedValue(
+        err({ code: 'UNAUTHORIZED', message: 'Bad token' })
+      );
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'task-123',
       });
     });
   });
@@ -368,6 +441,44 @@ describe('GitHubDispatchService', () => {
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ prNumber: 42, repo: 'test-owner/test-repo', error: 'Connection reset' }),
         'Unexpected error in dispatch workflow'
+      );
+    });
+  });
+
+  describe('dispatch — retry queue for existing task message failure', () => {
+    it('queues retry when sendTaskMessage fails with retryable error and dispatchRetryRepo is available', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(
+        err({ code: 'worker_unavailable' as const, message: 'Worker timed out' })
+      );
+
+      const mockCreate = vi.fn().mockResolvedValue(ok({} as never));
+      deps = createMockDeps({
+        dispatchRetryRepo: {
+          create: mockCreate,
+          findOldest: vi.fn(),
+          delete: vi.fn(),
+          update: vi.fn(),
+        } as never,
+      });
+      vi.mocked(deps.codeTaskRepo.findByPR).mockResolvedValue(ok(existingTask as never));
+
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch(context);
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'task-123',
+      });
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'task_message',
+          taskId: 'task-123',
+          userId: 'user-456',
+          lastError: 'Worker timed out',
+        })
       );
     });
   });

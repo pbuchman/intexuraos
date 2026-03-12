@@ -42,6 +42,32 @@ function toDate(value: unknown): Date {
 }
 /* v8 ignore stop @preserve */
 
+function toNullableDate(value: unknown): Date | null {
+  return value !== null && value !== undefined ? toDate(value) : null;
+}
+
+function mapSummaryData(data: Record<string, unknown>): GitHubPRSummary {
+  return {
+    repository: data['repository'] as string,
+    pullRequestNumber: data['pullRequestNumber'] as number,
+    title: (data['title'] as string | null | undefined) ?? null,
+    state: (data['state'] as string | null | undefined) ?? null,
+    mergedAt: toNullableDate(data['mergedAt']),
+    baseBranch: (data['baseBranch'] as string | null | undefined) ?? null,
+    authorLogin: (data['authorLogin'] as string | null | undefined) ?? null,
+    headBranch: (data['headBranch'] as string | null | undefined) ?? null,
+    mergeConflictStatus: (data['mergeConflictStatus'] as GitHubPRSummary['mergeConflictStatus'] | undefined) ?? null,
+    lastConflictCheckedAt: toNullableDate(data['lastConflictCheckedAt']),
+    conflictEpisodeStartedAt: toNullableDate(data['conflictEpisodeStartedAt']),
+    conflictResolvedAt: toNullableDate(data['conflictResolvedAt']),
+    managedConflictCommentId: (data['managedConflictCommentId'] as number | null | undefined) ?? null,
+    managedConflictTaskId: (data['managedConflictTaskId'] as string | null | undefined) ?? null,
+    managedConflictTaskOwnerUserId: (data['managedConflictTaskOwnerUserId'] as string | null | undefined) ?? null,
+    lastActivityAt: toDate(data['lastActivityAt']),
+    firstSeenAt: toDate(data['firstSeenAt']),
+  };
+}
+
 const COLLECTION_NAME = 'github-pr-summaries';
 
 export function createFirestoreGitHubPRSummariesRepository(deps: {
@@ -76,6 +102,36 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
         if ('mergedAt' in input) {
           data['mergedAt'] = input.mergedAt ?? null;
         }
+        if ('baseBranch' in input) {
+          data['baseBranch'] = input.baseBranch ?? null;
+        }
+        if ('authorLogin' in input) {
+          data['authorLogin'] = input.authorLogin ?? null;
+        }
+        if ('headBranch' in input) {
+          data['headBranch'] = input.headBranch ?? null;
+        }
+        if ('mergeConflictStatus' in input) {
+          data['mergeConflictStatus'] = input.mergeConflictStatus ?? null;
+        }
+        if ('lastConflictCheckedAt' in input) {
+          data['lastConflictCheckedAt'] = input.lastConflictCheckedAt ?? null;
+        }
+        if ('conflictEpisodeStartedAt' in input) {
+          data['conflictEpisodeStartedAt'] = input.conflictEpisodeStartedAt ?? null;
+        }
+        if ('conflictResolvedAt' in input) {
+          data['conflictResolvedAt'] = input.conflictResolvedAt ?? null;
+        }
+        if ('managedConflictCommentId' in input) {
+          data['managedConflictCommentId'] = input.managedConflictCommentId ?? null;
+        }
+        if ('managedConflictTaskId' in input) {
+          data['managedConflictTaskId'] = input.managedConflictTaskId ?? null;
+        }
+        if ('managedConflictTaskOwnerUserId' in input) {
+          data['managedConflictTaskOwnerUserId'] = input.managedConflictTaskOwnerUserId ?? null;
+        }
 
         await docRef.set(data, { merge: true });
 
@@ -102,24 +158,61 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
 
         const snapshot = await query.get();
 
-        const summaries: GitHubPRSummary[] = snapshot.docs.map((doc) => {
-          const data = doc.data() as Record<string, unknown>;
-          return {
-            repository: data['repository'] as string,
-            pullRequestNumber: data['pullRequestNumber'] as number,
-            title: (data['title'] as string | null | undefined) ?? null,
-            state: (data['state'] as string | null | undefined) ?? null,
-            /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */
-            mergedAt: data['mergedAt'] !== null && data['mergedAt'] !== undefined ? toDate(data['mergedAt']) : null,
-            /* v8 ignore stop @preserve */
-            lastActivityAt: toDate(data['lastActivityAt']),
-            firstSeenAt: toDate(data['firstSeenAt']),
-          };
-        });
+        const summaries: GitHubPRSummary[] = snapshot.docs.map((doc) => mapSummaryData(doc.data() as Record<string, unknown>));
 
         return ok(summaries);
       } catch (error) {
         logger.error({ error, withinDays }, 'Failed to find recently active GitHub PR summaries');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
+    async findByPullRequest(
+      repository: string,
+      pullRequestNumber: number
+    ): Promise<Result<GitHubPRSummary | null, SummaryRepositoryError>> {
+      try {
+        const docId = `${repository.replace('/', '__')}#${String(pullRequestNumber)}`;
+        const snapshot = await collection.doc(docId).get();
+
+        if (!snapshot.exists) {
+          return ok(null);
+        }
+
+        const data = snapshot.data() as Record<string, unknown> | undefined;
+        if (data === undefined) {
+          return ok(null);
+        }
+
+        return ok(mapSummaryData(data));
+      } catch (error) {
+        logger.error({ error, repository, pullRequestNumber }, 'Failed to find GitHub PR summary by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
+    async findOpenByBaseBranch(
+      repository: string,
+      baseBranch: string
+    ): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('state', '==', 'open')
+          .where('baseBranch', '==', baseBranch)
+          .get();
+
+        return ok(
+          snapshot.docs.map((doc) => mapSummaryData(doc.data() as Record<string, unknown>))
+        );
+      } catch (error) {
+        logger.error({ error, repository, baseBranch }, 'Failed to find open GitHub PR summaries by base branch');
         return err({
           code: 'FIRESTORE_ERROR',
           message: getErrorMessage(error, 'Unknown error'),

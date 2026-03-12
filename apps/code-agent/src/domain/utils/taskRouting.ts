@@ -10,7 +10,7 @@ export function hasPrCommentLabel(labels: string[]): boolean {
 }
 
 export function resolveTaskAgentType(
-  task: Pick<CodeTask, 'agentType' | 'systemPromptHash'>,
+  task: Pick<CodeTask, 'agentType' | 'systemPromptHash' | 'prNumber' | 'prBranch' | 'result'>,
   linearIssueLabels: string[]
 ): AgentType {
   if (task.agentType !== undefined) {
@@ -21,6 +21,13 @@ export function resolveTaskAgentType(
   }
   if (task.systemPromptHash === REVIEW_SYSTEM_PROMPT_HASH) {
     return 'review';
+  }
+  if (
+    task.prNumber !== undefined ||
+    task.prBranch !== undefined ||
+    task.result?.prUrl !== undefined
+  ) {
+    return 'execution';
   }
   return hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning';
 }

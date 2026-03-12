@@ -60,6 +60,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       execution_superpowers_executing_plans_used?: '0' | '1';
       execution_superpowers_requesting_code_review_used?: '0' | '1';
       execution_linear_issue_url?: string;
+      review_comments_posted?: string;
+      review_types?: string;
     };
     error?: {
       code: string;
@@ -105,6 +107,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 execution_outcome_label: { type: 'string' },
                 execution_superpowers_executing_plans_used: { type: 'string' },
                 execution_superpowers_requesting_code_review_used: { type: 'string' },
+                review_comments_posted: { type: 'string' },
+                review_types: { type: 'string' },
               },
               required: [],
             },
@@ -601,6 +605,37 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { ok: true };
       };
 
+      const enforceReviewOutcome = (
+        reviewResult: NonNullable<typeof result>
+      ): { ok: true } | { ok: false; message: string; code: string } => {
+        if (reviewResult.review_comments_posted === undefined) {
+          return {
+            ok: false,
+            code: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
+            message: 'Review enforcement requires result.review_comments_posted',
+          };
+        }
+
+        if (!/^\d+$/.test(reviewResult.review_comments_posted)) {
+          return {
+            ok: false,
+            code: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
+            message: 'Review enforcement requires result.review_comments_posted to be a non-negative integer string',
+          };
+        }
+
+        const trimmedReviewTypes = reviewResult.review_types?.trim();
+        if (trimmedReviewTypes === undefined || trimmedReviewTypes === '') {
+          return {
+            ok: false,
+            code: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
+            message: 'Review enforcement requires result.review_types',
+          };
+        }
+
+        return { ok: true };
+      };
+
       // Helper: clean up PR task lock for PR-originated tasks reaching terminal state.
       // Only the original lock-owning task (parentTaskId === undefined) should delete the lock.
       // Follow-up tasks copy prNumber but don't own the lock — deleting here could remove
@@ -773,6 +808,61 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
+        if (task.agentType === 'review') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Review completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
+                message: 'Review completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          const reviewEnforcement = enforceReviewOutcome(result);
+          if (!reviewEnforcement.ok) {
+            request.log.error(
+              {
+                taskId,
+                routedIssueId: task.linearIssueId,
+                reviewCommentsPosted: result.review_comments_posted,
+                reviewTypes: result.review_types,
+                errorCode: reviewEnforcement.code,
+                error: reviewEnforcement.message,
+              },
+              'Review deterministic enforcement failed'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: reviewEnforcement.code,
+                message: reviewEnforcement.message,
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            await cleanupLockIfPR();
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+        }
+
         // Extract PR number from prUrl for findByPR correlation (INT-465)
         let prNumber: number | undefined;
         if (result?.prUrl) {
@@ -789,6 +879,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           status: resolvedStatus,
           completedAt,
           ...(result !== undefined && { result }),
+          error: null,
           ...(prNumber !== undefined && { prNumber }),
           ...(result?.branch !== undefined && { prBranch: result.branch }),
           callbackReceived: true,

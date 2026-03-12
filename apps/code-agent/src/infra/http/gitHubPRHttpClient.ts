@@ -9,8 +9,11 @@ import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
 import type {
   GitHubPRClient,
   GitHubPRClientError,
+  GitHubPullRequestDetails,
+  GitHubPullRequestListItem,
   PullRequestFile,
   PullRequestCommit,
+  PullRequestStatus,
 } from '../../domain/ports/gitHubPRClient.js';
 
 export interface GitHubPRHttpClientConfig {
@@ -45,6 +48,14 @@ function parseNextPageUrl(linkHeader: string | null): string | null {
   if (linkHeader === null) return null;
   const match = /<([^>]+)>;\s*rel="next"/.exec(linkHeader);
   return match?.[1] ?? null;
+}
+
+function ensureString(value: unknown, field: string): Result<string, GitHubPRClientError> {
+  if (typeof value !== 'string') {
+    return err({ code: 'API_ERROR', message: `GitHub API response missing ${field}` });
+  }
+
+  return ok(value);
 }
 
 export function createGitHubPRHttpClient(
@@ -192,6 +203,55 @@ export function createGitHubPRHttpClient(
       }
     },
 
+    async getPullRequestStatus(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number
+    ): Promise<Result<PullRequestStatus, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(
+            mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`)
+          );
+        }
+
+        const data = (await response.json()) as {
+          state?: string;
+          merged_at?: string | null;
+          head?: { ref?: string };
+        };
+
+        const state = data.state;
+        const headRef = data.head?.ref;
+        if ((state !== 'open' && state !== 'closed') || typeof headRef !== 'string') {
+          return err({
+            code: 'API_ERROR',
+            message: 'PR response missing state or head.ref',
+          });
+        }
+
+        return ok({
+          state,
+          mergedAt: data.merged_at !== null && data.merged_at !== undefined
+            ? new Date(data.merged_at)
+            : null,
+          headRef,
+        });
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
     async postPRComment(
       token: string,
       owner: string,
@@ -216,6 +276,166 @@ export function createGitHubPRHttpClient(
         }
 
         return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async listOpenPullRequestsByBaseBranch(
+      token: string,
+      owner: string,
+      repo: string,
+      baseBranch: string
+    ): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+      try {
+        const items: GitHubPullRequestListItem[] = [];
+        let url: string | null =
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls?state=open&base=${encodeURIComponent(baseBranch)}&per_page=100`;
+        const MAX_PAGES = 10;
+
+        for (let page = 0; page < MAX_PAGES && url !== null; page++) {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          });
+
+          if (!response.ok) {
+            return err(mapErrorStatus(response.status, `Failed to list open PRs for base branch ${baseBranch}`));
+          }
+
+          const data = (await response.json()) as {
+            number?: number;
+            title?: string;
+            user?: { login?: string };
+            base?: { ref?: string };
+            head?: { ref?: string };
+          }[];
+          for (const pr of data) {
+            if (typeof pr.number !== 'number') {
+              return err({ code: 'API_ERROR', message: 'GitHub API response missing number' });
+            }
+
+            const titleResult = ensureString(pr.title, 'title');
+            if (!titleResult.ok) return titleResult;
+
+            const authorResult = ensureString(pr.user?.login, 'user.login');
+            if (!authorResult.ok) return authorResult;
+
+            const baseResult = ensureString(pr.base?.ref, 'base.ref');
+            if (!baseResult.ok) return baseResult;
+
+            const headResult = ensureString(pr.head?.ref, 'head.ref');
+            if (!headResult.ok) return headResult;
+
+            items.push({
+              number: pr.number,
+              title: titleResult.value,
+              authorLogin: authorResult.value,
+              baseBranch: baseResult.value,
+              headBranch: headResult.value,
+            });
+          }
+
+          url = parseNextPageUrl(response.headers.get('link'));
+        }
+
+        return ok(items);
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async getPullRequestDetails(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number
+    ): Promise<Result<GitHubPullRequestDetails, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+        }
+
+        const data = (await response.json()) as {
+          number?: number;
+          title?: string;
+          body?: string | null;
+          mergeable?: boolean | null;
+          mergeable_state?: string | null;
+          user?: { login?: string };
+          base?: { ref?: string };
+          head?: { ref?: string };
+        };
+
+        if (typeof data.number !== 'number') {
+          return err({ code: 'API_ERROR', message: 'GitHub API response missing number' });
+        }
+
+        const titleResult = ensureString(data.title, 'title');
+        if (!titleResult.ok) return titleResult;
+
+        const authorResult = ensureString(data.user?.login, 'user.login');
+        if (!authorResult.ok) return authorResult;
+
+        const baseResult = ensureString(data.base?.ref, 'base.ref');
+        if (!baseResult.ok) return baseResult;
+
+        const headResult = ensureString(data.head?.ref, 'head.ref');
+        if (!headResult.ok) return headResult;
+
+        return ok({
+          number: data.number,
+          title: titleResult.value,
+          body: data.body ?? null,
+          authorLogin: authorResult.value,
+          baseBranch: baseResult.value,
+          headBranch: headResult.value,
+          mergeable: data.mergeable ?? null,
+          mergeableState: data.mergeable_state ?? null,
+        });
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async updateIssueComment(
+      token: string,
+      owner: string,
+      repo: string,
+      commentId: number,
+      body: string
+    ): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/issues/comments/${String(commentId)}`,
+          {
+            method: 'PATCH',
+            headers: githubHeaders(token),
+            body: JSON.stringify({ body }),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(mapErrorStatus(response.status, `Comment #${String(commentId)} not found in ${owner}/${repo}`));
+        }
+
+        const data = (await response.json()) as { id?: number };
+        if (typeof data.id !== 'number') {
+          return err({ code: 'API_ERROR', message: 'GitHub API response missing comment id' });
+        }
+
+        return ok({ commentId: data.id });
       } catch (error) {
         return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
       }

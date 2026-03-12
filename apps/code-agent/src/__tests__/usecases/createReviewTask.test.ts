@@ -44,6 +44,9 @@ function createFakeGitHubPRClient(): GitHubPRClient {
     getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
     getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
     getPullRequestBaseBranch: vi.fn().mockResolvedValue(ok('main')),
+    getPullRequestStatus: vi.fn().mockResolvedValue(
+      ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })
+    ),
     postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 42 })),
   } as unknown as GitHubPRClient;
 }
@@ -63,6 +66,7 @@ function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateRe
     logger: createFakeLogger(),
     codeTaskRepo: {
       create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
+      findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       findByPR: vi.fn().mockResolvedValue(ok(null)),
       findById: vi.fn().mockResolvedValue(ok(null)),
       findByUser: vi.fn().mockResolvedValue(ok([])),
@@ -110,6 +114,7 @@ describe('createReviewTask', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
+      expect(result.value.status).toBe('created');
       expect(result.value.taskId).toBe('task-review-1');
     }
 
@@ -126,6 +131,70 @@ describe('createReviewTask', () => {
       'task-review-1',
       { status: 'dispatched' }
     );
+  });
+
+  it('returns already_running when an active review task exists for the PR', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-2' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({ id: 'task-review-existing' })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-already-running',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value).toEqual({
+      status: 'already_running',
+      taskId: 'task-review-existing',
+    });
+    expect(deps.userLookupService.resolveByGitHubUsername).not.toHaveBeenCalled();
+    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(deps.taskDispatcher.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('returns task_creation_failed when active review lookup fails', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-2' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(
+          err({ code: 'FIRESTORE_ERROR' as const, message: 'Lookup failed' })
+        ),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-active-review-error',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+
+    expect(result.error.code).toBe('task_creation_failed');
+    expect(result.error.message).toBe('Lookup failed');
+    expect(deps.userLookupService.resolveByGitHubUsername).not.toHaveBeenCalled();
+    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(deps.taskDispatcher.dispatch).not.toHaveBeenCalled();
   });
 
   it('does not include pr-comment label', async () => {
@@ -166,6 +235,52 @@ describe('createReviewTask', () => {
     }
   });
 
+  it('uses selected worker type for review task creation and dispatch', async () => {
+    const deps = createFakeDeps();
+
+    await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['architecture'],
+      workerType: 'qwen3.5-plus',
+      eventId: 'evt-worker-type',
+    });
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+    expect(createCall).toBeDefined();
+    if (createCall !== undefined) {
+      expect(createCall[0].workerType).toBe('qwen3.5-plus');
+    }
+
+    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
+    expect(dispatchCall).toBeDefined();
+    if (dispatchCall !== undefined) {
+      expect(dispatchCall[0].workerType).toBe('qwen3.5-plus');
+    }
+  });
+
+  it('includes review request comment in prompt when provided', async () => {
+    const deps = createFakeDeps();
+
+    await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['architecture'],
+      workerType: 'qwen3.5-plus',
+      reviewComment: '@review architecture',
+      eventId: 'evt-review-comment',
+    });
+
+    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
+    expect(dispatchCall).toBeDefined();
+    if (dispatchCall !== undefined) {
+      expect(dispatchCall[0].prompt).toContain('Triggered by review request comment');
+      expect(dispatchCall[0].prompt).toContain('@review architecture');
+    }
+  });
+
   it('returns error when user lookup fails', async () => {
     const deps = createFakeDeps({
       userLookupService: {
@@ -195,6 +310,7 @@ describe('createReviewTask', () => {
         create: vi.fn().mockResolvedValue(
           err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
         ),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       } as unknown as CodeTaskRepository,
     });
 
@@ -260,7 +376,9 @@ describe('createReviewTask', () => {
   });
 
   it('returns error when dispatch fails', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
     const deps = createFakeDeps({
+      gitHubPRClient,
       taskDispatcher: {
         dispatch: vi.fn().mockResolvedValue(
           err({ code: 'QUEUE_FULL' as const, message: 'Queue full' })
@@ -289,6 +407,7 @@ describe('createReviewTask', () => {
         error: { code: 'dispatch_failed', message: 'Queue full' },
       }
     );
+    expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
   });
 
   describe('PR notification after dispatch', () => {
@@ -311,6 +430,13 @@ describe('createReviewTask', () => {
         'intexuraos',
         42,
         expect.stringContaining('@ignore')
+      );
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'pbuchman',
+        'intexuraos',
+        42,
+        expect.stringContaining('**Dispatch outcome:** Review task dispatched')
       );
     });
 
@@ -376,6 +502,7 @@ describe('createReviewTask', () => {
       const deps = createFakeDeps({
         codeTaskRepo: {
           create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
+          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockResolvedValue(ok({ id: 'task-existing', linearIssueId: 'INT-100' })),
           findById: vi.fn().mockResolvedValue(ok(null)),
           findByUser: vi.fn().mockResolvedValue(ok([])),
@@ -472,6 +599,7 @@ describe('createReviewTask', () => {
       const deps = createFakeDeps({
         codeTaskRepo: {
           create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
+          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR' as const, message: 'DB error' })),
           findById: vi.fn().mockResolvedValue(ok(null)),
           findByUser: vi.fn().mockResolvedValue(ok([])),
@@ -501,6 +629,7 @@ describe('createReviewTask', () => {
       const deps = createFakeDeps({
         codeTaskRepo: {
           create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
+          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockRejectedValue(new Error('Unexpected crash')),
           findById: vi.fn().mockResolvedValue(ok(null)),
           findByUser: vi.fn().mockResolvedValue(ok([])),

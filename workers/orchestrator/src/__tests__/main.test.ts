@@ -83,9 +83,11 @@ describe('main.ts', () => {
     getRunningCount: vi.fn(() => 0),
     getCapacity: vi.fn(() => 5),
     adoptTask: vi.fn(),
+    recoverPendingResumeTask: vi.fn(),
   } as unknown as TaskDispatcher;
 
   const mockListWorkerContainers = vi.fn<() => Promise<DiscoveredContainer[]>>();
+  const mockStopPeriodicCleanup = vi.fn<() => void>();
   const mockIsolationProvider: IsolationProvider = {
     createWorker: vi.fn(),
     destroyWorker: vi.fn(),
@@ -96,6 +98,7 @@ describe('main.ts', () => {
     getResourceUsage: vi.fn(),
     listWorkers: vi.fn(),
     listWorkerContainers: mockListWorkerContainers,
+    stopPeriodicCleanup: mockStopPeriodicCleanup,
   } as unknown as IsolationProvider;
 
   const mockTokenService: GitHubTokenService = {
@@ -135,8 +138,13 @@ describe('main.ts', () => {
     });
     vi.mocked(mockWebhookClient.retryPending).mockResolvedValue(undefined);
     vi.mocked(mockDispatcher.adoptTask).mockResolvedValue({ ok: true, value: undefined });
+    vi.mocked(mockDispatcher.recoverPendingResumeTask).mockResolvedValue({
+      ok: true,
+      value: undefined,
+    });
     mockListWorkerContainers.mockResolvedValue([]);
     vi.mocked(mockIsolationProvider.destroyWorker).mockResolvedValue(undefined);
+    mockStopPeriodicCleanup.mockReset();
   });
 
   afterEach(() => {
@@ -501,6 +509,172 @@ describe('main.ts', () => {
       expect(mockWebhookClient.send).not.toHaveBeenCalled();
     });
 
+    it('should recover a pending accepted resume instead of interrupting it when no container is discovered', async () => {
+      const pendingResumeTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Original prompt',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: '',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+        pendingResumeStart: {
+          prompt: '[RESUME PRE-FLIGHT]\nUser follow-up message',
+          acceptedAt: '2025-01-26T00:05:00.000Z',
+        },
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': pendingResumeTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      mockListWorkerContainers.mockResolvedValue([]);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      expect(mockDispatcher.recoverPendingResumeTask).toHaveBeenCalledWith(pendingResumeTask);
+      expect(mockDispatcher.adoptTask).not.toHaveBeenCalled();
+      expect(mockWebhookClient.send).not.toHaveBeenCalled();
+    });
+
+    it('should recover a pending accepted resume instead of adopting directly when a live container is discovered', async () => {
+      const pendingResumeTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Original prompt',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: '',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+        pendingResumeStart: {
+          prompt: '[RESUME PRE-FLIGHT]\nUser follow-up message',
+          acceptedAt: '2025-01-26T00:05:00.000Z',
+        },
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': pendingResumeTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      mockListWorkerContainers.mockResolvedValue([
+        { containerId: 'container-1', taskId: 'task-1', state: 'running' },
+      ]);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      expect(mockDispatcher.recoverPendingResumeTask).toHaveBeenCalledWith(pendingResumeTask);
+      expect(mockDispatcher.adoptTask).not.toHaveBeenCalled();
+      expect(mockWebhookClient.send).not.toHaveBeenCalled();
+    });
+
+    it('should mark a pending accepted resume interrupted when recovery returns an error result', async () => {
+      const pendingResumeTask = {
+        taskId: 'task-1',
+        workerType: 'opus' as const,
+        prompt: 'Original prompt',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: '',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+        pendingResumeStart: {
+          prompt: '[RESUME PRE-FLIGHT]\nUser follow-up message',
+          acceptedAt: '2025-01-26T00:05:00.000Z',
+        },
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'task-1': pendingResumeTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+      vi.mocked(mockDispatcher.recoverPendingResumeTask).mockResolvedValue({
+        ok: false,
+        error: { type: 'invalid_status', message: 'missing pending resume prompt' },
+      });
+      mockListWorkerContainers.mockResolvedValue([]);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      expect(mockDispatcher.recoverPendingResumeTask).toHaveBeenCalledWith(pendingResumeTask);
+      expect(mockWebhookClient.send).toHaveBeenCalledWith({
+        url: 'https://example.com/webhook',
+        secret: 'secret',
+        payload: {
+          taskId: 'task-1',
+          status: 'interrupted',
+          duration: 0,
+        },
+        taskId: 'task-1',
+      });
+    });
+
     it('should send interrupted webhook for task with no container', async () => {
       const runningTask = {
         taskId: 'task-1',
@@ -598,7 +772,7 @@ describe('main.ts', () => {
         // Expected
       }
 
-      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('task-1');
+      expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalled();
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
@@ -640,7 +814,7 @@ describe('main.ts', () => {
         // Expected
       }
 
-      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('orphan-task');
+      expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalled();
       expect(mockWebhookClient.send).not.toHaveBeenCalled();
     });
 
@@ -1165,6 +1339,42 @@ describe('main.ts', () => {
       expect(clearIntervalSpy).toHaveBeenCalledTimes(2);
 
       // mockExit doesn't need restore - it's cleared in beforeEach
+    });
+
+    it('should stop provider periodic cleanup on shutdown', async () => {
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          mockIsolationProvider
+        );
+      } catch {
+        // Expected
+      }
+
+      const onCalls = vi.mocked(process.on).mock.calls;
+      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
+      const sigtermHandler = sigtermCall?.[1];
+
+      if (typeof sigtermHandler === 'function') {
+        vi.mocked(mockDispatcher.getRunningCount).mockReturnValue(0);
+
+        try {
+          await sigtermHandler();
+        } catch {
+          // exit(0) will throw
+        }
+      }
+
+      expect(mockStopPeriodicCleanup).toHaveBeenCalledTimes(1);
     });
 
     it('should wait for running tasks to complete before exit', async () => {

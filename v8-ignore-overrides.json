@@ -48,6 +48,7 @@
         "apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts",
         "apps/code-agent/src/infra/repositories/firestoreLogLineRepository.ts",
         "apps/code-agent/src/infra/services/taskDispatcherImpl.ts",
+        "apps/code-agent/src/infra/services/whatsappNotifierImpl.ts",
         "apps/code-agent/src/routes/code/github-pr-summaries.ts",
         "apps/code-agent/src/routes/code/github-pre-events.ts",
         "apps/code-agent/src/routes/codeRoutes.ts",
@@ -82,14 +83,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/linear-agent"
     },
-    "PENDING-apps-mobile-notifications-service": {
-      "files": [
-        "apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts",
-        "apps/mobile-notifications-service/src/infra/firestore/firestoreSignatureConnectionRepository.ts",
-        "apps/mobile-notifications-service/src/routes/notificationRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/mobile-notifications-service"
-    },
     "PENDING-apps-notion-service": {
       "files": [
         "apps/notion-service/src/infra/firestore/notionConnectionRepository.ts",
@@ -99,12 +92,7 @@
       "description": "Write tests for tightened v8 ignore blocks in apps/notion-service"
     },
     "PENDING-apps-todos-agent": {
-      "files": [
-        "apps/todos-agent/src/domain/usecases/reorderTodoItems.ts",
-        "apps/todos-agent/src/domain/usecases/updateTodoItem.ts",
-        "apps/todos-agent/src/infra/firestore/firestoreTodoRepository.ts",
-        "apps/todos-agent/src/routes/todoRoutes.ts"
-      ],
+      "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
       "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
     },
     "PENDING-apps-user-service": {

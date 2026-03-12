@@ -8,7 +8,9 @@ import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
 import { ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
+import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from './domain/repositories/logLineRepository.js';
@@ -54,14 +56,20 @@ import { createWebhookDispatchService, type WebhookDispatchService } from './dom
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
-import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
-import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
 import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
+import type { DispatchRetryRepository } from './domain/repositories/dispatchRetryRepository.js';
+import { createFirestoreDispatchRetryRepository } from './infra/firestore/dispatchRetryRepository.js';
 import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services/unifiedEvaluator.js';
 import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
 import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
 import { createReviewTask } from './domain/usecases/createReviewTask.js';
+import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
+import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
+import { parseOwnerRepo } from './domain/utils/parseOwnerRepo.js';
+
+const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
+const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -94,7 +102,9 @@ export interface ServiceContainer {
   toolCallingClient: ToolCallingClient | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
   // INT-744: Unified Webhook Evaluator
   eventDecisionRepo: EventDecisionRepository;
+  dispatchRetryRepo: DispatchRetryRepository;
   unifiedEvaluator: UnifiedEvaluator;
+  mergeConflictDetector?: MergeConflictDetector;
 }
 
 // Configuration required to initialize services
@@ -333,14 +343,33 @@ export function initServices(config: ServiceConfig): void {
   const toolCallingClient = config.geminiAppApiKey !== ''
     ? createToolCallingClient({
         apiKey: config.geminiAppApiKey,
-        model: LlmModels.Gemini25Flash,
+        model: GEMINI_TOOL_CALLING_MODEL,
         userId: 'system:github-agent',
-        pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
+        pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
       })
     : undefined;
 
   const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
+  const gitHubPRSummaryRepo = createFirestoreGitHubPRSummariesRepository({ logger });
+  const dispatchRetryRepo = createFirestoreDispatchRetryRepository({ logger });
+
+  const mergeConflictDetector = createDetectMergeConflictsOnPush({
+    logger,
+    gitHubPRClient,
+    gitHubPRSummaryRepo,
+    codeTaskRepo,
+    userServiceClient,
+    gitHubPREventRepo,
+    linearIssueService,
+    taskDispatcher,
+    logLineRepo,
+    workerSettingsRepo,
+    statusMirrorService,
+    whatsappNotifier,
+    serviceUrl: config.serviceUrl,
+    orchestratorSecret: config.orchestratorSecret,
+  });
 
   const dispatchService = createWebhookDispatchService({
     gitHubPREventRepo,
@@ -359,6 +388,7 @@ export function initServices(config: ServiceConfig): void {
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
+    dispatchRetryRepo,
   });
 
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
@@ -390,11 +420,17 @@ export function initServices(config: ServiceConfig): void {
       if (!tokenResult.ok) {
         return { ok: false, error: { code: 'TOKEN_NOT_AVAILABLE', message: `OAuth token unavailable for: ${resolvedUser.userId}` } };
       }
-      const [owner, repo] = repository.split('/');
-      if (owner === undefined || repo === undefined) {
+      const parsedRepository = parseOwnerRepo(repository);
+      if (parsedRepository === null) {
         return { ok: false, error: { code: 'INVALID_REPO', message: `Invalid repository: ${repository}` } };
       }
-      const commentResult = await gitHubPRClient.postPRComment(tokenResult.value.accessToken, owner, repo, prNumber, body); // @allow-result-access -- narrowed by !tokenResult.ok
+      const commentResult = await gitHubPRClient.postPRComment(
+        tokenResult.value.accessToken,
+        parsedRepository.owner,
+        parsedRepository.repo,
+        prNumber,
+        body
+      ); // @allow-result-access -- narrowed by !tokenResult.ok
       if (!commentResult.ok) {
         return { ok: false, error: { code: commentResult.error.code, message: commentResult.error.message } };
       }
@@ -435,7 +471,7 @@ export function initServices(config: ServiceConfig): void {
     workerSettingsRepo,
     workerHealthProbe,
     gitHubPREventRepo,
-    gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
+    gitHubPRSummaryRepo,
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
     userServiceClient,
     gitHubPRClient,
@@ -444,7 +480,9 @@ export function initServices(config: ServiceConfig): void {
     toolCallingClient,
     dispatchService,
     eventDecisionRepo,
+    dispatchRetryRepo,
     unifiedEvaluator,
+    mergeConflictDetector,
   };
 }
 

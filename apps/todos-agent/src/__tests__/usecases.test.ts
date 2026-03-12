@@ -7,7 +7,7 @@ import { listTodos } from '../domain/usecases/listTodos.js';
 import { updateTodo } from '../domain/usecases/updateTodo.js';
 import { deleteTodo } from '../domain/usecases/deleteTodo.js';
 import { addTodoItem } from '../domain/usecases/addTodoItem.js';
-import { updateTodoItem } from '../domain/usecases/updateTodoItem.js';
+import { updateTodoItem, computeTodoStatus } from '../domain/usecases/updateTodoItem.js';
 import { deleteTodoItem } from '../domain/usecases/deleteTodoItem.js';
 import { reorderTodoItems } from '../domain/usecases/reorderTodoItems.js';
 import { archiveTodo } from '../domain/usecases/archiveTodo.js';
@@ -2722,5 +2722,35 @@ describe('processTodoCreated', () => {
       expect(result.error.code).toBe('STORAGE_ERROR');
       expect(result.error.message).toBe('Update failed');
     }
+  });
+});
+
+describe('computeTodoStatus', () => {
+  it('returns pending for empty items array', () => {
+    expect(computeTodoStatus([])).toBe('pending');
+  });
+
+  it('returns completed when all items are completed', () => {
+    const items: import('../domain/models/todo.js').TodoItem[] = [
+      { id: '1', title: 'Item 1', status: 'completed', priority: null, dueDate: null, position: 0, completedAt: new Date(), createdAt: new Date(), updatedAt: new Date() },
+      { id: '2', title: 'Item 2', status: 'completed', priority: null, dueDate: null, position: 1, completedAt: new Date(), createdAt: new Date(), updatedAt: new Date() },
+    ];
+    expect(computeTodoStatus(items)).toBe('completed');
+  });
+
+  it('returns in_progress when some items are completed', () => {
+    const items: import('../domain/models/todo.js').TodoItem[] = [
+      { id: '1', title: 'Item 1', status: 'completed', priority: null, dueDate: null, position: 0, completedAt: new Date(), createdAt: new Date(), updatedAt: new Date() },
+      { id: '2', title: 'Item 2', status: 'pending', priority: null, dueDate: null, position: 1, completedAt: null, createdAt: new Date(), updatedAt: new Date() },
+    ];
+    expect(computeTodoStatus(items)).toBe('in_progress');
+  });
+
+  it('returns pending when no items are completed', () => {
+    const items: import('../domain/models/todo.js').TodoItem[] = [
+      { id: '1', title: 'Item 1', status: 'pending', priority: null, dueDate: null, position: 0, completedAt: null, createdAt: new Date(), updatedAt: new Date() },
+      { id: '2', title: 'Item 2', status: 'pending', priority: null, dueDate: null, position: 1, completedAt: null, createdAt: new Date(), updatedAt: new Date() },
+    ];
+    expect(computeTodoStatus(items)).toBe('pending');
   });
 });

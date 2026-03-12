@@ -15,7 +15,11 @@ import type { WebhookDispatchService } from './gitHubDispatchService.js';
 import { resolveLoginForTaskCreation } from './gitHubDispatchService.js';
 import type { EventDecisionRepository } from '../repositories/eventDecisionRepository.js';
 import type { GitHubAgentEvalResult, GitHubAgentError } from '../usecases/githubAgent.js';
-import type { CreateReviewTaskRequest, CreateReviewTaskError } from '../usecases/createReviewTask.js';
+import type {
+  CreateReviewTaskRequest,
+  CreateReviewTaskError,
+  CreateReviewTaskResult,
+} from '../usecases/createReviewTask.js';
 
 export interface UnifiedEvaluatorDeps {
   webhookRules: WebhookRulesService;
@@ -23,7 +27,7 @@ export interface UnifiedEvaluatorDeps {
   eventDecisionRepo: EventDecisionRepository;
   evaluateEvent?: ((event: GitHubPREvent) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
   /** Pre-bound review task creator. Logger is injected at call time; all other deps are closed over at wiring. */
-  createReviewTask: (logger: Logger, request: CreateReviewTaskRequest) => Promise<Result<{ taskId: string }, CreateReviewTaskError>>;
+  createReviewTask: (logger: Logger, request: CreateReviewTaskRequest) => Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>>;
   postTriageComment?: ((
     senderLogin: string,
     repository: string,
@@ -42,6 +46,7 @@ export function buildTriageCommentBody(
   costUsd: number,
   toolCalls: { tool: string; args: Record<string, unknown> }[],
   reasoning: string,
+  options?: { action?: 'dispatch' | 'already_running'; taskId?: string; workerType?: string },
 ): string {
   const reviewTypesStr = reviewTypes.map((t) => `\`${t}\``).join(', ');
 
@@ -58,17 +63,29 @@ export function buildTriageCommentBody(
     .map((tc) => `- \`${tc.tool}(${JSON.stringify(tc.args)})\``)
     .join('\n');
   const costStr = `$${String(costUsd)}`;
+  const action = options?.action ?? 'dispatch';
+  const actionLine = action === 'already_running'
+    ? '**Action:** Review already in progress'
+    : '**Action:** Dispatching review';
+  const workerTypeLine = options?.workerType !== undefined
+    ? `**Worker type:** \`${options.workerType}\``
+    : null;
+  const taskIdLine = action === 'already_running' && options?.taskId !== undefined
+    ? [`**Task ID:** \`${options.taskId}\``, '']
+    : [];
 
   return [
     '@ignore',
     '### Automated Code Review Triage Decision',
     '',
-    '**Action:** Dispatching review',
+    actionLine,
     `**Review types:** ${reviewTypesStr}`,
+    ...(workerTypeLine !== null ? [workerTypeLine] : []),
     `**Cost:** ${costStr}`,
     '',
+    ...taskIdLine,
     '**Tool calls:**',
-    toolCallLines,
+    toolCallLines === '' ? '- None' : toolCallLines,
     '',
     '**Reasoning:**',
     reasoning.split('\n').map((line) => `> ${line}`).join('\n'),
@@ -148,30 +165,6 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       }
 
       if (triage.action === 'request_review') {
-        // Post informational triage comment (non-fatal — must not block review task creation)
-        if (deps.postTriageComment !== undefined) {
-          try {
-            const commentBody = buildTriageCommentBody(triage.reviewTypes, usage.costUsd, usage.toolCalls, reasoning);
-            const commentResult = await deps.postTriageComment(
-              resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
-              event.repository,
-              event.pullRequestNumber,
-              commentBody,
-            );
-            if (!commentResult.ok) {
-              logger.warn(
-                { eventId: event.id, error: commentResult.error },
-                'Failed to post triage comment, continuing with review task creation'
-              );
-            }
-          } catch (commentError: unknown) {
-            logger.warn(
-              { eventId: event.id, error: commentError },
-              'Unexpected error posting triage comment, continuing with review task creation'
-            );
-          }
-        }
-
         const reviewResult = await deps.createReviewTask(
           logger,
           {
@@ -179,9 +172,11 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             prNumber: event.pullRequestNumber,
             senderLogin: resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
             reviewTypes: triage.reviewTypes,
+            ...(triage.workerType !== undefined && { workerType: triage.workerType }),
             eventId: event.id,
             ...(event.title !== null && { prTitle: event.title }),
-            ...(event.body !== null && { prBody: event.body }),
+            ...(event.eventType === 'pull_request' && event.body !== null && { prBody: event.body }),
+            ...(event.eventType === 'issue_comment' && event.body !== null && { reviewComment: event.body }),
             /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
             ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
             /* v8 ignore stop @preserve */
@@ -234,12 +229,37 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           return;
         }
 
+        await postReviewTriageComment(
+          deps,
+          event,
+          logger,
+          buildTriageCommentBody(
+            triage.reviewTypes,
+            usage.costUsd,
+            usage.toolCalls,
+            reasoning,
+            reviewResult.value.status === 'already_running'
+              ? {
+                  action: 'already_running',
+                  taskId: reviewResult.value.taskId,
+                  ...(triage.workerType !== undefined && { workerType: triage.workerType }),
+                }
+              : triage.workerType !== undefined
+                ? { workerType: triage.workerType }
+                : undefined,
+          ),
+        );
+
         await recordDecision(deps, event, {
           decidedBy: 'github_agent',
           decision: 'request_review',
           reason: `LLM request_review: ${triage.reviewTypes.join(', ')}`,
           dispatchAction: 'create_review_task',
-          dispatchParams: { taskId: reviewResult.value.taskId, reviewTypes: triage.reviewTypes }, // @allow-result-access -- narrowed by !reviewResult.ok above
+          dispatchParams: {
+            taskId: reviewResult.value.taskId,
+            reviewTypes: triage.reviewTypes,
+            ...(triage.workerType !== undefined && { workerType: triage.workerType }),
+          }, // @allow-result-access -- narrowed by !reviewResult.ok above
           llmCostUsd: usage.costUsd,
           /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
           ...(usage.model !== undefined && { llmModel: usage.model }),
@@ -264,6 +284,37 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       }, startTime, logger);
     },
   };
+}
+
+async function postReviewTriageComment(
+  deps: UnifiedEvaluatorDeps,
+  event: GitHubPREvent,
+  logger: Logger,
+  body: string,
+): Promise<void> {
+  if (deps.postTriageComment === undefined) {
+    return;
+  }
+
+  try {
+    const commentResult = await deps.postTriageComment(
+      resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
+      event.repository,
+      event.pullRequestNumber,
+      body,
+    );
+    if (!commentResult.ok) {
+      logger.warn(
+        { eventId: event.id, error: commentResult.error },
+        'Failed to post triage comment'
+      );
+    }
+  } catch (commentError: unknown) {
+    logger.warn(
+      { eventId: event.id, error: commentError },
+      'Unexpected error posting triage comment'
+    );
+  }
 }
 
 async function dispatchAndRecord(

@@ -188,7 +188,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
         className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${getAccentShadow(aggregateStatus)}`}
         onClick={handleRowClick}
       >
-        <div className="hidden grid-cols-[1fr_1fr_140px_120px] items-center gap-2 lg:grid">
+        <div className="hidden grid-cols-[1fr_1fr_140px_120px_36px] items-center gap-2 lg:grid">
           {/* Issue column */}
           <div className="flex items-center gap-2 overflow-hidden">
             <button
@@ -241,17 +241,6 @@ const IssueGroupRow = memo(function IssueGroupRow({
 
           {/* Output column */}
           <div className="flex items-center justify-end gap-2">
-            <button
-              onClick={(e): void => {
-                e.stopPropagation();
-                onOpenLogs(latestTask.id);
-              }}
-              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-              title="Preview logs"
-              aria-label={`Preview logs for ${latestTask.id}`}
-            >
-              <ScrollText className="h-3.5 w-3.5" />
-            </button>
             {pipeline.execution === 'actionable' ? (
               <button
                 onClick={(e): void => {
@@ -299,6 +288,21 @@ const IssueGroupRow = memo(function IssueGroupRow({
               title="Delete"
             >
               <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Transcript column */}
+          <div className="flex items-center justify-end">
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                onOpenLogs(latestTask.id);
+              }}
+              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+              title="Preview logs"
+              aria-label={`Preview logs for ${latestTask.id}`}
+            >
+              <ScrollText className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -355,6 +359,17 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   <Play className="h-3 w-3" />
                   Implement
                 </button>
+              ) : pipeline.pr !== null ? (
+                <a
+                  href={pipeline.pr.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e): void => { e.stopPropagation(); }}
+                  className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  #{pipeline.pr.number}
+                </a>
               ) : aggregateStatus === 'active' ? (
                 <span className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
                   <Loader2 className="h-3 w-3 animate-spin text-blue-400" />

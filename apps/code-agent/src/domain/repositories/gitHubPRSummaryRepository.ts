@@ -18,4 +18,20 @@ export interface GitHubPRSummaryRepository {
    * Find PRs with lastActivityAt within the last N days, newest-activity first.
    */
   findRecentlyActive(withinDays: number): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>>;
+
+  /**
+   * Find a PR summary by repository and pull request number.
+   */
+  findByPullRequest(
+    repository: string,
+    pullRequestNumber: number
+  ): Promise<Result<GitHubPRSummary | null, SummaryRepositoryError>>;
+
+  /**
+   * Find open PR summaries for a repository/base-branch pair.
+   */
+  findOpenByBaseBranch(
+    repository: string,
+    baseBranch: string
+  ): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>>;
 }

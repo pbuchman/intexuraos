@@ -16,6 +16,11 @@ export interface TaskVerificationRecord {
   createdAt: string;
 }
 
+export interface PendingResumeStart {
+  prompt: string;
+  acceptedAt: string;
+}
+
 export interface Task {
   taskId: string;
   workerType: WorkerType;
@@ -42,6 +47,12 @@ export interface Task {
   retriedFrom?: string;
   /** Agent type from code-agent. When set, used instead of recalculating from labels. */
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  /** Existing PR tracking comment to reuse instead of creating a new one. */
+  trackingCommentId?: string;
+  /** Existing PR number inherited from retry/follow-up continuation flow. */
+  continuationPrNumber?: number;
+  /** Existing PR branch inherited from retry/follow-up continuation flow. */
+  continuationPrBranch?: string;
   /** Branch name of planning PR to merge into execution worktree. */
   planningPrBranch?: string;
   /** PR URL to close after successful execution. */
@@ -68,6 +79,19 @@ export interface Task {
    * Cleared before persisting in finalizeTask().
    */
   resumedAfterSuccess?: boolean;
+  /**
+   * Result from the most recent successful completion.
+   * Used as fallback when a resumed-after-success attempt completes
+   * but checkForResult() returns undefined (e.g., planning tasks with no PR).
+   * Updated on successful completion with a result; cleared on failure or
+   * successful completion without a result.
+   */
+  lastSuccessResult?: TaskResult;
+  /**
+   * Set after a resume request is durably accepted but before the worker is ready.
+   * Allows startup recovery to restart the accepted resume instead of interrupting it.
+   */
+  pendingResumeStart?: PendingResumeStart;
 }
 
 export interface TaskResult {
