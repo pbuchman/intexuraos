@@ -407,7 +407,17 @@ describe('createReviewTask', () => {
         error: { code: 'dispatch_failed', message: 'Queue full' },
       }
     );
-    expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+
+    // Verify dispatch failure comment was posted
+    expect(gitHubPRClient.postPRComment).toHaveBeenCalled();
+    const commentCall = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0];
+    expect(commentCall).toBeDefined();
+    if (commentCall !== undefined) {
+      const commentBody = commentCall[4];
+      expect(commentBody).toContain('Review Dispatch Failed');
+      expect(commentBody).toContain('QUEUE_FULL');
+      expect(commentBody).toContain('Task was NOT queued');
+    }
   });
 
   describe('PR notification after dispatch', () => {

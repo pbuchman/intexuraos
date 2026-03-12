@@ -588,7 +588,16 @@ describe('createTaskForPR', () => {
     const result = await createTaskForPR(deps, request);
 
     expect(result.ok).toBe(false);
-    expect(postPRComment).not.toHaveBeenCalled();
+    // Dispatch failure comment SHOULD be posted
+    expect(postPRComment).toHaveBeenCalled();
+    const commentCall = vi.mocked(postPRComment).mock.calls[0];
+    expect(commentCall).toBeDefined();
+    if (commentCall !== undefined) {
+      const commentBody = commentCall[4];
+      expect(commentBody).toContain('Task Dispatch Failed');
+      expect(commentBody).toContain('WORKER_UNAVAILABLE');
+      expect(commentBody).toContain('Task was NOT queued');
+    }
   });
 
   it('returns task_creation_failed when dispatch fails', async () => {

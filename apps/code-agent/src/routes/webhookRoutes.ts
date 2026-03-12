@@ -10,6 +10,7 @@ import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
+import { notifyTaskOutcome } from '../domain/utils/prTaskNotification.js';
 
 export const parseLinearIdentifierFromUrl = (url: string): string | null => {
   const mdMatch = /\[.*?\]\((.*?)\)/.exec(url);
@@ -670,6 +671,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+
+            // Post failure comment (best-effort)
+            if (task.prNumber !== undefined) {
+              await notifyTaskOutcome(
+                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
+                {
+                  taskId,
+                  repository: task.repository,
+                  prNumber: task.prNumber,
+                  userId: task.userId,
+                  outcome: 'implementation_failed',
+                  errorCode: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+                },
+              );
+            }
+
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -701,8 +718,38 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+
+            // Post failure comment (best-effort)
+            if (task.prNumber !== undefined) {
+              await notifyTaskOutcome(
+                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
+                {
+                  taskId,
+                  repository: task.repository,
+                  prNumber: task.prNumber,
+                  userId: task.userId,
+                  outcome: 'implementation_failed',
+                  errorCode: executionEnforcement.code,
+                },
+              );
+            }
+
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
+          }
+
+          // Execution succeeded - post completion comment (best-effort)
+          if (task.prNumber !== undefined) {
+            await notifyTaskOutcome(
+              { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
+              {
+                taskId,
+                repository: task.repository,
+                prNumber: task.prNumber,
+                userId: task.userId,
+                outcome: 'implementation_completed',
+              },
+            );
           }
         }
 
@@ -725,6 +772,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+
+            // Post failure comment (best-effort)
+            if (task.prNumber !== undefined) {
+              await notifyTaskOutcome(
+                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
+                {
+                  taskId,
+                  repository: task.repository,
+                  prNumber: task.prNumber,
+                  userId: task.userId,
+                  outcome: 'reply_failed',
+                  errorCode: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+                },
+              );
+            }
+
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -756,8 +819,38 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+
+            // Post failure comment (best-effort)
+            if (task.prNumber !== undefined) {
+              await notifyTaskOutcome(
+                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
+                {
+                  taskId,
+                  repository: task.repository,
+                  prNumber: task.prNumber,
+                  userId: task.userId,
+                  outcome: 'reply_failed',
+                  errorCode: pullRequestEnforcement.code,
+                },
+              );
+            }
+
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
+          }
+
+          // Pull request succeeded - check if comment was replied or implementation done
+          if (task.prNumber !== undefined) {
+            await notifyTaskOutcome(
+              { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
+              {
+                taskId,
+                repository: task.repository,
+                prNumber: task.prNumber,
+                userId: task.userId,
+                outcome: result.comment_replied ? 'reply_completed' : 'implementation_completed',
+              },
+            );
           }
         }
 
@@ -827,6 +920,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+
+            // Post failure comment for missing result (best-effort)
+            if (task.prNumber !== undefined) {
+              await notifyTaskOutcome(
+                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
+                {
+                  taskId,
+                  repository: task.repository,
+                  prNumber: task.prNumber,
+                  userId: task.userId,
+                  outcome: 'review_failed',
+                  errorCode: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
+                },
+              );
+            }
+
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
@@ -858,8 +967,46 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               return reply.fail('INTERNAL_ERROR', failResult.error.message);
             }
             await cleanupLockIfPR();
+
+            // Post failure comment for enforcement failure (best-effort)
+            if (task.prNumber !== undefined) {
+              const reviewTypes = result.review_types
+                ? result.review_types.split(',').map((t) => t.trim()).filter((t) => t !== '')
+                : undefined;
+              await notifyTaskOutcome(
+                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
+                {
+                  taskId,
+                  repository: task.repository,
+                  prNumber: task.prNumber,
+                  userId: task.userId,
+                  outcome: 'review_failed',
+                  errorCode: reviewEnforcement.code,
+                  ...(reviewTypes !== undefined && { reviewTypes }),
+                },
+              );
+            }
+
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
+          }
+
+          // Review succeeded - post completion comment (best-effort)
+          if (task.prNumber !== undefined) {
+            const reviewTypes = result.review_types
+              ? result.review_types.split(',').map((t) => t.trim()).filter((t) => t !== '')
+              : undefined;
+            await notifyTaskOutcome(
+              { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
+              {
+                taskId,
+                repository: task.repository,
+                prNumber: task.prNumber,
+                userId: task.userId,
+                outcome: 'review_completed',
+                ...(reviewTypes !== undefined && { reviewTypes }),
+              },
+            );
           }
         }
 
