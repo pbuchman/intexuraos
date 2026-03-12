@@ -20,6 +20,7 @@ const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; descripti
   minimax: { name: 'MiniMax', description: 'MiniMax\'s coding and agent model with strong reasoning at lower cost' },
   glm: { name: 'GLM', description: 'Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks' },
   qwen: { name: 'Qwen', description: 'Advanced Qwen model with thinking enabled' },
+  kimi: { name: 'Kimi', description: 'Moonshot\'s latest recommended model with image understanding' },
 };
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = CODE_TASK_WORKER_TYPES.map((id) => ({
