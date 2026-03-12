@@ -571,6 +571,27 @@ describe('createTaskForPR', () => {
     expect(callOrder).toEqual(['dispatch', 'comment']);
   });
 
+  it('includes workerType in PR comment after dispatch when provided', async () => {
+    request.workerType = 'qwen3.5-plus';
+
+    const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
+    deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
+      postPRComment,
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+    expect(postPRComment).toHaveBeenCalledWith(
+      'ghp_test_token_123',
+      'pbuchman',
+      'intexuraos',
+      42,
+      expect.stringContaining('**Reviewer:** `qwen3.5-plus`'),
+    );
+  });
+
   it('does not post immediate PR comment when dispatch fails', async () => {
     deps.taskDispatcher = {
       ...createMockTaskDispatcher(),
@@ -756,6 +777,27 @@ describe('createTaskForPR', () => {
         'intexuraos',
         42,
         expect.stringContaining('**Dispatch outcome:** Created and queued')
+      );
+    });
+
+    it('includes workerType in queued PR comment when provided', async () => {
+      request.workerType = 'minimax';
+
+      const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        postPRComment,
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(postPRComment).toHaveBeenCalledWith(
+        'ghp_test_token_123',
+        'pbuchman',
+        'intexuraos',
+        42,
+        expect.stringContaining('**Reviewer:** `minimax`'),
       );
     });
 
