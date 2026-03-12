@@ -235,6 +235,52 @@ describe('createReviewTask', () => {
     }
   });
 
+  it('uses selected worker type for review task creation and dispatch', async () => {
+    const deps = createFakeDeps();
+
+    await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['architecture'],
+      workerType: 'qwen3.5-plus',
+      eventId: 'evt-worker-type',
+    });
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+    expect(createCall).toBeDefined();
+    if (createCall !== undefined) {
+      expect(createCall[0].workerType).toBe('qwen3.5-plus');
+    }
+
+    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
+    expect(dispatchCall).toBeDefined();
+    if (dispatchCall !== undefined) {
+      expect(dispatchCall[0].workerType).toBe('qwen3.5-plus');
+    }
+  });
+
+  it('includes review request comment in prompt when provided', async () => {
+    const deps = createFakeDeps();
+
+    await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['architecture'],
+      workerType: 'qwen3.5-plus',
+      reviewComment: '@review architecture',
+      eventId: 'evt-review-comment',
+    });
+
+    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
+    expect(dispatchCall).toBeDefined();
+    if (dispatchCall !== undefined) {
+      expect(dispatchCall[0].prompt).toContain('Triggered by review request comment');
+      expect(dispatchCall[0].prompt).toContain('@review architecture');
+    }
+  });
+
   it('returns error when user lookup fails', async () => {
     const deps = createFakeDeps({
       userLookupService: {

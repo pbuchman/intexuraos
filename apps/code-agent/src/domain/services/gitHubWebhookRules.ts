@@ -159,6 +159,10 @@ export class SenderWhitelistRule implements WebhookRule {
       return { action: 'dispatch', reason: 'PR_EVENT_PASS_THROUGH' };
     }
 
+    if (event.eventType === 'issue_comment' && event.action === 'created') {
+      return { action: 'dispatch', reason: 'ISSUE_COMMENT_CREATED_PASS_THROUGH' };
+    }
+
     const sender = event.senderLogin;
     const repoOwner = event.repository.split('/')[0];
 

@@ -46,7 +46,7 @@ export function buildTriageCommentBody(
   costUsd: number,
   toolCalls: { tool: string; args: Record<string, unknown> }[],
   reasoning: string,
-  options?: { action?: 'dispatch' | 'already_running'; taskId?: string },
+  options?: { action?: 'dispatch' | 'already_running'; taskId?: string; workerType?: string },
 ): string {
   const reviewTypesStr = reviewTypes.map((t) => `\`${t}\``).join(', ');
 
@@ -67,6 +67,9 @@ export function buildTriageCommentBody(
   const actionLine = action === 'already_running'
     ? '**Action:** Review already in progress'
     : '**Action:** Dispatching review';
+  const workerTypeLine = options?.workerType !== undefined
+    ? `**Worker type:** \`${options.workerType}\``
+    : null;
   const taskIdLine = action === 'already_running' && options?.taskId !== undefined
     ? [`**Task ID:** \`${options.taskId}\``, '']
     : [];
@@ -77,6 +80,7 @@ export function buildTriageCommentBody(
     '',
     actionLine,
     `**Review types:** ${reviewTypesStr}`,
+    ...(workerTypeLine !== null ? [workerTypeLine] : []),
     `**Cost:** ${costStr}`,
     '',
     ...taskIdLine,
@@ -168,9 +172,11 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             prNumber: event.pullRequestNumber,
             senderLogin: resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
             reviewTypes: triage.reviewTypes,
+            ...(triage.workerType !== undefined && { workerType: triage.workerType }),
             eventId: event.id,
             ...(event.title !== null && { prTitle: event.title }),
-            ...(event.body !== null && { prBody: event.body }),
+            ...(event.eventType === 'pull_request' && event.body !== null && { prBody: event.body }),
+            ...(event.eventType === 'issue_comment' && event.body !== null && { reviewComment: event.body }),
             /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
             ...(event.baseBranch !== null && { baseBranch: event.baseBranch }),
             /* v8 ignore stop @preserve */
@@ -233,8 +239,14 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             usage.toolCalls,
             reasoning,
             reviewResult.value.status === 'already_running'
-              ? { action: 'already_running', taskId: reviewResult.value.taskId }
-              : undefined,
+              ? {
+                  action: 'already_running',
+                  taskId: reviewResult.value.taskId,
+                  ...(triage.workerType !== undefined && { workerType: triage.workerType }),
+                }
+              : triage.workerType !== undefined
+                ? { workerType: triage.workerType }
+                : undefined,
           ),
         );
 
@@ -243,7 +255,11 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           decision: 'request_review',
           reason: `LLM request_review: ${triage.reviewTypes.join(', ')}`,
           dispatchAction: 'create_review_task',
-          dispatchParams: { taskId: reviewResult.value.taskId, reviewTypes: triage.reviewTypes }, // @allow-result-access -- narrowed by !reviewResult.ok above
+          dispatchParams: {
+            taskId: reviewResult.value.taskId,
+            reviewTypes: triage.reviewTypes,
+            ...(triage.workerType !== undefined && { workerType: triage.workerType }),
+          }, // @allow-result-access -- narrowed by !reviewResult.ok above
           llmCostUsd: usage.costUsd,
           /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
           ...(usage.model !== undefined && { llmModel: usage.model }),

@@ -12,6 +12,7 @@
 
 import { err, ok, type Result, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTaskRepository.js';
+import type { WorkerType } from '../models/codeTask.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
@@ -25,9 +26,11 @@ export interface CreateReviewTaskRequest {
   prNumber: number;
   senderLogin: string;
   reviewTypes: string[];
+  workerType?: WorkerType;
   eventId: string;
   prTitle?: string;
   prBody?: string;
+  reviewComment?: string;
   baseBranch?: string;
 }
 
@@ -99,7 +102,7 @@ async function resolveLinearIssueId(
 const PR_BODY_MAX_LENGTH = 500;
 
 function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
-  const { repository, prNumber, prBody, reviewTypes } = request;
+  const { repository, prNumber, prBody, reviewTypes, reviewComment } = request;
   const lines: string[] = [
     'Automated PR review created by GitHub Agent triage system.',
     '',
@@ -114,20 +117,31 @@ function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
   }
 
   lines.push('', `**Review types:** ${reviewTypes.join(', ')}`);
+  if (reviewComment !== undefined) {
+    lines.push('', '**Triggered by comment:**', reviewComment);
+  }
 
   return lines.join('\n');
 }
 
-function buildReviewPrompt(request: CreateReviewTaskRequest): string {
-  const { repository, prNumber, reviewTypes } = request;
-  return [
+function buildReviewPrompt(request: CreateReviewTaskRequest & { workerType: WorkerType }): string {
+  const { repository, prNumber, reviewTypes, workerType, reviewComment } = request;
+  const lines = [
     `[Review Task] Automated PR review for PR #${String(prNumber)} in ${repository}`,
     '',
     `Review types requested: ${reviewTypes.join(', ')}`,
+    `Worker type requested: ${workerType}`,
     '',
     'This task was created automatically by the GitHub Agent triage system.',
     `Perform a read-only review of PR #${String(prNumber)} and post review comments.`,
     '',
+  ];
+
+  if (reviewComment !== undefined) {
+    lines.push('Triggered by review request comment:', reviewComment, '');
+  }
+
+  lines.push(
     '### Review Scope',
     '',
     ...reviewTypes.map((t) => `- **${t}**: perform ${t} review`),
@@ -139,7 +153,9 @@ function buildReviewPrompt(request: CreateReviewTaskRequest): string {
     `3. Read changed files and analyze for the requested review types`,
     `4. Post review comments via gh api /repos/${repository}/pulls/${String(prNumber)}/reviews`,
     '5. Output REVIEW_AGENT_FINAL block when done',
-  ].join('\n');
+  );
+
+  return lines.join('\n');
 }
 
 export async function createReviewTask(
@@ -195,7 +211,8 @@ export async function createReviewTask(
   }
 
   // Create task
-  const prompt = buildReviewPrompt(request);
+  const effectiveWorkerType = request.workerType ?? 'auto';
+  const prompt = buildReviewPrompt({ ...request, workerType: effectiveWorkerType });
   const webhookSecret = createHmac('sha256', orchestratorSecret).update(eventId).digest('hex');
 
   const [owner] = repository.split('/');
@@ -206,7 +223,7 @@ export async function createReviewTask(
     prompt,
     sanitizedPrompt: prompt,
     systemPromptHash: 'review-auto',
-    workerType: 'auto',
+    workerType: effectiveWorkerType,
     workerLocation: worker.name,
     repository,
     baseBranch,
@@ -236,7 +253,7 @@ export async function createReviewTask(
     systemPromptHash: 'review-auto',
     repository,
     baseBranch,
-    workerType: 'auto',
+    workerType: effectiveWorkerType,
     webhookUrl,
     webhookSecret,
     traceId: eventId,
@@ -283,7 +300,7 @@ export async function createReviewTask(
       ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
       titleAlreadyTagged,
       reviewTypes: request.reviewTypes,
-      workerType: 'auto',
+      workerType: effectiveWorkerType,
     },
   );
 
