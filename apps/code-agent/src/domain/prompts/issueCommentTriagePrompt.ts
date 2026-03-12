@@ -52,6 +52,8 @@ export function buildIssueCommentTriageSection(input: IssueCommentTriagePromptIn
       '- `@review architecture` → request `architecture`, worker `qwen3.5-plus`',
       '',
       'Always call exactly one tool type: either one-or-more `request_review` calls, or `skip`.',
+      '',
+      'After you finish all `request_review` tool calls or the `skip` tool call, return one short final sentence and stop.',
     ].join('\n');
   }
 
@@ -84,5 +86,7 @@ export function buildIssueCommentTriageSection(input: IssueCommentTriagePromptIn
     '- Comment is a duplicate of already-processed content',
     '',
     'Always call exactly one tool: either `dispatch_to_task` or `skip`.',
+    '',
+    'After you finish your tool call, return one short final sentence and stop.',
   ].join('\n');
 }
