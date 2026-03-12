@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { WORKER_TYPES } from '../types.js';
 
 describe('WORKER_TYPES configuration', () => {
+  it('stays in sync with the shared code task worker type list', async () => {
+    const commonCore = (await import('@intexuraos/common-core')) as Record<string, unknown>;
+
+    expect(commonCore['CODE_TASK_WORKER_TYPES']).toEqual(Object.keys(WORKER_TYPES));
+  });
+
   it('uses generic opus alias so CLI resolves the latest model at runtime', () => {
     expect(WORKER_TYPES.opus.model).toBe('opus');
   });

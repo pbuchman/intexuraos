@@ -13,6 +13,7 @@
  */
 
 import { createHmac } from 'node:crypto';
+import type { CodeTaskWorkerType } from '@intexuraos/common-core';
 import express from 'express';
 import { pino } from 'pino';
 
@@ -67,7 +68,7 @@ const runningTasks = new Map<string, NodeJS.Timeout>();
 
 interface MockClaudeRequest {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+  workerType: CodeTaskWorkerType;
   prompt: string;
   repository?: string;
   baseBranch?: string;

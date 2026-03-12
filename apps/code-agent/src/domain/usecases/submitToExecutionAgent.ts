@@ -13,6 +13,7 @@ import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../dom
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { hasCodeTaskLabel, hasUnclearLabel } from '../../domain/utils/labelUtils.js';
 import { randomUUID } from 'node:crypto';
@@ -31,7 +32,7 @@ export interface SubmitToExecutionAgentRequest {
   /** User ID submitting the request */
   userId: string;
   /** Optional worker type to use for the implementation */
-  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType?: WorkerType;
 }
 
 /**
