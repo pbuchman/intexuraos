@@ -1,16 +1,12 @@
+import type { CodeTaskWorkerType } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 
 /**
  * Worker type determines which model Claude uses.
- * Design reference: Lines 1207-1212
- * - opus: Force Opus model
- * - auto: Automatic model selection (default)
- * - sonnet: Force Sonnet model
- * - minimax: Use MiniMax M2.5 model
- * - glm-5: Use DashScope GLM-5 model
- * - qwen3.5-plus: Use Qwen 3.5 Plus model
+ * Uses shared worker types from common-core.
+ * Note: 'glm' maps to DashScope GLM-5 in dispatch logic.
  */
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
+export type WorkerType = CodeTaskWorkerType;
 
 /**
  * Worker location for routing.

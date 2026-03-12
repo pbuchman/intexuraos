@@ -1097,7 +1097,7 @@ describe('processCodeAction', () => {
     vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
       linearIssueId: 'INT-123',
       linearIssueTitle: 'Test Issue',
-      linearIssueLabels: ['opus', 'glm-5'],
+      linearIssueLabels: ['opus', 'glm'],
       hasChildren: false,
       linearFallback: false,
     });

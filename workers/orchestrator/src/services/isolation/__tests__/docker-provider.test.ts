@@ -1010,7 +1010,7 @@ describe('DockerProvider', () => {
     });
 
     it('sets ANTHROPIC_API_KEY env var for glm worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'glm-5' });
+      const config = createTestConfig({ workerType: 'glm' });
       await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
@@ -1106,7 +1106,7 @@ describe('DockerProvider', () => {
     });
 
     it('sets ANTHROPIC_BASE_URL env var for glm worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'glm-5' });
+      const config = createTestConfig({ workerType: 'glm' });
       await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
@@ -1143,7 +1143,7 @@ describe('DockerProvider', () => {
     });
 
     it('mounts per-task session for glm workers even with sharedCredsPath', async () => {
-      const config = createTestConfig({ workerType: 'glm-5' });
+      const config = createTestConfig({ workerType: 'glm' });
       await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];

@@ -22,7 +22,7 @@ describe('CodeTask model', () => {
   });
 
   it('has correct worker types', () => {
-    const validTypes: WorkerType[] = ['opus', 'auto', 'sonnet', 'minimax', 'glm-5', 'qwen3.5-plus'];
+    const validTypes: WorkerType[] = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen'];
     validTypes.forEach((type) => {
       expect(typeof type).toBe('string');
     });

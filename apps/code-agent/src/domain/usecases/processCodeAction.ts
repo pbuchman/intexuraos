@@ -10,6 +10,7 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../domain/services/taskDispatcher.js';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -29,7 +30,7 @@ export interface ProcessCodeActionRequest {
   approvalEventId: string;
   userId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
+  workerType: WorkerType;
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
@@ -195,7 +196,7 @@ export async function processCodeAction(
     prompt: string;
     sanitizedPrompt: string;
     systemPromptHash: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
+    workerType: WorkerType;
     workerLocation: string;
     repository: string;
     baseBranch: string;
@@ -275,7 +276,7 @@ export async function processCodeAction(
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
+    workerType: WorkerType;
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;

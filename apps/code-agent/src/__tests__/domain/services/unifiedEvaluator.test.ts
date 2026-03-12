@@ -390,7 +390,7 @@ describe('UnifiedEvaluator', () => {
           triage: {
             action: 'request_review',
             reviewTypes: ['architecture'],
-            workerType: 'qwen3.5-plus',
+            workerType: 'qwen',
           },
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'The comment explicitly requested architecture review with qwen.',
@@ -410,7 +410,7 @@ describe('UnifiedEvaluator', () => {
         logger,
         expect.objectContaining({
           reviewTypes: ['architecture'],
-          workerType: 'qwen3.5-plus',
+          workerType: 'qwen',
           reviewComment: '@review architecture',
         })
       );
@@ -420,7 +420,7 @@ describe('UnifiedEvaluator', () => {
           dispatchParams: expect.objectContaining({
             taskId: 'task-review-comment-1',
             reviewTypes: ['architecture'],
-            workerType: 'qwen3.5-plus',
+            workerType: 'qwen',
           }),
         })
       );
@@ -474,10 +474,10 @@ describe('UnifiedEvaluator', () => {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
         } as unknown as WebhookRulesService,
         evaluateEvent: vi.fn().mockResolvedValue(ok({
-          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'qwen3.5-plus' },
+          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'qwen' },
           usage: {
             costUsd: 0.002,
-            toolCalls: [{ tool: 'request_review', args: { review_type: 'architecture', worker_type: 'qwen3.5-plus' } }],
+            toolCalls: [{ tool: 'request_review', args: { review_type: 'architecture', worker_type: 'qwen' } }],
           },
           reasoning: 'Architecture review is already in progress on qwen.',
         })),
@@ -496,14 +496,14 @@ describe('UnifiedEvaluator', () => {
         'dev-user',
         'intexuraos/intexuraos',
         42,
-        expect.stringContaining('**Worker type:** `qwen3.5-plus`')
+        expect.stringContaining('**Worker type:** `qwen`')
       );
       expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
           dispatchParams: expect.objectContaining({
             taskId: 'task-review-existing',
             reviewTypes: ['architecture'],
-            workerType: 'qwen3.5-plus',
+            workerType: 'qwen',
           }),
         })
       );

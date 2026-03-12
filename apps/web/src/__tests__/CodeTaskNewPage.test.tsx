@@ -282,4 +282,25 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
     expect(getCreateNewButton().className).toContain('border-blue-500');
     expect(getLinkExistingButton().className).not.toContain('border-blue-500');
   });
+
+  it('shows updated worker descriptions', () => {
+    render(<CodeTaskNewPage />);
+
+    expect(screen.getByText('Automatically select the best available model for the task')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Opus' }));
+    expect(screen.getByText('Anthropic\'s most capable model for complex reasoning and coding tasks')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sonnet' }));
+    expect(screen.getByText('Anthropic\'s daily coding model with the best balance of speed and intelligence')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'MiniMax' }));
+    expect(screen.getByText('MiniMax\'s coding and agent model with strong reasoning at lower cost')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'GLM' }));
+    expect(screen.getByText('Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Qwen' }));
+    expect(screen.getByText('Advanced Qwen model with thinking enabled')).toBeInTheDocument();
+  });
 });

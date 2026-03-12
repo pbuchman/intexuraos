@@ -523,7 +523,7 @@ describe('evaluateEvent', () => {
         expect(result.value.triage).toEqual({
           action: 'request_review',
           reviewTypes: ['architecture', 'security'],
-          workerType: 'qwen3.5-plus',
+          workerType: 'qwen',
         });
       }
     });
@@ -875,12 +875,12 @@ describe('evaluateEvent', () => {
         expect(result.value.triage).toEqual({
           action: 'request_review',
           reviewTypes: ['architecture'],
-          workerType: 'qwen3.5-plus',
+          workerType: 'qwen',
         });
       }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
-          existingWorkerType: 'qwen3.5-plus',
+          existingWorkerType: 'qwen',
           workerType: 'opus',
         }),
         'GitHub Agent requested conflicting review worker types'

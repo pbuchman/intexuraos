@@ -1,25 +1,19 @@
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
 import type { WorkerType } from '../models/codeTask.js';
 
 export const REVIEW_COMMAND_PREFIX = '@review';
 
-export const SUPPORTED_REVIEW_WORKER_TYPES = [
-  'auto',
-  'opus',
-  'sonnet',
-  'minimax',
-  'glm-5',
-  'qwen3.5-plus',
-] as const satisfies readonly WorkerType[];
+// Use shared worker types from common-core
+export const SUPPORTED_REVIEW_WORKER_TYPES = CODE_TASK_WORKER_TYPES satisfies readonly WorkerType[];
 
+// Map user-facing worker names to internal types
 const REVIEW_WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   auto: 'auto',
   opus: 'opus',
   sonnet: 'sonnet',
   minimax: 'minimax',
-  glm: 'glm-5',
-  'glm-5': 'glm-5',
-  qwen: 'qwen3.5-plus',
-  'qwen3.5-plus': 'qwen3.5-plus',
+  glm: 'glm',
+  qwen: 'qwen',
 };
 
 export function isReviewCommandComment(commentBody: string): boolean {

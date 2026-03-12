@@ -5,6 +5,8 @@
  * Implementations may use Docker containers, VMs, or other isolation mechanisms.
  */
 
+import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+
 export interface AnthropicOAuthCredentials {
   accessToken: string;
   refreshToken: string;
@@ -19,7 +21,7 @@ export type OAuthState =
   | { status: 'expired'; message: string }
   | { status: 'not_configured'; message: string };
 
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
+export type WorkerType = CodeTaskWorkerType;
 
 export interface WorkerTypeConfig {
   apiBaseUrl: string;
@@ -28,14 +30,14 @@ export interface WorkerTypeConfig {
 }
 
 export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
+  auto: {
+    apiBaseUrl: 'https://api.anthropic.com',
+    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+  },
   opus: {
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     model: 'opus',
-  },
-  auto: {
-    apiBaseUrl: 'https://api.anthropic.com',
-    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
   },
   sonnet: {
     apiBaseUrl: 'https://api.anthropic.com',
@@ -47,12 +49,12 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     model: 'MiniMax-M2.5',
   },
-  'glm-5': {
+  glm: {
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'glm-5',
   },
-  'qwen3.5-plus': {
+  qwen: {
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'qwen3.5-plus',

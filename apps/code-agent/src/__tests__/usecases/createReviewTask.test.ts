@@ -291,20 +291,20 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['architecture'],
-      workerType: 'qwen3.5-plus',
+      workerType: 'qwen',
       eventId: 'evt-worker-type',
     });
 
     const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
     expect(createCall).toBeDefined();
     if (createCall !== undefined) {
-      expect(createCall[0].workerType).toBe('qwen3.5-plus');
+      expect(createCall[0].workerType).toBe('qwen');
     }
 
     const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
     expect(dispatchCall).toBeDefined();
     if (dispatchCall !== undefined) {
-      expect(dispatchCall[0].workerType).toBe('qwen3.5-plus');
+      expect(dispatchCall[0].workerType).toBe('qwen');
     }
   });
 
@@ -316,7 +316,7 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['architecture'],
-      workerType: 'qwen3.5-plus',
+      workerType: 'qwen',
       reviewComment: '@review architecture',
       eventId: 'evt-review-comment',
     });
