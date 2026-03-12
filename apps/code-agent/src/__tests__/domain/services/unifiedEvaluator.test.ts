@@ -1472,3 +1472,153 @@ describe('buildTriageCommentBody', () => {
     expect(toolCallMatches).toHaveLength(2);
   });
 });
+
+describe('fail-closed @review triage', () => {
+  it('fails closed when LLM triage fails for @review comment', async () => {
+    const logger = createFakeLogger();
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({
+          action: 'needs_triage',
+          reason: 'ISSUE_COMMENT_REQUIRES_LLM',
+        }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(err({ message: 'LLM timeout', code: 'timeout' })),
+      postTriageComment: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({
+      eventType: 'issue_comment',
+      body: '@review architecture',
+    });
+
+    await evaluator.evaluate(event, logger);
+
+    // Should NOT dispatch fallback
+    expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
+    // Should post failure comment
+    expect(deps.postTriageComment).toHaveBeenCalled();
+    // Should record skip decision with review_triage_failed reason
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: 'skip',
+        reason: expect.stringContaining('review_triage_failed'),
+      }),
+    );
+  });
+
+  it('extracts worker type from @review comment on triage failure', async () => {
+    const logger = createFakeLogger();
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({
+          action: 'needs_triage',
+          reason: 'ISSUE_COMMENT_REQUIRES_LLM',
+        }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(err({ message: 'LLM error', code: 'error' })),
+      postTriageComment: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({
+      eventType: 'issue_comment',
+      body: '@review opus security',
+    });
+
+    await evaluator.evaluate(event, logger);
+
+    // Should record worker type in dispatch params
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dispatchParams: { workerType: 'opus' },
+      }),
+    );
+  });
+
+  it('handles triage failure without postTriageComment dep', async () => {
+    const logger = createFakeLogger();
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({
+          action: 'needs_triage',
+          reason: 'ISSUE_COMMENT_REQUIRES_LLM',
+        }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(err({ message: 'LLM error', code: 'error' })),
+      postTriageComment: undefined,
+    });
+
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({
+      eventType: 'issue_comment',
+      body: '@review',
+    });
+
+    // Should not throw
+    await expect(evaluator.evaluate(event, logger)).resolves.toBeUndefined();
+
+    // Should still record the decision
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: 'skip',
+        reason: expect.stringContaining('review_triage_failed'),
+      }),
+    );
+  });
+
+  it('falls back to dispatch for non-review comment on LLM failure', async () => {
+    const logger = createFakeLogger();
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({
+          action: 'needs_triage',
+          reason: 'ISSUE_COMMENT_REQUIRES_LLM',
+        }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(err({ message: 'LLM error', code: 'error' })),
+      dispatchService: {
+        dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: true }),
+      } as unknown as WebhookDispatchService,
+    });
+
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({
+      eventType: 'issue_comment',
+      body: 'Fix the tests',
+    });
+
+    await evaluator.evaluate(event, logger);
+
+    // Should fallback dispatch for non-review comment
+    expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+  });
+
+  it('handles null body in @review check on LLM failure', async () => {
+    const logger = createFakeLogger();
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({
+          action: 'needs_triage',
+          reason: 'ISSUE_COMMENT_REQUIRES_LLM',
+        }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(err({ message: 'LLM error', code: 'error' })),
+      dispatchService: {
+        dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: true }),
+      } as unknown as WebhookDispatchService,
+    });
+
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({
+      eventType: 'issue_comment',
+      body: null,
+    });
+
+    await evaluator.evaluate(event, logger);
+
+    // Should fallback dispatch when body is null (not a @review command)
+    expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+  });
+});

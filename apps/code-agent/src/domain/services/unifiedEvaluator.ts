@@ -130,7 +130,9 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
 
         // Fail closed for explicit @review commands - do not fallback dispatch
         if (event.eventType === 'issue_comment' && isReviewCommandComment(event.body ?? '')) {
+          /* v8 ignore start -- ts-type: defensive null coalescing, body is truthy when isReviewCommandComment passes @preserve */
           const workerType = extractReviewWorkerType(event.body ?? '');
+          /* v8 ignore stop @preserve */
           await handleReviewTriageFailure(deps, event, llmResult.error.message, workerType, startTime, logger);
           return;
         }

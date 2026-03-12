@@ -233,6 +233,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         } else {
           request.log.info({ taskId }, 'Ignoring duplicate cancelled callback');
         }
+        // @allow-raw-send: external webhook callback contract requires simple acknowledgment
         return await reply.send({ received: true });
       }
 
