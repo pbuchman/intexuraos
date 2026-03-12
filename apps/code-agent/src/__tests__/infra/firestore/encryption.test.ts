@@ -7,12 +7,18 @@ import { encryptToken, decryptToken, generateEncryptionKey } from '../../../infr
 
 describe('encryption', () => {
   const originalEnv = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+  const originalNodeEnv = process.env['NODE_ENV'];
 
   afterEach(() => {
     if (originalEnv !== undefined) {
       process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = originalEnv;
     } else {
       delete process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+    }
+    if (originalNodeEnv !== undefined) {
+      process.env['NODE_ENV'] = originalNodeEnv;
+    } else {
+      delete process.env['NODE_ENV'];
     }
   });
 
@@ -77,6 +83,34 @@ describe('encryption', () => {
       const decrypted = decryptToken(encrypted);
 
       expect(decrypted).toBe(original);
+    });
+  });
+
+  describe('production error handling', () => {
+    beforeEach(() => {
+      process.env['NODE_ENV'] = 'production';
+    });
+
+    it('throws when key has wrong length in production', () => {
+      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = Buffer.alloc(16).toString('base64');
+
+      expect(() => encryptToken('test')).toThrow('expected 32 bytes');
+    });
+
+    it('throws when key is missing in production', () => {
+      delete process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+
+      expect(() => encryptToken('test')).toThrow('required in production');
+    });
+  });
+
+  describe('decryptToken error handling', () => {
+    beforeEach(() => {
+      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = generateEncryptionKey();
+    });
+
+    it('throws when encrypted data has wrong number of parts', () => {
+      expect(() => decryptToken('a:b')).toThrow('Invalid encrypted data format');
     });
   });
 
