@@ -20,11 +20,11 @@ import type { TaskDispatcherService, DispatchWorkerCredentials } from '../servic
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import type { CodeTask } from '../models/codeTask.js';
+import type { CodeTask, WorkerType } from '../models/codeTask.js';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
 import { buildLockDocPath, deletePRTaskLock } from '../utils/prTaskLock.js';
-import { fetchGitHubToken, notifyPROfTaskDispatch } from '../utils/prTaskNotification.js';
+import { fetchGitHubToken, notifyPROfTaskDispatch, notifyDispatchFailed } from '../utils/prTaskNotification.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
@@ -44,6 +44,8 @@ export interface CreateTaskForPRRequest {
   /** GitHub webhook event ID for deduplication */
   eventId: string;
   baseBranch?: string;
+  /** Worker type extracted from @worker/@model directive (optional) */
+  workerType?: WorkerType;
 }
 
 export type CreateTaskForPRErrorCode =
@@ -267,7 +269,7 @@ export async function createTaskForPR(
         prompt: taskPrompt,
         sanitizedPrompt: sanitizePrompt(taskPrompt),
         systemPromptHash: 'pr-comment-auto',
-        workerType: 'auto',
+        workerType: request.workerType ?? 'auto',
         workerLocation: worker.name,
         repository,
         baseBranch: resolvedBaseBranch ?? 'main',
@@ -359,7 +361,7 @@ export async function createTaskForPR(
     systemPromptHash: 'pr-comment-auto',
     repository,
     baseBranch: resolvedBaseBranch ?? 'main',
-    workerType: 'auto',
+    workerType: request.workerType ?? 'auto',
     webhookUrl,
     webhookSecret,
     traceId: eventId,
@@ -417,6 +419,7 @@ export async function createTaskForPR(
           ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
           ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
           titleAlreadyTagged: existingLinearIssueId !== undefined,
+          ...(request.workerType !== undefined && { workerType: request.workerType }),
         },
       );
       await deps.whatsappNotifier.notifyTaskQueued(userId, queuedTask, queuePosition, estimatedWaitMinutes);
@@ -454,6 +457,20 @@ export async function createTaskForPR(
       status: 'failed',
       error: { code: dispatchError.code, message: dispatchError.message },
     });
+
+    // Post dispatch failure comment (best-effort)
+    await notifyDispatchFailed(
+      { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+      {
+        taskId,
+        repository,
+        prNumber,
+        userId,
+        failureType: 'pr_task',
+        errorCode: dispatchError.code,
+      },
+    );
+
     await deletePRTaskLock(firestore, repository, prNumber, logger);
     return err({
       code: 'task_creation_failed' as CreateTaskForPRErrorCode,
@@ -479,6 +496,7 @@ export async function createTaskForPR(
       ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
       ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
       titleAlreadyTagged: existingLinearIssueId !== undefined,
+      ...(request.workerType !== undefined && { workerType: request.workerType }),
     },
   );
 

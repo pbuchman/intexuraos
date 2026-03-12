@@ -137,7 +137,12 @@ describe('createReviewTask', () => {
     const deps = createFakeDeps({
       codeTaskRepo: {
         create: vi.fn().mockResolvedValue(ok({ id: 'task-review-2' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({ id: 'task-review-existing' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          workerType: 'auto',
+          workerLocation: 'mac-dev',
+        })),
         findByPR: vi.fn().mockResolvedValue(ok(null)),
         findById: vi.fn().mockResolvedValue(ok(null)),
         findByUser: vi.fn().mockResolvedValue(ok([])),
@@ -163,6 +168,49 @@ describe('createReviewTask', () => {
     expect(deps.userLookupService.resolveByGitHubUsername).not.toHaveBeenCalled();
     expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
     expect(deps.taskDispatcher.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('posts skip notification using the active task owner token', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
+    const userServiceClient = createFakeUserServiceClient();
+    const deps = createFakeDeps({
+      gitHubPRClient,
+      userServiceClient,
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-2' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          workerType: 'claude-code',
+          workerLocation: 'office-mac',
+        })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    await createReviewTask(deps, {
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-skip-comment',
+    });
+
+    expect(userServiceClient.getOAuthToken).toHaveBeenCalledWith('user-existing', 'github');
+    expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+      'ghp_test_token',
+      'pbuchman',
+      'intexuraos',
+      42,
+      expect.stringContaining('### Automated Code Review Request Skipped')
+    );
+    const commentBody = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0]?.[4];
+    expect(commentBody).toContain('**Existing Task ID:** `task-review-existing`');
+    expect(commentBody).toContain('**Worker Type:** `claude-code`');
+    expect(commentBody).toContain('**Worker:** `office-mac`');
   });
 
   it('returns task_creation_failed when active review lookup fails', async () => {
@@ -407,7 +455,17 @@ describe('createReviewTask', () => {
         error: { code: 'dispatch_failed', message: 'Queue full' },
       }
     );
-    expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+
+    // Verify dispatch failure comment was posted
+    expect(gitHubPRClient.postPRComment).toHaveBeenCalled();
+    const commentCall = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0];
+    expect(commentCall).toBeDefined();
+    if (commentCall !== undefined) {
+      const commentBody = commentCall[4];
+      expect(commentBody).toContain('Review Dispatch Failed');
+      expect(commentBody).toContain('QUEUE_FULL');
+      expect(commentBody).toContain('Task was NOT queued');
+    }
   });
 
   describe('PR notification after dispatch', () => {
