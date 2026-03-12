@@ -5,6 +5,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
   DispatchError,
@@ -48,7 +49,7 @@ interface WorkerTaskRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: WorkerType;
   webhookUrl: string;
   webhookSecret: string;
   /** Labels from the validated Linear issue */

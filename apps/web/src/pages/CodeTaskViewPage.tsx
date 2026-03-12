@@ -18,27 +18,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
+import { WORKER_TYPES, WORKER_TYPE_LABELS, type WorkerType } from '@/components/code-tasks/v2/shared.js';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PREventsGroup } from '@/components/PREventsGroup';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import type { LogLine, MessageStatus } from '@/hooks';
 import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus, WorkerStatusTag } from '@/types';
-
-// --- Worker type config ---
-
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
-
-const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'];
-
-const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
-  auto: 'Auto',
-  opus: 'Opus',
-  sonnet: 'Sonnet',
-  minimax: 'Minimax',
-  glm: 'GLM',
-  'qwen3.5-plus': 'Qwen 3.5 Plus',
-};
 
 // --- Status badge config ---
 
@@ -252,7 +238,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
         implementError={implementError}
         {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
         selectedWorkerType={selectedWorkerType}
-        originalWorkerType={task.workerType as WorkerType}
+        originalWorkerType={task.workerType}
         showDropdown={showImplementDropdown}
         onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowImplementDropdown(false); }}
@@ -270,7 +256,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
         retrying={retrying}
         retryError={retryError}
         selectedWorkerType={selectedWorkerType}
-        originalWorkerType={task.workerType as WorkerType}
+        originalWorkerType={task.workerType}
         showDropdown={showRetryDropdown}
         onToggleDropdown={(): void => { setShowRetryDropdown(!showRetryDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowRetryDropdown(false); }}
