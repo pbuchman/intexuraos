@@ -22,18 +22,26 @@ export async function createIsolationProvider(
 ): Promise<IsolationProvider> {
   const provider = new DockerProvider(config, logger);
 
-  // Timeout wrapper for Docker cleanup
-  const DOCKER_CLEANUP_TIMEOUT_MS = 30 * 1000; // 30 seconds
-  const cleanupPromise = provider.cleanupOrphanedContainers();
+  // Timeout wrapper for Docker availability verification
+  const DOCKER_CHECK_TIMEOUT_MS = 30 * 1000; // 30 seconds
+  const cleanupPromise = provider.assertDockerAvailable();
+  let timeoutHandle: NodeJS.Timeout | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
-      reject(new Error('Docker cleanup timeout'));
-    }, DOCKER_CLEANUP_TIMEOUT_MS);
+    timeoutHandle = setTimeout(() => {
+      reject(new Error('Docker availability check timeout'));
+    }, DOCKER_CHECK_TIMEOUT_MS);
   });
 
   try {
     await Promise.race([cleanupPromise, timeoutPromise]);
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
+    provider.startPeriodicCleanup();
   } catch (error) {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
     const errMsg = error instanceof Error ? error.message : String(error);
     if (
       errMsg.includes('timeout') ||
@@ -42,7 +50,7 @@ export async function createIsolationProvider(
     ) {
       process.stderr.write(`\n❌ PRECONDITION FAILED: Cannot connect to Docker\n`);
       process.stderr.write(
-        `   Docker cleanup failed after ${String(DOCKER_CLEANUP_TIMEOUT_MS / 1000)} seconds\n`
+        `   Docker availability check failed after ${String(DOCKER_CHECK_TIMEOUT_MS / 1000)} seconds\n`
       );
       process.stderr.write(`   Ensure:\n`);
       process.stderr.write(`     1. Docker Desktop is running\n`);

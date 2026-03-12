@@ -1137,6 +1137,8 @@ export interface CodeTaskResult {
   ciFailed?: boolean;
   partialWork?: boolean;
   rebaseResult?: 'success' | 'conflict' | 'skipped';
+  review_comments_posted?: string;
+  review_types?: string;
 }
 
 /**
