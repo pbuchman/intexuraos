@@ -237,7 +237,7 @@ curl -X POST http://localhost:8128/code/submit \
   }'
 ```
 
-Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `glm`, `qwen3.5-plus`. If the linked Linear issue has a label matching a worker type, that label overrides the request.
+Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `glm`, `qwen`. If the linked Linear issue has a label matching a worker type, that label overrides the request.
 
 ### Query GitHub PR summaries
 

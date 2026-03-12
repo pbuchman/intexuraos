@@ -29,7 +29,7 @@ export interface ProcessCodeActionRequest {
   approvalEventId: string;
   userId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen';
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
@@ -195,7 +195,7 @@ export async function processCodeAction(
     prompt: string;
     sanitizedPrompt: string;
     systemPromptHash: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen';
     workerLocation: string;
     repository: string;
     baseBranch: string;
@@ -275,7 +275,7 @@ export async function processCodeAction(
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen';
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;

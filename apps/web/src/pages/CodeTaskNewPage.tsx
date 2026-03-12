@@ -18,7 +18,7 @@ const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string 
   { id: 'sonnet', name: 'Sonnet', description: 'Claude Sonnet - fast and capable' },
   { id: 'minimax', name: 'MiniMax', description: 'MiniMax M2.5 - alternative model' },
   { id: 'glm', name: 'GLM', description: 'GLM - alternative model' },
-  { id: 'qwen3.5-plus', name: 'Qwen 3.5 Plus', description: 'Qwen 3.5 Plus - alternative model' },
+  { id: 'qwen', name: 'Qwen', description: 'Qwen - alternative model' },
 ];
 
 type LinearMode = 'create' | 'link';

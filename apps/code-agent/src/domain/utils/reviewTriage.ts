@@ -8,7 +8,7 @@ export const SUPPORTED_REVIEW_WORKER_TYPES = [
   'sonnet',
   'minimax',
   'glm',
-  'qwen3.5-plus',
+  'qwen',
 ] as const satisfies readonly WorkerType[];
 
 const REVIEW_WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
@@ -17,8 +17,8 @@ const REVIEW_WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   sonnet: 'sonnet',
   minimax: 'minimax',
   glm: 'glm',
-  qwen: 'qwen3.5-plus',
-  'qwen3.5-plus': 'qwen3.5-plus',
+  qwen: 'qwen',
+  'qwen3.5-plus': 'qwen',
 };
 
 export function isReviewCommandComment(commentBody: string): boolean {

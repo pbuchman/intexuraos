@@ -295,7 +295,7 @@ async function evaluateCommentEventInternal(
           worker_type: {
             type: 'string',
             enum: ['qwen', ...SUPPORTED_REVIEW_WORKER_TYPES],
-            description: 'The worker type to use. Normalize qwen to qwen3.5-plus.',
+            description: 'The worker type to use (qwen maps to qwen3.5-plus in orchestrator)',
           },
         },
         required: ['review_type', 'worker_type'],

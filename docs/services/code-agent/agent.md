@@ -32,7 +32,7 @@ interface ProcessCodeActionRequest {
   approvalEventId: string;
   userId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen';
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
@@ -43,7 +43,7 @@ interface ProcessCodeActionRequest {
 // Public (from web UI)
 interface SubmitCodeTaskRequest {
   prompt: string; // 1-100000 chars
-  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus'; // default: 'auto'
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen'; // default: 'auto'
   workerLocation?: string; // 1-32 chars
   linearIssueId?: string;
   linearIssueTitle?: string;

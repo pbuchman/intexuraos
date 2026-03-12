@@ -8,7 +8,7 @@ export const SUPPORTED_DISPATCH_WORKER_TYPES = [
   'sonnet',
   'minimax',
   'glm',
-  'qwen3.5-plus',
+  'qwen',
 ] as const satisfies readonly WorkerType[];
 
 const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
@@ -17,9 +17,23 @@ const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   sonnet: 'sonnet',
   minimax: 'minimax',
   glm: 'glm',
-  qwen: 'qwen3.5-plus',
-  'qwen3.5-plus': 'qwen3.5-plus',
+  qwen: 'qwen',
+  'qwen3.5-plus': 'qwen',
 };
+
+/**
+ * Orchestrator worker type (includes qwen3.5-plus).
+ */
+export type OrchestratorWorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+
+/**
+ * Convert internal worker type to orchestrator worker type.
+ * Internal 'qwen' maps to orchestrator's 'qwen3.5-plus'.
+ */
+export function toOrchestratorWorkerType(wt: WorkerType): OrchestratorWorkerType {
+  if (wt === 'qwen') return 'qwen3.5-plus';
+  return wt as OrchestratorWorkerType;
+}
 
 // Build regex from patterns for maintainability
 const WORKER_PATTERN = new RegExp(

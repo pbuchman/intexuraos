@@ -27,9 +27,9 @@ import type { CodeTask, CodeTaskStatus, WorkerStatusTag } from '@/types';
 
 // --- Worker type config ---
 
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen';
 
-const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'];
+const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen'];
 
 const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   auto: 'Auto',
@@ -37,7 +37,7 @@ const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   sonnet: 'Sonnet',
   minimax: 'Minimax',
   glm: 'GLM',
-  'qwen3.5-plus': 'Qwen 3.5 Plus',
+  qwen: 'Qwen',
 };
 
 // --- Status badge config ---

@@ -16,6 +16,7 @@ import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/ser
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerConfig as WorkerSettingsConfig } from '../../domain/models/workerSettings.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
+import { toOrchestratorWorkerType, type OrchestratorWorkerType } from '../../domain/utils/dispatchWorkerTriage.js';
 
 /**
  * Check if an HTTP status code is a retryable infrastructure error.
@@ -48,7 +49,7 @@ interface WorkerTaskRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: OrchestratorWorkerType;
   webhookUrl: string;
   webhookSecret: string;
   /** Labels from the validated Linear issue */
@@ -103,13 +104,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     this.logger.info({ taskId: request.taskId }, 'Dispatching task to worker');
 
     // Build request body (field order must match DispatchRequest for consistent HMAC)
+    // Convert internal worker type to orchestrator format (e.g., 'qwen' -> 'qwen3.5-plus')
+    const orchestratorWorkerType = toOrchestratorWorkerType(request.workerType);
     const taskRequest: WorkerTaskRequest = {
       taskId: request.taskId,
       prompt: request.prompt,
       systemPromptHash: request.systemPromptHash,
       repository: request.repository,
       baseBranch: request.baseBranch,
-      workerType: request.workerType,
+      workerType: orchestratorWorkerType,
       webhookUrl: request.webhookUrl,
       webhookSecret: request.webhookSecret,
       linearIssueLabels: request.linearIssueLabels,

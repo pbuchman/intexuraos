@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractDispatchWorkerType } from '../../../domain/utils/dispatchWorkerTriage.js';
+import { extractDispatchWorkerType, toOrchestratorWorkerType } from '../../../domain/utils/dispatchWorkerTriage.js';
 
 describe('extractDispatchWorkerType', () => {
   it('extracts worker type from @worker directive', () => {
@@ -7,11 +7,11 @@ describe('extractDispatchWorkerType', () => {
   });
 
   it('extracts worker type from @model directive', () => {
-    expect(extractDispatchWorkerType('@model qwen fix tests')).toBe('qwen3.5-plus');
+    expect(extractDispatchWorkerType('@model qwen fix tests')).toBe('qwen');
   });
 
-  it('normalizes qwen alias to qwen3.5-plus', () => {
-    expect(extractDispatchWorkerType('@worker qwen')).toBe('qwen3.5-plus');
+  it('normalizes qwen alias to qwen', () => {
+    expect(extractDispatchWorkerType('@worker qwen')).toBe('qwen');
   });
 
   it('returns undefined when no directive found', () => {
@@ -47,7 +47,7 @@ describe('extractDispatchWorkerType', () => {
   });
 
   it('handles qwen3.5-plus explicit form', () => {
-    expect(extractDispatchWorkerType('@worker qwen3.5-plus')).toBe('qwen3.5-plus');
+    expect(extractDispatchWorkerType('@worker qwen3.5-plus')).toBe('qwen');
   });
 
   it('returns undefined for @worker without type', () => {
@@ -56,5 +56,19 @@ describe('extractDispatchWorkerType', () => {
 
   it('returns undefined for @model without type', () => {
     expect(extractDispatchWorkerType('@model')).toBeUndefined();
+  });
+});
+
+describe('toOrchestratorWorkerType', () => {
+  it('converts qwen to qwen3.5-plus', () => {
+    expect(toOrchestratorWorkerType('qwen')).toBe('qwen3.5-plus');
+  });
+
+  it('passes through other worker types unchanged', () => {
+    expect(toOrchestratorWorkerType('opus')).toBe('opus');
+    expect(toOrchestratorWorkerType('auto')).toBe('auto');
+    expect(toOrchestratorWorkerType('sonnet')).toBe('sonnet');
+    expect(toOrchestratorWorkerType('minimax')).toBe('minimax');
+    expect(toOrchestratorWorkerType('glm')).toBe('glm');
   });
 });

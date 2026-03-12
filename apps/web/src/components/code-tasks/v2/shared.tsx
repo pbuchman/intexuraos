@@ -2,9 +2,9 @@ import type { CodeTaskStatus, WorkerStatusTag } from '@/types';
 
 // --- Worker types (shared by V2TaskActions + V2NextSteps) ---
 
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen';
 
-export const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'];
+export const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen'];
 
 export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   auto: 'Auto',
@@ -12,7 +12,7 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   sonnet: 'Sonnet',
   minimax: 'Minimax',
   glm: 'GLM',
-  'qwen3.5-plus': 'Qwen 3.5 Plus',
+  qwen: 'Qwen',
 };
 
 // --- Status badge config ---

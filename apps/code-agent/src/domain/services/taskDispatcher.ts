@@ -37,7 +37,7 @@ export interface DispatchRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen';
   webhookUrl: string;
   webhookSecret: string;
   traceId?: string;

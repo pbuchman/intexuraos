@@ -233,7 +233,7 @@ interface CodeTask {
   approvalEventId?: string;
   retriedFrom?: string;
   userId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen';
   workerLocation: string;
   status:
     | 'dispatched'

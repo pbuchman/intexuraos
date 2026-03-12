@@ -356,7 +356,7 @@
         "Network isolation blocking cloud metadata and private IPs",
         "Ephemeral tmpfs home directory",
         "Pre-baked developer toolchain (git, pnpm, ripgrep, gh, terraform, gcloud)",
-        "Multi-model worker types (opus, auto, sonnet, minimax, glm, qwen3.5-plus)"
+        "Multi-model worker types (opus, auto, sonnet, minimax, glm, qwen)"
       ],
       "endpoints": 0,
       "docs": "services/claude-worker"

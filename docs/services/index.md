@@ -210,7 +210,7 @@ Cloud Functions and local services that run outside Cloud Run.
 
 ### Worker Details
 
-**orchestrator** -- Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated git worktrees, spawns Claude Code sessions in Docker containers, and reports results via webhooks. Supports 6 worker types across Anthropic (opus, auto, sonnet), ZAI (glm), MiniMax (minimax), and Alibaba Cloud (qwen3.5-plus). Features container adoption on restart, Gemini-based completion verification with agent-specific Zod schemas, versioned system prompts via PromptBuilder, planning PR branch merging, forensics mode, and mid-task messaging.
+**orchestrator** -- Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated git worktrees, spawns Claude Code sessions in Docker containers, and reports results via webhooks. Supports 6 worker types across Anthropic (opus, auto, sonnet), ZAI (glm), MiniMax (minimax), and Alibaba Cloud (qwen). Features container adoption on restart, Gemini-based completion verification with agent-specific Zod schemas, versioned system prompts via PromptBuilder, planning PR branch merging, forensics mode, and mid-task messaging.
 
 **claude-worker** -- Docker container (Node.js 22 Alpine) pre-loaded with Claude CLI, git, pnpm, GitHub CLI, ripgrep, terraform, and gcloud. Runs as non-root user with network restrictions. The orchestrator manages its lifecycle.
 
