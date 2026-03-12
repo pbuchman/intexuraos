@@ -7,6 +7,7 @@ const EXPECTED_CODE_TASK_WORKER_TYPES = [
   'minimax',
   'glm',
   'qwen',
+  'kimi',
 ];
 
 describe('code task worker types', () => {

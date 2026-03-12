@@ -10,6 +10,7 @@ import { Timestamp } from '@google-cloud/firestore';
  * - minimax: Use MiniMax M2.5 model
  * - glm: Use Z.ai GLM model
  * - qwen: Use Qwen model
+ * - kimi: Use Kimi model
  */
 export type WorkerType = CodeTaskWorkerType;
 

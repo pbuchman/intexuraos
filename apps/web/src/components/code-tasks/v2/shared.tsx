@@ -14,6 +14,7 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   minimax: 'Minimax',
   glm: 'GLM',
   qwen: 'Qwen',
+  kimi: 'Kimi',
 };
 
 // --- Status badge config ---
