@@ -12,6 +12,7 @@ const REVIEW_WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   minimax: 'minimax',
   glm: 'glm',
   qwen: 'qwen',
+  kimi: 'kimi',
 };
 
 export function isReviewCommandComment(commentBody: string): boolean {

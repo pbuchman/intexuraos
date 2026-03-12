@@ -302,5 +302,8 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Qwen' }));
     expect(screen.getByText('Advanced Qwen model with thinking enabled')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Kimi' }));
+    expect(screen.getByText('Moonshot\'s latest recommended model with image understanding')).toBeInTheDocument();
   });
 });
