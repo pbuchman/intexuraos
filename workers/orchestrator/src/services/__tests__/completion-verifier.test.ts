@@ -236,6 +236,56 @@ describe('REVIEW_SCHEMA', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts review_comments_posted as numeric string', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '0',
+      review_types: 'code_quality',
+      summary: 'No issues found.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects empty review_comments_posted', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '',
+      review_types: 'code_quality',
+      summary: 'Reviewed.',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-numeric review_comments_posted', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: 'three',
+      review_types: 'code_quality',
+      summary: 'Reviewed.',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty review_types', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '3',
+      review_types: '',
+      summary: 'Reviewed.',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects whitespace-only review_types', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '3',
+      review_types: '   ',
+      summary: 'Reviewed.',
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects missing fields', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
