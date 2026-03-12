@@ -40,7 +40,7 @@ fi
 # ── Phase 2: Verify critical env vars are loadable ─────────────────────────
 # Source .envrc + .envrc.local in a subshell to test without affecting parent.
 # This catches issues like missing .envrc.local or broken variable references.
-CRITICAL_VARS="INTEXURAOS_GCP_PROJECT_ID INTEXURAOS_INTERNAL_AUTH_TOKEN INTEXURAOS_AUTH_JWKS_URL INTEXURAOS_ZAI_APP_API_KEY INTEXURAOS_OPENAI_APP_API_KEY INTEXURAOS_SENTRY_DSN"
+CRITICAL_VARS="INTEXURAOS_GCP_PROJECT_ID INTEXURAOS_INTERNAL_AUTH_TOKEN INTEXURAOS_AUTH_JWKS_URL INTEXURAOS_ZAI_APP_API_KEY INTEXURAOS_DASHSCOPE_APP_API_KEY INTEXURAOS_OPENAI_APP_API_KEY INTEXURAOS_SENTRY_DSN"
 
 missing_vars=$(
   # Source in subshell to avoid polluting hook environment
