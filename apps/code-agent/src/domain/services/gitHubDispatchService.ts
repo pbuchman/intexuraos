@@ -19,6 +19,7 @@ import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepos
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { loadConfig } from '../../config.js';
 import { notifyPROfTaskDispatch } from '../utils/prTaskNotification.js';
+import { extractDispatchWorkerType } from '../utils/dispatchWorkerTriage.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
@@ -140,6 +141,12 @@ async function handleNewTask(
     }
   }
 
+  // Extract @worker/@model directive from comment
+  const workerType = extractDispatchWorkerType(event.body ?? '');
+  if (workerType !== undefined) {
+    logger.info({ workerType, prNumber: event.pullRequestNumber }, 'Extracted worker type from comment');
+  }
+
   const createResult = await createTaskForPR(
     {
       logger,
@@ -162,6 +169,7 @@ async function handleNewTask(
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
       ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),
+      ...(workerType !== undefined && { workerType }),
     },
   );
 
