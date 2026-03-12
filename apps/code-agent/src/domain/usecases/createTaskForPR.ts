@@ -419,6 +419,7 @@ export async function createTaskForPR(
           ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
           ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
           titleAlreadyTagged: existingLinearIssueId !== undefined,
+          ...(request.workerType !== undefined && { workerType: request.workerType }),
         },
       );
       await deps.whatsappNotifier.notifyTaskQueued(userId, queuedTask, queuePosition, estimatedWaitMinutes);
@@ -481,6 +482,7 @@ export async function createTaskForPR(
       ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
       ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
       titleAlreadyTagged: existingLinearIssueId !== undefined,
+      ...(request.workerType !== undefined && { workerType: request.workerType }),
     },
   );
 
