@@ -1736,6 +1736,161 @@ describe('firestoreCodeTaskRepository', () => {
     });
   });
 
+  describe('findLatestNonReviewTaskByPR', () => {
+    it('returns newest non-review task for PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a review task first (should be ignored)
+      await repo.create(createTaskInput({
+        id: 'task-review-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      // Create a non-review task
+      const nonReview = await repo.create(createTaskInput({
+        id: 'task-nonreview-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'PR task',
+        sanitizedPrompt: 'pr task',
+      }));
+      expect(nonReview.ok).toBe(true);
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-nonreview-1');
+    });
+
+    it('ignores review tasks when finding non-review task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create only review tasks
+      await repo.create(createTaskInput({
+        id: 'task-review-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+
+    it('treats missing agentType as non-review (backward compatibility)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task without agentType (legacy)
+      const legacy = await repo.create(createTaskInput({
+        id: 'task-legacy-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        // No agentType - should be treated as non-review
+        prompt: 'Legacy task',
+        sanitizedPrompt: 'legacy task',
+      }));
+      expect(legacy.ok).toBe(true);
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-legacy-1');
+    });
+
+    it('returns null when all tasks are review tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-review-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review 1',
+        sanitizedPrompt: 'review 1',
+      }));
+
+      await repo.create(createTaskInput({
+        id: 'task-review-2',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review 2',
+        sanitizedPrompt: 'review 2',
+      }));
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+
+    it('returns newest non-review task when multiple exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create older non-review task
+      await repo.create(createTaskInput({
+        id: 'task-old',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'Old task',
+        sanitizedPrompt: 'old task',
+      }));
+
+      // Create newer non-review task (most recent)
+      await repo.create(createTaskInput({
+        id: 'task-new',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'New task',
+        sanitizedPrompt: 'new task',
+      }));
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-new');
+    });
+  });
+
   describe('findRecentTasksByLinearIssue', () => {
     it('returns newest tasks first for the same Linear issue', async () => {
       const repo = createFirestoreCodeTaskRepository({

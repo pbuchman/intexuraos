@@ -877,6 +877,40 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    findLatestNonReviewTaskByPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        // Query the newest 10 tasks for this PR and filter in-memory
+        // This avoids needing a composite index and keeps the method simple
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .orderBy('createdAt', 'desc')
+          .limit(10)
+          .get();
+
+        // Find the first non-review task (agentType !== 'review' or missing)
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          const agentType = data['agentType'] as string | undefined;
+          // Treat missing agentType as non-review (backward compatibility)
+          if (agentType !== 'review') {
+            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+          }
+        }
+
+        return ok(null);
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find latest non-review task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     findRecentTasksByLinearIssue: async (
       linearIssueId: string,
       limit: number
