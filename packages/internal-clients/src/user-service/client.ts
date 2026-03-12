@@ -196,6 +196,29 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         const apiKey = keysBody.data[keyField];
 
         if (apiKey === null || apiKey === undefined) {
+          if (config.platformDashscopeApiKey !== undefined) {
+            logger.warn(
+              { userId, provider, requestedModel: defaultModel },
+              'No API key for provider, falling back to platform DashScope GLM'
+            );
+            const fallbackModel = LlmModels.Glm47Flash;
+            const fallbackPricing = config.pricingContext.getPricing(fallbackModel);
+            const fallbackClient = createLlmClient({
+              apiKey: config.platformDashscopeApiKey,
+              model: fallbackModel,
+              userId,
+              pricing: fallbackPricing,
+              logger: config.logger,
+            });
+
+            logger.info(
+              { userId, model: fallbackModel, provider: LlmProviders.Zai },
+              'LLM client created successfully'
+            );
+
+            return ok(fallbackClient);
+          }
+
           if (config.platformGeminiApiKey !== undefined) {
             logger.warn(
               { userId, provider, requestedModel: defaultModel },
@@ -213,29 +236,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
             logger.info(
               { userId, model: fallbackModel, provider: LlmProviders.Google },
-              'LLM client created successfully'
-            );
-
-            return ok(fallbackClient);
-          }
-
-          if (config.platformZaiApiKey !== undefined) {
-            logger.warn(
-              { userId, provider, requestedModel: defaultModel },
-              'No API key for provider, falling back to platform Glm47Flash'
-            );
-            const fallbackModel = LlmModels.Glm47Flash;
-            const fallbackPricing = config.pricingContext.getPricing(fallbackModel);
-            const fallbackClient = createLlmClient({
-              apiKey: config.platformZaiApiKey,
-              model: fallbackModel,
-              userId,
-              pricing: fallbackPricing,
-              logger: config.logger,
-            });
-
-            logger.info(
-              { userId, model: fallbackModel, provider: LlmProviders.Zai },
               'LLM client created successfully'
             );
 

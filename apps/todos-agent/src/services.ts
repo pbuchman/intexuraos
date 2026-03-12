@@ -49,7 +49,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthKey,
     pricingContext,
     logger: createAppLogger({ name: 'userServiceClient' }),
-    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
+    platformDashscopeApiKey: process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 

@@ -80,7 +80,7 @@ export async function initializeServices(): Promise<void> {
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   const appSettingsServiceUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
-  const guestZaiApiKey = process.env['INTEXURAOS_ZAI_APP_API_KEY'];
+  const guestDashscopeApiKey = process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'];
 
   if (openaiApiKey === undefined || openaiApiKey.length === 0) {
     throw new Error('INTEXURAOS_OPENAI_APP_API_KEY environment variable is required');
@@ -98,8 +98,8 @@ export async function initializeServices(): Promise<void> {
     throw new Error('INTEXURAOS_APP_SETTINGS_SERVICE_URL environment variable is required');
   }
 
-  if (guestZaiApiKey === undefined || guestZaiApiKey.length === 0) {
-    throw new Error('INTEXURAOS_ZAI_APP_API_KEY environment variable is required');
+  if (guestDashscopeApiKey === undefined || guestDashscopeApiKey.length === 0) {
+    throw new Error('INTEXURAOS_DASHSCOPE_APP_API_KEY environment variable is required');
   }
 
   const logger = createAppLogger({
@@ -122,9 +122,9 @@ export async function initializeServices(): Promise<void> {
   // Create OpenAI instance for embeddings
   const openai = new OpenAI({ apiKey: openaiApiKey });
 
-  // Create guest LLM client with platform-owned Zai API key (GLM-4.7-Flash at $0 cost)
+  // Create guest LLM client with platform-owned DashScope API key (GLM-4.7-Flash at $0 cost)
   const guestLlmClient = createLlmClient({
-    apiKey: guestZaiApiKey,
+    apiKey: guestDashscopeApiKey,
     model: LlmModels.Glm47Flash,
     userId: 'guest',
     pricing: pricingContext.getPricing(LlmModels.Glm47Flash),
@@ -143,7 +143,7 @@ export async function initializeServices(): Promise<void> {
       internalAuthToken,
       pricingContext,
       logger,
-      platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
+      platformDashscopeApiKey: process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'],
       platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
     }),
     logger,

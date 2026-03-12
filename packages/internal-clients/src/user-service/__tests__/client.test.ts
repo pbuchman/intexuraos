@@ -653,15 +653,15 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('falls back to platform Glm47Flash when no Gemini key and platformZaiApiKey is configured', async () => {
-      const configWithZaiKey = {
+    it('falls back to platform DashScope GLM when no user key and platformDashscopeApiKey is configured', async () => {
+      const configWithDashscope = {
         ...config,
-        platformZaiApiKey: 'platform-zai-key',
+        platformDashscopeApiKey: 'platform-dashscope-key',
       };
 
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LlmModels.Glm47Flash,
         },
       };
 
@@ -679,7 +679,7 @@ describe('createUserServiceClient', () => {
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, { success: true, data: mockKeys });
 
-      const client = createUserServiceClient(configWithZaiKey);
+      const client = createUserServiceClient(configWithDashscope);
       const result = await client.getLlmClient('user123');
 
       if (result.ok) {
@@ -687,10 +687,10 @@ describe('createUserServiceClient', () => {
         expect(mockLogger.warn).toHaveBeenCalledWith(
           {
             userId: 'user123',
-            provider: LlmProviders.Google,
-            requestedModel: LlmModels.Gemini25Flash,
+            provider: LlmProviders.Zai,
+            requestedModel: LlmModels.Glm47Flash,
           },
-          'No API key for provider, falling back to platform Glm47Flash'
+          'No API key for provider, falling back to platform DashScope GLM'
         );
         expect(mockLogger.info).toHaveBeenCalledWith(
           { userId: 'user123', model: LlmModels.Glm47Flash, provider: LlmProviders.Zai },
@@ -701,16 +701,16 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('prefers Gemini fallback over ZAI when both platform keys are configured', async () => {
+    it('uses DashScope fallback when both platform keys are configured', async () => {
       const configWithBothKeys = {
         ...config,
+        platformDashscopeApiKey: 'platform-dashscope-key',
         platformGeminiApiKey: 'platform-gemini-key',
-        platformZaiApiKey: 'platform-zai-key',
       };
 
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LlmModels.Glm47Flash,
         },
       };
 
@@ -734,13 +734,13 @@ describe('createUserServiceClient', () => {
         expect(mockLogger.warn).toHaveBeenCalledWith(
           {
             userId: 'user123',
-            provider: LlmProviders.Google,
-            requestedModel: LlmModels.Gemini25Flash,
+            provider: LlmProviders.Zai,
+            requestedModel: LlmModels.Glm47Flash,
           },
-          'No API key for provider, falling back to platform Gemini25Flash'
+          'No API key for provider, falling back to platform DashScope GLM'
         );
         expect(mockLogger.info).toHaveBeenCalledWith(
-          { userId: 'user123', model: LlmModels.Gemini25Flash, provider: LlmProviders.Google },
+          { userId: 'user123', model: LlmModels.Glm47Flash, provider: LlmProviders.Zai },
           'LLM client created successfully'
         );
       } else {

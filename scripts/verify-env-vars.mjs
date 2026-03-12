@@ -52,17 +52,6 @@ const COMMON_OPTIONAL_ENV = new Set([
   'INTEXURAOS_ACTIONS_AGENT_URL',
   'INTEXURAOS_USER_SERVICE_URL',
   // Auth0 JWT vars (optional in E2E mode)
-  'INTEXURAOS_AUTH0_AUDIENCE',
-  'INTEXURAOS_AUTH0_ISSUER',
-  'INTEXURAOS_AUTH0_JWKS_URI',
-  // Old names (used by some configs, aliased to Auth0 versions)
-  'INTEXURAOS_AUTH_AUDIENCE',
-  'INTEXURAOS_AUTH_ISSUER',
-  'INTEXURAOS_AUTH_JWKS_URL',
-  // Platform-wide Zai API key (optional fallback for services using user-service client)
-  'INTEXURAOS_ZAI_APP_API_KEY',
-  // Platform-wide Gemini API key (primary fallback for services using user-service client)
-  'INTEXURAOS_GEMINI_APP_API_KEY',
   // Dash0 OpenTelemetry (optional — no-op when not configured)
   'INTEXURAOS_DASH0_OTLP_ENDPOINT',
   'INTEXURAOS_DASH0_AUTH_TOKEN',
@@ -309,7 +298,6 @@ function isCommonServiceVar(varName) {
     'INTEXURAOS_AUTH0_DOMAIN',
     'INTEXURAOS_AUTH0_CLIENT_ID',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-    'INTEXURAOS_ZAI_APP_API_KEY',
     'INTEXURAOS_GEMINI_APP_API_KEY',
     // Global infrastructure vars (set once, used by all services)
     'INTEXURAOS_GCP_PROJECT_ID',
