@@ -6,7 +6,7 @@ const EXPECTED_CODE_TASK_WORKER_TYPES = [
   'sonnet',
   'minimax',
   'glm',
-  'qwen3.5-plus',
+  'qwen',
 ];
 
 describe('code task worker types', () => {

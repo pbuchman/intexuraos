@@ -4,7 +4,7 @@ export const CODE_TASK_WORKER_TYPES = [
   'sonnet',
   'minimax',
   'glm',
-  'qwen3.5-plus',
+  'qwen',
 ] as const;
 
 export type CodeTaskWorkerType = (typeof CODE_TASK_WORKER_TYPES)[number];

@@ -13,7 +13,7 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   sonnet: 'Sonnet',
   minimax: 'Minimax',
   glm: 'GLM',
-  'qwen3.5-plus': 'Qwen 3.5 Plus',
+  qwen: 'Qwen',
 };
 
 // --- Status badge config ---
