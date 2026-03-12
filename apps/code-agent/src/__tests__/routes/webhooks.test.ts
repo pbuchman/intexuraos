@@ -5528,4 +5528,228 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(params.message).toContain('✅');
     expect(params.message).not.toContain('🔁');
   });
+
+  describe('stale callback handling for cancelled tasks', () => {
+    it('ignores completed callback for already cancelled task', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review task',
+        sanitizedPrompt: 'Review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'sonnet',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_cancelled',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Cancel the task first
+      await codeTaskRepo.update(task.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Review was replaced' },
+      });
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Review completed',
+          review_comments_posted: '3',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ received: true });
+
+      // Verify task is still cancelled
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('cancelled');
+    });
+
+    it('ignores failed callback for already cancelled task', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review task',
+        sanitizedPrompt: 'Review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_cancelled_fail',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Cancel the task first
+      await codeTaskRepo.update(task.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Review was replaced' },
+      });
+
+      const payload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: { code: 'TIMEOUT', message: 'Review timed out' },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ received: true });
+
+      // Verify task is still cancelled
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('cancelled');
+    });
+
+    it('ignores interrupted callback for already cancelled task', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review task',
+        sanitizedPrompt: 'Review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'minimax',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_cancelled_interrupt',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Cancel the task first
+      await codeTaskRepo.update(task.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Review was replaced' },
+      });
+
+      const payload = {
+        taskId: task.id,
+        status: 'interrupted' as const,
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ received: true });
+
+      // Verify task is still cancelled
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('cancelled');
+    });
+
+    it('ignores duplicate cancelled callback', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review task',
+        sanitizedPrompt: 'Review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'qwen3.5-plus',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_cancelled_dup',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Cancel the task first
+      await codeTaskRepo.update(task.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Review was replaced' },
+      });
+
+      const payload = {
+        taskId: task.id,
+        status: 'cancelled' as const,
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ received: true });
+
+      // Verify task is still cancelled
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('cancelled');
+    });
+  });
 });
