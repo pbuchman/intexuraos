@@ -1889,6 +1889,42 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value).not.toBeNull();
       expect(result.value?.id).toBe('task-new');
     });
+
+    it('returns non-review task even when newer review task exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create non-review task first (older)
+      await repo.create(createTaskInput({
+        id: 'task-nonreview-older',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'PR implementation task',
+        sanitizedPrompt: 'pr implementation task',
+      }));
+
+      // Create review task (newer - should be ignored)
+      await repo.create(createTaskInput({
+        id: 'task-review-newer',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Should return the non-review task, ignoring the newer review task
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-nonreview-older');
+    });
   });
 
   describe('findRecentTasksByLinearIssue', () => {

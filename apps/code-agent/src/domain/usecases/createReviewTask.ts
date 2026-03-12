@@ -189,7 +189,11 @@ export async function createReviewTask(
       'Active review task exists for PR, replacing with fresh review'
     );
 
-    // Post replacement comment first (best-effort)
+    // Post replacement comment first for user visibility.
+    // If local cancel fails after this, users will see a cancel message
+    // but the original task continues. This is acceptable because:
+    // 1. The new task creation will fail too (atomic operation)
+    // 2. Users can retry the review request
     await notifyReviewReplaced(
       { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
       {
