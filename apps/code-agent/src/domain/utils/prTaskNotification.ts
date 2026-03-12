@@ -137,6 +137,7 @@ export interface TaskOutcomeCommentRequest {
   outcome: 'review_completed' | 'review_failed' | 'implementation_completed' | 'implementation_failed' | 'reply_completed' | 'reply_failed';
   reviewTypes?: string[];
   errorCode?: string;
+  workerType?: string;
 }
 
 /**
@@ -215,6 +216,10 @@ export function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): str
     '',
     `**Task ID:** \`${request.taskId}\``,
   ];
+
+  if (isReview && request.workerType !== undefined) {
+    lines.push(`**Reviewer:** \`${request.workerType}\``);
+  }
 
   if (isReview && request.reviewTypes !== undefined && request.reviewTypes.length > 0) {
     const reviewTypesStr = request.reviewTypes.map((t) => `\`${t}\``).join(', ');
@@ -449,6 +454,86 @@ export async function notifyTaskOutcome(
     logger.warn(
       { error, taskId: request.taskId },
       'Unexpected error in task outcome notification (best-effort)',
+    );
+  }
+}
+
+export interface ReviewReplacementCommentRequest {
+  taskId: string;
+  repository: string;
+  prNumber: number;
+  userId: string;
+  replacedTaskId: string;
+  replacedWorkerType?: string;
+}
+
+/**
+ * Build comment when a review is cancelled due to replacement.
+ */
+export function buildReviewReplacementComment(request: ReviewReplacementCommentRequest): string {
+  const lines: string[] = [
+    '@ignore',
+    '### Automated Code Review Cancelled',
+    '',
+    'A new review has been requested for this PR.',
+    '',
+    `**Cancelled Task ID:** \`${request.replacedTaskId}\``,
+  ];
+
+  if (request.replacedWorkerType !== undefined) {
+    lines.push(`**Previous Reviewer:** \`${request.replacedWorkerType}\``);
+  }
+
+  lines.push(
+    '',
+    'The previous review task has been cancelled. A new review task will start shortly.',
+  );
+
+  return lines.join('\n');
+}
+
+/**
+ * Post comment when a review is cancelled because a new review was requested.
+ */
+export async function notifyReviewReplaced(
+  deps: PRTaskNotificationDeps,
+  request: ReviewReplacementCommentRequest,
+): Promise<void> {
+  const { logger, gitHubPRClient, userServiceClient } = deps;
+
+  try {
+    const [owner, repo] = request.repository.split('/');
+    if (owner === undefined || repo === undefined) {
+      logger.warn(
+        { repository: request.repository },
+        'Invalid repository format, skipping review replacement notification',
+      );
+      return;
+    }
+
+    const githubToken = await fetchGitHubToken(userServiceClient, request.userId, logger);
+    if (githubToken === null) {
+      logger.info(
+        { userId: request.userId },
+        'Skipping review replacement notification: no GitHub token',
+      );
+      return;
+    }
+
+    const commentBody = buildReviewReplacementComment(request);
+    const commentResult = await gitHubPRClient.postPRComment(
+      githubToken, owner, repo, request.prNumber, commentBody,
+    );
+    if (!commentResult.ok) {
+      logger.warn(
+        { error: commentResult.error, prNumber: request.prNumber },
+        'Failed to post review replacement comment (best-effort)',
+      );
+    }
+  } catch (error: unknown) {
+    logger.warn(
+      { error, taskId: request.taskId },
+      'Unexpected error in review replacement notification (best-effort)',
     );
   }
 }
