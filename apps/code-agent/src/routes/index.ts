@@ -4,7 +4,7 @@ import { codeRoutes } from './codeRoutes.js';
 import { webhookRoutes } from './webhookRoutes.js';
 import { workerSettingsRoutes } from './workerSettingsRoutes.js';
 import { webhooksRoutes } from './webhooks/index.js';
-import { githubPREventsRoute, githubPRSummariesRoute } from './code/index.js';
+import { githubEventLogRoute, githubPREventsRoute, githubPRSummariesRoute } from './code/index.js';
 
 export interface RoutesDeps {
   jwtValidator: JwtValidator;
@@ -17,4 +17,5 @@ export async function registerRoutes(app: FastifyInstance, deps: RoutesDeps): Pr
   await app.register(webhooksRoutes);
   await app.register(githubPREventsRoute, deps);
   await app.register(githubPRSummariesRoute, deps);
+  await app.register(githubEventLogRoute, deps);
 }

@@ -241,5 +241,137 @@ describe('createFirestoreEventDecisionRepository', () => {
         expect(result.value.dispatchParams?.messageTemplate).toBe('pr_comment');
       }
     });
+
+    it('should save route-level decisions with nullable repository metadata', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreEventDecisionRepository({ logger: mockLogger });
+      const result = await repo.save(createDecisionInput({
+        eventId: 'audit_ping_1',
+        repository: null,
+        pullRequestNumber: null,
+        eventType: 'ping',
+        eventAction: 'unknown',
+        senderLogin: null,
+        decidedBy: 'webhook_route',
+        decision: 'skip',
+        reason: 'ping_event',
+      }));
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.repository).toBeNull();
+        expect(result.value.pullRequestNumber).toBeNull();
+        expect(result.value.senderLogin).toBeNull();
+        expect(result.value.decidedBy).toBe('webhook_route');
+      }
+    });
+  });
+
+  describe('findByEventIds()', () => {
+    it('returns found decisions, skips missing docs, and normalizes Firestore date shapes', async () => {
+      const snapshotById = new Map<string, {
+        exists: boolean;
+        id: string;
+        data?: () => Record<string, unknown>;
+      }>([
+        ['ed_evt_date', {
+          exists: true,
+          id: 'ed_evt_date',
+          data: (): Record<string, unknown> => ({
+            eventId: 'evt_date',
+            repository: 'intexuraos/test-repo',
+            pullRequestNumber: 10,
+            eventType: 'pull_request',
+            eventAction: 'opened',
+            senderLogin: 'octocat',
+            decidedBy: 'hard_rules',
+            decision: 'dispatch',
+            reason: 'ALL_RULES_PASSED',
+            createdAt: new Date('2026-03-12T10:00:00.000Z'),
+            decisionLatencyMs: 4,
+          }),
+        }],
+        ['ed_evt_missing', {
+          exists: false,
+          id: 'ed_evt_missing',
+        }],
+        ['ed_evt_timestamp', {
+          exists: true,
+          id: 'ed_evt_timestamp',
+          data: (): Record<string, unknown> => ({
+            eventId: 'evt_timestamp',
+            repository: 'intexuraos/test-repo',
+            pullRequestNumber: 11,
+            eventType: 'issue_comment',
+            eventAction: 'created',
+            senderLogin: 'octocat',
+            decidedBy: 'github_agent',
+            decision: 'skip',
+            reason: 'BOT_NOISE',
+            createdAt: { toDate: () => new Date('2026-03-12T10:01:00.000Z') },
+            decisionLatencyMs: 8,
+          }),
+        }],
+        ['ed_evt_string', {
+          exists: true,
+          id: 'ed_evt_string',
+          data: (): Record<string, unknown> => ({
+            eventId: 'evt_string',
+            repository: 'intexuraos/test-repo',
+            pullRequestNumber: 12,
+            eventType: 'pull_request_review',
+            eventAction: 'submitted',
+            senderLogin: 'octocat',
+            decidedBy: 'webhook_route',
+            decision: 'skip',
+            reason: 'unsupported_event',
+            createdAt: '2026-03-12T10:02:00.000Z',
+            decisionLatencyMs: 12,
+          }),
+        }],
+      ]);
+
+      const mockCollection = {
+        doc: vi.fn().mockImplementation((id: string): { get: ReturnType<typeof vi.fn> } => ({
+          get: vi.fn().mockResolvedValue(snapshotById.get(id)),
+        })),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreEventDecisionRepository({ logger: mockLogger });
+      if (repo.findByEventIds === undefined) {
+        throw new Error('findByEventIds is not configured');
+      }
+      const result = await repo.findByEventIds(['evt_date', 'evt_missing', 'evt_timestamp', 'evt_string']);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(3);
+        expect(result.value.map((decision) => decision.id)).toEqual([
+          'ed_evt_date',
+          'ed_evt_timestamp',
+          'ed_evt_string',
+        ]);
+        expect(result.value.map((decision) => decision.createdAt.toISOString())).toEqual([
+          '2026-03-12T10:00:00.000Z',
+          '2026-03-12T10:01:00.000Z',
+          '2026-03-12T10:02:00.000Z',
+        ]);
+      }
+    });
   });
 });
