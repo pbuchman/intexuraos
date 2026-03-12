@@ -4,7 +4,6 @@ import { Timestamp } from '@google-cloud/firestore';
 /**
  * Worker type determines which model Claude uses.
  * Uses shared worker types from common-core.
- * Note: 'glm' maps to DashScope GLM-5 in dispatch logic.
  */
 export type WorkerType = CodeTaskWorkerType;
 

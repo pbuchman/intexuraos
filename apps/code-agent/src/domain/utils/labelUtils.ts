@@ -13,8 +13,7 @@ export function hasUnclearLabel(labels: string[]): boolean {
   return labels.some((label) => normalizeLabel(label) === 'unclear');
 }
 
-// Worker type labels supported from Linear issues
-const WORKER_TYPE_LABELS = ['opus', 'sonnet', 'minimax', 'glm'] as const satisfies readonly WorkerType[];
+const WORKER_TYPE_LABELS = ['opus', 'sonnet', 'minimax', 'glm', 'kimi'] as const satisfies readonly WorkerType[];
 type WorkerTypeLabel = typeof WORKER_TYPE_LABELS[number];
 const WORKER_TYPE_LABEL_SET = new Set<WorkerTypeLabel>(WORKER_TYPE_LABELS);
 

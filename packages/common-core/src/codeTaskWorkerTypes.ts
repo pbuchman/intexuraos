@@ -5,6 +5,7 @@ export const CODE_TASK_WORKER_TYPES = [
   'minimax',
   'glm',
   'qwen',
+  'kimi',
 ] as const;
 
 export type CodeTaskWorkerType = (typeof CODE_TASK_WORKER_TYPES)[number];
