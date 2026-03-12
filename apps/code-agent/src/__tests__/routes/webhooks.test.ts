@@ -240,6 +240,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -269,6 +270,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -2323,6 +2325,116 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('implemented');
     });
 
+    it('review task rejects empty review_types in completed payload', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'No review was performed.',
+          review_comments_posted: '0',
+          review_types: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.code).toBe('REVIEW_AGENT_ENFORCEMENT_FAILED');
+      expect(getResult.value.error?.message).toContain('review_types');
+    });
+
+    it('review task clears stale error on successful completion', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const staleErrorResult = await codeTaskRepo.update(task.id, {
+        error: {
+          code: 'SETUP_FAILED',
+          message: 'Anthropic API key is invalid: Orchestrator credentials expired or unavailable',
+        },
+      });
+      expect(staleErrorResult.ok).toBe(true);
+      if (!staleErrorResult.ok) throw new Error('Failed to seed stale error');
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Reviewed the PR and posted two comments.',
+          review_comments_posted: '2',
+          review_types: 'code_quality,architecture',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('reviewed');
+      expect(getResult.value.error).toBeUndefined();
+    });
+
     it('handles execution-agent failed webhook without any Linear mutations', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
@@ -3782,6 +3894,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -3811,6 +3924,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -4135,6 +4249,7 @@ describe('POST /internal/logs', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -4164,6 +4279,7 @@ describe('POST /internal/logs', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -4711,6 +4827,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
     } as {
       firestore: Firestore;
@@ -4740,6 +4857,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
 
     });
@@ -4813,7 +4931,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('completed');
+    expect(params?.message).toContain('✅');
   });
 
   it('sends WhatsApp notification on task completion', async () => {
@@ -4865,7 +4983,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string; ctaUrl?: { displayText: string; url: string } } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('completed');
+    expect(params?.message).toContain('✅');
     expect(params?.message).toContain('fix/login-bug');
     expect(params?.message).not.toContain('PR:');
     expect(params?.ctaUrl).toEqual({
@@ -4922,7 +5040,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('failed');
+    expect(params?.message).toContain('❌');
   });
 
   it('sends WhatsApp notification on interrupted status', async () => {
@@ -4968,8 +5086,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(publishCall).toBeDefined();
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
-    expect(params?.message).toContain('failed');
-    expect(params?.message).toContain('interrupted');
+    expect(params?.message).toContain('❌');
   });
 
   it('continues even if WhatsApp notification fails', async () => {
@@ -5072,7 +5189,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const params = publishCall?.[0] as { userId: string; message: string };
     expect(params.userId).toBe('user-123');
     expect(params.message).toContain('🔁');
-    expect(params.message).toContain('Session continued');
+    expect(params.message).toContain('Implement the new feature');
     expect(params.message).not.toContain('✅');
   });
 

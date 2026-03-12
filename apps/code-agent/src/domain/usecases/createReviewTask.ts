@@ -4,7 +4,7 @@
  * Standalone use case — NOT a wrapper around createTaskForPR.
  * Key differences:
  * - No pr-comment label (would route to wrong prompt)
- * - No PR task lock (review tasks don't conflict with comment tasks)
+ * - PR-scoped review dedup (reuse active review task for the same PR)
  * - Best-effort Linear issue linking for UI grouping
  * - Sets agentType: 'review' on dispatch
  * - systemPromptHash: 'review-auto'
@@ -12,12 +12,13 @@
 
 import { err, ok, type Result, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTaskRepository.js';
+import type { WorkerType } from '../models/codeTask.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import { notifyPROfTaskCreation } from '../utils/prTaskNotification.js';
+import { notifyPROfTaskDispatch } from '../utils/prTaskNotification.js';
 import { createHmac } from 'node:crypto';
 
 export interface CreateReviewTaskRequest {
@@ -25,9 +26,11 @@ export interface CreateReviewTaskRequest {
   prNumber: number;
   senderLogin: string;
   reviewTypes: string[];
+  workerType?: WorkerType;
   eventId: string;
   prTitle?: string;
   prBody?: string;
+  reviewComment?: string;
   baseBranch?: string;
 }
 
@@ -35,6 +38,10 @@ export interface CreateReviewTaskError {
   code: 'user_not_found' | 'no_workers_configured' | 'task_creation_failed' | 'dispatch_failed' | 'internal_error';
   message: string;
 }
+
+export type CreateReviewTaskResult =
+  | { status: 'created'; taskId: string }
+  | { status: 'already_running'; taskId: string };
 
 export interface CreateReviewTaskDeps {
   logger: Logger;
@@ -95,7 +102,7 @@ async function resolveLinearIssueId(
 const PR_BODY_MAX_LENGTH = 500;
 
 function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
-  const { repository, prNumber, prBody, reviewTypes } = request;
+  const { repository, prNumber, prBody, reviewTypes, reviewComment } = request;
   const lines: string[] = [
     'Automated PR review created by GitHub Agent triage system.',
     '',
@@ -110,20 +117,31 @@ function buildLinearIssueDescription(request: CreateReviewTaskRequest): string {
   }
 
   lines.push('', `**Review types:** ${reviewTypes.join(', ')}`);
+  if (reviewComment !== undefined) {
+    lines.push('', '**Triggered by comment:**', reviewComment);
+  }
 
   return lines.join('\n');
 }
 
-function buildReviewPrompt(request: CreateReviewTaskRequest): string {
-  const { repository, prNumber, reviewTypes } = request;
-  return [
+function buildReviewPrompt(request: CreateReviewTaskRequest & { workerType: WorkerType }): string {
+  const { repository, prNumber, reviewTypes, workerType, reviewComment } = request;
+  const lines = [
     `[Review Task] Automated PR review for PR #${String(prNumber)} in ${repository}`,
     '',
     `Review types requested: ${reviewTypes.join(', ')}`,
+    `Worker type requested: ${workerType}`,
     '',
     'This task was created automatically by the GitHub Agent triage system.',
     `Perform a read-only review of PR #${String(prNumber)} and post review comments.`,
     '',
+  ];
+
+  if (reviewComment !== undefined) {
+    lines.push('Triggered by review request comment:', reviewComment, '');
+  }
+
+  lines.push(
     '### Review Scope',
     '',
     ...reviewTypes.map((t) => `- **${t}**: perform ${t} review`),
@@ -135,13 +153,15 @@ function buildReviewPrompt(request: CreateReviewTaskRequest): string {
     `3. Read changed files and analyze for the requested review types`,
     `4. Post review comments via gh api /repos/${repository}/pulls/${String(prNumber)}/reviews`,
     '5. Output REVIEW_AGENT_FINAL block when done',
-  ].join('\n');
+  );
+
+  return lines.join('\n');
 }
 
 export async function createReviewTask(
   deps: CreateReviewTaskDeps,
   request: CreateReviewTaskRequest
-): Promise<Result<{ taskId: string }, CreateReviewTaskError>> {
+): Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>> {
   const { logger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, orchestratorSecret, serviceUrl } = deps;
   const { repository, prNumber, senderLogin, eventId } = request;
 
@@ -149,6 +169,23 @@ export async function createReviewTask(
     { repository, prNumber, senderLogin, reviewTypes: request.reviewTypes, eventId },
     'Creating review task'
   );
+
+  const activeReviewResult = await codeTaskRepo.findActiveReviewForPR(repository, prNumber);
+  if (!activeReviewResult.ok) {
+    logger.error(
+      { repository, prNumber, error: activeReviewResult.error },
+      'Failed to check for active review task'
+    );
+    return err({ code: 'task_creation_failed', message: activeReviewResult.error.message });
+  }
+
+  if (activeReviewResult.value !== null) {
+    logger.info(
+      { repository, prNumber, taskId: activeReviewResult.value.id },
+      'Active review task already exists for PR'
+    );
+    return ok({ status: 'already_running', taskId: activeReviewResult.value.id });
+  }
 
   // Resolve user
   const userResult = await userLookupService.resolveByGitHubUsername(senderLogin);
@@ -174,7 +211,8 @@ export async function createReviewTask(
   }
 
   // Create task
-  const prompt = buildReviewPrompt(request);
+  const effectiveWorkerType = request.workerType ?? 'auto';
+  const prompt = buildReviewPrompt({ ...request, workerType: effectiveWorkerType });
   const webhookSecret = createHmac('sha256', orchestratorSecret).update(eventId).digest('hex');
 
   const [owner] = repository.split('/');
@@ -185,7 +223,7 @@ export async function createReviewTask(
     prompt,
     sanitizedPrompt: prompt,
     systemPromptHash: 'review-auto',
-    workerType: 'auto',
+    workerType: effectiveWorkerType,
     workerLocation: worker.name,
     repository,
     baseBranch,
@@ -215,7 +253,7 @@ export async function createReviewTask(
     systemPromptHash: 'review-auto',
     repository,
     baseBranch,
-    workerType: 'auto',
+    workerType: effectiveWorkerType,
     webhookUrl,
     webhookSecret,
     traceId: eventId,
@@ -247,21 +285,24 @@ export async function createReviewTask(
     'Review task created and dispatched'
   );
 
-  // Best-effort: post task-created comment and update PR title
+  // Best-effort: post dispatch comment and update PR title
   const titleAlreadyTagged = request.prTitle !== undefined && /\bINT-\d+\b/i.test(request.prTitle);
-  await notifyPROfTaskCreation(
+  await notifyPROfTaskDispatch(
     { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
     {
       taskId: task.id,
       repository,
       prNumber,
       userId,
+      dispatchOutcome: 'review_task_dispatched',
+      updateTitle: true,
       ...(linearIssueId !== undefined && { linearIssueId }),
       ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
       titleAlreadyTagged,
       reviewTypes: request.reviewTypes,
+      workerType: effectiveWorkerType,
     },
   );
 
-  return ok({ taskId: task.id });
+  return ok({ status: 'created', taskId: task.id });
 }

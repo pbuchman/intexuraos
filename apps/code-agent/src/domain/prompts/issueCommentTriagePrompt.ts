@@ -5,6 +5,8 @@
  * issue_comment events (created or edited by bots).
  */
 
+import { isReviewCommandComment, SUPPORTED_REVIEW_WORKER_TYPES } from '../utils/reviewTriage.js';
+
 export interface IssueCommentTriagePromptInput {
   commentBody: string;
   isEdit: boolean;
@@ -13,6 +15,46 @@ export interface IssueCommentTriagePromptInput {
 }
 
 export function buildIssueCommentTriageSection(input: IssueCommentTriagePromptInput): string {
+  const isReviewCommand = isReviewCommandComment(input.commentBody);
+
+  if (isReviewCommand) {
+    return [
+      '## Comment Triage Instructions',
+      '',
+      `Comment by: @${input.senderLogin}${input.isBotSender ? ' (bot)' : ''}`,
+      `Action: ${input.isEdit ? 'edited' : 'created'}`,
+      '',
+      '### Comment Body',
+      '',
+      input.commentBody,
+      '',
+      '### Review Command Instructions',
+      '',
+      'The comment starts with `@review`, so this is a review-triage request.',
+      'Do NOT use `dispatch_to_task` for this comment. Either request a review or skip.',
+      '',
+      'Allowed review types:',
+      '- `code_quality`',
+      '- `security`',
+      '- `architecture`',
+      '',
+      `Allowed worker types: ${SUPPORTED_REVIEW_WORKER_TYPES.join(', ')}`,
+      '- Normalize `qwen` to `qwen3.5-plus`.',
+      '- Choose exactly one worker type and include it on every `request_review` tool call.',
+      '- If the comment does not name a review scope, infer the best scope from the request. Default to `code_quality` when the request is generic.',
+      '- If the comment requests architecture review and does not name a worker, prefer `qwen3.5-plus`.',
+      '- If the comment requests security review and does not name a worker, prefer `opus`.',
+      '',
+      'Examples:',
+      '- `@review architecture, security with qwen` → request `architecture` + `security`, worker `qwen3.5-plus`',
+      '- `@review with minimax` → request `code_quality`, worker `minimax`',
+      '- `@review opus` → request `code_quality`, worker `opus`',
+      '- `@review architecture` → request `architecture`, worker `qwen3.5-plus`',
+      '',
+      'Always call exactly one tool type: either one-or-more `request_review` calls, or `skip`.',
+    ].join('\n');
+  }
+
   return [
     '## Comment Triage Instructions',
     '',

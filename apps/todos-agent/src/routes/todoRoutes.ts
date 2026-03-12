@@ -316,12 +316,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Body: CreateTodoBody }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
       if (user === null) {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
         return;
-        /* v8 ignore stop @preserve */
       }
 
       const { todoRepository } = getServices();
@@ -377,12 +373,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
       if (user === null) {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
         return;
-        /* v8 ignore stop @preserve */
       }
 
       const { todoRepository } = getServices();
@@ -396,9 +388,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
+        /* v8 ignore stop @preserve */
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
@@ -434,12 +428,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       reply: FastifyReply
     ) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
       if (user === null) {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
         return;
-        /* v8 ignore stop @preserve */
       }
 
       const { todoRepository } = getServices();
@@ -460,7 +450,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: single test user means FORBIDDEN never triggered @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -496,12 +486,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
       if (user === null) {
-      /* v8 ignore stop @preserve */
-        /* v8 ignore start -- test-infra: tests use valid auth tokens @preserve */
         return;
-        /* v8 ignore stop @preserve */
       }
 
       const { todoRepository } = getServices();
@@ -515,7 +501,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: single test user means FORBIDDEN never triggered @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -575,7 +561,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: single test user means FORBIDDEN never triggered @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -846,9 +832,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
+        /* v8 ignore stop @preserve */
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 

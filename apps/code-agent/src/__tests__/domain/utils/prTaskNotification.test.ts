@@ -6,7 +6,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
 import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import { notifyPROfTaskCreation, fetchGitHubToken, type PRTaskNotificationDeps, type PRTaskNotificationRequest } from '../../../domain/utils/prTaskNotification.js';
+import {
+  notifyPROfTaskDispatch,
+  fetchGitHubToken,
+  type PRTaskNotificationDeps,
+  type PRTaskNotificationRequest,
+} from '../../../domain/utils/prTaskNotification.js';
 
 function createFakeLogger(): Logger {
   return {
@@ -23,7 +28,22 @@ function createFakeGitHubPRClient(): GitHubPRClient {
     getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
     getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
     getPullRequestBaseBranch: vi.fn().mockResolvedValue(ok('main')),
+    getPullRequestStatus: vi.fn().mockResolvedValue(
+      ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })
+    ),
     postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 42 })),
+    listOpenPullRequestsByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+    getPullRequestDetails: vi.fn().mockResolvedValue(ok({
+      number: 42,
+      title: 'Test PR',
+      body: null,
+      authorLogin: 'alice',
+      baseBranch: 'main',
+      headBranch: 'feature/test',
+      mergeable: true,
+      mergeableState: 'clean',
+    })),
+    updateIssueComment: vi.fn().mockResolvedValue(ok({ commentId: 42 })),
   };
 }
 
@@ -51,6 +71,8 @@ function createFakeRequest(overrides: Partial<PRTaskNotificationRequest> = {}): 
     repository: 'pbuchman/intexuraos',
     prNumber: 42,
     userId: 'user-1',
+    dispatchOutcome: 'created_and_dispatched',
+    updateTitle: true,
     titleAlreadyTagged: false,
     ...overrides,
   };
@@ -80,12 +102,12 @@ describe('fetchGitHubToken', () => {
   });
 });
 
-describe('notifyPROfTaskCreation', () => {
-  it('posts task-created comment with @ignore prefix', async () => {
+describe('notifyPROfTaskDispatch', () => {
+  it('posts dispatch comment with @ignore prefix', async () => {
     const deps = createFakeDeps();
     const request = createFakeRequest();
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledWith(
       'ghp_test_token',
@@ -96,23 +118,25 @@ describe('notifyPROfTaskCreation', () => {
     );
   });
 
-  it('comment includes task ID and link', async () => {
+  it('comment includes task ID, link, and dispatch outcome', async () => {
     const deps = createFakeDeps();
     const request = createFakeRequest();
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).toContain('task_abc123');
+    expect(body).toContain('[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task_abc123)');
     expect(body).toContain('intexuraos.cloud/#/code-tasks/task_abc123');
-    expect(body).toContain('Automated Code Review Task Created');
+    expect(body).toContain('Automated Code Review Task');
+    expect(body).toContain('**Dispatch outcome:** Created and dispatched');
   });
 
   it('comment includes Linear issue ID when provided', async () => {
     const deps = createFakeDeps();
     const request = createFakeRequest({ linearIssueId: 'INT-809' });
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).toContain('INT-809');
@@ -120,23 +144,40 @@ describe('notifyPROfTaskCreation', () => {
 
   it('comment includes review types when provided', async () => {
     const deps = createFakeDeps();
-    const request = createFakeRequest({ reviewTypes: ['code_quality', 'security'] });
+    const request = createFakeRequest({
+      dispatchOutcome: 'review_task_dispatched',
+      reviewTypes: ['code_quality', 'security'],
+    });
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).toContain('`code_quality`, `security`');
   });
 
-  it('updates PR title when not already tagged and linearIssueId provided', async () => {
+  it('uses outcome-specific wording for existing-task resumes', async () => {
+    const deps = createFakeDeps();
+    const request = createFakeRequest({
+      dispatchOutcome: 'existing_task_resumed',
+      updateTitle: false,
+    });
+
+    await notifyPROfTaskDispatch(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('**Dispatch outcome:** Existing task resumed');
+  });
+
+  it('updates PR title when enabled, not already tagged, and linearIssueId provided', async () => {
     const deps = createFakeDeps();
     const request = createFakeRequest({
       linearIssueId: 'INT-809',
       prTitle: 'Fix the bug',
+      updateTitle: true,
       titleAlreadyTagged: false,
     });
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     expect(deps.gitHubPRClient.updatePRTitle).toHaveBeenCalledWith(
       'ghp_test_token',
@@ -147,33 +188,72 @@ describe('notifyPROfTaskCreation', () => {
     );
   });
 
+  it('posts the PR comment before attempting to update the title', async () => {
+    const deps = createFakeDeps();
+    const callOrder: string[] = [];
+    vi.mocked(deps.gitHubPRClient.postPRComment).mockImplementation(async () => {
+      callOrder.push('comment');
+      return ok({ commentId: 42 });
+    });
+    vi.mocked(deps.gitHubPRClient.updatePRTitle).mockImplementation(async () => {
+      callOrder.push('title');
+      return ok(undefined);
+    });
+
+    await notifyPROfTaskDispatch(
+      deps,
+      createFakeRequest({
+        linearIssueId: 'INT-809',
+        prTitle: 'Fix the bug',
+        updateTitle: true,
+      }),
+    );
+
+    expect(callOrder).toEqual(['comment', 'title']);
+  });
+
   it('skips PR title update when already tagged', async () => {
     const deps = createFakeDeps();
     const request = createFakeRequest({
       linearIssueId: 'INT-809',
       prTitle: '[INT-809] Fix the bug',
+      updateTitle: true,
       titleAlreadyTagged: true,
     });
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
+
+    expect(deps.gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+  });
+
+  it('skips PR title update when disabled for existing-task notifications', async () => {
+    const deps = createFakeDeps();
+    const request = createFakeRequest({
+      dispatchOutcome: 'existing_task_queued',
+      linearIssueId: 'INT-809',
+      prTitle: 'Fix the bug',
+      updateTitle: false,
+    });
+
+    await notifyPROfTaskDispatch(deps, request);
 
     expect(deps.gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
   });
 
   it('skips PR title update when linearIssueId not provided', async () => {
     const deps = createFakeDeps();
-    const request = createFakeRequest({ prTitle: 'Fix the bug' });
+    const request = createFakeRequest({ prTitle: 'Fix the bug', updateTitle: true });
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     expect(deps.gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
   });
 
   it('skips PR title update when prTitle not provided', async () => {
     const deps = createFakeDeps();
-    const request = createFakeRequest({ linearIssueId: 'INT-809' });
+    const request = createFakeRequest({ linearIssueId: 'INT-809', updateTitle: true });
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     expect(deps.gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
   });
@@ -182,7 +262,7 @@ describe('notifyPROfTaskCreation', () => {
     const deps = createFakeDeps();
     const request = createFakeRequest({ repository: 'noslash' });
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
     expect(deps.gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
@@ -196,7 +276,7 @@ describe('notifyPROfTaskCreation', () => {
     );
     const request = createFakeRequest();
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
     expect(deps.logger.info).toHaveBeenCalledWith(
@@ -213,10 +293,11 @@ describe('notifyPROfTaskCreation', () => {
     const request = createFakeRequest({
       linearIssueId: 'INT-809',
       prTitle: 'Fix the bug',
+      updateTitle: true,
       titleAlreadyTagged: false,
     });
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     expect(deps.logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ prNumber: 42 }),
@@ -233,7 +314,7 @@ describe('notifyPROfTaskCreation', () => {
     );
     const request = createFakeRequest();
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     expect(deps.logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 'task_abc123' }),
@@ -246,7 +327,7 @@ describe('notifyPROfTaskCreation', () => {
     vi.mocked(deps.userServiceClient.getOAuthToken).mockRejectedValue(new Error('Network crash'));
     const request = createFakeRequest();
 
-    await expect(notifyPROfTaskCreation(deps, request)).resolves.toBeUndefined();
+    await expect(notifyPROfTaskDispatch(deps, request)).resolves.toBeUndefined();
 
     expect(deps.logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 'task_abc123' }),
@@ -258,7 +339,7 @@ describe('notifyPROfTaskCreation', () => {
     const deps = createFakeDeps();
     const request = createFakeRequest();
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).not.toContain('**Linear Issue:**');
@@ -268,9 +349,29 @@ describe('notifyPROfTaskCreation', () => {
     const deps = createFakeDeps();
     const request = createFakeRequest();
 
-    await notifyPROfTaskCreation(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).not.toContain('**Review types:**');
+  });
+
+  it('includes reviewer line when workerType is provided', async () => {
+    const deps = createFakeDeps();
+    const request = createFakeRequest({ workerType: 'auto' });
+
+    await notifyPROfTaskDispatch(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('**Reviewer:** `auto`');
+  });
+
+  it('omits reviewer line when workerType is undefined', async () => {
+    const deps = createFakeDeps();
+    const request = createFakeRequest();
+
+    await notifyPROfTaskDispatch(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).not.toContain('**Reviewer:**');
   });
 });

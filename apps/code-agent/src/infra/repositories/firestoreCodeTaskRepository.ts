@@ -9,7 +9,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
-import type { Firestore, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
+import type { Firestore, QueryDocumentSnapshot, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Result } from '@intexuraos/common-core';
@@ -26,6 +26,7 @@ import type {
 } from '../../domain/repositories/codeTaskRepository.js';
 
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
+const ACTIVE_TASK_STATUSES = ['queued', 'dispatched', 'running'] as const;
 
 function stripLegacyLinearFields(data: Record<string, unknown>): Record<string, unknown> {
   const {
@@ -151,16 +152,18 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
 
         // Layer 3: Check active task for Linear issue (design lines 448-458)
-        if (input.linearIssueId !== undefined) {
-          const activeStatuses = ['queued', 'dispatched', 'running'] as const;
+        if (input.linearIssueId !== undefined && input.agentType !== 'review') {
           const linearQuery = collection
             .where('linearIssueId', '==', input.linearIssueId)
-            .where('status', 'in', activeStatuses)
-            .limit(1);
+            .where('status', 'in', ACTIVE_TASK_STATUSES);
           const linearSnapshot = await transaction.get(linearQuery);
 
-          if (!linearSnapshot.empty) {
-            const existingTask = linearSnapshot.docs[0]!;
+          for (const existingTask of linearSnapshot.docs) {
+            const existingData = existingTask.data();
+            if (existingData['agentType'] === 'review') {
+              continue;
+            }
+
             logger.info({
               dedupLayer: 3,
               dedupType: 'ACTIVE_TASK_EXISTS',
@@ -478,22 +481,24 @@ export const createFirestoreCodeTaskRepository = (deps: {
       linearIssueId: string
     ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>> => {
       try {
-        const activeStatuses = ['queued', 'dispatched', 'running'] as const;
         const snapshot = await collection
           .where('linearIssueId', '==', linearIssueId)
-          .where('status', 'in', activeStatuses)
-          .limit(1)
+          .where('status', 'in', ACTIVE_TASK_STATUSES)
           .get();
 
-        if (snapshot.empty) {
-          return ok({ hasActive: false });
+        for (const task of snapshot.docs) {
+          const data = task.data();
+          if (data['agentType'] === 'review') {
+            continue;
+          }
+
+          return ok({
+            hasActive: true,
+            taskId: task.id,
+          });
         }
 
-        const task = snapshot.docs[0]!;
-        return ok({
-          hasActive: true,
-          taskId: task.id,
-        });
+        return ok({ hasActive: false });
       } catch (error) {
         logger.error({ error, linearIssueId }, 'Failed to check active task for Linear issue');
         return err({
@@ -513,7 +518,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .get();
 
          
-        const tasks = snapshot.docs.map((doc: any) =>
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
           toCodeTask(doc as { id: string; data(): Record<string, unknown> })
         );
 
@@ -837,6 +842,59 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok(task);
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findActiveReviewForPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('agentType', '==', 'review')
+          .where('status', 'in', ACTIVE_TASK_STATUSES)
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find active review task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findRecentTasksByLinearIssue: async (
+      linearIssueId: string,
+      limit: number
+    ): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('linearIssueId', '==', linearIssueId)
+          .orderBy('createdAt', 'desc')
+          .limit(limit)
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error, linearIssueId, limit }, 'Failed to find recent tasks by Linear issue');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

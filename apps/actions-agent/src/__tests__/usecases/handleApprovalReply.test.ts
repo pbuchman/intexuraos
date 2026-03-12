@@ -67,7 +67,6 @@ describe('HandleApprovalReplyUseCase', () => {
       whatsappPublisher,
       actionEventPublisher,
       logger: createMockLogger(),
-      webAppUrl: 'https://test.intexuraos.cloud',
     });
   });
 
@@ -839,8 +838,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeNoteAction: mockExecuteNoteAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -919,8 +917,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeNoteAction: mockExecuteNoteAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -971,8 +968,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeTodoAction: mockExecuteTodoAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -1052,8 +1048,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeTodoAction: mockExecuteTodoAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -1104,8 +1099,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeResearchAction: mockExecuteResearchAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -1185,8 +1179,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeResearchAction: mockExecuteResearchAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -1237,8 +1230,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeLinkAction: mockExecuteLinkAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -1288,8 +1280,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: errorLogger,
         executeLinkAction: mockExecuteLinkAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithError({
         replyToWamid: 'wamid-123',
@@ -1374,8 +1365,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeCalendarAction: mockExecuteCalendarAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -1455,8 +1445,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: errorLogger,
         executeCalendarAction: mockExecuteCalendarAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithError({
         replyToWamid: 'wamid-123',
@@ -1511,8 +1500,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeLinearAction: mockExecuteLinearAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -1592,8 +1580,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: errorLogger,
         executeLinearAction: mockExecuteLinearAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithError({
         replyToWamid: 'wamid-123',
@@ -1648,8 +1635,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeCodeAction: mockExecuteCodeAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -1729,8 +1715,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeCodeAction: mockExecuteCodeAction,
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithExecute({
         replyToWamid: 'wamid-123',
@@ -2141,8 +2126,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2172,8 +2156,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2213,8 +2196,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2246,8 +2228,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2275,8 +2256,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2304,8 +2284,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2333,8 +2312,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2362,8 +2340,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2380,46 +2357,6 @@ describe('HandleApprovalReplyUseCase', () => {
     });
   });
 
-  describe('view-task button (INT-379)', () => {
-    it('sends task URL message on view-task button', async () => {
-      const result = await useCase({
-        replyToWamid: 'wamid-123',
-        replyText: '',
-        userId: 'user-1',
-        buttonId: 'view-task:task-abc',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.matched).toBe(true);
-      }
-
-      const messages = whatsappPublisher.getSentMessages();
-      expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/code-tasks/task-abc');
-    });
-  });
-
-  describe('view-task button edge cases', () => {
-    it('should handle empty taskId in view-task button', async () => {
-      const result = await useCase({
-        replyToWamid: 'wamid-123',
-        replyText: '',
-        userId: 'user-1',
-        buttonId: 'view-task:',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.matched).toBe(true);
-      }
-
-      const messages = whatsappPublisher.getSentMessages();
-      expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/code-tasks/');
-    });
-  });
-
   describe('cancel-task button edge cases', () => {
     it('should handle when nonce parsing results in undefined', async () => {
       const { FakeCodeAgentClient } = await import('../fakes.js');
@@ -2432,8 +2369,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2461,8 +2397,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2485,8 +2420,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2499,24 +2433,6 @@ describe('HandleApprovalReplyUseCase', () => {
       if (!result.ok) {
         expect(result.error.message).toContain('missing nonce');
       }
-    });
-
-    it('should handle view-task button with empty taskId', async () => {
-      const result = await useCase({
-        replyToWamid: 'wamid-123',
-        replyText: '',
-        userId: 'user-1',
-        buttonId: 'view-task:',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.matched).toBe(true);
-      }
-
-      const messages = whatsappPublisher.getSentMessages();
-      expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/code-tasks/');
     });
   });
 
@@ -2571,8 +2487,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2612,8 +2527,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2648,8 +2562,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2695,8 +2608,7 @@ describe('HandleApprovalReplyUseCase', () => {
           actionEventPublisher,
           codeAgentClient,
           logger: createMockLogger(),
-          webAppUrl: 'https://test.intexuraos.cloud',
-        });
+            });
 
         await useCaseWithClient({
           replyToWamid: 'wamid-123',
@@ -2749,8 +2661,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
@@ -2783,8 +2694,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
-        webAppUrl: 'https://test.intexuraos.cloud',
-      });
+        });
 
       const result = await useCaseWithClient({
         replyToWamid: 'wamid-123',
