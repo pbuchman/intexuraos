@@ -11,7 +11,7 @@ export interface UserServiceConfig {
   internalAuthToken: string;
   pricingContext: IPricingContext;
   logger: Logger;
-  platformZaiApiKey?: string | undefined;
+  platformDashscopeApiKey?: string | undefined;
   platformGeminiApiKey?: string | undefined;
 }
 
