@@ -62,7 +62,7 @@ describe('buildIssueCommentTriageSection', () => {
     expect(result).toContain('Review Command Instructions');
     expect(result).toContain('Allowed worker types');
     expect(result).toContain('@review architecture, security with qwen');
-    expect(result).toContain('qwen3.5-plus');
+    expect(result).toContain('qwen');
     expect(result).toContain('@review with minimax');
   });
 

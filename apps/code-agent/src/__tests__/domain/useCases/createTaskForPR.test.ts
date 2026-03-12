@@ -572,7 +572,7 @@ describe('createTaskForPR', () => {
   });
 
   it('includes workerType in PR comment after dispatch when provided', async () => {
-    request.workerType = 'qwen3.5-plus';
+    request.workerType = 'qwen';
 
     const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
     deps.gitHubPRClient = {
@@ -588,7 +588,7 @@ describe('createTaskForPR', () => {
       'pbuchman',
       'intexuraos',
       42,
-      expect.stringContaining('**Reviewer:** `qwen3.5-plus`'),
+      expect.stringContaining('**Reviewer:** `qwen`'),
     );
   });
 

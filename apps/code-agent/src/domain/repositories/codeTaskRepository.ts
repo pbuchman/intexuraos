@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type FirebaseFirestore from '@google-cloud/firestore';
-import type { CodeTask, TaskStatus } from '../models/codeTask.js';
+import type { CodeTask, TaskStatus, WorkerType } from '../models/codeTask.js';
 
 export interface CreateTaskInput {
   /** Pre-generated task ID. Auto-generated if not provided. */
@@ -14,7 +14,7 @@ export interface CreateTaskInput {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
+  workerType: WorkerType;
   workerLocation: string;
   repository: string;
   baseBranch: string;
