@@ -10,6 +10,7 @@
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import type { CreateEventDecisionInput } from '../models/eventDecision.js';
+import type { EventDecisionReviewType } from '../models/eventDecision.js';
 import type { WebhookRulesService, RuleOutcome } from './gitHubWebhookRules.js';
 import type { WebhookDispatchService } from './gitHubDispatchService.js';
 import { resolveLoginForTaskCreation } from './gitHubDispatchService.js';
@@ -22,11 +23,13 @@ import type {
 } from '../usecases/createReviewTask.js';
 import { isReviewCommandComment, extractReviewWorkerType } from '../utils/reviewTriage.js';
 import type { WorkerType } from '../models/codeTask.js';
+import type { GitHubEventLogEntryRepository } from '../repositories/gitHubEventLogEntryRepository.js';
 
 export interface UnifiedEvaluatorDeps {
   webhookRules: WebhookRulesService;
   dispatchService: WebhookDispatchService;
   eventDecisionRepo: EventDecisionRepository;
+  gitHubEventLogEntryRepo?: GitHubEventLogEntryRepository;
   evaluateEvent?: ((event: GitHubPREvent) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
   /** Pre-bound review task creator. Logger is injected at call time; all other deps are closed over at wiring. */
   createReviewTask: (logger: Logger, request: CreateReviewTaskRequest) => Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>>;
@@ -303,7 +306,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           dispatchAction: 'create_review_task',
           dispatchParams: {
             taskId: reviewResult.value.taskId,
-            reviewTypes: triage.reviewTypes,
+            reviewTypes: triage.reviewTypes as EventDecisionReviewType[],
             workerType: reviewResult.value.workerType,
           }, // @allow-result-access -- narrowed by !reviewResult.ok above
           llmCostUsd: usage.costUsd,
@@ -496,7 +499,7 @@ async function recordDecision(
     decision: 'dispatch' | 'skip' | 'request_review';
     reason: string;
     dispatchAction?: 'create_task' | 'send_message' | 'create_review_task';
-    dispatchParams?: { taskId?: string; reviewTypes?: string[]; workerType?: WorkerType };
+    dispatchParams?: CreateEventDecisionInput['dispatchParams'];
     llmCostUsd?: number;
     llmModel?: string;
     llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
@@ -507,8 +510,10 @@ async function recordDecision(
   startTime: number,
   logger: Logger,
 ): Promise<void> {
+  const eventId = event.auditEventId ?? event.id;
   const input: CreateEventDecisionInput = {
-    eventId: event.id,
+    eventId,
+    ...(event.auditEventId !== undefined && { normalizedEventId: event.id }),
     repository: event.repository,
     pullRequestNumber: event.pullRequestNumber,
     eventType: event.eventType,
@@ -533,7 +538,32 @@ async function recordDecision(
   };
 
   try {
-    await deps.eventDecisionRepo.save(input);
+    const decisionResult = await deps.eventDecisionRepo.save(input);
+    if (!decisionResult.ok) {
+      logger.error(
+        { eventId: event.id, auditEventId: event.auditEventId, error: decisionResult.error },
+        'Failed to save event decision audit record'
+      );
+      return;
+    }
+
+    if (event.auditEventId !== undefined && deps.gitHubEventLogEntryRepo !== undefined) {
+      const completeResult = await deps.gitHubEventLogEntryRepo.complete({
+        id: event.auditEventId,
+        decisionId: decisionResult.value.id,
+        decisionState: 'completed',
+        decisionOutcome: fields.decision,
+        updatedAt: new Date(),
+        rowVersion: 2,
+      });
+
+      if (!completeResult.ok) {
+        logger.error(
+          { eventId: event.id, auditEventId: event.auditEventId, error: completeResult.error },
+          'Failed to complete GitHub event log entry'
+        );
+      }
+    }
   } catch (saveError) {
     logger.error(
       { eventId: event.id, error: saveError },
