@@ -82,14 +82,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/linear-agent"
     },
-    "PENDING-apps-notion-service": {
-      "files": [
-        "apps/notion-service/src/infra/firestore/notionConnectionRepository.ts",
-        "apps/notion-service/src/routes/integrationRoutes.ts",
-        "apps/notion-service/src/routes/internalRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/notion-service"
-    },
     "PENDING-apps-todos-agent": {
       "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
       "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
