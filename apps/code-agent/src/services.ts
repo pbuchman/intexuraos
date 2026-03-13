@@ -189,7 +189,7 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         root: {
           id: request.issueId,
           identifier: `INT-${request.issueId}`,
-          url: `https://linear.app/intexuraos/issue/${request.issueId}`,
+          url: `https://linear.app/pbuchman/issue/${request.issueId}`,
           parentId: null,
           labels: [],
           assigneeId: null,
@@ -404,7 +404,7 @@ export function initServices(config: ServiceConfig): void {
         )
       : undefined,
     createReviewTask: (taskLogger, request) => createReviewTask(
-      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, gitHubPRClient, userServiceClient, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl },
+      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, gitHubPRClient, userServiceClient, workerSettingsRepo, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl },
       request,
     ),
     postTriageComment: async (senderLogin, repository, prNumber, body) => {

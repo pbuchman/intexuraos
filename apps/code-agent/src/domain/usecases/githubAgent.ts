@@ -421,7 +421,7 @@ async function evaluateCommentEventInternal(
     systemPrompt,
     messages: [{ role: 'user', content: 'Evaluate this comment and decide what action to take.' }],
     tools,
-    maxIterations: 3,
+    maxIterations: 5,
   });
 
   if (!agentResult.ok) {

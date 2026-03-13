@@ -248,7 +248,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       dispatchService,
       eventDecisionRepo,
       evaluateEvent: undefined,
-      createReviewTask: async () => ({ ok: true as const, value: { status: 'created' as const, taskId: 'mock-task' } }),
+      createReviewTask: async () => ({ ok: true as const, value: { status: 'created' as const, taskId: 'mock-task', workerType: 'qwen' } }),
       allowedBots: ALLOWED_BOTS,
     }),
   };
