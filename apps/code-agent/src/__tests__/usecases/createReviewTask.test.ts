@@ -852,6 +852,7 @@ describe('createReviewTask', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('dispatch_failed');
+      expect(result.error.taskId).toBe('task-review-1');
     }
 
     // Verify task is marked as failed with error details
@@ -863,16 +864,9 @@ describe('createReviewTask', () => {
       }
     );
 
-    // Verify dispatch failure comment was posted
-    expect(gitHubPRClient.postPRComment).toHaveBeenCalled();
-    const commentCall = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0];
-    expect(commentCall).toBeDefined();
-    if (commentCall !== undefined) {
-      const commentBody = commentCall[4];
-      expect(commentBody).toContain('Review Dispatch Failed');
-      expect(commentBody).toContain('QUEUE_FULL');
-      expect(commentBody).toContain('Task was NOT queued');
-    }
+    // Verify NO separate dispatch failure comment is posted
+    // (error info is now surfaced via the triage decision comment in unifiedEvaluator)
+    expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
   });
 
   describe('PR notification after dispatch', () => {
