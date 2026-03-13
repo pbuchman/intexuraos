@@ -47,3 +47,10 @@ export * from './tracing/index.js';
 
 // Label utilities for Linear issue labels
 export { normalizeLabel, hasCodeTaskLabel, hasPlanningTaskLabel } from './labels.js';
+
+// Shared code-task worker type contract
+export {
+  CODE_TASK_WORKER_TYPES,
+  isCodeTaskWorkerType,
+  type CodeTaskWorkerType,
+} from './codeTaskWorkerTypes.js';

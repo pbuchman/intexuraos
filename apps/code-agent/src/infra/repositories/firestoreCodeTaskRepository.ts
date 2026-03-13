@@ -882,13 +882,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
       prNumber: number
     ): Promise<Result<CodeTask | null, RepositoryError>> => {
       try {
-        // Query the newest 10 tasks for this PR and filter in-memory
-        // This avoids needing a composite index and keeps the method simple
+        // Query the newest 50 tasks for this PR and filter in-memory.
+        // Uses limit(50) instead of a Firestore inequality filter on agentType
+        // to avoid a composite index. 50 is generous — a PR would need 50+
+        // consecutive review tasks before the oldest non-review task falls
+        // outside this window.
         const snapshot = await collection
           .where('repository', '==', repository)
           .where('prNumber', '==', prNumber)
           .orderBy('createdAt', 'desc')
-          .limit(10)
+          .limit(50)
           .get();
 
         // Find the first non-review task (agentType !== 'review' or missing)

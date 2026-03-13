@@ -2733,7 +2733,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         prompt: 'Review the PR',
         sanitizedPrompt: 'Review the PR',
         systemPromptHash: 'review-auto',
-        workerType: 'qwen3.5-plus',
+        workerType: 'qwen',
         workerLocation: 'mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
@@ -2775,7 +2775,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         'pbuchman',
         'intexuraos',
         42,
-        expect.stringContaining('**Reviewer:** `qwen3.5-plus`')
+        expect.stringContaining('**Reviewer:** `qwen`')
       );
     });
 
@@ -5863,7 +5863,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         prompt: 'Review task',
         sanitizedPrompt: 'Review task',
         systemPromptHash: 'review-auto',
-        workerType: 'qwen3.5-plus',
+        workerType: 'qwen',
         workerLocation: 'mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',

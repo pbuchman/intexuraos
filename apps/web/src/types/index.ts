@@ -1,3 +1,4 @@
+import type { CodeTaskWorkerType as SharedCodeTaskWorkerType } from '@intexuraos/common-core';
 import type { LlmProvider } from '@intexuraos/llm-contract';
 /**
  * API Response types matching backend response format.
@@ -1104,7 +1105,7 @@ export interface CalendarPreview {
 /**
  * Worker type determines which model Claude uses.
  */
-export type CodeTaskWorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type CodeTaskWorkerType = SharedCodeTaskWorkerType;
 
 /**
  * Worker location for routing.

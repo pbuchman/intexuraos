@@ -766,11 +766,11 @@ describe('buildTaskOutcomeComment', () => {
       userId: 'user-1',
       outcome: 'review_failed',
       errorCode: 'TIMEOUT',
-      workerType: 'qwen3.5-plus',
+      workerType: 'qwen',
     });
 
     expect(comment).toContain('### Automated Review Failed');
-    expect(comment).toContain('**Reviewer:** `qwen3.5-plus`');
+    expect(comment).toContain('**Reviewer:** `qwen`');
     expect(comment).toContain('**Error:** TIMEOUT');
   });
 

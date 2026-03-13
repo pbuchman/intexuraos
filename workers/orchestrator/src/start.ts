@@ -150,7 +150,7 @@ function validatePortAvailable(port: number): void {
 
 /**
  * Validate worker API keys at startup.
- * Validates Anthropic OAuth credentials and ZAI API key.
+ * Validates Anthropic OAuth credentials and third-party API keys.
  * Warns (does not exit) so tasks of one type can still run if the other fails.
  */
 /* v8 ignore start -- test-infra: startup validation with network call @preserve */
@@ -246,7 +246,6 @@ function extractErrorChain(error: unknown): string {
 
 async function validateWorkerApiKeys(
   credentialMonitor: CredentialMonitor,
-  zaiKey: string,
   minimaxKey: string,
   dashscopeKey: string,
   logger: pino.Logger
@@ -272,14 +271,17 @@ async function validateWorkerApiKeys(
     );
   }
 
-  // Validate all third-party API keys in parallel
+  // Validate all third-party API keys in parallel.
+  // GLM, Qwen, and Kimi all use the same DashScope API key.
   await Promise.all([
-    zaiKey !== '' ? validateThirdPartyApiKey('glm', zaiKey, suffix, logger) : Promise.resolve(),
     minimaxKey !== ''
       ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
       : Promise.resolve(),
     dashscopeKey !== ''
-      ? validateThirdPartyApiKey('qwen3.5-plus', dashscopeKey, suffix, logger)
+      ? Promise.all([
+          validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger),
+          validateThirdPartyApiKey('kimi', dashscopeKey, suffix, logger),
+        ])
       : Promise.resolve(),
   ]);
 }
@@ -590,7 +592,7 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  // Get initial access token for non-OAuth workers (glm)
+  // Get initial access token for Anthropic-backed workers.
   const currentToken = credentialMonitor.getCurrentAccessToken();
   if (currentToken === null) {
     process.stderr.write(`\n❌ Credentials expired. Run claude-login.sh again.\n\n`);
@@ -602,7 +604,6 @@ async function bootstrap(): Promise<void> {
     ANTHROPIC_API_KEY: currentToken,
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
-    ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_APP_API_KEY'),
     MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
     DASHSCOPE_API_KEY: getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY'),
   };
@@ -627,7 +628,6 @@ async function bootstrap(): Promise<void> {
   const secrets = isolationConfig.getSecrets();
   void validateWorkerApiKeys(
     credentialMonitor,
-    secrets.ZAI_API_KEY,
     secrets.MINIMAX_API_KEY,
     secrets.DASHSCOPE_API_KEY,
     logger

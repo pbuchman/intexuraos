@@ -432,7 +432,7 @@ describe('GitHubDispatchService', () => {
       await service.dispatch({ ...context, event: modelCommentEvent });
 
       const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
-      expect(requestArg?.workerType).toBe('qwen3.5-plus');
+      expect(requestArg?.workerType).toBe('qwen');
     });
 
     it('should not pass workerType when no @worker/@model directive found', async () => {

@@ -1,3 +1,4 @@
+import type { CodeTaskWorkerType } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 
 /**
@@ -8,9 +9,10 @@ import { Timestamp } from '@google-cloud/firestore';
  * - sonnet: Force Sonnet model
  * - minimax: Use MiniMax M2.5 model
  * - glm: Use Z.ai GLM model
- * - qwen3.5-plus: Use Qwen 3.5 Plus model
+ * - qwen: Use Qwen model
+ * - kimi: Use Kimi model
  */
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type WorkerType = CodeTaskWorkerType;
 
 /**
  * Worker location for routing.

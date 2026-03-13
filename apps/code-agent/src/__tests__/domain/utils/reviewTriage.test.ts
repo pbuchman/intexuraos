@@ -13,7 +13,7 @@ describe('extractReviewWorkerType', () => {
 
   it('extracts worker type from @review architecture security qwen', () => {
     const workerType = extractReviewWorkerType('@review architecture security qwen');
-    expect(workerType).toBe('qwen3.5-plus');
+    expect(workerType).toBe('qwen');
   });
 
   it('returns undefined when no worker type found', () => {
@@ -58,7 +58,7 @@ describe('extractReviewWorkerType', () => {
 
   it('extracts worker type from multi-review comment with worker specifier', () => {
     const workerType = extractReviewWorkerType('@review architecture, security with qwen');
-    expect(workerType).toBe('qwen3.5-plus');
+    expect(workerType).toBe('qwen');
   });
 });
 
@@ -97,8 +97,8 @@ describe('isReviewCommandComment', () => {
 });
 
 describe('normalizeReviewWorkerType', () => {
-  it('normalizes qwen to qwen3.5-plus', () => {
-    expect(normalizeReviewWorkerType('qwen')).toBe('qwen3.5-plus');
+  it('normalizes qwen to qwen', () => {
+    expect(normalizeReviewWorkerType('qwen')).toBe('qwen');
   });
 
   it('normalizes case-insensitively', () => {

@@ -390,12 +390,12 @@ describe('UnifiedEvaluator', () => {
           triage: {
             action: 'request_review',
             reviewTypes: ['architecture'],
-            workerType: 'qwen3.5-plus',
+            workerType: 'qwen',
           },
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'The comment explicitly requested architecture review with qwen.',
         })),
-        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-comment-1', workerType: 'qwen3.5-plus' })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-comment-1', workerType: 'qwen' })),
       });
       const evaluator = createUnifiedEvaluator(deps);
       const event = createFakeEvent({
@@ -410,7 +410,7 @@ describe('UnifiedEvaluator', () => {
         logger,
         expect.objectContaining({
           reviewTypes: ['architecture'],
-          workerType: 'qwen3.5-plus',
+          workerType: 'qwen',
           reviewComment: '@review architecture',
         })
       );
@@ -420,7 +420,7 @@ describe('UnifiedEvaluator', () => {
           dispatchParams: expect.objectContaining({
             taskId: 'task-review-comment-1',
             reviewTypes: ['architecture'],
-            workerType: 'qwen3.5-plus',
+            workerType: 'qwen',
           }),
         })
       );
@@ -835,7 +835,7 @@ describe('UnifiedEvaluator', () => {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
         } as unknown as WebhookRulesService,
         evaluateEvent: vi.fn().mockResolvedValue(ok({
-          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'qwen3.5-plus' },
+          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'qwen' },
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'Architecture review requested.',
         })),
@@ -858,7 +858,7 @@ describe('UnifiedEvaluator', () => {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
         } as unknown as WebhookRulesService,
         evaluateEvent: vi.fn().mockResolvedValue(ok({
-          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'qwen3.5-plus' },
+          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'qwen' },
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'Architecture review requested.',
         })),
