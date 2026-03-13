@@ -5231,6 +5231,56 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('carries forward comment_replied for pull_request tasks', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-pr-comment-replied-test',
+        workerType: 'auto',
+        prompt: 'Test pull_request comment_replied carry-forward',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'feature/merge-conflict',
+        commits: 2,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/1161',
+        summary: 'Resolved merge conflicts',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-pr-comment-replied-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        comment_replied: true,
+        summary: 'old summary',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              comment_replied: true,
+            }),
+          }),
+        })
+      );
+    });
+
     it('does not send resumedCompletion in webhook payload on failure', async () => {
       const request: CreateTaskRequest = {
         taskId: 'resumed-failure-no-flag-test',
