@@ -382,6 +382,28 @@ describe('notifyPROfTaskDispatch', () => {
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).not.toContain('**Reviewer:**');
   });
+
+  it('skips comment posting when skipComment is true but still updates title', async () => {
+    const deps = createFakeDeps();
+    const request = createFakeRequest({
+      skipComment: true,
+      linearIssueId: 'INT-809',
+      prTitle: 'Fix the bug',
+      updateTitle: true,
+      titleAlreadyTagged: false,
+    });
+
+    await notifyPROfTaskDispatch(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.gitHubPRClient.updatePRTitle).toHaveBeenCalledWith(
+      'ghp_test_token',
+      'pbuchman',
+      'intexuraos',
+      42,
+      '[INT-809] Fix the bug'
+    );
+  });
 });
 
 describe('notifyDispatchFailed', () => {

@@ -30,6 +30,7 @@ export interface PRTaskNotificationRequest {
   titleAlreadyTagged?: boolean;
   reviewTypes?: string[];
   workerType?: string;
+  skipComment?: boolean;
 }
 
 export type PRTaskDispatchOutcome =
@@ -253,16 +254,18 @@ export async function notifyPROfTaskDispatch(
       return;
     }
 
-    // Post dispatch comment
-    const commentBody = buildTaskDispatchComment(request);
-    const commentResult = await gitHubPRClient.postPRComment(
-      githubToken, owner, repo, request.prNumber, commentBody,
-    );
-    if (!commentResult.ok) {
-      logger.warn(
-        { error: commentResult.error, taskId: request.taskId, prNumber: request.prNumber },
-        'Failed to post task-dispatch comment (best-effort)',
+    // Post dispatch comment (skip for review tasks where triage comment already posted)
+    if (request.skipComment !== true) {
+      const commentBody = buildTaskDispatchComment(request);
+      const commentResult = await gitHubPRClient.postPRComment(
+        githubToken, owner, repo, request.prNumber, commentBody,
       );
+      if (!commentResult.ok) {
+        logger.warn(
+          { error: commentResult.error, taskId: request.taskId, prNumber: request.prNumber },
+          'Failed to post task-dispatch comment (best-effort)',
+        );
+      }
     }
 
     // Best-effort: update PR title with Linear issue tag after the ack comment.

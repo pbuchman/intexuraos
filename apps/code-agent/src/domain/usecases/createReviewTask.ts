@@ -367,6 +367,7 @@ export async function createReviewTask(
       userId,
       dispatchOutcome: 'review_task_dispatched',
       updateTitle: true,
+      skipComment: true,
       ...(linearIssueId !== undefined && { linearIssueId }),
       ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
       titleAlreadyTagged,
