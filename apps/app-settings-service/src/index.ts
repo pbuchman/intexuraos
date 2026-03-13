@@ -34,13 +34,12 @@ const HOST = process.env['HOST'] ?? '0.0.0.0';
 async function validateAllModelPricing(): Promise<void> {
   const { pricingRepository } = getServices();
 
-  // Fetch pricing for all providers
-  const [google, openai, anthropic, perplexity, zai] = await Promise.all([
+  // Fetch pricing for all 4 providers (no ZAI)
+  const [google, openai, anthropic, perplexity] = await Promise.all([
     pricingRepository.getByProvider(LlmProviders.Google),
     pricingRepository.getByProvider(LlmProviders.OpenAI),
     pricingRepository.getByProvider(LlmProviders.Anthropic),
     pricingRepository.getByProvider(LlmProviders.Perplexity),
-    pricingRepository.getByProvider(LlmProviders.Zai),
   ]);
 
   // Build a map of all models that have pricing
@@ -63,11 +62,6 @@ async function validateAllModelPricing(): Promise<void> {
   }
   if (perplexity !== null) {
     for (const model of Object.keys(perplexity.models)) {
-      modelsWithPricing.add(model);
-    }
-  }
-  if (zai !== null) {
-    for (const model of Object.keys(zai.models)) {
       modelsWithPricing.add(model);
     }
   }

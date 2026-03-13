@@ -43,8 +43,6 @@ let container: Services | null = null;
  */
 const CLASSIFIER_MODELS = [
   LlmModels.Gemini25Flash,
-  LlmModels.Glm47,
-  LlmModels.Glm47Flash,
 ] as const;
 
 export async function initServices(config: ServiceConfig): Promise<void> {
@@ -75,7 +73,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger: createAppLogger({ name: 'userServiceClient' }),
-    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
   const eventPublisher = createActionEventPublisher({

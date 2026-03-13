@@ -1165,7 +1165,7 @@ describe('processCodeAction', () => {
 
     expect(result.ok).toBe(true);
 
-    // Conflicting labels (opus + glm) → fall back to request's 'auto'
+    // Conflicting labels (opus + glm-5) → fall back to request's 'auto'
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         workerType: 'auto',

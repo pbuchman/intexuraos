@@ -3,14 +3,7 @@ import { Timestamp } from '@google-cloud/firestore';
 
 /**
  * Worker type determines which model Claude uses.
- * Design reference: Lines 1207-1212
- * - opus: Force Opus model
- * - auto: Automatic model selection (default)
- * - sonnet: Force Sonnet model
- * - minimax: Use MiniMax M2.5 model
- * - glm: Use Z.ai GLM model
- * - qwen: Use Qwen model
- * - kimi: Use Kimi model
+ * Uses shared worker types from common-core.
  */
 export type WorkerType = CodeTaskWorkerType;
 

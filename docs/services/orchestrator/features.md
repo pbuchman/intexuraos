@@ -35,7 +35,7 @@ You can run one orchestrator or several, each on different hardware, each in a d
 
 ### Choose Your Model Provider
 
-Each task specifies a worker type that determines which AI model provider handles the inference. The orchestrator supports Anthropic (opus, auto, sonnet), ZAI (glm), MiniMax (MiniMax-M2.5), and Alibaba Cloud (qwen3.5-plus). OAuth credentials for Anthropic models are managed automatically — the orchestrator reads Claude CLI credentials, refreshes tokens before they expire, and propagates fresh credentials to every running container. Third-party API keys are validated at startup so you know immediately if a provider is misconfigured.
+Each task specifies a worker type that determines which AI model provider handles the inference. The orchestrator supports Anthropic (opus, auto, sonnet), MiniMax (MiniMax-M2.5), and Alibaba Cloud (glm-5, qwen3.5-plus). OAuth credentials for Anthropic models are managed automatically — the orchestrator reads Claude CLI credentials, refreshes tokens before they expire, and propagates fresh credentials to every running container. Third-party API keys are validated at startup so you know immediately if a provider is misconfigured.
 
 **Example:** A team routes complex architecture tasks to opus for maximum reasoning depth, routine bug fixes to sonnet for speed and cost efficiency, and batch documentation tasks to qwen3.5-plus. The orchestrator dispatches each to the right provider without manual intervention.
 
@@ -86,7 +86,7 @@ Install the orchestrator on any Unix machine with Docker, set up a Cloudflare tu
 ## Key Benefits
 
 - **Infrastructure sovereignty** — Your source code never leaves your network; outbound data is limited to task status, logs, and performance metrics
-- **Model flexibility** — Route tasks to Anthropic, ZAI, MiniMax, or Alibaba Cloud models based on complexity and cost requirements
+- **Model flexibility** — Route tasks to Anthropic, MiniMax, or Alibaba Cloud models based on complexity and cost requirements
 - **Location independence** — Any Unix machine with Docker becomes a worker station, connected through a single outbound tunnel
 - **Concurrent isolation** — Each task gets its own branch, container, credentials, and resource limits with no cross-task visibility
 - **Independent verification** — Completion is confirmed by Gemini semantic analysis with agent-specific schema validation, not worker self-reporting
