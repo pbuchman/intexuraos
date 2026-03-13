@@ -7,7 +7,6 @@ import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
 import { createPerplexityClient } from '@intexuraos/infra-perplexity';
-import { createGlmClient } from '@intexuraos/infra-glm';
 import { LlmModels, LlmProviders, type ModelPricing } from '@intexuraos/llm-contract';
 import type {
   LlmProvider,
@@ -23,7 +22,6 @@ const VALIDATION_MODELS = {
   [LlmProviders.OpenAI]: LlmModels.GPT4oMini,
   [LlmProviders.Anthropic]: LlmModels.ClaudeHaiku35,
   [LlmProviders.Perplexity]: LlmModels.Sonar,
-  [LlmProviders.Zai]: LlmModels.Glm47,
 } as const;
 
 /**
@@ -34,7 +32,6 @@ export interface ValidationPricing {
   openai: ModelPricing;
   anthropic: ModelPricing;
   perplexity: ModelPricing;
-  zai: ModelPricing;
 }
 
 /**
@@ -136,26 +133,6 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok(undefined);
       }
-      case LlmProviders.Zai: {
-        const client = createGlmClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Zai],
-          userId,
-          pricing: this.pricing.zai,
-          logger: this.logger,
-        });
-        const result = await client.generate(VALIDATION_PROMPT);
-        if (!result.ok) {
-          return err({
-            code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
-            message:
-              result.error.code === 'INVALID_KEY'
-                ? 'Invalid Zai API key'
-                : `Zai API error: ${result.error.message}`,
-          });
-        }
-        return ok(undefined);
-      }
     }
   }
 
@@ -223,23 +200,6 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
           pricing: this.pricing.perplexity,
-          logger: this.logger,
-        });
-        const result = await client.generate(prompt);
-        if (!result.ok) {
-          return err({
-            code: 'API_ERROR',
-            message: result.error.message,
-          });
-        }
-        return ok({ content: result.value.content });
-      }
-      case LlmProviders.Zai: {
-        const client = createGlmClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Zai],
-          userId,
-          pricing: this.pricing.zai,
           logger: this.logger,
         });
         const result = await client.generate(prompt);

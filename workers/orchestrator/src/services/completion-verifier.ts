@@ -106,8 +106,10 @@ export const PULL_REQUEST_SCHEMA = z.object({
 
 export const REVIEW_SCHEMA = z.object({
   gh_pr_url: z.string(),
-  review_comments_posted: z.string(),
-  review_types: z.string(),
+  review_comments_posted: z
+    .string()
+    .regex(/^\d+$/, 'review_comments_posted must be a numeric string'),
+  review_types: z.string().trim().min(1, 'review_types must not be empty'),
   summary: z.string(),
 });
 

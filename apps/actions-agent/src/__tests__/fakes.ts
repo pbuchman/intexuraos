@@ -1,4 +1,4 @@
-import type { Result, ServiceFeedback } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback, CodeTaskWorkerType } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
@@ -745,7 +745,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     approvalEventId: string;
     payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+      workerType: CodeTaskWorkerType;
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
@@ -798,7 +798,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     approvalEventId: string;
     payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+      workerType: CodeTaskWorkerType;
       linearIssueId?: string;
       linearIssueTitle?: string;
     };

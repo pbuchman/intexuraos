@@ -83,7 +83,8 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           'Starting GitHub dispatch workflow'
         );
 
-        const taskResult = await deps.codeTaskRepo.findByPR(event.repository, event.pullRequestNumber);
+        // Use non-review lookup to avoid routing generic comments into review tasks
+        const taskResult = await deps.codeTaskRepo.findLatestNonReviewTaskByPR(event.repository, event.pullRequestNumber);
 
         if (!taskResult.ok) {
           logger.error(

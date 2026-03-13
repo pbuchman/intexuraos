@@ -1,3 +1,5 @@
+import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+
 export type ActionType = 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code';
 export type ActionStatus =
   | 'pending'
@@ -28,7 +30,7 @@ export interface CodeActionPayload {
   /** The user's request (what they want Claude to do) */
   prompt: string;
   /** Which model to use (see design lines 1203-1230) */
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+  workerType: CodeTaskWorkerType;
   /** Optional: existing Linear issue to work on */
   linearIssueId?: string;
   /** Optional: title if issue exists */

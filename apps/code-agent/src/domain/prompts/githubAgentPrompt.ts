@@ -29,7 +29,7 @@ export interface GitHubAgentPromptInput {
 export const githubAgentPrompt: PromptBuilder<GitHubAgentPromptInput> = {
   name: 'github-agent',
   description: 'System prompt for GitHub Agent that evaluates PR and comment events',
-  version: '4.0.0',
+  version: '4.2.0',
   build(input: GitHubAgentPromptInput): string {
     const sections: string[] = [
       'You are a GitHub webhook evaluation agent for the IntexuraOS project.',
@@ -89,7 +89,15 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
     '- **architecture**: Architecture review. Request when changes span multiple packages/services or introduce new patterns.',
     '',
     'You may request multiple review types for a single PR if appropriate.',
-    'Always call at least one tool (either `request_review` or `skip`).',
+    '',
+    '## CRITICAL',
+    '',
+    'You MUST call exactly one of these tools to make your decision:',
+    '- `request_review`: if the PR needs review',
+    '- `skip`: if the PR is trivial (config-only, docs-only, auto-generated)',
+    '',
+    'Do NOT respond with text only. Your decision is recorded via tool calls.',
+    'If you skip, explain WHY in the reason field — this reason is shown to the PR author.',
     '',
     '## HARD RULES',
     '',

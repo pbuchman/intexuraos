@@ -316,7 +316,7 @@ describe('Code Tasks E2E', () => {
       expect(Array.isArray(response.data.data.workers)).toBe(true);
 
       // Each worker should have expected fields
-      response.data.data.workers.forEach((worker) => {
+      response.data.data.workers.forEach((worker: Record<string, unknown>) => {
         expect(worker).toHaveProperty('name');
         expect(worker).toHaveProperty('url');
         expect(worker).toHaveProperty('priority');

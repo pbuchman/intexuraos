@@ -31,23 +31,17 @@ vi.mock('@intexuraos/infra-perplexity', () => ({
   createPerplexityClient: vi.fn(),
 }));
 
-vi.mock('@intexuraos/infra-glm', () => ({
-  createGlmClient: vi.fn(),
-}));
-
 // Import mocked modules after vi.mock
 const { createGeminiClient } = await import('@intexuraos/infra-gemini');
 const { createGptClient } = await import('@intexuraos/infra-gpt');
 const { createClaudeClient } = await import('@intexuraos/infra-claude');
 const { createPerplexityClient } = await import('@intexuraos/infra-perplexity');
-const { createGlmClient } = await import('@intexuraos/infra-glm');
 
 const testPricing: ValidationPricing = {
   google: { inputPricePerMillion: 0.1, outputPricePerMillion: 0.4 },
   openai: { inputPricePerMillion: 0.15, outputPricePerMillion: 0.6 },
   anthropic: { inputPricePerMillion: 0.8, outputPricePerMillion: 4.0 },
   perplexity: { inputPricePerMillion: 1.0, outputPricePerMillion: 1.0, useProviderCost: true },
-  zai: { inputPricePerMillion: 0.6, outputPricePerMillion: 2.2, webSearchCostPerCall: 0.005 },
 };
 
 describe('LlmValidatorImpl', () => {
@@ -265,56 +259,6 @@ describe('LlmValidatorImpl', () => {
         }
       });
     });
-
-    describe('zai provider', () => {
-      it('returns ok when validation succeeds', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
-        };
-        vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('zai', 'glm-test-key', testUserId);
-
-        expect(result.ok).toBe(true);
-        expect(createGlmClient).toHaveBeenCalledWith({
-          apiKey: 'glm-test-key',
-          model: LlmModels.Glm47,
-          userId: testUserId,
-          pricing: testPricing.zai,
-          logger: mockLogger,
-        });
-      });
-
-      it('returns INVALID_KEY error when key is invalid', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
-        };
-        vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('zai', 'bad-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('INVALID_KEY');
-          expect(result.error.message).toBe('Invalid Zai API key');
-        }
-      });
-
-      it('returns API_ERROR when other errors occur', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMITED', message: 'Too fast' })),
-        };
-        vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('zai', 'test-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toContain('Zai API error');
-        }
-      });
-    });
   });
 
   describe('testRequest', () => {
@@ -468,40 +412,6 @@ describe('LlmValidatorImpl', () => {
         if (!result.ok) {
           expect(result.error.code).toBe('API_ERROR');
           expect(result.error.message).toBe('Search failed');
-        }
-      });
-    });
-
-    describe('zai provider', () => {
-      it('returns content when test succeeds', async () => {
-        const mockClient = {
-          generate: vi
-            .fn()
-            .mockResolvedValue(ok({ content: 'Hello from GLM!', usage: mockUsage })),
-        };
-        vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest('zai', 'glm-key', testPrompt, testUserId);
-
-        expect(result.ok).toBe(true);
-        if (result.ok) {
-          expect(result.value.content).toBe('Hello from GLM!');
-        }
-        expect(mockClient.generate).toHaveBeenCalledWith(testPrompt);
-      });
-
-      it('returns API_ERROR when test fails', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Request failed' })),
-        };
-        vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest('zai', 'glm-key', testPrompt, testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toBe('Request failed');
         }
       });
     });

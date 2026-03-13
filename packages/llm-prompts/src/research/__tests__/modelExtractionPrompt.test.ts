@@ -470,7 +470,6 @@ describe('exported constants', () => {
       expect(MODEL_KEYWORDS[LlmModels.Sonar]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.SonarPro]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.SonarDeepResearch]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.Glm47]).toBeDefined();
     });
 
     it('each model has at least one keyword', () => {
@@ -486,7 +485,6 @@ describe('exported constants', () => {
       expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Anthropic]).toBe(LlmModels.ClaudeSonnet45);
       expect(PROVIDER_DEFAULT_MODELS[LlmProviders.OpenAI]).toBe(LlmModels.GPT52);
       expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Perplexity]).toBe(LlmModels.SonarPro);
-      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Zai]).toBe(LlmModels.Glm47);
     });
   });
 

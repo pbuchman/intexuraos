@@ -18,9 +18,81 @@ import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import { githubAgentPrompt } from '../prompts/githubAgentPrompt.js';
 import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.js';
 import { isReviewCommandComment, normalizeReviewWorkerType, SUPPORTED_REVIEW_WORKER_TYPES } from '../utils/reviewTriage.js';
+import { TriageSkipSchema, TriageReviewSchema } from '../validation/triageSchema.js';
+import { buildTriageRepairMessage } from '../validation/buildTriageRepairMessage.js';
+import type { ZodError } from 'zod';
 
 const VALID_REVIEW_TYPES = ['code_quality', 'security', 'architecture'] as const;
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
+
+function formatZodErrors(error: ZodError): string {
+  return error.issues.map((i) => i.message).join('; ');
+}
+
+function validateTriageState(
+  state: { skipped: boolean; skipReason: string | undefined },
+  reviewsRequested: string[],
+): { ok: true; value: GitHubAgentTriageResult } | { ok: false; error: string } {
+  const dedupedReviewTypes = [...new Set(reviewsRequested)];
+
+  if (state.skipped) {
+    /* v8 ignore start -- upstream: skip tool handler always sets skipReason to a string, nullish coalescing fallback is unreachable @preserve */
+    const parsed = TriageSkipSchema.safeParse({ action: 'skip', reason: state.skipReason ?? '' });
+    /* v8 ignore stop @preserve */
+    if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
+    return { ok: true, value: { action: 'skip', reason: parsed.data.reason } };
+  }
+
+  if (dedupedReviewTypes.length > 0) {
+    const parsed = TriageReviewSchema.safeParse({ action: 'request_review', reviewTypes: dedupedReviewTypes });
+    /* v8 ignore start -- upstream: tool handler pre-validates review types before adding to reviewsRequested, so Zod reject is unreachable @preserve */
+    if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
+    /* v8 ignore stop @preserve */
+    return { ok: true, value: { action: 'request_review', reviewTypes: parsed.data.reviewTypes } };
+  }
+
+  return { ok: false, error: 'No triage tool was called. You must call either request_review or skip.' };
+}
+
+function validateCommentTriageState(
+  state: {
+    skipped: boolean;
+    skipReason: string | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes: property is always present but nullable
+    reviewTypes: string[];
+    reviewWorkerType: WorkerType | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes: property is always present but nullable
+    dispatchTemplate: 'pr_comment' | 'bot_review_edit' | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes: property is always present but nullable
+  },
+): { ok: true; value: GitHubAgentTriageResult } | { ok: false; error: string } {
+  if (state.skipped) {
+    /* v8 ignore start -- upstream: skip tool handler always sets skipReason to a string, nullish coalescing fallback is unreachable @preserve */
+    const parsed = TriageSkipSchema.safeParse({ action: 'skip', reason: state.skipReason ?? '' });
+    /* v8 ignore stop @preserve */
+    if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
+    return { ok: true, value: { action: 'skip', reason: parsed.data.reason } };
+  }
+
+  const dedupedReviewTypes = [...new Set(state.reviewTypes)];
+  if (dedupedReviewTypes.length > 0) {
+    const parsed = TriageReviewSchema.safeParse({ action: 'request_review', reviewTypes: dedupedReviewTypes });
+    /* v8 ignore start -- upstream: tool handler pre-validates review types before adding to state.reviewTypes, so Zod reject is unreachable @preserve */
+    if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
+    /* v8 ignore stop @preserve */
+    return {
+      ok: true,
+      value: {
+        action: 'request_review',
+        reviewTypes: parsed.data.reviewTypes,
+        ...(state.reviewWorkerType !== undefined && { workerType: state.reviewWorkerType }),
+      },
+    };
+  }
+
+  if (state.dispatchTemplate !== undefined) {
+    return { ok: true, value: { action: 'dispatch', template: state.dispatchTemplate } };
+  }
+
+  return { ok: false, error: 'No triage tool was called. You must call a tool to make your decision.' };
+}
 
 export interface GitHubAgentDeps {
   logger: Logger;
@@ -228,6 +300,11 @@ async function evaluatePREventInternal(
     messages: [{ role: 'user', content: 'Evaluate this PR and decide what reviews to request.' }],
     tools,
     maxIterations: 5,
+    onExhausted: () => buildTriageRepairMessage(
+      { skipped: state.skipped, skipReason: state.skipReason, reviewsRequested },
+      'No triage tool was called. You must call either request_review or skip.',
+    ),
+    repairIterations: 2,
   });
 
   if (!agentResult.ok) {
@@ -243,15 +320,15 @@ async function evaluatePREventInternal(
     'GitHub Agent evaluation complete'
   );
 
-  /* v8 ignore start -- ts-type: null coalescing for optional skip reason @preserve */
-  const skipReason = state.skipReason ?? '(no reason)';
-  /* v8 ignore stop @preserve */
-  const dedupedReviewTypes = [...new Set(reviewsRequested)];
-  const triage: GitHubAgentTriageResult = state.skipped
-    ? { action: 'skip', reason: skipReason }
-    : dedupedReviewTypes.length > 0
-      ? { action: 'request_review', reviewTypes: dedupedReviewTypes }
-      : { action: 'skip', reason: 'No tool called' };
+  const triageOrError = validateTriageState(state, reviewsRequested);
+  if (!triageOrError.ok) {
+    logger.error(
+      { prNumber: event.pullRequestNumber, error: triageOrError.error, toolCalls },
+      'GitHub Agent triage validation failed after repair'
+    );
+    return { ok: false, error: { code: 'LLM_FAILED', message: `Triage invalid: ${triageOrError.error}` } };
+  }
+  const triage = triageOrError.value;
 
   return {
     ok: true,
@@ -294,8 +371,8 @@ async function evaluateCommentEventInternal(
           },
           worker_type: {
             type: 'string',
-            enum: ['qwen', ...SUPPORTED_REVIEW_WORKER_TYPES],
-            description: 'The worker type to use. Normalize qwen to qwen3.5-plus.',
+            enum: [...SUPPORTED_REVIEW_WORKER_TYPES],
+            description: 'The worker type to use.',
           },
         },
         required: ['review_type', 'worker_type'],
@@ -421,7 +498,12 @@ async function evaluateCommentEventInternal(
     systemPrompt,
     messages: [{ role: 'user', content: 'Evaluate this comment and decide what action to take.' }],
     tools,
-    maxIterations: 3,
+    maxIterations: 5,
+    onExhausted: () => buildTriageRepairMessage(
+      { skipped: state.skipped, skipReason: state.skipReason, reviewsRequested: state.reviewTypes },
+      'No triage tool was called. You must call a tool to make your decision.',
+    ),
+    repairIterations: 2,
   });
 
   if (!agentResult.ok) {
@@ -437,21 +519,15 @@ async function evaluateCommentEventInternal(
     'GitHub Agent comment evaluation complete'
   );
 
-  /* v8 ignore start -- ts-type: null coalescing for optional skip reason @preserve */
-  const commentSkipReason = state.skipReason ?? '(no reason)';
-  /* v8 ignore stop @preserve */
-  const dedupedReviewTypes = [...new Set(state.reviewTypes)];
-  const triage: GitHubAgentTriageResult = state.skipped
-    ? { action: 'skip', reason: commentSkipReason }
-    : dedupedReviewTypes.length > 0
-      ? {
-          action: 'request_review',
-          reviewTypes: dedupedReviewTypes,
-          ...(state.reviewWorkerType !== undefined && { workerType: state.reviewWorkerType }),
-        }
-    : state.dispatchTemplate !== undefined
-      ? { action: 'dispatch', template: state.dispatchTemplate }
-      : { action: 'skip', reason: 'No tool called' };
+  const commentTriageOrError = validateCommentTriageState(state);
+  if (!commentTriageOrError.ok) {
+    logger.error(
+      { prNumber: event.pullRequestNumber, error: commentTriageOrError.error, toolCalls },
+      'GitHub Agent comment triage validation failed after repair'
+    );
+    return { ok: false, error: { code: 'LLM_FAILED', message: `Triage invalid: ${commentTriageOrError.error}` } };
+  }
+  const triage = commentTriageOrError.value;
 
   return {
     ok: true,

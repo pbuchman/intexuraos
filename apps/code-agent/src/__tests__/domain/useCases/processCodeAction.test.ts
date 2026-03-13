@@ -460,7 +460,7 @@ describe('processCodeAction', () => {
       linearIssueLabels: ['code-task'],
       hasChildren: false,
       linearFallback: false,
-      linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-305',
+      linearIssueUrl: 'https://linear.app/pbuchman/issue/INT-305',
     });
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({
@@ -1165,7 +1165,7 @@ describe('processCodeAction', () => {
 
     expect(result.ok).toBe(true);
 
-    // Conflicting labels (opus + glm) → fall back to request's 'auto'
+    // Conflicting labels (opus + glm-5) → fall back to request's 'auto'
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         workerType: 'auto',

@@ -21,7 +21,6 @@ const ALLOWED_CLIENT_FILES = [
   'packages/infra-gpt/src/client.ts',
   'packages/infra-claude/src/client.ts',
   'packages/infra-perplexity/src/client.ts',
-  'packages/infra-glm/src/client.ts',
 ];
 
 // All LLM model string literals that should not appear outside llm-contract

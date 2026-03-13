@@ -11,7 +11,6 @@ export interface UserServiceConfig {
   internalAuthToken: string;
   pricingContext: IPricingContext;
   logger: Logger;
-  platformZaiApiKey?: string | undefined;
   platformGeminiApiKey?: string | undefined;
 }
 
@@ -23,7 +22,6 @@ export interface DecryptedApiKeys {
   openai?: string;
   anthropic?: string;
   perplexity?: string;
-  zai?: string;
 }
 
 /**

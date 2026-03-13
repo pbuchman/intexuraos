@@ -439,7 +439,6 @@ export function createFakeLlmProviders(): Record<LlmProvider, LlmResearchProvide
     openai: createFakeLlmResearchProvider('OpenAI research result'),
     anthropic: createFakeLlmResearchProvider('Anthropic research result'),
     perplexity: createFakeLlmResearchProvider('Perplexity research result'),
-    zai: createFakeLlmResearchProvider('Zai research result'),
   };
 }
 

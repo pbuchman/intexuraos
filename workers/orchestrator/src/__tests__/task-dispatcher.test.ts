@@ -107,8 +107,8 @@ const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
           text: `PLANNING_AGENT_FINAL:
 - Outcome: ${outcome}
 - superpowers_writing_plans_used: 1
-- Original issue: https://linear.app/intexuraos/issue/INT-123
-- Planning issue: ${outcome === 'planned' ? 'https://linear.app/intexuraos/issue/INT-456' : ''}
+- Original issue: https://linear.app/pbuchman/issue/INT-123
+- Planning issue: ${outcome === 'planned' ? 'https://linear.app/pbuchman/issue/INT-456' : ''}
 - Child issues: ${outcome === 'planned' ? '1' : '0'}
 - Plan doc:
 - Planning PR: 
@@ -129,7 +129,7 @@ const executionFinalAssistantLog = (): string =>
           text: `EXECUTION_AGENT_FINAL:
 - PR: https://github.com/pbuchman/intexuraos/pull/123
 - CI evidence: pnpm run ci:tracked successful
-- Linear issue: https://linear.app/intexuraos/issue/INT-123
+- Linear issue: https://linear.app/pbuchman/issue/INT-123
 - Summary: Execution completed`,
         },
       ],
@@ -1834,7 +1834,7 @@ describe('TaskDispatcher', () => {
               execution_outcome_label: 'implemented',
               execution_superpowers_executing_plans_used: '1',
               execution_superpowers_requesting_code_review_used: '1',
-              execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+              execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
             }),
           }),
         })
@@ -4760,7 +4760,7 @@ describe('TaskDispatcher', () => {
             status: 'completed',
             result: expect.objectContaining({
               prUrl: 'https://github.com/pbuchman/intexuraos/pull/967',
-              execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-677',
+              execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-677',
             }),
           }),
         })
@@ -4881,7 +4881,7 @@ describe('TaskDispatcher', () => {
       task.resumedAfterSuccess = true;
       task.lastSuccessResult = {
         planning_outcome_label: 'planned',
-        planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+        planning_linear_url: 'https://linear.app/pbuchman/issue/INT-818',
       };
       await resumedStatePersistence.save(state);
 
@@ -4897,7 +4897,7 @@ describe('TaskDispatcher', () => {
             status: 'completed',
             result: expect.objectContaining({
               planning_outcome_label: 'planned',
-              planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+              planning_linear_url: 'https://linear.app/pbuchman/issue/INT-818',
             }),
           }),
         })
@@ -5025,7 +5025,7 @@ describe('TaskDispatcher', () => {
       task.resumedAfterSuccess = true;
       task.lastSuccessResult = {
         planning_outcome_label: 'planned',
-        planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+        planning_linear_url: 'https://linear.app/pbuchman/issue/INT-818',
       };
       await resumedStatePersistence.save(state);
 
@@ -5041,7 +5041,7 @@ describe('TaskDispatcher', () => {
             status: 'failed',
             result: expect.objectContaining({
               planning_outcome_label: 'planned',
-              planning_linear_url: 'https://linear.app/intexuraos/issue/INT-818',
+              planning_linear_url: 'https://linear.app/pbuchman/issue/INT-818',
             }),
             error: expect.objectContaining({
               code: 'TASK_RESUMED_HARD_ERROR',
@@ -5084,6 +5084,151 @@ describe('TaskDispatcher', () => {
       const finalTask = await resumedDispatcher.getTask('clear-result-on-fail-test');
       expect(finalTask?.status).toBe('failed');
       expect(finalTask?.lastSuccessResult).toBeUndefined();
+    });
+
+    it('carries forward review fields from lastSuccessResult for review tasks', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-review-carry-forward-test',
+        workerType: 'auto',
+        prompt: 'Test review field carry-forward',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'feature/x',
+        commits: 5,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/500',
+        summary: 'new summary',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-review-carry-forward-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        review_comments_posted: '3',
+        review_types: 'code_quality',
+        summary: 'old summary',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              review_comments_posted: '3',
+              review_types: 'code_quality',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('does not carry forward review fields for non-review tasks', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-no-review-carry-test',
+        workerType: 'auto',
+        prompt: 'Test no review carry-forward for execution',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'feature/y',
+        commits: 2,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/501',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-no-review-carry-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        review_comments_posted: '3',
+        review_types: 'code_quality',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const webhookCall = vi.mocked(mockWebhookClient.send).mock.calls.at(-1);
+      expect(webhookCall?.[0]?.payload).not.toHaveProperty('result.review_comments_posted');
+      expect(webhookCall?.[0]?.payload).not.toHaveProperty('result.review_types');
+    });
+
+    it('does not overwrite review fields if already present in checkForResult', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-review-no-overwrite-test',
+        workerType: 'auto',
+        prompt: 'Test review fields not overwritten',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = resumedDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'feature/z',
+        commits: 3,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/502',
+        review_comments_posted: '5',
+      });
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-review-no-overwrite-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      task.lastSuccessResult = {
+        review_comments_posted: '3',
+        review_types: 'code_quality',
+      };
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              review_comments_posted: '5',
+              review_types: 'code_quality',
+            }),
+          }),
+        })
+      );
     });
 
     it('does not send resumedCompletion in webhook payload on failure', async () => {

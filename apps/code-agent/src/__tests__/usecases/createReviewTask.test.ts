@@ -10,6 +10,7 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { createReviewTask, type CreateReviewTaskDeps } from '../../domain/usecases/createReviewTask.js';
 
 function createFakeLogger(): Logger {
@@ -61,6 +62,23 @@ function createFakeUserServiceClient(): UserServiceClient {
   } as unknown as UserServiceClient;
 }
 
+function createFakeWorkerSettingsRepo(): WorkerSettingsRepository {
+  return {
+    getSettings: vi.fn().mockResolvedValue(ok({
+      workers: [{
+        name: 'worker-1',
+        url: 'https://worker.example.com',
+        cfAccessClientId: 'cf-id',
+        cfAccessClientSecret: 'cf-secret',
+        dispatchSigningSecret: 'dispatch-secret',
+        workerType: 'auto' as const,
+        enabled: true,
+      }],
+    })),
+    saveSettings: vi.fn().mockResolvedValue(ok(undefined)),
+  } as unknown as WorkerSettingsRepository;
+}
+
 function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateReviewTaskDeps {
   return {
     logger: createFakeLogger(),
@@ -91,10 +109,12 @@ function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateRe
         dispatched: true,
         workerLocation: 'worker-1',
       })),
+      cancelOnWorker: vi.fn().mockResolvedValue(undefined),
     } as unknown as TaskDispatcherService,
     linearAgentClient: createFakeLinearAgentClient(),
     gitHubPRClient: createFakeGitHubPRClient(),
     userServiceClient: createFakeUserServiceClient(),
+    workerSettingsRepo: createFakeWorkerSettingsRepo(),
     orchestratorSecret: 'test-secret',
     serviceUrl: 'https://code-agent.example.com',
     ...overrides,
@@ -133,15 +153,26 @@ describe('createReviewTask', () => {
     );
   });
 
-  it('returns already_running when an active review task exists for the PR', async () => {
+  it('cancels and replaces active review task, returning created with new task ID', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
+    const taskDispatcher = {
+      dispatch: vi.fn().mockResolvedValue(ok({
+        dispatched: true,
+        workerLocation: 'worker-1',
+      })),
+      cancelOnWorker: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TaskDispatcherService;
     const deps = createFakeDeps({
+      gitHubPRClient,
+      taskDispatcher,
       codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-2' })),
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
         findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
           id: 'task-review-existing',
           userId: 'user-existing',
           workerType: 'auto',
-          workerLocation: 'mac-dev',
+          workerLocation: 'worker-1',
+          status: 'dispatched',
         })),
         findByPR: vi.fn().mockResolvedValue(ok(null)),
         findById: vi.fn().mockResolvedValue(ok(null)),
@@ -155,34 +186,410 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['code_quality'],
-      eventId: 'evt-already-running',
+      eventId: 'evt-replace',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // Always returns created with new task ID
+    expect(result.value).toEqual({
+      status: 'created',
+      taskId: 'task-review-new',
+      workerType: 'auto',
+    });
+
+    // Verify replacement comment was posted
+    expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+      'ghp_test_token',
+      'intexuraos',
+      'intexuraos',
+      42,
+      expect.stringContaining('### Automated Code Review Cancelled')
+    );
+    const commentBody = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0]?.[4];
+    expect(commentBody).toContain('**Cancelled Task ID:** `task-review-existing`');
+
+    // Verify old task was cancelled locally
+    expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
+      'task-review-existing',
+      expect.objectContaining({
+        status: 'cancelled',
+        error: expect.objectContaining({ code: 'review_replaced' }),
+      })
+    );
+
+    // Verify worker cancellation was attempted (best-effort)
+    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
+      'task-review-existing',
+      'worker-1',
+      expect.objectContaining({ url: 'https://worker.example.com' })
+    );
+
+    // Verify new task was created
+    expect(deps.codeTaskRepo.create).toHaveBeenCalled();
+    expect(deps.taskDispatcher.dispatch).toHaveBeenCalled();
+  });
+
+  it('returns error if local cancel fails and does not create new task', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          workerType: 'auto',
+          workerLocation: 'worker-1',
+          status: 'running',
+        })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn()
+          .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'Update failed' }))
+          .mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-cancel-fail',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+
+    expect(result.error.code).toBe('task_creation_failed');
+
+    // Verify new task was NOT created
+    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(deps.taskDispatcher.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('creates new review task even if worker cancellation fails', async () => {
+    const taskDispatcher = {
+      dispatch: vi.fn().mockResolvedValue(ok({
+        dispatched: true,
+        workerLocation: 'worker-1',
+      })),
+      cancelOnWorker: vi.fn().mockRejectedValue(new Error('Worker unreachable')),
+    } as unknown as TaskDispatcherService;
+    const deps = createFakeDeps({
+      taskDispatcher,
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          workerType: 'qwen',
+          workerLocation: 'worker-1',
+          status: 'dispatched',
+        })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-worker-cancel-fail',
+    });
+
+    // Should still succeed
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.status).toBe('created');
+    expect(result.value.taskId).toBe('task-review-new');
+
+    // Verify new task was still created
+    expect(deps.codeTaskRepo.create).toHaveBeenCalled();
+    expect(deps.taskDispatcher.dispatch).toHaveBeenCalled();
+  });
+
+  it('creates new review task when worker settings are null', async () => {
+    const deps = createFakeDeps({
+      workerSettingsRepo: {
+        getSettings: vi.fn().mockResolvedValue(ok(null)),
+        saveSettings: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as WorkerSettingsRepository,
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          workerType: 'auto',
+          workerLocation: 'worker-1',
+          status: 'dispatched',
+        })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-null-settings',
+    });
+
+    // Should still succeed
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.status).toBe('created');
+    expect(result.value.taskId).toBe('task-review-new');
+
+    // Verify new task was still created
+    expect(deps.codeTaskRepo.create).toHaveBeenCalled();
+    expect(deps.taskDispatcher.dispatch).toHaveBeenCalled();
+  });
+
+  it('creates new review task even if replacement comment fails to post', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
+    vi.mocked(gitHubPRClient.postPRComment).mockRejectedValue(new Error('GitHub API down'));
+    const deps = createFakeDeps({
+      gitHubPRClient,
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          workerType: 'auto',
+          workerLocation: 'worker-1',
+          status: 'dispatched',
+        })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-comment-fail',
+    });
+
+    // Should still succeed - fresh-start rule holds
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.status).toBe('created');
+
+    // Verify new task was still created
+    expect(deps.codeTaskRepo.create).toHaveBeenCalled();
+  });
+
+  it('creates replacement when existing task owner token is unavailable', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
+    const userServiceClient = createFakeUserServiceClient();
+    // Return null for existing task owner's token
+    vi.mocked(userServiceClient.getOAuthToken).mockImplementation(async (userId: string) => {
+      if (userId === 'user-existing') {
+        return err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' }) as never;
+      }
+      return ok({ accessToken: 'ghp_sender_token', email: 'test@example.com' });
+    });
+    const deps = createFakeDeps({
+      gitHubPRClient,
+      userServiceClient,
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          workerType: 'auto',
+          workerLocation: 'worker-1',
+          status: 'dispatched',
+        })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-token-unavailable',
+    });
+
+    // Should still succeed - replacement comment is best-effort
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.status).toBe('created');
+    expect(result.value.taskId).toBe('task-review-new');
+
+    // Verify cancel still happened even without posting replacement comment
+    expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
+      'task-review-existing',
+      expect.objectContaining({ status: 'cancelled' })
+    );
+  });
+
+  it('posts replacement comment, cancels locally, then creates new task in correct order', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
+    const taskDispatcher = {
+      dispatch: vi.fn().mockResolvedValue(ok({
+        dispatched: true,
+        workerLocation: 'worker-1',
+      })),
+      cancelOnWorker: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TaskDispatcherService;
+    const deps = createFakeDeps({
+      gitHubPRClient,
+      taskDispatcher,
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          workerType: 'auto',
+          workerLocation: 'worker-1',
+          status: 'dispatched',
+        })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-call-order',
+    });
+
+    // Verify call order using invocationCallOrder
+    const commentCallOrder = vi.mocked(gitHubPRClient.postPRComment).mock.invocationCallOrder[0] ?? 0;
+    const cancelCallOrder = vi.mocked(deps.codeTaskRepo.update).mock.invocationCallOrder[0] ?? 0;
+    const createCallOrder = vi.mocked(deps.codeTaskRepo.create).mock.invocationCallOrder[0] ?? 0;
+
+    // Verify sequence: comment -> cancel -> create
+    expect(commentCallOrder).toBeLessThan(cancelCallOrder);
+    expect(cancelCallOrder).toBeLessThan(createCallOrder);
+  });
+
+  it('replaces review task when existing task has no workerType', async () => {
+    const gitHubPRClient = createFakeGitHubPRClient();
+    const deps = createFakeDeps({
+      gitHubPRClient,
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
+        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
+          id: 'task-review-existing',
+          userId: 'user-existing',
+          // No workerType - simulates legacy task
+          workerLocation: 'worker-1',
+          status: 'running',
+        })),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(ok(null)),
+        findByUser: vi.fn().mockResolvedValue(ok([])),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-no-worker-type',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.status).toBe('created');
+    expect(result.value.taskId).toBe('task-review-new');
+
+    // Verify replacement comment was posted without worker type
+    const commentBody = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(commentBody).toContain('### Automated Code Review Cancelled');
+    expect(commentBody).not.toContain('**Previous Reviewer:**');
+  });
+
+  it('returns worker type in result', async () => {
+    const deps = createFakeDeps();
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['architecture'],
+      workerType: 'qwen',
+      eventId: 'evt-worker-type-result',
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
     expect(result.value).toEqual({
-      status: 'already_running',
-      taskId: 'task-review-existing',
+      status: 'created',
+      taskId: 'task-review-1',
+      workerType: 'qwen',
     });
-    expect(deps.userLookupService.resolveByGitHubUsername).not.toHaveBeenCalled();
-    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
-    expect(deps.taskDispatcher.dispatch).not.toHaveBeenCalled();
   });
 
-  it('posts skip notification using the active task owner token', async () => {
+  it('uses auto as default worker type in result when not specified', async () => {
+    const deps = createFakeDeps();
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-auto-worker',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value).toEqual({
+      status: 'created',
+      taskId: 'task-review-1',
+      workerType: 'auto',
+    });
+  });
+
+  it('posts replacement notification using the active task owner token', async () => {
     const gitHubPRClient = createFakeGitHubPRClient();
     const userServiceClient = createFakeUserServiceClient();
     const deps = createFakeDeps({
       gitHubPRClient,
       userServiceClient,
       codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-2' })),
+        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
         findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
           id: 'task-review-existing',
           userId: 'user-existing',
           workerType: 'claude-code',
           workerLocation: 'office-mac',
+          status: 'running',
         })),
         findByPR: vi.fn().mockResolvedValue(ok(null)),
         findById: vi.fn().mockResolvedValue(ok(null)),
@@ -196,21 +603,21 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['code_quality'],
-      eventId: 'evt-skip-comment',
+      eventId: 'evt-replacement-comment',
     });
 
+    // Verify replacement comment uses existing task owner's token
     expect(userServiceClient.getOAuthToken).toHaveBeenCalledWith('user-existing', 'github');
     expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
       'ghp_test_token',
       'pbuchman',
       'intexuraos',
       42,
-      expect.stringContaining('### Automated Code Review Request Skipped')
+      expect.stringContaining('### Automated Code Review Cancelled')
     );
     const commentBody = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0]?.[4];
-    expect(commentBody).toContain('**Existing Task ID:** `task-review-existing`');
-    expect(commentBody).toContain('**Worker Type:** `claude-code`');
-    expect(commentBody).toContain('**Worker:** `office-mac`');
+    expect(commentBody).toContain('**Cancelled Task ID:** `task-review-existing`');
+    expect(commentBody).toContain('**Previous Reviewer:** `claude-code`');
   });
 
   it('returns task_creation_failed when active review lookup fails', async () => {
@@ -291,20 +698,20 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['architecture'],
-      workerType: 'qwen3.5-plus',
+      workerType: 'qwen',
       eventId: 'evt-worker-type',
     });
 
     const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
     expect(createCall).toBeDefined();
     if (createCall !== undefined) {
-      expect(createCall[0].workerType).toBe('qwen3.5-plus');
+      expect(createCall[0].workerType).toBe('qwen');
     }
 
     const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
     expect(dispatchCall).toBeDefined();
     if (dispatchCall !== undefined) {
-      expect(dispatchCall[0].workerType).toBe('qwen3.5-plus');
+      expect(dispatchCall[0].workerType).toBe('qwen');
     }
   });
 
@@ -316,7 +723,7 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['architecture'],
-      workerType: 'qwen3.5-plus',
+      workerType: 'qwen',
       reviewComment: '@review architecture',
       eventId: 'evt-review-comment',
     });
@@ -445,6 +852,7 @@ describe('createReviewTask', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('dispatch_failed');
+      expect(result.error.taskId).toBe('task-review-1');
     }
 
     // Verify task is marked as failed with error details
@@ -456,20 +864,13 @@ describe('createReviewTask', () => {
       }
     );
 
-    // Verify dispatch failure comment was posted
-    expect(gitHubPRClient.postPRComment).toHaveBeenCalled();
-    const commentCall = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0];
-    expect(commentCall).toBeDefined();
-    if (commentCall !== undefined) {
-      const commentBody = commentCall[4];
-      expect(commentBody).toContain('Review Dispatch Failed');
-      expect(commentBody).toContain('QUEUE_FULL');
-      expect(commentBody).toContain('Task was NOT queued');
-    }
+    // Verify NO separate dispatch failure comment is posted
+    // (error info is now surfaced via the triage decision comment in unifiedEvaluator)
+    expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
   });
 
   describe('PR notification after dispatch', () => {
-    it('posts task-created comment after successful dispatch', async () => {
+    it('skips dispatch comment for review tasks (skipComment: true)', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
       const deps = createFakeDeps({ gitHubPRClient });
 
@@ -482,20 +883,12 @@ describe('createReviewTask', () => {
         prTitle: 'Fix bug',
       });
 
-      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
-        'ghp_test_token',
-        'pbuchman',
-        'intexuraos',
-        42,
-        expect.stringContaining('@ignore')
-      );
-      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
-        'ghp_test_token',
-        'pbuchman',
-        'intexuraos',
-        42,
-        expect.stringContaining('**Dispatch outcome:** Review task dispatched')
-      );
+      // skipComment: true means no "Task Accepted" dispatch comment is posted
+      const commentCalls = vi.mocked(gitHubPRClient.postPRComment).mock.calls;
+      for (const call of commentCalls) {
+        const body = call[4] as string;
+        expect(body).not.toContain('**Dispatch outcome:** Review task dispatched');
+      }
     });
 
     it('updates PR title with Linear issue ID when not already tagged', async () => {

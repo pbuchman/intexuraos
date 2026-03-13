@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type FirebaseFirestore from '@google-cloud/firestore';
-import type { CodeTask, TaskStatus } from '../models/codeTask.js';
+import type { CodeTask, TaskStatus, WorkerType } from '../models/codeTask.js';
 
 export interface CreateTaskInput {
   /** Pre-generated task ID. Auto-generated if not provided. */
@@ -14,7 +14,7 @@ export interface CreateTaskInput {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: WorkerType;
   workerLocation: string;
   repository: string;
   baseBranch: string;
@@ -169,6 +169,17 @@ export interface CodeTaskRepository {
    * Returns null if no queued/dispatched/running review task exists.
    */
   findActiveReviewForPR(
+    repository: string,
+    prNumber: number
+  ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * Find the newest non-review task for a PR.
+   * Used to route generic PR comments to existing non-review tasks.
+   * Returns null if no non-review tasks exist for the PR.
+   * Treats tasks with missing agentType as non-review (backward compatibility).
+   */
+  findLatestNonReviewTaskByPR(
     repository: string,
     prNumber: number
   ): Promise<Result<CodeTask | null, RepositoryError>>;
