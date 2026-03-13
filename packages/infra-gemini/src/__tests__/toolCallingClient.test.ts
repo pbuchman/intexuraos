@@ -872,4 +872,159 @@ describe('createGeminiToolCallingClient', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('CONTENT_FILTERED');
   });
+
+  it('calls onExhausted when maxIterations exhausted without text', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
+    const onExhausted = vi.fn().mockReturnValue(undefined);
+
+    // All iterations return function calls
+    mockGenerateContent.mockResolvedValue(
+      functionCallResponse('request_review', { review_type: 'frontend' })
+    );
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+      maxIterations: 2,
+      onExhausted,
+    });
+
+    expect(onExhausted).toHaveBeenCalledWith({ iterationCount: 2, toolCallsMade: 2 });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('maxIterations');
+  });
+
+  it('injects repair message and continues loop', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
+    const onExhausted = vi.fn().mockReturnValue('Please respond with text now.');
+
+    // Iterations 1-2: function calls (exhaust maxIterations=2)
+    mockGenerateContent
+      .mockResolvedValueOnce(functionCallResponse('request_review', { review_type: 'frontend' }))
+      .mockResolvedValueOnce(functionCallResponse('request_review', { review_type: 'backend' }))
+      // After repair injection, LLM returns text
+      .mockResolvedValueOnce(textResponse('Here is my final answer.'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+      maxIterations: 2,
+      onExhausted,
+    });
+
+    expect(onExhausted).toHaveBeenCalledWith({ iterationCount: 2, toolCallsMade: 2 });
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ iteration: 2, totalToolCalls: 2 }),
+      'Tool calling: repair message injected'
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.content).toBe('Here is my final answer.');
+    expect(result.value.iterationCount).toBe(3);
+    expect(result.value.toolCallsMade).toBe(2);
+  });
+
+  it('fails when onExhausted returns undefined', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
+    const onExhausted = vi.fn().mockReturnValue(undefined);
+
+    mockGenerateContent.mockResolvedValue(
+      functionCallResponse('request_review', { review_type: 'frontend' })
+    );
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+      maxIterations: 2,
+      onExhausted,
+    });
+
+    expect(onExhausted).toHaveBeenCalledOnce();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('API_ERROR');
+    expect(result.error.message).toContain('maxIterations');
+  });
+
+  it('fails when repair iterations also exhaust', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
+    const onExhausted = vi.fn().mockReturnValue('Please respond with text.');
+
+    // All responses are function calls — even after repair
+    mockGenerateContent.mockResolvedValue(
+      functionCallResponse('request_review', { review_type: 'frontend' })
+    );
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+      maxIterations: 2,
+      repairIterations: 1,
+      onExhausted,
+    });
+
+    expect(onExhausted).toHaveBeenCalledOnce();
+    // 2 initial + 1 repair = 3 total iterations
+    expect(mockGenerateContent).toHaveBeenCalledTimes(3);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('API_ERROR');
+    expect(result.error.message).toContain('maxIterations');
+  });
+
+  it('does not call onExhausted when text response received', async () => {
+    const onExhausted = vi.fn().mockReturnValue('repair');
+
+    mockGenerateContent.mockResolvedValueOnce(textResponse('All good.'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      onExhausted,
+    });
+
+    expect(onExhausted).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.content).toBe('All good.');
+  });
 });
