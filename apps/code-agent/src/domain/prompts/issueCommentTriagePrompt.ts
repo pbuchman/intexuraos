@@ -39,19 +39,21 @@ export function buildIssueCommentTriageSection(input: IssueCommentTriagePromptIn
       '- `architecture`',
       '',
       `Allowed worker types: ${SUPPORTED_REVIEW_WORKER_TYPES.join(', ')}`,
-      '- Normalize `qwen` to `qwen3.5-plus`.',
+      '- Use `qwen` for Qwen review requests.',
       '- Choose exactly one worker type and include it on every `request_review` tool call.',
       '- If the comment does not name a review scope, infer the best scope from the request. Default to `code_quality` when the request is generic.',
-      '- If the comment requests architecture review and does not name a worker, prefer `qwen3.5-plus`.',
+      '- If the comment requests architecture review and does not name a worker, prefer `qwen`.',
       '- If the comment requests security review and does not name a worker, prefer `opus`.',
       '',
       'Examples:',
-      '- `@review architecture, security with qwen` → request `architecture` + `security`, worker `qwen3.5-plus`',
+      '- `@review architecture, security with qwen` → request `architecture` + `security`, worker `qwen`',
       '- `@review with minimax` → request `code_quality`, worker `minimax`',
       '- `@review opus` → request `code_quality`, worker `opus`',
-      '- `@review architecture` → request `architecture`, worker `qwen3.5-plus`',
+      '- `@review architecture` → request `architecture`, worker `qwen`',
       '',
       'Always call exactly one tool type: either one-or-more `request_review` calls, or `skip`.',
+      '',
+      'After you finish all `request_review` tool calls or the `skip` tool call, return one short final sentence and stop.',
     ].join('\n');
   }
 
@@ -84,5 +86,7 @@ export function buildIssueCommentTriageSection(input: IssueCommentTriagePromptIn
     '- Comment is a duplicate of already-processed content',
     '',
     'Always call exactly one tool: either `dispatch_to_task` or `skip`.',
+    '',
+    'After you finish your tool call, return one short final sentence and stop.',
   ].join('\n');
 }

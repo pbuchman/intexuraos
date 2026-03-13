@@ -228,7 +228,7 @@ Output ALL of the following:
 PHASE2_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/XXX
 - CI evidence: pnpm run ci:tracked successful
-- Linear issue: https://linear.app/intexuraos/issue/INT-XXX
+- Linear issue: https://linear.app/pbuchman/issue/INT-XXX
 - Review iterations: <number>
 - Turn summary: <line 1> | <line 2> | <line 3> | <line 4> | <line 5>
 - Summary: Implemented requested changes

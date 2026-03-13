@@ -398,7 +398,6 @@ On startup, the orchestrator:
 | `INTEXURAOS_LINEAR_API_KEY`                    | Yes      | -                             |
 | `INTEXURAOS_SENTRY_AUTH_TOKEN`                 | Yes      | -                             |
 | `INTEXURAOS_GEMINI_APP_API_KEY`                | Yes      | -                             |
-| `INTEXURAOS_ZAI_APP_API_KEY`                   | Yes      | -                             |
 | `INTEXURAOS_MINIMAX_APP_API_KEY`               | Yes      | -                             |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`             | Yes      | -                             |
 | `GOOGLE_APPLICATION_CREDENTIALS`               | Yes      | -                             |
@@ -455,4 +454,4 @@ On startup, the orchestrator:
 - Turn metrics: non-fatal; zero values returned when cgroup path unavailable (macOS)
 - Completion verifier: required; verifier failure marks task `failed` (no false positives)
 - Container adoption timeout: 5 seconds on startup
-- Worker types: 6 (opus, auto, sonnet for Anthropic; glm for ZAI; minimax for MiniMax; qwen3.5-plus for Alibaba Cloud)
+- Worker types: 5 (opus, auto, sonnet for Anthropic; minimax for MiniMax; glm-5 for Alibaba Cloud)

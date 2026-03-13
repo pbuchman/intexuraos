@@ -11,7 +11,7 @@
  * Based on design doc: docs/designs/INT-156-code-action-type.md
  */
 
-import type { Result } from '@intexuraos/common-core';
+import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
@@ -92,8 +92,8 @@ export function createExecuteCodeActionUseCase(
 
     // Get payload fields
     const prompt = typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
-    const workerTypeRaw = action.payload['workerType'] as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | undefined;
-    const workerType = workerTypeRaw ?? 'auto';
+    const workerTypeRaw = action.payload['workerType'] as CodeTaskWorkerType | undefined;
+    const workerType: CodeTaskWorkerType = workerTypeRaw ?? 'auto';
     const linearIssueId = action.payload['linearIssueId'] as string | undefined;
     const linearIssueTitle = action.payload['linearIssueTitle'] as string | undefined;
 
@@ -105,7 +105,7 @@ export function createExecuteCodeActionUseCase(
     // Build payload without undefined values (exactOptionalPropertyTypes)
     const payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+      workerType: CodeTaskWorkerType;
       linearIssueId?: string;
       linearIssueTitle?: string;
     } = { prompt, workerType };

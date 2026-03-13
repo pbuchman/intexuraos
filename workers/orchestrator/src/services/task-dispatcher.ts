@@ -1177,7 +1177,7 @@ export class TaskDispatcher {
         base.prUrl = agentData.gh_pr_url;
       }
       if (task.linearIssueId !== undefined) {
-        base.execution_linear_issue_url = `https://linear.app/intexuraos/issue/${task.linearIssueId}`;
+        base.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
       }
     } else if (agentData.agentType === 'review') {
       if (agentData.gh_pr_url !== '') {
@@ -1201,7 +1201,18 @@ export class TaskDispatcher {
   ): TaskResult | undefined {
     if (result === undefined) return undefined;
     if (task.agentType === 'execution' && task.linearIssueId !== undefined) {
-      result.execution_linear_issue_url = `https://linear.app/intexuraos/issue/${task.linearIssueId}`;
+      result.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
+    }
+    if (task.agentType === 'review' && task.lastSuccessResult !== undefined) {
+      if (
+        result.review_comments_posted === undefined &&
+        task.lastSuccessResult.review_comments_posted !== undefined
+      ) {
+        result.review_comments_posted = task.lastSuccessResult.review_comments_posted;
+      }
+      if (result.review_types === undefined && task.lastSuccessResult.review_types !== undefined) {
+        result.review_types = task.lastSuccessResult.review_types;
+      }
     }
     return result;
   }

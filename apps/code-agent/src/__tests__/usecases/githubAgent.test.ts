@@ -233,6 +233,24 @@ describe('evaluateEvent', () => {
       }
     });
 
+    it('returns LLM_FAILED when skip is called with empty reason', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'skip',
+          toolArgs: { reason: '' },
+        }),
+      });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+        expect(result.error.message).toContain('Skip reason must not be empty');
+      }
+    });
+
     it('handles unknown review_type gracefully', async () => {
       const logger = createFakeLogger();
       const deps = createDeps({
@@ -246,9 +264,9 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ reviewType: 'performance' }),
@@ -256,15 +274,15 @@ describe('evaluateEvent', () => {
       );
     });
 
-    it('returns skip when no tool is called for PR event', async () => {
+    it('returns LLM_FAILED when no tool is called for PR event', async () => {
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({ callTools: false }),
       });
       const event = createFakePREvent();
       const result = await evaluateEvent(deps, event);
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
     });
 
@@ -401,9 +419,9 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
     });
 
@@ -523,12 +541,12 @@ describe('evaluateEvent', () => {
         expect(result.value.triage).toEqual({
           action: 'request_review',
           reviewTypes: ['architecture', 'security'],
-          workerType: 'qwen3.5-plus',
+          workerType: 'qwen',
         });
       }
     });
 
-    it('returns skip when @review comment does not call request_review', async () => {
+    it('returns LLM_FAILED when @review comment does not call request_review', async () => {
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({ callTools: false }),
       });
@@ -540,12 +558,9 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({
-          action: 'skip',
-          reason: 'No tool called',
-        });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
     });
 
@@ -640,7 +655,7 @@ describe('evaluateEvent', () => {
       }
     });
 
-    it('returns skip when no tool is called', async () => {
+    it('returns LLM_FAILED when no tool is called', async () => {
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({ callTools: false }),
       });
@@ -652,12 +667,9 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({
-          action: 'skip',
-          reason: 'No tool called',
-        });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
     });
 
@@ -730,7 +742,10 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+      }
       expect(logger.warn).toHaveBeenCalled();
     });
 
@@ -775,7 +790,10 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+      }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ template: 'unknown_template' }),
         'GitHub Agent used unknown dispatch template'
@@ -799,9 +817,9 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ workerType: 'invalid-worker' }),
@@ -834,9 +852,9 @@ describe('evaluateEvent', () => {
 
       const result = await evaluateEvent(deps, event);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.triage).toEqual({ action: 'skip', reason: 'No tool called' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
       }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ reviewType: '' }),
@@ -875,16 +893,161 @@ describe('evaluateEvent', () => {
         expect(result.value.triage).toEqual({
           action: 'request_review',
           reviewTypes: ['architecture'],
-          workerType: 'qwen3.5-plus',
+          workerType: 'qwen',
         });
       }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
-          existingWorkerType: 'qwen3.5-plus',
+          existingWorkerType: 'qwen',
           workerType: 'opus',
         }),
         'GitHub Agent requested conflicting review worker types'
       );
+    });
+  });
+
+  describe('onExhausted and validation', () => {
+    it('passes onExhausted and repairIterations to toolCallingClient.run for PR events', async () => {
+      const captured = { onExhausted: undefined as unknown, repairIterations: undefined as unknown };
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          captured.onExhausted = params.onExhausted;
+          captured.repairIterations = params.repairIterations;
+          const skipTool = params.tools.find((t: ToolDefinition) => t.name === 'skip');
+          if (skipTool !== undefined) {
+            await skipTool.run({ reason: 'Test skip' });
+          }
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent();
+
+      await evaluateEvent(deps, event);
+
+      expect(captured.onExhausted).toBeTypeOf('function');
+      expect(captured.repairIterations).toBe(2);
+    });
+
+    it('passes onExhausted and repairIterations to toolCallingClient.run for comment events', async () => {
+      const captured = { onExhausted: undefined as unknown, repairIterations: undefined as unknown };
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          captured.onExhausted = params.onExhausted;
+          captured.repairIterations = params.repairIterations;
+          const skipTool = params.tools.find((t: ToolDefinition) => t.name === 'skip');
+          if (skipTool !== undefined) {
+            await skipTool.run({ reason: 'Test skip' });
+          }
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: 'some comment',
+      });
+
+      await evaluateEvent(deps, event);
+
+      expect(captured.onExhausted).toBeTypeOf('function');
+      expect(captured.repairIterations).toBe(2);
+    });
+
+    it('returns LLM_FAILED when no tool called after repair for PR event', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+      });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+        expect(result.error.message).toContain('No triage tool was called');
+      }
+    });
+
+    it('returns LLM_FAILED when skip reason is empty for PR event', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'skip',
+          toolArgs: { reason: '' },
+        }),
+      });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+        expect(result.error.message).toContain('Skip reason must not be empty');
+      }
+    });
+
+    it('returns LLM_FAILED when skip reason is empty for comment event', async () => {
+      const deps = createDeps({
+        toolCallingClient: createFakeToolCallingClient({
+          toolToCall: 'skip',
+          toolArgs: { reason: '' },
+        }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: 'test comment',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+        expect(result.error.message).toContain('Skip reason must not be empty');
+      }
+    });
+
+    it('onExhausted returns repair message with current state for PR events', async () => {
+      let capturedOnExhausted: ((ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined) | undefined;
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          capturedOnExhausted = params.onExhausted;
+          const skipTool = params.tools.find((t: ToolDefinition) => t.name === 'skip');
+          if (skipTool !== undefined) {
+            await skipTool.run({ reason: 'Test skip' });
+          }
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent();
+
+      await evaluateEvent(deps, event);
+
+      expect(capturedOnExhausted).toBeTypeOf('function');
+      if (typeof capturedOnExhausted === 'function') {
+        const repairMessage = (capturedOnExhausted as (ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined)({ iterationCount: 5, toolCallsMade: 0 });
+        expect(repairMessage).toContain('triage decision is incomplete');
+        expect(repairMessage).toContain('No triage tool was called');
+      }
     });
   });
 

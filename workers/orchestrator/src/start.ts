@@ -271,14 +271,17 @@ async function validateWorkerApiKeys(
     );
   }
 
-  // Validate all third-party API keys in parallel
-  // Note: GLM and Qwen both use DashScope API key
+  // Validate all third-party API keys in parallel.
+  // GLM, Qwen, and Kimi all use the same DashScope API key.
   await Promise.all([
     minimaxKey !== ''
       ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
       : Promise.resolve(),
     dashscopeKey !== ''
-      ? validateThirdPartyApiKey('qwen3.5-plus', dashscopeKey, suffix, logger)
+      ? Promise.all([
+          validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger),
+          validateThirdPartyApiKey('kimi', dashscopeKey, suffix, logger),
+        ])
       : Promise.resolve(),
   ]);
 }
@@ -589,7 +592,7 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  // Get initial access token for non-OAuth workers (glm)
+  // Get initial access token for Anthropic-backed workers.
   const currentToken = credentialMonitor.getCurrentAccessToken();
   if (currentToken === null) {
     process.stderr.write(`\n❌ Credentials expired. Run claude-login.sh again.\n\n`);

@@ -40,7 +40,7 @@ initSentry({
 });
 
 /** Models used by this service */
-const REQUIRED_MODELS: LLMModel[] = [LlmModels.Gemini25Flash, LlmModels.Glm47, LlmModels.Glm47Flash];
+const REQUIRED_MODELS: LLMModel[] = [LlmModels.Gemini25Flash];
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -64,7 +64,6 @@ async function main(): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger,
-    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 

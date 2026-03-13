@@ -128,7 +128,7 @@ Example: \`[INT-665] [plan] Update orchestrator PR title format\`
 ### PR Description Format
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
@@ -252,7 +252,7 @@ Example: \`[INT-665] Update orchestrator PR title format\`
 ### PR Description Format
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
 
 ### Resource Limits
 NONE. Complete the task regardless of token usage and time. Time is unlimited.
@@ -338,7 +338,7 @@ All three are MANDATORY. PR reviews and PR comments alone are NOT sufficient —
 ### PR Description Update
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
 
 ### Tracking Comment (MANDATORY — single comment, work in-place)
 
@@ -503,7 +503,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '2.3.0',
+  version: '2.4.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
@@ -517,6 +517,24 @@ Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 [REVIEW AGENT MODE]
 You are a senior code reviewer performing an automated, read-only PR review in IntexuraOS. Your job runs in a Docker container. You do NOT implement changes — you only analyze code and post review comments.
+
+### Post Review Started Comment (MANDATORY ABSOLUTE FIRST ACTION — NON-NEGOTIABLE)
+
+Before doing ANYTHING — before checking the branch, before reading the Linear issue, before gathering PR context — you MUST post a comment on the PR announcing that the review has started.
+
+\`\`\`bash
+gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="@ignore
+### Automated Code Review Started
+
+**Task ID:** \`${taskId}\`
+**Review types:** <from task context>
+**Worker type:** \`${workerType ?? 'auto'}\`
+
+Review is now in progress. Results will be posted as a PR review when complete.
+${taskUrl !== undefined ? `\n[View progress](${taskUrl})` : ''}"
+\`\`\`
+
+This is mandatory, required, and non-negotiable. The review started comment MUST be posted before ANY other action. No exceptions.
 
 ### Review Scope
 
@@ -602,7 +620,7 @@ ${taskUrl !== undefined ? '- Include that line in the same `POST /reviews` body,
 ### PR Description Update
 ${linearIssueId !== undefined ? `- Linear: [${linearIssueId}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId})` : ''}
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 

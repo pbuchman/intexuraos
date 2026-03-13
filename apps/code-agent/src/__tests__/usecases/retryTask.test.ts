@@ -144,7 +144,7 @@ describe('retryTask use case', () => {
         id: linearIssueId,
         identifier: linearIssueId,
         title: 'Retry mechanism test',
-        url: 'https://linear.app/intexuraos/issue/INT-520',
+        url: 'https://linear.app/pbuchman/issue/INT-520',
         labels: ['unclear'],
         childCount: 0,
       })
@@ -727,7 +727,7 @@ describe('retryTask use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Retry mechanism test',
-          url: 'https://linear.app/intexuraos/issue/INT-520',
+          url: 'https://linear.app/pbuchman/issue/INT-520',
           labels: ['code-task'],
           childCount: 2,
         })
@@ -931,7 +931,7 @@ describe('retryTask use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Retry mechanism test',
-          url: 'https://linear.app/intexuraos/issue/INT-520',
+          url: 'https://linear.app/pbuchman/issue/INT-520',
           labels: ['unclear'],
           childCount: 0,
         })
@@ -1015,7 +1015,7 @@ describe('retryTask use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Retry mechanism test',
-          url: 'https://linear.app/intexuraos/issue/INT-520',
+          url: 'https://linear.app/pbuchman/issue/INT-520',
           labels: ['code-task'],
           childCount: 0,
         })
@@ -1075,7 +1075,7 @@ describe('retryTask use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Retry mechanism test',
-          url: 'https://linear.app/intexuraos/issue/INT-520',
+          url: 'https://linear.app/pbuchman/issue/INT-520',
           labels: ['bug'],
           childCount: 0,
         })
@@ -1178,7 +1178,7 @@ describe('retryTask use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Retry mechanism test',
-          url: 'https://linear.app/intexuraos/issue/INT-520',
+          url: 'https://linear.app/pbuchman/issue/INT-520',
           labels: ['unclear'],
           childCount: 0,
         })
@@ -1234,7 +1234,7 @@ describe('retryTask use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Retry mechanism test',
-          url: 'https://linear.app/intexuraos/issue/INT-520',
+          url: 'https://linear.app/pbuchman/issue/INT-520',
           labels: ['code-task'],
           childCount: 0,
         })

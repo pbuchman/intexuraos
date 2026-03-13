@@ -183,8 +183,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     LlmModels.Gemini25Pro,
     LlmModels.ClaudeSonnet45,
     LlmModels.GPT52,
-    LlmModels.Glm47,
-    LlmModels.Glm47Flash,
     LlmModels.SonarPro,
   ]);
 
@@ -200,7 +198,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger: createAppLogger({ name: 'userServiceClient' }),
-    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
