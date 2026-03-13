@@ -1,4 +1,4 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../../domain/ports.js';
@@ -9,7 +9,7 @@ export interface TriggerCodeTaskRequest {
   userId: string;
   linearIssueId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5';
+  workerType: CodeTaskWorkerType;
   actionId: string;
   approvalEventId: string;
 }

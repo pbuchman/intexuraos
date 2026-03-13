@@ -3,7 +3,7 @@
  * These define contracts for infrastructure adapters.
  */
 
-import type { Result } from '@intexuraos/common-core';
+import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
 import type {
   LinearConnection,
   LinearConnectionPublic,
@@ -211,7 +211,7 @@ export interface CodeAgentClient {
     userId: string;
     linearIssueId: string;
     prompt: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5';
+    workerType: CodeTaskWorkerType;
     actionId: string;
     approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>>;

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { isOk, isErr } from '@intexuraos/common-core';
+import { isOk, isErr, type CodeTaskWorkerType } from '@intexuraos/common-core';
 import nock from 'nock';
 import { createCodeAgentHttpClient } from '../../../infra/http/codeAgentHttpClient.js';
 import type { CodeAgentClient } from '../../../domain/ports/codeAgentClient.js';
@@ -442,8 +442,8 @@ describe('codeAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
     });
 
-    it('handles different worker types (opus, glm-5, auto)', async () => {
-      const workerTypes: ('opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5')[] = ['opus', 'auto', 'sonnet', 'minimax', 'glm-5'];
+    it('handles different worker types (opus, glm, auto)', async () => {
+      const workerTypes: CodeTaskWorkerType[] = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi'];
 
       for (const workerType of workerTypes) {
         nock(baseUrl)

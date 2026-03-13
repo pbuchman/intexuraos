@@ -375,7 +375,7 @@ describe('059_remove-zai-and-finalize-glm5 migration', () => {
   });
 
   describe('code_tasks migration', () => {
-    it('should change workerType from glm to glm-5', async () => {
+    it('should not modify workerType — glm is the canonical type', async () => {
       const collection = fakeFirestore.collection('code_tasks');
       await collection.doc('task1').set({
         userId: 'user1',
@@ -386,31 +386,14 @@ describe('059_remove-zai-and-finalize-glm5 migration', () => {
       const context = {
         firestore: fakeFirestore as unknown as import('@google-cloud/firestore').Firestore,
       };
-      await up(context);
+      const result = await up(context);
 
       const doc = await collection.doc('task1').get();
       const data = doc.data();
 
-      expect(data?.workerType).toBe('glm-5');
-    });
-
-    it('should not change other worker types', async () => {
-      const collection = fakeFirestore.collection('code_tasks');
-      await collection.doc('task2').set({
-        userId: 'user1',
-        workerType: 'opus',
-        status: 'completed',
-      });
-
-      const context = {
-        firestore: fakeFirestore as unknown as import('@google-cloud/firestore').Firestore,
-      };
-      await up(context);
-
-      const doc = await collection.doc('task2').get();
-      const data = doc.data();
-
-      expect(data?.workerType).toBe('opus');
+      // glm remains unchanged — it is the canonical CodeTaskWorkerType
+      expect(data?.workerType).toBe('glm');
+      expect(result.codeTasks.codeTasksModified).toBe(0);
     });
   });
 
@@ -487,9 +470,33 @@ describe('059_remove-zai-and-finalize-glm5 migration', () => {
       expect(data?.llmResults[0].model).toBe('gemini-2.5-flash');
     });
 
-    it('should delete research when synthesisModel was glm-4.7', async () => {
+    it('should reassign synthesisModel when it was glm-4.7 and other models remain', async () => {
       const collection = fakeFirestore.collection('researches');
       await collection.doc('research3').set({
+        userId: 'user1',
+        selectedModels: ['glm-4.7', 'gemini-2.5-flash'],
+        synthesisModel: 'glm-4.7',
+        llmResults: [],
+      });
+
+      const context = {
+        firestore: fakeFirestore as unknown as import('@google-cloud/firestore').Firestore,
+      };
+      const result = await up(context);
+
+      const doc = await collection.doc('research3').get();
+      const data = doc.data();
+
+      // synthesisModel reassigned to first remaining model
+      expect(data?.synthesisModel).toBe('gemini-2.5-flash');
+      expect(data?.selectedModels).toEqual(['gemini-2.5-flash']);
+      expect(result.researches.researchesModified).toBe(1);
+      expect(result.researches.researchesDeleted).toBe(0);
+    });
+
+    it('should delete research when synthesisModel and all selectedModels are glm-4.7', async () => {
+      const collection = fakeFirestore.collection('researches');
+      await collection.doc('research3b').set({
         userId: 'user1',
         selectedModels: ['glm-4.7'],
         synthesisModel: 'glm-4.7',
@@ -501,7 +508,6 @@ describe('059_remove-zai-and-finalize-glm5 migration', () => {
       };
       const result = await up(context);
 
-      // Verify the migration correctly identified and marked the document for deletion
       expect(result.researches.researchesDeleted).toBe(1);
     });
 
