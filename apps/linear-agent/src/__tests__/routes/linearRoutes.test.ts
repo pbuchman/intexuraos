@@ -869,6 +869,37 @@ describe('linearRoutes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('FORBIDDEN');
     });
+
+    it('returns 403 when getFullConnection fails on retry', async () => {
+      seedConnection('test-user-123');
+      const createResult = await ctx.failedIssueRepository.create({
+        userId: 'test-user-123',
+        actionId: 'action-1',
+        originalText: 'Create a task for testing',
+        extractedTitle: 'Testing task',
+        extractedPriority: 2,
+        error: 'Connection error',
+        reasoning: 'Network timeout',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.connectionRepository.setGetFullConnectionFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database unavailable',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      const body2 = response.json();
+      expect(body2.success).toBe(false);
+    });
   });
 
   describe('Webhook Config Endpoints', () => {
@@ -1419,6 +1450,41 @@ describe('linearRoutes', () => {
       expect(body.data.commentCount).toBe(2);
       expect(body.data.lastCommentAt).toBe('2025-01-15T11:00:00Z');
     });
+
+    it('returns 500 when commentRepository listByIssueId fails', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+      ctx.commentRepository.setListByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body2 = response.json();
+      expect(body2.success).toBe(false);
+      expect(body2.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 
   describe('GET /linear/issues/:identifier/comments', () => {
@@ -1943,6 +2009,52 @@ describe('linearRoutes logging coverage', () => {
 
       expect(response.statusCode).toBe(200);
       // Error logging is enabled - coverage will verify the log line is hit
+    });
+  });
+
+  describe('POST /linear/sync', () => {
+    it('returns 401 when no auth token provided', async () => {
+      const response = await loggingApp.inject({
+        method: 'POST',
+        url: '/linear/sync',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('syncs issues for the authenticated user successfully', async () => {
+      seedConnection('test-user-123');
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await loggingApp.inject({
+        method: 'POST',
+        url: '/linear/sync',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.created).toBeGreaterThanOrEqual(0);
+    });
+
+    it('returns 500 when fullSync fails', async () => {
+      seedConnection('test-user-123');
+      loggingRepos.connectionRepository.setGetFullConnectionFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database error',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await loggingApp.inject({
+        method: 'POST',
+        url: '/linear/sync',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      const body = response.json();
+      expect(body.success).toBe(false);
     });
   });
 });

@@ -24,11 +24,9 @@ async function handleLinearError(
   if (error.code === 'NOT_CONNECTED') {
     return await reply.fail('FORBIDDEN', error.message);
   }
-  /* v8 ignore start -- test-infra: covered by internalRoutes.test.ts but v8 misses async branch @preserve */
   if (error.code === 'INTERNAL_ERROR') {
     return await reply.fail('INTERNAL_ERROR', error.message);
   }
-  /* v8 ignore stop @preserve */
   return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }
 
@@ -551,19 +549,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       logIncomingRequest(request);
 
       const authResult = validateInternalAuth(request);
-      /* v8 ignore start -- test-infra: auth validation error path covered by other endpoint tests @preserve */
       if (!authResult.valid) {
         reply.status(401);
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
-      /* v8 ignore stop @preserve */
 
       const { userId } = request.body;
       const services = getServices();
 
       request.log.info({ userId }, 'internal/fullSync: starting sync');
 
-      /* v8 ignore start -- test-infra: error handling path covered by use case tests @preserve */
       const result = await fullSync(userId, {
         issueRepo: services.issueRepository,
         connectionRepo: services.connectionRepository,
@@ -588,7 +583,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       return await reply.ok(result.value); // @allow-result-access -- guarded by if (!result.ok) at line 563
-      /* v8 ignore stop @preserve */
     }
   );
 

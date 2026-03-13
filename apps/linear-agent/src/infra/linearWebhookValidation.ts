@@ -46,10 +46,8 @@ export function validateLinearWebhookSignature(
     return err({ code: 'MISSING_SIGNATURE', message: 'Missing Linear-Signature header' });
   }
 
-  /* v8 ignore start -- test-infra: Fastify header edge cases difficult to reproduce @preserve */
   // Linear sends raw 64-char hex digest (no prefix like "sha256=")
   const signatureStr = Array.isArray(signatureHeader) ? signatureHeader[0] ?? '' : signatureHeader;
-  /* v8 ignore stop @preserve */
 
   if (signatureStr.length === 0) {
     return err({
@@ -78,7 +76,6 @@ export function validateLinearWebhookSignature(
   const receivedBuffer = Buffer.from(receivedSignature, 'utf-8');
   const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
 
-  /* v8 ignore start -- test-infra: timing-safe comparison requires matching signature buffer @preserve */
   if (receivedBuffer.length !== expectedBuffer.length) {
     return err({ code: 'INVALID_SIGNATURE', message: 'Signature length mismatch' });
   }
@@ -88,5 +85,4 @@ export function validateLinearWebhookSignature(
   }
 
   return ok(undefined);
-  /* v8 ignore stop @preserve */
 }

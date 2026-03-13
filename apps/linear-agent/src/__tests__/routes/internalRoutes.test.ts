@@ -609,4 +609,70 @@ describe('internalRoutes', () => {
       expect(body.success).toBe(false);
     });
   });
+
+  describe('POST /internal/linear/sync', () => {
+    it('returns 401 when no internal auth header provided', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/sync',
+        headers: { 'content-type': 'application/json' },
+        payload: { userId: 'user-1' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('syncs issues for a single user successfully', async () => {
+      const conn: LinearConnection = {
+        userId: 'user-1',
+        apiKey: 'key-1',
+        teamId: 'team-1',
+        teamName: 'Team 1',
+        webhookSecret: null,
+        connected: true,
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+      };
+      fakeConnectionRepo.seedConnection(conn);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/sync',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: { userId: 'user-1' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.created).toBeGreaterThanOrEqual(0);
+    });
+
+    it('returns error when fullSync fails', async () => {
+      fakeConnectionRepo.setGetFullConnectionFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database connection failed',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/sync',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: { userId: 'user-1' },
+      });
+
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      const body = response.json();
+      expect(body.success).toBe(false);
+    });
+  });
 });
