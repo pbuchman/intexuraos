@@ -1029,6 +1029,125 @@ describe('internalIssuesRoutes', () => {
     });
   });
 
+  describe('PATCH /internal/linear/issues/:issueId/metadata - null apiKey and updateIssue paths', () => {
+    const metaIssue: import('../../domain/models.js').SyncedLinearIssue = {
+      id: 'issue-meta-null-key',
+      identifier: 'ENG-300',
+      title: 'Meta Null Key Issue',
+      description: null,
+      state: 'In Progress',
+      stateType: 'started',
+      priority: 2,
+      assigneeId: null,
+      assigneeName: null,
+      labels: [],
+      url: 'https://linear.app/test/ENG-300',
+      userId: 'user-no-connection',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      syncedAt: '2024-01-01T00:00:00.000Z',
+      teamId: 'team-1',
+      parentId: null,
+    };
+
+    beforeEach(() => {
+      fakeIssueRepo.seedIssue(metaIssue);
+    });
+
+    it('returns 403 when getApiKey returns null (user not connected)', async () => {
+      // user-no-connection has no seeded connection → getApiKey returns ok(null)
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/issue-meta-null-key/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': 'user-no-connection' },
+        payload: { addLabels: ['bug'] },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('PATCH /internal/linear/issues/:issueId/metadata - updateIssue paths', () => {
+    const metaIssueForUpdate: import('../../domain/models.js').SyncedLinearIssue = {
+      id: 'issue-meta-update',
+      identifier: 'ENG-400',
+      title: 'Meta Update Issue',
+      description: null,
+      state: 'In Progress',
+      stateType: 'started',
+      priority: 2,
+      assigneeId: null,
+      assigneeName: null,
+      labels: [],
+      url: 'https://linear.app/test/ENG-400',
+      userId: testUserId,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      syncedAt: '2024-01-01T00:00:00.000Z',
+      teamId: 'team-1',
+      parentId: null,
+    };
+
+    beforeEach(() => {
+      fakeIssueRepo.seedIssue(metaIssueForUpdate);
+    });
+
+    it('returns 502 when updateIssue fails (issue not found in Linear API)', async () => {
+      // fakeLinearClient has no issue seeded → updateIssue returns err('Issue not found')
+      // This covers: listIssueLabels FALSE branch (labelsResult.ok=true), updateIssue call, updateResult not ok
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/issue-meta-update/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { addLabels: [] },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('returns 200 when metadata update succeeds (assignee null path)', async () => {
+      // Seed issue in linearApiClient so updateIssue succeeds with no assignee
+      fakeLinearClient.seedIssue({
+        id: 'issue-meta-update',
+        identifier: 'ENG-400',
+        title: 'Meta Update Issue',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'In Progress', type: 'started' },
+        url: 'https://linear.app/test/ENG-400',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [],
+        // assignee not set → undefined → updateResult.value.assignee ?? null → null
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/issue-meta-update/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { addLabels: [], assigneeId: 'assignee-123' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { id: string; labels: unknown[]; assignee: null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe('issue-meta-update');
+      expect(body.data.assignee).toBeNull();
+    });
+  });
+
   describe('PATCH /internal/issues/:issueId/state - additional error paths', () => {
     let testIssueId: string;
 
@@ -1270,6 +1389,127 @@ describe('internalIssuesRoutes', () => {
       expect(body.data.root.id).toBe('root-1');
       expect(body.data.descendants).toHaveLength(1);
       expect(body.data.descendants[0]?.id).toBe('child-1');
+    });
+
+    it('returns root with no children (empty descendants, covers ?? [] fallback)', async () => {
+      // Root has no children → byParent.get(root.id) is undefined → ?? [] fires
+      const root: import('../../domain/models.js').SyncedLinearIssue = {
+        id: 'root-leaf',
+        identifier: 'ENG-510',
+        title: 'Leaf Root Issue',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-510',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      };
+      fakeIssueRepo.seedIssue(root);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/issues/root-leaf/tree',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { root: { id: string }; descendants: unknown[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.root.id).toBe('root-leaf');
+      expect(body.data.descendants).toHaveLength(0);
+    });
+
+    it('returns grandchildren in tree (covers children !== undefined branch)', async () => {
+      // Three-level hierarchy: root → child → grandchild
+      const root: import('../../domain/models.js').SyncedLinearIssue = {
+        id: 'root-deep',
+        identifier: 'ENG-520',
+        title: 'Deep Root',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-520',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      };
+      const child: import('../../domain/models.js').SyncedLinearIssue = {
+        id: 'child-deep',
+        identifier: 'ENG-521',
+        title: 'Deep Child',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-521',
+        userId: testUserId,
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        syncedAt: '2024-01-02T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: 'root-deep',
+      };
+      const grandchild: import('../../domain/models.js').SyncedLinearIssue = {
+        id: 'grandchild-deep',
+        identifier: 'ENG-522',
+        title: 'Deep Grandchild',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-522',
+        userId: testUserId,
+        createdAt: '2024-01-03T00:00:00.000Z',
+        updatedAt: '2024-01-03T00:00:00.000Z',
+        syncedAt: '2024-01-03T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: 'child-deep',
+      };
+      fakeIssueRepo.seedIssue(root);
+      fakeIssueRepo.seedIssue(child);
+      fakeIssueRepo.seedIssue(grandchild);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/issues/root-deep/tree',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { root: { id: string }; descendants: { id: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.root.id).toBe('root-deep');
+      expect(body.data.descendants).toHaveLength(2);
+      const descendantIds = body.data.descendants.map((d) => d.id);
+      expect(descendantIds).toContain('child-deep');
+      expect(descendantIds).toContain('grandchild-deep');
     });
   });
 });
