@@ -4,6 +4,7 @@
  * Provides axios instance configured for code-agent API.
  */
 
+import type { CodeTaskWorkerType } from '@intexuraos/common-core';
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
 
 /**
@@ -70,7 +71,7 @@ export interface CodeTask {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5';
+  workerType: CodeTaskWorkerType;
   workerLocation: string;
   repository: string;
   baseBranch: string;

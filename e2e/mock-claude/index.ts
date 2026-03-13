@@ -12,6 +12,7 @@
  * - ci-failure: Creates PR with broken code to simulate CI failure
  */
 
+import type { CodeTaskWorkerType } from '@intexuraos/common-core';
 import { createHmac } from 'node:crypto';
 import express from 'express';
 import { pino } from 'pino';
@@ -67,7 +68,7 @@ const runningTasks = new Map<string, NodeJS.Timeout>();
 
 interface MockClaudeRequest {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5';
+  workerType: CodeTaskWorkerType;
   prompt: string;
   repository?: string;
   baseBranch?: string;

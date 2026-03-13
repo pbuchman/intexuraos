@@ -2,7 +2,7 @@
  * Test fakes for linear-agent.
  */
 
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result, type CodeTaskWorkerType } from '@intexuraos/common-core';
 import type {
   LinearConnectionRepository,
   LinearConnection,
@@ -879,7 +879,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     userId: string;
     linearIssueId: string;
     prompt: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5';
+    workerType: CodeTaskWorkerType;
     actionId: string;
     approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>> {

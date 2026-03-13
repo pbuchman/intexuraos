@@ -5,9 +5,8 @@
  * This migration:
  * 1. Removes ZAI API keys and test results from user_settings
  * 2. Changes default model from GLM-4.7/GLM-4.7-flash to gemini-2.5-flash
- * 3. Updates code_tasks workerType from 'glm' to 'glm-5'
- * 4. Deletes zai provider from llm_pricing
- * 5. Cleans up GLM-4.7 references from researches
+ * 3. Deletes zai provider from llm_pricing
+ * 4. Cleans up GLM-4.7 references from researches
  */
 
 import { FieldValue } from 'firebase-admin/firestore';
@@ -104,44 +103,17 @@ async function migrateUserSettings(context) {
 
 /**
  * Process code_tasks collection
- * @param {{ firestore: import('@google-cloud/firestore').Firestore }} context
+ *
+ * Note: 'glm' is the canonical CodeTaskWorkerType (defined in common-core).
+ * No rename is needed — existing code_tasks with workerType 'glm' are already correct.
+ * The orchestrator maps 'glm' to the GLM-5 model at runtime.
+ *
+ * @param {{ firestore: import('@google-cloud/firestore').Firestore }} _context
  */
-async function migrateCodeTasks(context) {
+async function migrateCodeTasks(_context) {
   console.log('  Processing code_tasks collection...');
-
-  const db = context.firestore;
-  // Query for documents with workerType === 'glm'
-  const snapshot = await db.collection('code_tasks').where('workerType', '==', 'glm').get();
-
-  console.log(`  Found ${snapshot.size} code_tasks with workerType 'glm'`);
-
-  if (snapshot.size === 0) {
-    console.log('  No code_tasks to migrate.');
-    return { codeTasksModified: 0 };
-  }
-
-  const BATCH_SIZE = 400;
-  let batch = db.batch();
-  let count = 0;
-
-  for (const doc of snapshot.docs) {
-    batch.update(doc.ref, { workerType: 'glm-5' });
-    count++;
-
-    if (count % BATCH_SIZE === 0) {
-      await batch.commit();
-      console.log(`  Committed batch of ${BATCH_SIZE} (${count} documents modified)`);
-      batch = db.batch();
-    }
-  }
-
-  if (count % BATCH_SIZE !== 0) {
-    await batch.commit();
-  }
-
-  console.log(`  Code tasks migration complete: ${count} documents modified`);
-
-  return { codeTasksModified: count };
+  console.log('  No code_tasks migration needed — glm is the canonical worker type.');
+  return { codeTasksModified: 0 };
 }
 
 /**
@@ -206,7 +178,6 @@ async function migrateResearches(context) {
           shouldDelete = true;
         } else {
           updates.selectedModels = filteredModels;
-          count++;
         }
       }
     }
@@ -218,45 +189,43 @@ async function migrateResearches(context) {
       );
       if (filteredResults.length !== data.llmResults.length) {
         updates.llmResults = filteredResults;
-        count++;
       }
     }
 
-    // Remove synthesisModel if it was GLM-4.7
+    // Reassign synthesisModel if it was GLM-4.7
     if (!shouldDelete && data.synthesisModel !== undefined) {
       if (DEPRECATED_GL_MODELS.includes(data.synthesisModel)) {
-        // If synthesis model was GLM-4.7, we can't keep the research without a synthesis model
-        // Delete it as it can't function properly
-        shouldDelete = true;
-        deleteCount++;
+        // If filtered models remain, reassign synthesisModel to the first remaining model
+        const remainingModels = updates.selectedModels ?? data.selectedModels;
+        if (Array.isArray(remainingModels) && remainingModels.length > 0) {
+          updates.synthesisModel = remainingModels[0];
+        } else {
+          // No models remain — delete the research
+          shouldDelete = true;
+        }
       }
     }
 
     if (shouldDelete) {
       batch.delete(doc.ref);
       deleteCount++;
-      docsProcessed++;
-
-      if (deleteCount % BATCH_SIZE === 0) {
-        await batch.commit();
-        console.log(`  Committed batch: ${deleteCount} documents deleted`);
-        batch = db.batch();
-      }
     } else if (Object.keys(updates).length > 0) {
       batch.update(doc.ref, updates);
       count++;
-
-      if (count % BATCH_SIZE === 0) {
-        await batch.commit();
-        console.log(`  Committed batch: ${count} documents modified`);
-        batch = db.batch();
-      }
     }
 
     docsProcessed++;
+
+    const opsInBatch = count + deleteCount;
+    if (opsInBatch > 0 && opsInBatch % BATCH_SIZE === 0) {
+      await batch.commit();
+      console.log(`  Committed batch: ${count} modified, ${deleteCount} deleted`);
+      batch = db.batch();
+    }
   }
 
-  if (count % BATCH_SIZE !== 0) {
+  // Commit any remaining operations
+  if ((count + deleteCount) % BATCH_SIZE !== 0) {
     await batch.commit();
   }
 

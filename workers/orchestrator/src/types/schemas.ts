@@ -1,14 +1,8 @@
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
 import { z } from 'zod';
 
 // Worker type validation
-export const WorkerTypeSchema = z.enum([
-  'opus',
-  'auto',
-  'sonnet',
-  'minimax',
-  'glm-5',
-  'qwen3.5-plus',
-]);
+export const WorkerTypeSchema = z.enum(CODE_TASK_WORKER_TYPES);
 
 // Task status validation
 export const TaskStatusSchema = z.enum([
