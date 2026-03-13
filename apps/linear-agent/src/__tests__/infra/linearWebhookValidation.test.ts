@@ -137,6 +137,22 @@ describe('validateLinearWebhookSignature', () => {
         expect(result.error.message).toBe('Missing request body');
       }
     });
+
+    it('handles empty array header by treating as empty string (INVALID_SIGNATURE_FORMAT)', () => {
+      const request = {
+        headers: {
+          'linear-signature': [] as unknown as string[],
+        },
+        rawBody: '{}',
+      } as unknown as FastifyRequest;
+
+      const result = validateLinearWebhookSignature(request, webhookSecret);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_SIGNATURE_FORMAT');
+      }
+    });
   });
 });
 

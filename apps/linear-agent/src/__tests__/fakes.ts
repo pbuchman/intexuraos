@@ -61,6 +61,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   private connections = new Map<string, LinearConnection>();
   private shouldFailGetFullConnection = false;
   private shouldFailGetConnection = false;
+  private shouldFailFindWebhookSecret = false;
   private shouldFailSave = false;
   private shouldFailDisconnect = false;
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
@@ -144,6 +145,11 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     if (error) this.failError = error;
   }
 
+  setFindWebhookSecretFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailFindWebhookSecret = fail;
+    if (error) this.failError = error;
+  }
+
   setSaveFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailSave = fail;
     if (error) this.failError = error;
@@ -202,6 +208,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   async findWebhookSecretByTeamId(
     teamId: string
   ): Promise<Result<{ userId: string; webhookSecret: string } | null, LinearError>> {
+    if (this.shouldFailFindWebhookSecret) return err(this.failError);
     if (this.shouldFailGetConnection) return err(this.failError);
 
     for (const [userId, conn] of this.connections.entries()) {
@@ -243,6 +250,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     this.connections.clear();
     this.shouldFailGetFullConnection = false;
     this.shouldFailGetConnection = false;
+    this.shouldFailFindWebhookSecret = false;
     this.shouldFailGetApiKey = false;
     this.shouldFailSave = false;
     this.shouldFailDisconnect = false;
