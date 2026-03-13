@@ -3,8 +3,10 @@ import type { WorkerType } from '../models/codeTask.js';
 
 export const DISPATCH_WORKER_PATTERNS = ['@worker', '@model'] as const;
 
+// Use shared worker types from common-core
 export const SUPPORTED_DISPATCH_WORKER_TYPES = CODE_TASK_WORKER_TYPES satisfies readonly WorkerType[];
 
+// Map user-facing worker names to internal dispatch types
 const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   auto: 'auto',
   opus: 'opus',

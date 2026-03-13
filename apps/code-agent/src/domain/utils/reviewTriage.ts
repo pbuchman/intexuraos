@@ -3,8 +3,10 @@ import type { WorkerType } from '../models/codeTask.js';
 
 export const REVIEW_COMMAND_PREFIX = '@review';
 
+// Use shared worker types from common-core
 export const SUPPORTED_REVIEW_WORKER_TYPES = CODE_TASK_WORKER_TYPES satisfies readonly WorkerType[];
 
+// Map user-facing worker names to internal types
 const REVIEW_WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   auto: 'auto',
   opus: 'opus',

@@ -79,7 +79,7 @@ describe('labelUtils', () => {
       expect(getWorkerTypeFromLabels(['minimax'])).toBe('minimax');
     });
 
-    it('returns glm for single glm label', () => {
+    it('normalizes glm label to glm', () => {
       expect(getWorkerTypeFromLabels(['glm'])).toBe('glm');
     });
 

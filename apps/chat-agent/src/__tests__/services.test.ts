@@ -82,7 +82,6 @@ describe('chat-agent services', () => {
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://localhost:8080';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-token';
     process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] = 'http://localhost:8081';
-    process.env['INTEXURAOS_ZAI_APP_API_KEY'] = 'test-zai-key';
     process.env['INTEXURAOS_GEMINI_APP_API_KEY'] = 'test-gemini-key';
     process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'] = 'test-dashscope-key';
     mockCreatePricingContext.mockClear();
@@ -99,7 +98,6 @@ describe('chat-agent services', () => {
     delete process.env['INTEXURAOS_USER_SERVICE_URL'];
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
     delete process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
-    delete process.env['INTEXURAOS_ZAI_APP_API_KEY'];
     delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
     delete process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'];
   });
@@ -196,28 +194,27 @@ describe('chat-agent services', () => {
   });
 
   describe('initializeServices', () => {
-    it('uses the ZAI platform key for guest GLM and user-service fallbacks', async () => {
+    it('uses the Gemini platform key for guest access and user-service fallbacks', async () => {
       await initializeServices();
 
       expect(mockCreateLlmClient).toHaveBeenCalledWith(
         expect.objectContaining({
-          apiKey: 'test-zai-key',
-          model: LlmModels.Glm47Flash,
+          apiKey: 'test-gemini-key',
+          model: LlmModels.Gemini25Flash,
         })
       );
       expect(mockCreateUserServiceClient).toHaveBeenCalledWith(
         expect.objectContaining({
-          platformZaiApiKey: 'test-zai-key',
           platformGeminiApiKey: 'test-gemini-key',
         })
       );
     });
 
-    it('fails fast when the ZAI guest key is missing', async () => {
-      delete process.env['INTEXURAOS_ZAI_APP_API_KEY'];
+    it('fails fast when the Gemini guest key is missing', async () => {
+      delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
 
       await expect(initializeServices()).rejects.toThrow(
-        'INTEXURAOS_ZAI_APP_API_KEY environment variable is required'
+        'INTEXURAOS_GEMINI_APP_API_KEY environment variable is required for guest access'
       );
     });
   });

@@ -32,7 +32,6 @@ graph TB
         IO[infra-gpt]
         IC[infra-claude]
         IP[infra-perplexity]
-        IZ[infra-glm]
     end
 
     subgraph "Foundation Layer"
@@ -197,7 +196,6 @@ All provider packages implement the same interface but wrap different APIs.
 | `@intexuraos/infra-gpt`        | OpenAI     | GPT-5.2, O4 Mini        |
 | `@intexuraos/infra-claude`     | Anthropic  | Claude Opus 4.5, Sonnet |
 | `@intexuraos/infra-perplexity` | Perplexity | Sonar, Sonar Pro        |
-| `@intexuraos/infra-glm`        | Zai        | GLM-4.7, GLM-4.7-Flash  |
 
 ---
 

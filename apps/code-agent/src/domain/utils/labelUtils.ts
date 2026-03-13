@@ -17,10 +17,13 @@ const WORKER_TYPE_LABELS = ['opus', 'sonnet', 'minimax', 'glm', 'kimi'] as const
 type WorkerTypeLabel = typeof WORKER_TYPE_LABELS[number];
 const WORKER_TYPE_LABEL_SET = new Set<WorkerTypeLabel>(WORKER_TYPE_LABELS);
 
-export function getWorkerTypeFromLabels(labels: string[]): WorkerTypeLabel | undefined {
+export function getWorkerTypeFromLabels(labels: string[]): WorkerType | undefined {
   const matches = labels
     .map((label) => normalizeLabel(label))
     .filter((normalized): normalized is WorkerTypeLabel => WORKER_TYPE_LABEL_SET.has(normalized as WorkerTypeLabel));
 
-  return matches.length === 1 ? matches[0] : undefined;
+  // Filter to unique types
+  const unique = [...new Set(matches)];
+
+  return unique.length === 1 ? unique[0] : undefined;
 }

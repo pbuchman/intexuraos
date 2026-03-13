@@ -68,7 +68,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     pricingContext,
     logger: createAppLogger({ name: 'user-service-client' }),
-    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 

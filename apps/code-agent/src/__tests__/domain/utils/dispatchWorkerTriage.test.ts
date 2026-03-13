@@ -38,7 +38,7 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('@model sonnet')).toBe('sonnet');
   });
 
-  it('extracts glm from @worker glm', () => {
+  it('normalizes glm to glm', () => {
     expect(extractDispatchWorkerType('@worker glm')).toBe('glm');
   });
 
