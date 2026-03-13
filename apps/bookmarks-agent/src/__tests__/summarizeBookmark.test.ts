@@ -131,6 +131,51 @@ describe('summarizeBookmark', () => {
       );
     });
 
+    it('omits title line in WhatsApp message when bookmark has no title', async () => {
+      const createResult = await bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/page',
+        source: 'test',
+        sourceId: 'test-1',
+        description: 'A description only',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const bookmark = createResult.value;
+      // After summary, update the bookmark to clear any title from ogPreview too
+      bookmark.ogPreview = {
+        title: null,
+        description: 'OG Description',
+        image: null,
+        siteName: null,
+        type: null,
+        favicon: null,
+      };
+      await bookmarkRepository.update(bookmark.id, bookmark);
+
+      bookmarkSummaryService.setDefaultSummary('Summary of the page.');
+
+      const result = await summarizeBookmark(
+        {
+          bookmarkRepository,
+          bookmarkSummaryService,
+          whatsAppSendPublisher,
+          logger: silentLogger,
+        },
+        { bookmarkId: bookmark.id, userId: 'user-1' }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(whatsAppSendPublisher.publishedMessages).toHaveLength(1);
+      const message = whatsAppSendPublisher.publishedMessages[0]?.message ?? '';
+      // No bold title line should appear
+      expect(message).toBe(
+        '📑 *Bookmark Summary*\n\nSummary of the page.\n\n🔗 https://example.com/page'
+      );
+    });
+
     it('uses ogPreview title when available in WhatsApp message', async () => {
       const createResult = await bookmarkRepository.create({
         userId: 'user-1',
@@ -375,6 +420,36 @@ describe('summarizeBookmark', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('STORAGE_ERROR');
     expect(result.error.message).toBe('Database connection failed');
+  });
+
+  it('returns error when repository update fails after summary generation', async () => {
+    const createResult = await bookmarkRepository.create({
+      userId: 'user-1',
+      url: 'https://example.com',
+      source: 'test',
+      sourceId: 'test-1',
+      title: 'Test',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    bookmarkSummaryService.setDefaultSummary('Generated summary');
+
+    bookmarkRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Firestore write failed',
+    });
+
+    const result = await summarizeBookmark(
+      { bookmarkRepository, bookmarkSummaryService, logger: silentLogger },
+      { bookmarkId: createResult.value.id, userId: 'user-1' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('STORAGE_ERROR');
+    expect(result.error.message).toBe('Firestore write failed');
   });
 
   describe('transient error handling', () => {
