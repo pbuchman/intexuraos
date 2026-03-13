@@ -1,13 +1,11 @@
 import { memo } from 'react';
 import {
-  Bot,
   ChevronDown,
   ChevronRight,
   Loader2,
-  ShieldCheck,
-  SquareArrowOutUpRight,
 } from 'lucide-react';
 import type { GitHubEventLogListRow } from '@/hooks';
+import { formatTimeOnly } from '@/utils/dateFormat';
 
 export interface GitHubEventLogRowProps {
   row: GitHubEventLogListRow;
@@ -18,10 +16,11 @@ export interface GitHubEventLogRowProps {
 // --- Helpers ---
 
 function formatEventLabel(row: GitHubEventLogListRow): string {
-  if (row.action === null) {
-    return row.eventType;
+  const base = row.githubEventName;
+  if (row.action === null || row.action === 'unknown') {
+    return base;
   }
-  return `${row.eventType}.${row.action}`;
+  return `${base}.${row.action}`;
 }
 
 function formatDecisionSummary(row: GitHubEventLogListRow): string {
@@ -35,16 +34,6 @@ function formatDecisionSummary(row: GitHubEventLogListRow): string {
     return row.decisionOutcome;
   }
   return 'pending';
-}
-
-function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(new Date(value));
 }
 
 function decisionClasses(row: GitHubEventLogListRow): string {
@@ -61,17 +50,27 @@ function decisionClasses(row: GitHubEventLogListRow): string {
 }
 
 function eventClasses(row: GitHubEventLogListRow): string {
-  if (row.eventType === 'pull_request') {
+  const name = row.githubEventName;
+  if (name === 'pull_request') {
     return 'bg-indigo-100 text-indigo-700 ring-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:ring-indigo-800';
   }
-  if (row.eventType === 'issue_comment' || row.eventType === 'pull_request_review_comment') {
+  if (name === 'issue_comment' || name === 'pull_request_review_comment') {
     return 'bg-orange-100 text-orange-700 ring-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:ring-orange-800';
   }
-  if (row.eventType === 'pull_request_review') {
+  if (name === 'pull_request_review') {
     return 'bg-rose-100 text-rose-700 ring-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:ring-rose-800';
   }
-  if (row.eventType === 'push') {
+  if (name === 'push') {
     return 'bg-teal-100 text-teal-700 ring-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:ring-teal-800';
+  }
+  if (name === 'check_run' || name === 'check_suite') {
+    return 'bg-cyan-100 text-cyan-700 ring-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400 dark:ring-cyan-800';
+  }
+  if (name === 'workflow_run' || name === 'workflow_job') {
+    return 'bg-violet-100 text-violet-700 ring-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:ring-violet-800';
+  }
+  if (name === 'create' || name === 'delete') {
+    return 'bg-amber-100 text-amber-700 ring-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-800';
   }
   return 'bg-slate-200 text-slate-700 ring-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:ring-slate-600';
 }
@@ -87,79 +86,33 @@ function getAccentShadow(row: GitHubEventLogListRow): string {
 
 // --- Expanded detail ---
 
-function DetailSection({ row }: { row: GitHubEventLogListRow }): React.JSX.Element {
+function DetailPair({ label, value }: { label: string; value: string }): React.JSX.Element {
   return (
-    <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-700 dark:bg-slate-800/50">
-      <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-        <DetailCard label="Decision">
-          <div className="font-medium text-slate-900 dark:text-slate-100">
-            {row.decisionOutcome ?? 'pending'}
-          </div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {row.decidedBy ?? 'awaiting evaluator'}
-          </div>
-        </DetailCard>
-
-        <DetailCard label="Dispatch">
-          <div className="font-medium text-slate-900 dark:text-slate-100">
-            {row.dispatchAction ?? 'none'}
-          </div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {row.taskId ?? 'no task'}
-          </div>
-        </DetailCard>
-
-        <DetailCard label="Reviews">
-          <div className="font-medium text-slate-900 dark:text-slate-100">
-            {row.reviewTypes.length > 0 ? row.reviewTypes.join(', ') : 'none'}
-          </div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {row.workerType ?? 'worker unset'}
-          </div>
-        </DetailCard>
-
-        <DetailCard label="Latency">
-          <div className="font-medium text-slate-900 dark:text-slate-100">
-            {row.decisionLatencyMs !== null ? `${String(row.decisionLatencyMs)} ms` : 'n/a'}
-          </div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {row.deliveryId ?? row.id}
-          </div>
-        </DetailCard>
-      </div>
-
-      <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="mb-2 flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
-          <ShieldCheck className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-          Detail
-        </div>
-        <div className="text-slate-600 dark:text-slate-300">
-          {row.reason ?? 'No explicit reason recorded yet.'}
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-          <span className="inline-flex items-center gap-1">
-            <Bot className="h-3.5 w-3.5" />
-            {row.senderLogin ?? 'system'}
-          </span>
-          {row.normalizedEventId !== null ? (
-            <span className="inline-flex items-center gap-1">
-              <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-              {row.normalizedEventId}
-            </span>
-          ) : null}
-        </div>
-      </div>
-    </div>
+    <span className="inline-flex gap-1">
+      <span className="text-slate-400 dark:text-slate-500">{label}:</span>
+      <span className="text-slate-700 dark:text-slate-300">{value}</span>
+    </span>
   );
 }
 
-function DetailCard({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
+function DetailSection({ row }: { row: GitHubEventLogListRow }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-700 dark:bg-slate-800">
-      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-        {label}
+    <div className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/50">
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <DetailPair label="Decision" value={row.decisionOutcome ?? 'pending'} />
+        <DetailPair label="Decided by" value={row.decidedBy ?? 'awaiting evaluator'} />
+        <DetailPair label="Dispatch" value={row.dispatchAction ?? 'none'} />
+        <DetailPair label="Reviews" value={row.reviewTypes.length > 0 ? row.reviewTypes.join(', ') : 'none'} />
+        <DetailPair label="Latency" value={row.decisionLatencyMs !== null ? `${String(row.decisionLatencyMs)}ms` : 'n/a'} />
+        <DetailPair label="ID" value={row.deliveryId ?? row.id} />
+        {row.taskId !== null ? <DetailPair label="Task" value={row.taskId} /> : null}
+        {row.workerType !== null ? <DetailPair label="Worker" value={row.workerType} /> : null}
       </div>
-      {children}
+      {row.reason !== null ? (
+        <div className="mt-1 text-slate-500 dark:text-slate-400">
+          Reason: {row.reason}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -179,55 +132,46 @@ function GitHubEventLogRowComponent({
       <button
         type="button"
         onClick={(): void => { onToggle(row.id); }}
-        className="grid w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50 sm:grid-cols-[minmax(0,2.5fr)_minmax(0,1.8fr)_auto]"
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50"
       >
-        {/* Event column */}
-        <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] ring-1 ${eventClasses(row)}`}>
-              {formatEventLabel(row)}
-            </span>
-            {row.pullRequestNumber !== null ? (
-              <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-[11px] font-semibold text-white dark:bg-slate-600">
-                #{String(row.pullRequestNumber)}
-              </span>
-            ) : null}
-            {row.isHydrating ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-800">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                hydrating
-              </span>
-            ) : null}
-          </div>
-          <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {row.repository ?? 'unknown repository'}
-          </div>
-          <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-            {row.reason ?? 'Decision pending'}
-          </div>
-        </div>
+        <span className="shrink-0 text-xs font-medium text-slate-400 dark:text-slate-500">
+          {formatTimeOnly(row.updatedAt)}
+        </span>
 
-        {/* Decision column */}
-        <div className="flex min-w-0 flex-col justify-center gap-2 sm:items-start">
-          <span className={`inline-flex w-fit rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] ring-1 ${decisionClasses(row)}`}>
-            {formatDecisionSummary(row)}
+        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-[0.08em] ring-1 ${eventClasses(row)}`}>
+          {formatEventLabel(row)}
+        </span>
+
+        {row.pullRequestNumber !== null ? (
+          <span className="shrink-0 rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white dark:bg-slate-600">
+            #{String(row.pullRequestNumber)}
           </span>
-          <div className="truncate text-sm text-slate-600 dark:text-slate-400">
-            {row.senderLogin ?? 'system'}
-          </div>
-        </div>
+        ) : null}
 
-        {/* Time + chevron column */}
-        <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
-          <div className="text-xs font-medium text-slate-400 dark:text-slate-500">
-            {formatTimestamp(row.updatedAt)}
-          </div>
-          {expanded ? (
-            <ChevronDown className="h-4 w-4 text-slate-400 transition-transform" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-slate-400 transition-transform" />
-          )}
-        </div>
+        {row.isHydrating ? (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-800">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            hydrating
+          </span>
+        ) : null}
+
+        <span className="min-w-0 shrink truncate text-xs text-slate-600 dark:text-slate-400">
+          {row.repository ?? 'unknown repository'}
+        </span>
+
+        <span className="shrink-0 text-xs text-slate-500 dark:text-slate-500">
+          @{row.senderLogin ?? 'system'}
+        </span>
+
+        <span className={`ml-auto inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${decisionClasses(row)}`}>
+          {formatDecisionSummary(row)}
+        </span>
+
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform" />
+        )}
       </button>
 
       {/* Expanded detail */}
