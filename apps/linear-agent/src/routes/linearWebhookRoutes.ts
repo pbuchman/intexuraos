@@ -217,7 +217,9 @@ async function handleLinearWebhook(
     for (let i = 0; i < syncResults.length; i++) {
       const result = syncResults[i];
       const uid = userIds[i];
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check on syncResults[i] and userIds[i] despite length-guarded loop @preserve */
       if (result === undefined || uid === undefined) continue;
+      /* v8 ignore stop @preserve */
 
       if (result.status === 'fulfilled' && result.value.ok) {
         request.log.info(
@@ -242,7 +244,9 @@ async function handleLinearWebhook(
     // Trigger code task only for the first user (avoid duplicate tasks)
     if (shouldTriggerCodeTask(event)) {
       const firstUserId = userIds[0];
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check on userIds[0] despite length check above @preserve */
       if (firstUserId !== undefined) {
+      /* v8 ignore stop @preserve */
         void triggerCodeTaskFromAssignment(event, firstUserId, {
           codeAgentClient: services.codeAgentClient,
           logger: request.log as unknown as Logger,
@@ -303,7 +307,9 @@ async function handleLinearWebhook(
     const userIdsResult = await services.issueRepository.findUserIdsByIssueId(data.issueId);
     let commentUserId: string;
     if (userIdsResult.ok && userIdsResult.value.length > 0) {
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces ?? fallback on userIdsResult.value[0] despite length guard @preserve */
       commentUserId = userIdsResult.value[0] ?? issue.userId; // noUncheckedIndexedAccess
+      /* v8 ignore stop @preserve */
     } else {
       if (!userIdsResult.ok) {
         request.log.warn({ error: userIdsResult.error, issueId: data.issueId }, 'Failed to find users by issue ID, falling back to issue.userId');

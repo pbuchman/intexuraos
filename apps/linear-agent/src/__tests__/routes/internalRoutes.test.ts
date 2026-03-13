@@ -674,5 +674,35 @@ describe('internalRoutes', () => {
       const body = response.json();
       expect(body.success).toBe(false);
     });
+
+    it('returns 502 DOWNSTREAM_ERROR when linearApiClient fails with non-INTERNAL_ERROR code', async () => {
+      const conn: LinearConnection = {
+        userId: 'user-1',
+        apiKey: 'key-1',
+        teamId: 'team-1',
+        teamName: 'Team 1',
+        webhookSecret: null,
+        connected: true,
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+      };
+      fakeConnectionRepo.seedConnection(conn);
+      fakeLinearClient.setFailure(true, { code: 'API_ERROR', message: 'Linear API unavailable' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/sync',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: { userId: 'user-1' },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
   });
 });
