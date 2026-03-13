@@ -520,7 +520,7 @@ describe('firestoreCodeTaskRepository', () => {
         .doc(created.value.id)
         .update({
           linearIssueTitle: 'Legacy title',
-          linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-123',
+          linearIssueUrl: 'https://linear.app/pbuchman/issue/INT-123',
           linearIssueType: 'feature',
           linearIssueLabels: ['backend'],
           linearFallback: true,

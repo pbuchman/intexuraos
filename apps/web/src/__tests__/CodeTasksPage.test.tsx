@@ -145,7 +145,7 @@ describe('CodeTasksPage', () => {
             priority: 1,
             assignee: { id: 'user-1', name: 'Test User' },
             labels: [{ id: 'label-1', name: 'backend' }],
-            url: 'https://linear.app/intexuraos/issue/INT-301',
+            url: 'https://linear.app/pbuchman/issue/INT-301',
             commentCount: 2,
             lastCommentAt: '2026-03-06T12:01:00.000Z',
           },
@@ -167,7 +167,7 @@ describe('CodeTasksPage', () => {
     expect(screen.getByText('Hydrated Linear Issue')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'INT-301' })).toSatisfy((links) =>
       links.every((link) =>
-        link.getAttribute('href') === 'https://linear.app/intexuraos/issue/INT-301'
+        link.getAttribute('href') === 'https://linear.app/pbuchman/issue/INT-301'
       )
     );
   });
