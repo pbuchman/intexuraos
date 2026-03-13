@@ -128,7 +128,7 @@ Example: \`[INT-665] [plan] Update orchestrator PR title format\`
 ### PR Description Format
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
@@ -252,7 +252,7 @@ Example: \`[INT-665] Update orchestrator PR title format\`
 ### PR Description Format
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
 
 ### Resource Limits
 NONE. Complete the task regardless of token usage and time. Time is unlimited.
@@ -338,7 +338,7 @@ All three are MANDATORY. PR reviews and PR comments alone are NOT sufficient —
 ### PR Description Update
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
 
 ### Tracking Comment (MANDATORY — single comment, work in-place)
 
@@ -602,7 +602,7 @@ ${taskUrl !== undefined ? '- Include that line in the same `POST /reviews` body,
 ### PR Description Update
 ${linearIssueId !== undefined ? `- Linear: [${linearIssueId}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId})` : ''}
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 

@@ -1,15 +1,9 @@
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
 import type { WorkerType } from '../models/codeTask.js';
 
 export const DISPATCH_WORKER_PATTERNS = ['@worker', '@model'] as const;
 
-export const SUPPORTED_DISPATCH_WORKER_TYPES = [
-  'auto',
-  'opus',
-  'sonnet',
-  'minimax',
-  'glm',
-  'qwen3.5-plus',
-] as const satisfies readonly WorkerType[];
+export const SUPPORTED_DISPATCH_WORKER_TYPES = CODE_TASK_WORKER_TYPES satisfies readonly WorkerType[];
 
 const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   auto: 'auto',
@@ -17,8 +11,8 @@ const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   sonnet: 'sonnet',
   minimax: 'minimax',
   glm: 'glm',
-  qwen: 'qwen3.5-plus',
-  'qwen3.5-plus': 'qwen3.5-plus',
+  qwen: 'qwen',
+  kimi: 'kimi',
 };
 
 // Build regex from patterns for maintainability
