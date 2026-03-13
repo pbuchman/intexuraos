@@ -84,7 +84,14 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 
   return {
     async run(params): Promise<Result<ToolCallingResult, LLMError>> {
-      const { systemPrompt, messages, tools, maxIterations = DEFAULT_MAX_ITERATIONS, onExhausted, repairIterations } = params;
+      const {
+        systemPrompt,
+        messages,
+        tools,
+        maxIterations = DEFAULT_MAX_ITERATIONS,
+        onExhausted,
+        repairIterations,
+      } = params;
 
       const auditContext: AuditContext = createAuditContext(
         {
@@ -287,7 +294,10 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 
           // Post-loop: try repair on first attempt only
           if (attempt === 0 && onExhaustedFn !== undefined) {
-            const repairMessage = onExhaustedFn({ iterationCount: iteration, toolCallsMade: totalToolCalls });
+            const repairMessage = onExhaustedFn({
+              iterationCount: iteration,
+              toolCallsMade: totalToolCalls,
+            });
             onExhaustedFn = undefined;
             if (repairMessage !== undefined) {
               logger.info({ iteration, totalToolCalls }, 'Tool calling: repair message injected');

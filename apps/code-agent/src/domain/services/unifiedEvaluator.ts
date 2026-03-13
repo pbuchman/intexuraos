@@ -91,6 +91,43 @@ export function buildTriageCommentBody(
   ].join('\n');
 }
 
+export function buildSkipCommentBody(
+  reason: string,
+  costUsd: number,
+  toolCalls: { tool: string; args: Record<string, unknown> }[],
+  reasoning: string,
+): string {
+  const costStr = `$${String(costUsd)}`;
+
+  // Deduplicate identical tool calls
+  const seen = new Set<string>();
+  const uniqueToolCalls = toolCalls.filter((tc) => {
+    const key = `${tc.tool}:${JSON.stringify(tc.args)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const toolCallLines = uniqueToolCalls
+    .map((tc) => `- \`${tc.tool}(${JSON.stringify(tc.args)})\``)
+    .join('\n');
+
+  return [
+    '@ignore',
+    '### Automated Code Review Triage Decision',
+    '',
+    '**Action:** Skipped (no review needed)',
+    `**Reason:** ${reason}`,
+    `**Cost:** ${costStr}`,
+    '',
+    '**Tool calls:**',
+    toolCallLines === '' ? '- None' : toolCallLines,
+    '',
+    '**Reasoning:**',
+    reasoning.split('\n').map((line) => `> ${line}`).join('\n'),
+  ].join('\n');
+}
+
 export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvaluator {
   return {
     async evaluate(event: GitHubPREvent, logger: Logger): Promise<void> {
@@ -280,6 +317,22 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       }
 
       // triage.action === 'skip'
+
+      // Post skip comment to PR (pull_request events only)
+      if (event.eventType === 'pull_request' && deps.postTriageComment !== undefined) {
+        try {
+          const skipBody = buildSkipCommentBody(triage.reason, usage.costUsd, usage.toolCalls, reasoning);
+          await deps.postTriageComment(
+            resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
+            event.repository,
+            event.pullRequestNumber,
+            skipBody,
+          );
+        } catch (commentError: unknown) {
+          logger.warn({ eventId: event.id, error: commentError }, 'Failed to post skip comment');
+        }
+      }
+
       await recordDecision(deps, event, {
         decidedBy: 'github_agent',
         decision: 'skip',
