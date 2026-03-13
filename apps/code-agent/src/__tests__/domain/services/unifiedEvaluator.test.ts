@@ -1265,7 +1265,7 @@ describe('UnifiedEvaluator', () => {
           reasoning: 'Review needed.',
         })),
         createReviewTask: vi.fn().mockResolvedValue(
-          err({ code: 'dispatch_failed' as const, message: 'Worker unavailable' })
+          err({ code: 'dispatch_failed' as const, message: 'Worker unavailable', taskId: 'task_abc123' })
         ),
         postTriageComment,
       });
@@ -1280,7 +1280,40 @@ describe('UnifiedEvaluator', () => {
       expect(errorCommentBody).toContain('Automated Code Review Triage Decision');
       expect(errorCommentBody).toContain('Review task creation failed');
       expect(errorCommentBody).toContain('dispatch_failed');
+      expect(errorCommentBody).toContain('Task ID:');
+      expect(errorCommentBody).toContain('task_abc123');
+      expect(errorCommentBody).toContain('Task was NOT queued');
+      expect(errorCommentBody).toContain('View in IntexuraOS');
       expect(errorCommentBody).not.toContain('Worker unavailable');
+    });
+
+    it('posts error comment without task link when taskId is absent', async () => {
+      const postTriageComment = vi.fn().mockResolvedValue(ok({ commentId: 99 }));
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'request_review', reviewTypes: ['code_quality'] },
+          usage: { costUsd: 0.002, toolCalls: [] },
+          reasoning: 'Review needed.',
+        })),
+        createReviewTask: vi.fn().mockResolvedValue(
+          err({ code: 'dispatch_failed' as const, message: 'Worker unavailable' })
+        ),
+        postTriageComment,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(postTriageComment).toHaveBeenCalledTimes(1);
+      const errorCommentBody = postTriageComment.mock.calls[0]?.[3] as string;
+      expect(errorCommentBody).toContain('Review task creation failed');
+      expect(errorCommentBody).toContain('Task was NOT queued');
+      expect(errorCommentBody).not.toContain('Task ID:');
+      expect(errorCommentBody).not.toContain('View in IntexuraOS');
     });
 
     it('does not post error comment when postTriageComment is undefined', async () => {

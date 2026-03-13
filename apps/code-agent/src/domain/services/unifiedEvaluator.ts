@@ -207,8 +207,16 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
                 '',
                 '**Action:** Review task creation failed',
                 `**Error code:** ${reviewResult.error.code}`,
+                ...(reviewResult.error.taskId !== undefined
+                  ? [`**Task ID:** \`${reviewResult.error.taskId}\``]
+                  : []),
                 '',
                 'The triage agent decided to request a review but the review task could not be created.',
+                '**Status:** Task was NOT queued. Review is not currently in progress.',
+                '',
+                ...(reviewResult.error.taskId !== undefined
+                  ? [`[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/${reviewResult.error.taskId})`]
+                  : []),
               ].join('\n');
               await deps.postTriageComment(
                 resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),

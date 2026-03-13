@@ -19,7 +19,7 @@ import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
-import { notifyPROfTaskDispatch, notifyReviewReplaced, notifyDispatchFailed } from '../utils/prTaskNotification.js';
+import { notifyPROfTaskDispatch, notifyReviewReplaced } from '../utils/prTaskNotification.js';
 import { createHmac } from 'node:crypto';
 
 export interface CreateReviewTaskRequest {
@@ -38,6 +38,7 @@ export interface CreateReviewTaskRequest {
 export interface CreateReviewTaskError {
   code: 'user_not_found' | 'no_workers_configured' | 'task_creation_failed' | 'dispatch_failed' | 'internal_error';
   message: string;
+  taskId?: string;
 }
 
 export interface CreateReviewTaskResult { status: 'created'; taskId: string; workerType: WorkerType }
@@ -333,20 +334,7 @@ export async function createReviewTask(
       error: { code: 'dispatch_failed', message: dispatchResult.error.message },
     });
 
-    // Post dispatch failure comment (best-effort)
-    await notifyDispatchFailed(
-      { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
-      {
-        taskId: task.id,
-        repository,
-        prNumber,
-        userId,
-        failureType: 'review',
-        errorCode: dispatchResult.error.code,
-      },
-    );
-
-    return err({ code: 'dispatch_failed', message: dispatchResult.error.message });
+    return err({ code: 'dispatch_failed', message: dispatchResult.error.message, taskId: task.id });
   }
 
   await codeTaskRepo.update(task.id, { status: 'dispatched' });
