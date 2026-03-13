@@ -67,7 +67,7 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
       subtask_urls: '',
       pr_url: '',
@@ -450,7 +450,7 @@ describe('OrchestratorCompletionVerifier', () => {
     const validPlanningResponse = JSON.stringify({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
       subtask_urls: '',
       pr_url: '',
@@ -481,7 +481,7 @@ describe('OrchestratorCompletionVerifier', () => {
         agentType: 'planning',
         outcome: 'planned',
         superpowers_writing_plans: 'used',
-        linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+        linear_url: 'https://linear.app/pbuchman/issue/INT-100',
         is_complex: '0',
         subtask_urls: '',
         pr_url: '',
@@ -749,7 +749,7 @@ describe('OrchestratorCompletionVerifier', () => {
     const validPlanningResponse = JSON.stringify({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
       subtask_urls: '',
       pr_url: '',
@@ -838,7 +838,7 @@ describe('OrchestratorCompletionVerifier', () => {
       const wrappedResponse = `Here is the result:\n${JSON.stringify({
         outcome: 'planned',
         superpowers_writing_plans: 'used',
-        linear_url: 'https://linear.app/intexuraos/issue/INT-50',
+        linear_url: 'https://linear.app/pbuchman/issue/INT-50',
         is_complex: '0',
         subtask_urls: '',
         pr_url: '',
@@ -944,7 +944,7 @@ describe('verify — fatal exit code pre-check', () => {
         content: JSON.stringify({
           outcome: 'planned',
           superpowers_writing_plans: 'used',
-          linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+          linear_url: 'https://linear.app/pbuchman/issue/INT-100',
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',

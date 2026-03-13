@@ -189,7 +189,7 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         root: {
           id: request.issueId,
           identifier: `INT-${request.issueId}`,
-          url: `https://linear.app/intexuraos/issue/${request.issueId}`,
+          url: `https://linear.app/pbuchman/issue/${request.issueId}`,
           parentId: null,
           labels: [],
           assigneeId: null,
