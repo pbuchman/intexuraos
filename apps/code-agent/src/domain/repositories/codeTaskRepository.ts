@@ -174,6 +174,17 @@ export interface CodeTaskRepository {
   ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
+   * Find the newest non-review task for a PR.
+   * Used to route generic PR comments to existing non-review tasks.
+   * Returns null if no non-review tasks exist for the PR.
+   * Treats tasks with missing agentType as non-review (backward compatibility).
+   */
+  findLatestNonReviewTaskByPR(
+    repository: string,
+    prNumber: number
+  ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
    * Find newest tasks for a Linear issue.
    * Used to recover open PR continuity across retries and follow-ups.
    */

@@ -460,7 +460,7 @@ describe('processCodeAction', () => {
       linearIssueLabels: ['code-task'],
       hasChildren: false,
       linearFallback: false,
-      linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-305',
+      linearIssueUrl: 'https://linear.app/pbuchman/issue/INT-305',
     });
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({

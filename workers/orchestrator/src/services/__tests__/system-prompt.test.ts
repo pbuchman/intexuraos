@@ -570,6 +570,35 @@ describe('system-prompt', () => {
     expect(result).not.toContain('[View in IntexuraOS](');
   });
 
+  it('review agent prompt requires posting review started comment as absolute first action', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    expect(result).toContain('### Post Review Started Comment');
+    expect(result).toContain('MANDATORY ABSOLUTE FIRST ACTION');
+    expect(result).toContain('NON-NEGOTIABLE');
+    expect(result).toContain('Review is now in progress');
+  });
+
+  it('review agent prompt requires review started comment before all other sections', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    const reviewStartedIdx = result.indexOf('### Post Review Started Comment');
+    const reviewScopeIdx = result.indexOf('### Review Scope');
+    const linearIdx = result.indexOf('### Reading the Linear Issue');
+    const gatheringIdx = result.indexOf('### Gathering PR Context');
+
+    expect(reviewStartedIdx).toBeGreaterThan(-1);
+    expect(reviewStartedIdx).toBeLessThan(reviewScopeIdx);
+    expect(reviewStartedIdx).toBeLessThan(linearIdx);
+    expect(reviewStartedIdx).toBeLessThan(gatheringIdx);
+  });
+
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
     const result = buildSystemPrompt({
       ...baseParams,

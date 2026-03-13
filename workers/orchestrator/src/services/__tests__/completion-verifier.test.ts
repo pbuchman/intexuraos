@@ -67,7 +67,7 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
       subtask_urls: '',
       pr_url: '',
@@ -236,6 +236,56 @@ describe('REVIEW_SCHEMA', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts review_comments_posted as numeric string', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '0',
+      review_types: 'code_quality',
+      summary: 'No issues found.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects empty review_comments_posted', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '',
+      review_types: 'code_quality',
+      summary: 'Reviewed.',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-numeric review_comments_posted', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: 'three',
+      review_types: 'code_quality',
+      summary: 'Reviewed.',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty review_types', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '3',
+      review_types: '',
+      summary: 'Reviewed.',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects whitespace-only review_types', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_comments_posted: '3',
+      review_types: '   ',
+      summary: 'Reviewed.',
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects missing fields', () => {
     const result = REVIEW_SCHEMA.safeParse({
       gh_pr_url: 'https://github.com/org/repo/pull/42',
@@ -400,7 +450,7 @@ describe('OrchestratorCompletionVerifier', () => {
     const validPlanningResponse = JSON.stringify({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
       subtask_urls: '',
       pr_url: '',
@@ -431,7 +481,7 @@ describe('OrchestratorCompletionVerifier', () => {
         agentType: 'planning',
         outcome: 'planned',
         superpowers_writing_plans: 'used',
-        linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+        linear_url: 'https://linear.app/pbuchman/issue/INT-100',
         is_complex: '0',
         subtask_urls: '',
         pr_url: '',
@@ -699,7 +749,7 @@ describe('OrchestratorCompletionVerifier', () => {
     const validPlanningResponse = JSON.stringify({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100',
       is_complex: '0',
       subtask_urls: '',
       pr_url: '',
@@ -788,7 +838,7 @@ describe('OrchestratorCompletionVerifier', () => {
       const wrappedResponse = `Here is the result:\n${JSON.stringify({
         outcome: 'planned',
         superpowers_writing_plans: 'used',
-        linear_url: 'https://linear.app/intexuraos/issue/INT-50',
+        linear_url: 'https://linear.app/pbuchman/issue/INT-50',
         is_complex: '0',
         subtask_urls: '',
         pr_url: '',
@@ -894,7 +944,7 @@ describe('verify — fatal exit code pre-check', () => {
         content: JSON.stringify({
           outcome: 'planned',
           superpowers_writing_plans: 'used',
-          linear_url: 'https://linear.app/intexuraos/issue/INT-100',
+          linear_url: 'https://linear.app/pbuchman/issue/INT-100',
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',
