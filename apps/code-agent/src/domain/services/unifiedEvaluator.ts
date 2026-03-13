@@ -48,7 +48,7 @@ export function buildTriageCommentBody(
   costUsd: number,
   toolCalls: { tool: string; args: Record<string, unknown> }[],
   reasoning: string,
-  options?: { workerType?: string },
+  options?: { workerType?: string; taskId?: string },
 ): string {
   const reviewTypesStr = reviewTypes.map((t) => `\`${t}\``).join(', ');
 
@@ -83,6 +83,11 @@ export function buildTriageCommentBody(
     '',
     '**Reasoning:**',
     reasoning.split('\n').map((line) => `> ${line}`).join('\n'),
+    ...(options?.taskId !== undefined ? [
+      '',
+      `**Task ID:** \`${options.taskId}\``,
+      `[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/${options.taskId})`,
+    ] : []),
   ].join('\n');
 }
 
@@ -242,7 +247,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             usage.costUsd,
             usage.toolCalls,
             reasoning,
-            { workerType: reviewResult.value.workerType },
+            { workerType: reviewResult.value.workerType, taskId: reviewResult.value.taskId }, // @allow-result-access -- narrowed by !reviewResult.ok above
           ),
         );
 

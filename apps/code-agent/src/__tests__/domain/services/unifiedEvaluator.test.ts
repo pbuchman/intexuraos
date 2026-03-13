@@ -850,6 +850,9 @@ describe('UnifiedEvaluator', () => {
       const commentBody = postTriageComment.mock.calls[0]?.[3] as string;
       // Uses workerType from createReviewTask result, not from triage
       expect(commentBody).toContain('**Worker type:** `auto`');
+      // Includes task ID and view link from createReviewTask result
+      expect(commentBody).toContain('**Task ID:** `task-1`');
+      expect(commentBody).toContain('[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task-1)');
     });
 
     it('records workerType from createReviewTask result in dispatchParams', async () => {
@@ -1096,6 +1099,8 @@ describe('UnifiedEvaluator', () => {
       const body = postTriageComment.mock.calls[0]?.[3] as string;
       expect(body).toContain('Dispatching review');
       expect(body).toContain('**Worker type:** `minimax`');
+      expect(body).toContain('**Task ID:** `task-review-1`');
+      expect(body).toContain('[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task-review-1)');
     });
 
     it('continues dispatching when comment posting fails', async () => {
@@ -1470,6 +1475,46 @@ describe('buildTriageCommentBody', () => {
 
     const toolCallMatches = body.match(/`request_review\(/g);
     expect(toolCallMatches).toHaveLength(2);
+  });
+
+  it('includes task ID and view link when taskId option is provided', () => {
+    const body = buildTriageCommentBody(
+      ['code_quality'],
+      0.001,
+      [],
+      'Review needed.',
+      { taskId: 'task_abc123' },
+    );
+
+    expect(body).toContain('**Task ID:** `task_abc123`');
+    expect(body).toContain('[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task_abc123)');
+  });
+
+  it('omits task ID and view link when taskId option is not provided', () => {
+    const body = buildTriageCommentBody(
+      ['code_quality'],
+      0.001,
+      [],
+      'Review needed.',
+      { workerType: 'auto' },
+    );
+
+    expect(body).not.toContain('**Task ID:**');
+    expect(body).not.toContain('[View in IntexuraOS]');
+  });
+
+  it('includes both worker type and task ID when both options are provided', () => {
+    const body = buildTriageCommentBody(
+      ['code_quality'],
+      0.001,
+      [],
+      'Review needed.',
+      { workerType: 'auto', taskId: 'task_xyz789' },
+    );
+
+    expect(body).toContain('**Worker type:** `auto`');
+    expect(body).toContain('**Task ID:** `task_xyz789`');
+    expect(body).toContain('[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task_xyz789)');
   });
 });
 

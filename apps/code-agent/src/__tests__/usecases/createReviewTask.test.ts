@@ -876,7 +876,7 @@ describe('createReviewTask', () => {
   });
 
   describe('PR notification after dispatch', () => {
-    it('posts task-created comment after successful dispatch', async () => {
+    it('skips dispatch comment for review tasks (skipComment: true)', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
       const deps = createFakeDeps({ gitHubPRClient });
 
@@ -889,20 +889,12 @@ describe('createReviewTask', () => {
         prTitle: 'Fix bug',
       });
 
-      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
-        'ghp_test_token',
-        'pbuchman',
-        'intexuraos',
-        42,
-        expect.stringContaining('@ignore')
-      );
-      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
-        'ghp_test_token',
-        'pbuchman',
-        'intexuraos',
-        42,
-        expect.stringContaining('**Dispatch outcome:** Review task dispatched')
-      );
+      // skipComment: true means no "Task Accepted" dispatch comment is posted
+      const commentCalls = vi.mocked(gitHubPRClient.postPRComment).mock.calls;
+      for (const call of commentCalls) {
+        const body = call[4] as string;
+        expect(body).not.toContain('**Dispatch outcome:** Review task dispatched');
+      }
     });
 
     it('updates PR title with Linear issue ID when not already tagged', async () => {
