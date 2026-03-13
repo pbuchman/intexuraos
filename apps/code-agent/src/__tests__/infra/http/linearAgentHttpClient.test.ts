@@ -34,7 +34,7 @@ describe('linearAgentHttpClient', () => {
           id: 'issue-123',
           identifier: 'INT-123',
           title: 'Test Issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
         },
       };
 
@@ -54,7 +54,7 @@ describe('linearAgentHttpClient', () => {
         expect(result.value.issueId).toBe('issue-123');
         expect(result.value.issueIdentifier).toBe('INT-123');
         expect(result.value.issueTitle).toBe('Test Issue');
-        expect(result.value.issueUrl).toBe('https://linear.app/intexuraos/issue/INT-123');
+        expect(result.value.issueUrl).toBe('https://linear.app/pbuchman/issue/INT-123');
         expect(mockLogger.info).toHaveBeenCalledWith(
           { issueId: 'issue-123', identifier: 'INT-123' },
           'Linear issue created'
@@ -71,7 +71,7 @@ describe('linearAgentHttpClient', () => {
           id: 'issue-456',
           identifier: 'INT-456',
           title: 'Test Issue',
-          url: 'https://linear.app/intexuraos/issue/INT-456',
+          url: 'https://linear.app/pbuchman/issue/INT-456',
         },
       };
 
@@ -221,7 +221,7 @@ describe('linearAgentHttpClient', () => {
           id: 'issue-789',
           identifier: 'INT-789',
           title: 'My Title',
-          url: 'https://linear.app/intexuraos/issue/INT-789',
+          url: 'https://linear.app/pbuchman/issue/INT-789',
         });
 
       await client.createIssue({
@@ -359,7 +359,7 @@ describe('linearAgentHttpClient', () => {
           id: 'issue-123',
           identifier: 'INT-123',
           title: 'Test Issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 0,
           parentId: null,
@@ -381,7 +381,7 @@ describe('linearAgentHttpClient', () => {
         expect(result.value.id).toBe('issue-123');
         expect(result.value.identifier).toBe('INT-123');
         expect(result.value.title).toBe('Test Issue');
-        expect(result.value.url).toBe('https://linear.app/intexuraos/issue/INT-123');
+        expect(result.value.url).toBe('https://linear.app/pbuchman/issue/INT-123');
         expect(result.value.parentId).toBe(null);
         expect(mockLogger.info).toHaveBeenCalledWith(
           { identifier: 'INT-123', issueId: 'issue-123' },
@@ -399,7 +399,7 @@ describe('linearAgentHttpClient', () => {
           id: 'issue-456',
           identifier: 'INT-456',
           title: 'Subtask Issue',
-          url: 'https://linear.app/intexuraos/issue/INT-456',
+          url: 'https://linear.app/pbuchman/issue/INT-456',
           labels: [],
           childCount: 0,
           parentId: 'parent-issue-id',
@@ -571,7 +571,7 @@ describe('linearAgentHttpClient', () => {
             id: 'issue-456',
             identifier: 'INT-456',
             title: 'Validated Issue',
-            url: 'https://linear.app/intexuraos/issue/INT-456',
+            url: 'https://linear.app/pbuchman/issue/INT-456',
             labels: [],
             childCount: 0,
             parentId: null,
@@ -937,7 +937,7 @@ describe('linearAgentHttpClient', () => {
           root: {
             id: 'issue-123',
             identifier: 'INT-123',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             parentId: null,
             labels: ['backend'],
             assigneeId: 'user-123',
@@ -1190,7 +1190,7 @@ describe('linearAgentHttpClient', () => {
           priority: 0,
           assignee: { id: 'user-123', name: 'Test User' },
           labels: [],
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           createdAt: '2024-01-01T00:00:00Z',
           updatedAt: '2024-01-01T00:00:00Z',
           commentCount: 0,
@@ -1215,7 +1215,7 @@ describe('linearAgentHttpClient', () => {
         expect(result.value.state.name).toBe('Backlog');
         expect(result.value.priority).toBe(0);
         expect(result.value.assignee?.name).toBe('Test User');
-        expect(result.value.url).toBe('https://linear.app/intexuraos/issue/INT-123');
+        expect(result.value.url).toBe('https://linear.app/pbuchman/issue/INT-123');
         expect(result.value.commentCount).toBe(0);
         expect(result.value.lastCommentAt).toBeNull();
         expect(mockLogger.info).toHaveBeenCalledWith(
@@ -1362,7 +1362,7 @@ describe('linearAgentHttpClient', () => {
               priority: 0,
               assignee: null,
               labels: [{ id: 'label-1', name: 'backend' }],
-              url: 'https://linear.app/intexuraos/issue/INT-123',
+              url: 'https://linear.app/pbuchman/issue/INT-123',
               commentCount: 1,
               lastCommentAt: '2026-03-06T10:00:00.000Z',
             },
@@ -1373,7 +1373,7 @@ describe('linearAgentHttpClient', () => {
               priority: 2,
               assignee: { id: 'user-123', name: 'Test User' },
               labels: [],
-              url: 'https://linear.app/intexuraos/issue/INT-456',
+              url: 'https://linear.app/pbuchman/issue/INT-456',
               commentCount: 0,
               lastCommentAt: null,
             },

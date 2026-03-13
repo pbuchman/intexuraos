@@ -39,7 +39,7 @@ describe('WhatsAppNotifier', () => {
           priority: 0,
           assignee: null,
           labels: [],
-          url: `https://linear.app/intexuraos/issue/${identifier}`,
+          url: `https://linear.app/pbuchman/issue/${identifier}`,
           commentCount: 0,
           lastCommentAt: null,
         });

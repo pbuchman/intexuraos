@@ -877,6 +877,52 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    findLatestNonReviewTaskByPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        // Query the newest 50 tasks for this PR and filter in-memory.
+        // Uses limit(50) instead of a Firestore inequality filter on agentType
+        // to avoid a composite index. 50 is generous — a PR would need 50+
+        // consecutive review tasks before the oldest non-review task falls
+        // outside this window.
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .orderBy('createdAt', 'desc')
+          .limit(50)
+          .get();
+
+        // Find the first non-review task (agentType !== 'review' or missing)
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          const agentType = data['agentType'] as string | undefined;
+          // Treat missing agentType as non-review (backward compatibility)
+          if (agentType !== 'review') {
+            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+          }
+        }
+
+        /* v8 ignore start -- test-infra: FakeFirestore limit(50) requires inserting 50 documents to trigger this observability warning @preserve */
+        if (snapshot.docs.length === 50) {
+          logger.warn(
+            { repository, prNumber, docsScanned: 50 },
+            'findLatestNonReviewTaskByPR exhausted 50-doc window without finding a non-review task',
+          );
+        }
+        /* v8 ignore stop @preserve */
+
+        return ok(null);
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find latest non-review task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     findRecentTasksByLinearIssue: async (
       linearIssueId: string,
       limit: number

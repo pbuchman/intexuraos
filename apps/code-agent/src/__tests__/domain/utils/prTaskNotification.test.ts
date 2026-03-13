@@ -9,15 +9,16 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import {
   notifyPROfTaskDispatch,
   fetchGitHubToken,
-  notifyReviewSkipped,
   notifyDispatchFailed,
   notifyTaskOutcome,
   buildTaskOutcomeComment,
+  buildReviewReplacementComment,
+  notifyReviewReplaced,
   type PRTaskNotificationDeps,
   type PRTaskNotificationRequest,
-  type ReviewSkipCommentRequest,
   type DispatchFailedCommentRequest,
   type TaskOutcomeCommentRequest,
+  type ReviewReplacementCommentRequest,
 } from '../../../domain/utils/prTaskNotification.js';
 
 function createFakeLogger(): Logger {
@@ -381,115 +382,26 @@ describe('notifyPROfTaskDispatch', () => {
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).not.toContain('**Reviewer:**');
   });
-});
 
-describe('notifyReviewSkipped', () => {
-  function createReviewSkipRequest(overrides: Partial<ReviewSkipCommentRequest> = {}): ReviewSkipCommentRequest {
-    return {
-      taskId: 'task_skip_test',
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      userId: 'user-1',
-      existingTaskId: 'task_existing_123',
-      ...overrides,
-    };
-  }
-
-  it('posts skip comment with @ignore prefix', async () => {
+  it('skips comment posting when skipComment is true but still updates title', async () => {
     const deps = createFakeDeps();
-    const request = createReviewSkipRequest();
+    const request = createFakeRequest({
+      skipComment: true,
+      linearIssueId: 'INT-809',
+      prTitle: 'Fix the bug',
+      updateTitle: true,
+      titleAlreadyTagged: false,
+    });
 
-    await notifyReviewSkipped(deps, request);
+    await notifyPROfTaskDispatch(deps, request);
 
-    expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.gitHubPRClient.updatePRTitle).toHaveBeenCalledWith(
       'ghp_test_token',
       'pbuchman',
       'intexuraos',
       42,
-      expect.stringContaining('@ignore')
-    );
-  });
-
-  it('comment includes existing task ID and skip message', async () => {
-    const deps = createFakeDeps();
-    const request = createReviewSkipRequest();
-
-    await notifyReviewSkipped(deps, request);
-
-    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(body).toContain('### Automated Code Review Request Skipped');
-    expect(body).toContain('**Existing Task ID:** `task_existing_123`');
-    expect(body).toContain('The new request has been skipped to avoid duplicate reviews.');
-  });
-
-  it('includes worker type when existingWorkerType is provided', async () => {
-    const deps = createFakeDeps();
-    const request = createReviewSkipRequest({ existingWorkerType: 'claude-code' });
-
-    await notifyReviewSkipped(deps, request);
-
-    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(body).toContain('**Worker Type:** `claude-code`');
-  });
-
-  it('includes worker location when existingWorkerLocation is provided', async () => {
-    const deps = createFakeDeps();
-    const request = createReviewSkipRequest({ existingWorkerLocation: 'us-central1' });
-
-    await notifyReviewSkipped(deps, request);
-
-    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(body).toContain('**Worker:** `us-central1`');
-  });
-
-  it('returns early when repository format is invalid', async () => {
-    const deps = createFakeDeps();
-    const request = createReviewSkipRequest({ repository: 'noslash' });
-
-    await notifyReviewSkipped(deps, request);
-
-    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
-    expect(deps.logger.warn).toHaveBeenCalled();
-  });
-
-  it('returns early when GitHub token is not available', async () => {
-    const deps = createFakeDeps();
-    vi.mocked(deps.userServiceClient.getOAuthToken).mockResolvedValue(
-      err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' }) as never
-    );
-    const request = createReviewSkipRequest();
-
-    await notifyReviewSkipped(deps, request);
-
-    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
-    expect(deps.logger.info).toHaveBeenCalled();
-  });
-
-  it('logs warning when comment posting fails (best-effort)', async () => {
-    const deps = createFakeDeps();
-    vi.mocked(deps.gitHubPRClient.postPRComment).mockResolvedValue(
-      err({ code: 'UNAUTHORIZED', message: 'Bad token' })
-    );
-    const request = createReviewSkipRequest();
-
-    await notifyReviewSkipped(deps, request);
-
-    expect(deps.logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ prNumber: 42 }),
-      expect.stringContaining('review skip comment')
-    );
-  });
-
-  it('swallows unexpected exceptions (best-effort)', async () => {
-    const deps = createFakeDeps();
-    vi.mocked(deps.userServiceClient.getOAuthToken).mockRejectedValue(new Error('Network crash'));
-    const request = createReviewSkipRequest();
-
-    await expect(notifyReviewSkipped(deps, request)).resolves.toBeUndefined();
-
-    expect(deps.logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: 'task_existing_123' }),
-      expect.stringContaining('Unexpected error')
+      '[INT-809] Fix the bug'
     );
   });
 });
@@ -852,5 +764,192 @@ describe('buildTaskOutcomeComment', () => {
 
     expect(comment).toContain('### Reply Failed');
     expect(comment).toContain('**Error:** COMMENT_ERROR');
+  });
+
+  it('builds review completed comment with worker type', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'review_completed',
+      workerType: 'claude-code',
+    });
+
+    expect(comment).toContain('### Automated Review Completed');
+    expect(comment).toContain('**Reviewer:** `claude-code`');
+  });
+
+  it('builds review failed comment with worker type', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'review_failed',
+      errorCode: 'TIMEOUT',
+      workerType: 'qwen',
+    });
+
+    expect(comment).toContain('### Automated Review Failed');
+    expect(comment).toContain('**Reviewer:** `qwen`');
+    expect(comment).toContain('**Error:** TIMEOUT');
+  });
+
+  it('omits reviewer line for non-review outcomes even when workerType provided', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'implementation_completed',
+      workerType: 'claude-code',
+    });
+
+    expect(comment).toContain('### Implementation Completed');
+    expect(comment).not.toContain('**Reviewer:**');
+  });
+});
+
+describe('buildReviewReplacementComment', () => {
+  it('builds replacement comment with cancelled task ID', () => {
+    const comment = buildReviewReplacementComment({
+      taskId: 'task_new',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      replacedTaskId: 'task_old_123',
+    });
+
+    expect(comment).toContain('@ignore');
+    expect(comment).toContain('### Automated Code Review Cancelled');
+    expect(comment).toContain('**Cancelled Task ID:** `task_old_123`');
+    expect(comment).toContain('A new review has been requested');
+  });
+
+  it('includes old worker type when provided', () => {
+    const comment = buildReviewReplacementComment({
+      taskId: 'task_new',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      replacedTaskId: 'task_old_123',
+      replacedWorkerType: 'minimax',
+    });
+
+    expect(comment).toContain('**Previous Reviewer:** `minimax`');
+  });
+
+  it('omits previous reviewer line when worker type not provided', () => {
+    const comment = buildReviewReplacementComment({
+      taskId: 'task_new',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      replacedTaskId: 'task_old_123',
+    });
+
+    expect(comment).not.toContain('**Previous Reviewer:**');
+  });
+});
+
+describe('notifyReviewReplaced', () => {
+  function createReplacementRequest(overrides: Partial<ReviewReplacementCommentRequest> = {}): ReviewReplacementCommentRequest {
+    return {
+      taskId: 'task_new',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      replacedTaskId: 'task_old_123',
+      ...overrides,
+    };
+  }
+
+  it('posts replacement comment with @ignore prefix', async () => {
+    const deps = createFakeDeps();
+    const request = createReplacementRequest();
+
+    await notifyReviewReplaced(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+      'ghp_test_token',
+      'pbuchman',
+      'intexuraos',
+      42,
+      expect.stringContaining('@ignore')
+    );
+  });
+
+  it('comment includes cancelled task ID and replacement message', async () => {
+    const deps = createFakeDeps();
+    const request = createReplacementRequest();
+
+    await notifyReviewReplaced(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### Automated Code Review Cancelled');
+    expect(body).toContain('**Cancelled Task ID:** `task_old_123`');
+    expect(body).toContain('A new review has been requested');
+  });
+
+  it('includes previous worker type when provided', async () => {
+    const deps = createFakeDeps();
+    const request = createReplacementRequest({ replacedWorkerType: 'claude-code' });
+
+    await notifyReviewReplaced(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('**Previous Reviewer:** `claude-code`');
+  });
+
+  it('returns early when repository format is invalid', async () => {
+    const deps = createFakeDeps();
+    const request = createReplacementRequest({ repository: 'noslash' });
+
+    await notifyReviewReplaced(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.logger.warn).toHaveBeenCalled();
+  });
+
+  it('returns early when GitHub token is not available', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.userServiceClient.getOAuthToken).mockResolvedValue(
+      err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' }) as never
+    );
+    const request = createReplacementRequest();
+
+    await notifyReviewReplaced(deps, request);
+
+    expect(deps.gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    expect(deps.logger.info).toHaveBeenCalled();
+  });
+
+  it('logs warning when comment posting fails (best-effort)', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.gitHubPRClient.postPRComment).mockResolvedValue(
+      err({ code: 'UNAUTHORIZED', message: 'Bad token' })
+    );
+    const request = createReplacementRequest();
+
+    await notifyReviewReplaced(deps, request);
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ prNumber: 42 }),
+      expect.stringContaining('review replacement comment')
+    );
+  });
+
+  it('swallows unexpected exceptions (best-effort)', async () => {
+    const deps = createFakeDeps();
+    vi.mocked(deps.userServiceClient.getOAuthToken).mockRejectedValue(new Error('Network crash'));
+    const request = createReplacementRequest();
+
+    await expect(notifyReviewReplaced(deps, request)).resolves.toBeUndefined();
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task_new' }),
+      expect.stringContaining('Unexpected error')
+    );
   });
 });

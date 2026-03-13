@@ -30,6 +30,7 @@ export interface PRTaskNotificationRequest {
   titleAlreadyTagged?: boolean;
   reviewTypes?: string[];
   workerType?: string;
+  skipComment?: boolean;
 }
 
 export type PRTaskDispatchOutcome =
@@ -40,7 +41,6 @@ export type PRTaskDispatchOutcome =
   | 'review_task_dispatched';
 
 export type PRCommentOutcome =
-  | 'review_skipped'
   | 'review_dispatch_failed'
   | 'pr_task_dispatch_failed'
   | 'review_completed'
@@ -110,16 +110,6 @@ function buildTaskDispatchComment(request: PRTaskNotificationRequest): string {
   return lines.join('\n');
 }
 
-export interface ReviewSkipCommentRequest {
-  taskId: string;
-  repository: string;
-  prNumber: number;
-  userId: string;
-  existingTaskId: string;
-  existingWorkerType?: string;
-  existingWorkerLocation?: string;
-}
-
 export interface DispatchFailedCommentRequest {
   taskId: string;
   repository: string;
@@ -137,36 +127,7 @@ export interface TaskOutcomeCommentRequest {
   outcome: 'review_completed' | 'review_failed' | 'implementation_completed' | 'implementation_failed' | 'reply_completed' | 'reply_failed';
   reviewTypes?: string[];
   errorCode?: string;
-}
-
-/**
- * Build comment for skipped review request (another review already running).
- */
-function buildReviewSkipComment(request: ReviewSkipCommentRequest): string {
-  const lines: string[] = [
-    '@ignore',
-    '### Automated Code Review Request Skipped',
-    '',
-    'A new review request was received but a review task is already in progress for this PR.',
-    '',
-    `**Existing Task ID:** \`${request.existingTaskId}\``,
-  ];
-
-  if (request.existingWorkerType !== undefined) {
-    lines.push(`**Worker Type:** \`${request.existingWorkerType}\``);
-  }
-
-  if (request.existingWorkerLocation !== undefined) {
-    lines.push(`**Worker:** \`${request.existingWorkerLocation}\``);
-  }
-
-  lines.push(
-    '',
-    'The new request has been skipped to avoid duplicate reviews.',
-    `[View Running Task](https://intexuraos.cloud/#/code-tasks/${request.existingTaskId})`,
-  );
-
-  return lines.join('\n');
+  workerType?: string;
 }
 
 /**
@@ -216,6 +177,10 @@ export function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): str
     `**Task ID:** \`${request.taskId}\``,
   ];
 
+  if (isReview && request.workerType !== undefined) {
+    lines.push(`**Reviewer:** \`${request.workerType}\``);
+  }
+
   if (isReview && request.reviewTypes !== undefined && request.reviewTypes.length > 0) {
     const reviewTypesStr = request.reviewTypes.map((t) => `\`${t}\``).join(', ');
     lines.push(`**Review types:** ${reviewTypesStr}`);
@@ -250,6 +215,23 @@ export function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): str
   return lines.join('\n');
 }
 
+/**
+ * Split repository string into owner and repo parts.
+ * Returns null if the format is invalid (missing slash).
+ */
+function splitRepository(
+  repository: string,
+  logger: Logger,
+  context: string,
+): { owner: string; repo: string } | null {
+  const [owner, repo] = repository.split('/');
+  if (owner === undefined || repo === undefined) {
+    logger.warn({ repository }, `Invalid repository format, skipping ${context}`);
+    return null;
+  }
+  return { owner, repo };
+}
+
 export async function notifyPROfTaskDispatch(
   deps: PRTaskNotificationDeps,
   request: PRTaskNotificationRequest,
@@ -258,14 +240,9 @@ export async function notifyPROfTaskDispatch(
 
   try {
     // Split repository into owner/repo
-    const [owner, repo] = request.repository.split('/');
-    if (owner === undefined || repo === undefined) {
-      logger.warn(
-        { repository: request.repository, taskId: request.taskId },
-        'Invalid repository format, skipping PR notification',
-      );
-      return;
-    }
+    const parsed = splitRepository(request.repository, logger, 'PR notification');
+    if (parsed === null) return;
+    const { owner, repo } = parsed;
 
     // Fetch OAuth token
     const githubToken = await fetchGitHubToken(userServiceClient, request.userId, logger);
@@ -277,16 +254,18 @@ export async function notifyPROfTaskDispatch(
       return;
     }
 
-    // Post dispatch comment
-    const commentBody = buildTaskDispatchComment(request);
-    const commentResult = await gitHubPRClient.postPRComment(
-      githubToken, owner, repo, request.prNumber, commentBody,
-    );
-    if (!commentResult.ok) {
-      logger.warn(
-        { error: commentResult.error, taskId: request.taskId, prNumber: request.prNumber },
-        'Failed to post task-dispatch comment (best-effort)',
+    // Post dispatch comment (skip for review tasks where triage comment already posted)
+    if (request.skipComment !== true) {
+      const commentBody = buildTaskDispatchComment(request);
+      const commentResult = await gitHubPRClient.postPRComment(
+        githubToken, owner, repo, request.prNumber, commentBody,
       );
+      if (!commentResult.ok) {
+        logger.warn(
+          { error: commentResult.error, taskId: request.taskId, prNumber: request.prNumber },
+          'Failed to post task-dispatch comment (best-effort)',
+        );
+      }
     }
 
     // Best-effort: update PR title with Linear issue tag after the ack comment.
@@ -316,52 +295,6 @@ export async function notifyPROfTaskDispatch(
 }
 
 /**
- * Post comment when review request is skipped (already running).
- */
-export async function notifyReviewSkipped(
-  deps: PRTaskNotificationDeps,
-  request: ReviewSkipCommentRequest,
-): Promise<void> {
-  const { logger, gitHubPRClient, userServiceClient } = deps;
-
-  try {
-    const [owner, repo] = request.repository.split('/');
-    if (owner === undefined || repo === undefined) {
-      logger.warn(
-        { repository: request.repository },
-        'Invalid repository format, skipping review skip notification',
-      );
-      return;
-    }
-
-    const githubToken = await fetchGitHubToken(userServiceClient, request.userId, logger);
-    if (githubToken === null) {
-      logger.info(
-        { userId: request.userId },
-        'Skipping review skip notification: no GitHub token',
-      );
-      return;
-    }
-
-    const commentBody = buildReviewSkipComment(request);
-    const commentResult = await gitHubPRClient.postPRComment(
-      githubToken, owner, repo, request.prNumber, commentBody,
-    );
-    if (!commentResult.ok) {
-      logger.warn(
-        { error: commentResult.error, prNumber: request.prNumber },
-        'Failed to post review skip comment (best-effort)',
-      );
-    }
-  } catch (error: unknown) {
-    logger.warn(
-      { error, taskId: request.existingTaskId },
-      'Unexpected error in review skip notification (best-effort)',
-    );
-  }
-}
-
-/**
  * Post comment when task dispatch fails (not queued, not in progress).
  */
 export async function notifyDispatchFailed(
@@ -371,14 +304,9 @@ export async function notifyDispatchFailed(
   const { logger, gitHubPRClient, userServiceClient } = deps;
 
   try {
-    const [owner, repo] = request.repository.split('/');
-    if (owner === undefined || repo === undefined) {
-      logger.warn(
-        { repository: request.repository },
-        'Invalid repository format, skipping dispatch failure notification',
-      );
-      return;
-    }
+    const parsed = splitRepository(request.repository, logger, 'dispatch failure notification');
+    if (parsed === null) return;
+    const { owner, repo } = parsed;
 
     const githubToken = await fetchGitHubToken(userServiceClient, request.userId, logger);
     if (githubToken === null) {
@@ -417,14 +345,9 @@ export async function notifyTaskOutcome(
   const { logger, gitHubPRClient, userServiceClient } = deps;
 
   try {
-    const [owner, repo] = request.repository.split('/');
-    if (owner === undefined || repo === undefined) {
-      logger.warn(
-        { repository: request.repository },
-        'Invalid repository format, skipping task outcome notification',
-      );
-      return;
-    }
+    const parsed = splitRepository(request.repository, logger, 'task outcome notification');
+    if (parsed === null) return;
+    const { owner, repo } = parsed;
 
     const githubToken = await fetchGitHubToken(userServiceClient, request.userId, logger);
     if (githubToken === null) {
@@ -449,6 +372,81 @@ export async function notifyTaskOutcome(
     logger.warn(
       { error, taskId: request.taskId },
       'Unexpected error in task outcome notification (best-effort)',
+    );
+  }
+}
+
+export interface ReviewReplacementCommentRequest {
+  taskId: string;
+  repository: string;
+  prNumber: number;
+  userId: string;
+  replacedTaskId: string;
+  replacedWorkerType?: string;
+}
+
+/**
+ * Build comment when a review is cancelled due to replacement.
+ */
+export function buildReviewReplacementComment(request: ReviewReplacementCommentRequest): string {
+  const lines: string[] = [
+    '@ignore',
+    '### Automated Code Review Cancelled',
+    '',
+    'A new review has been requested for this PR.',
+    '',
+    `**Cancelled Task ID:** \`${request.replacedTaskId}\``,
+  ];
+
+  if (request.replacedWorkerType !== undefined) {
+    lines.push(`**Previous Reviewer:** \`${request.replacedWorkerType}\``);
+  }
+
+  lines.push(
+    '',
+    'The previous review task has been cancelled. A new review task will start shortly.',
+  );
+
+  return lines.join('\n');
+}
+
+/**
+ * Post comment when a review is cancelled because a new review was requested.
+ */
+export async function notifyReviewReplaced(
+  deps: PRTaskNotificationDeps,
+  request: ReviewReplacementCommentRequest,
+): Promise<void> {
+  const { logger, gitHubPRClient, userServiceClient } = deps;
+
+  try {
+    const parsed = splitRepository(request.repository, logger, 'review replacement notification');
+    if (parsed === null) return;
+    const { owner, repo } = parsed;
+
+    const githubToken = await fetchGitHubToken(userServiceClient, request.userId, logger);
+    if (githubToken === null) {
+      logger.info(
+        { userId: request.userId },
+        'Skipping review replacement notification: no GitHub token',
+      );
+      return;
+    }
+
+    const commentBody = buildReviewReplacementComment(request);
+    const commentResult = await gitHubPRClient.postPRComment(
+      githubToken, owner, repo, request.prNumber, commentBody,
+    );
+    if (!commentResult.ok) {
+      logger.warn(
+        { error: commentResult.error, prNumber: request.prNumber },
+        'Failed to post review replacement comment (best-effort)',
+      );
+    }
+  } catch (error: unknown) {
+    logger.warn(
+      { error, taskId: request.taskId },
+      'Unexpected error in review replacement notification (best-effort)',
     );
   }
 }
