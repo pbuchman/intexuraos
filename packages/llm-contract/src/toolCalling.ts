@@ -65,6 +65,10 @@ export interface ToolCallingClient {
     tools: ToolDefinition[];
     /** Maximum iterations of the tool calling loop (default: 5) */
     maxIterations?: number;
+    /** Called when maxIterations exhausted without text. Return a repair message to inject, or undefined to fail. */
+    onExhausted?: (context: { iterationCount: number; toolCallsMade: number }) => string | undefined;
+    /** Max extra iterations after repair message injection (default: 2) */
+    repairIterations?: number;
   }): Promise<Result<ToolCallingResult, LLMError>>;
 }
 
