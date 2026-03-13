@@ -1,4 +1,7 @@
 {
   "preferredNotifChannel": "terminal_bell",
-  "outputStyle": "explanatory"
+  "outputStyle": "explanatory",
+  "env": {
+    "CLAUDE_CODE_ENABLE_TASKS": "1"
+  }
 }
