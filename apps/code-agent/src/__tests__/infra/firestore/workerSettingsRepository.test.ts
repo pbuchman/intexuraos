@@ -689,6 +689,30 @@ describe('workerSettingsRepository', () => {
   });
 
   describe('decryption error path', () => {
+    it('should return generic Firestore error for non-decrypt failures in getSettings', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Write a document with invalid workers structure to trigger a non-decrypt error
+      const collection = fakeFirestore.collection('code_worker_settings');
+      await collection.doc('bad-structure-user').set({
+        userId: 'bad-structure-user',
+        workers: 'not-an-array',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result = await repo.getSettings('bad-structure-user');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('Firestore error');
+      }
+    });
+
     it('should return error when decrypting corrupted encrypted data', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -753,11 +777,11 @@ describe('workerSettingsRepository', () => {
   });
 
   describe('encryption error path', () => {
-    it('should return error when encryption fails in addWorker', async () => {
-      // Spy on encryptToken to make it throw
+    it('should return encrypt-specific error when encryption fails in addWorker', async () => {
+      // Spy on encryptToken to make it throw with lowercase 'encrypt' in message
       const encryptTokenSpy = vi.spyOn(await import('../../../infra/firestore/encryption.js'), 'encryptToken');
       encryptTokenSpy.mockImplementation(() => {
-        throw new Error('Encryption failed');
+        throw new Error('Failed to encrypt token: bad key');
       });
 
       const repo = createWorkerSettingsRepository({
@@ -770,10 +794,33 @@ describe('workerSettingsRepository', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('internal_error');
-        expect(result.error.message.toLowerCase()).toContain('encrypt');
+        expect(result.error.message).toContain('Failed to encrypt worker config');
       }
 
-      // Restore the spy
+      encryptTokenSpy.mockRestore();
+    });
+
+    it('should return generic Firestore error for non-encrypt failures in addWorker', async () => {
+      // Spy on encryptToken to throw a generic (non-encrypt) error
+      const encryptTokenSpy = vi.spyOn(await import('../../../infra/firestore/encryption.js'), 'encryptToken');
+      encryptTokenSpy.mockImplementation(() => {
+        throw new Error('Connection timeout');
+      });
+
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('Firestore error');
+        expect(result.error.message).toContain('Connection timeout');
+      }
+
       encryptTokenSpy.mockRestore();
     });
   });
