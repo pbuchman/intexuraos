@@ -1030,7 +1030,7 @@ describe('internalIssuesRoutes', () => {
   });
 
   describe('PATCH /internal/linear/issues/:issueId/metadata - null apiKey and updateIssue paths', () => {
-    const metaIssue: import('../../domain/models.js').SyncedLinearIssue = {
+    const metaIssue: SyncedLinearIssue = {
       id: 'issue-meta-null-key',
       identifier: 'ENG-300',
       title: 'Meta Null Key Issue',
@@ -1071,7 +1071,7 @@ describe('internalIssuesRoutes', () => {
   });
 
   describe('PATCH /internal/linear/issues/:issueId/metadata - updateIssue paths', () => {
-    const metaIssueForUpdate: import('../../domain/models.js').SyncedLinearIssue = {
+    const metaIssueForUpdate: SyncedLinearIssue = {
       id: 'issue-meta-update',
       identifier: 'ENG-400',
       title: 'Meta Update Issue',
@@ -1333,7 +1333,7 @@ describe('internalIssuesRoutes', () => {
     });
 
     it('returns root issue and descendants', async () => {
-      const root: import('../../domain/models.js').SyncedLinearIssue = {
+      const root: SyncedLinearIssue = {
         id: 'root-1',
         identifier: 'ENG-500',
         title: 'Root Issue',
@@ -1352,7 +1352,7 @@ describe('internalIssuesRoutes', () => {
         teamId: 'team-1',
         parentId: null,
       };
-      const child: import('../../domain/models.js').SyncedLinearIssue = {
+      const child: SyncedLinearIssue = {
         id: 'child-1',
         identifier: 'ENG-501',
         title: 'Child Issue',
@@ -1393,7 +1393,7 @@ describe('internalIssuesRoutes', () => {
 
     it('returns root with no children (empty descendants, covers ?? [] fallback)', async () => {
       // Root has no children → byParent.get(root.id) is undefined → ?? [] fires
-      const root: import('../../domain/models.js').SyncedLinearIssue = {
+      const root: SyncedLinearIssue = {
         id: 'root-leaf',
         identifier: 'ENG-510',
         title: 'Leaf Root Issue',
@@ -1432,7 +1432,7 @@ describe('internalIssuesRoutes', () => {
 
     it('returns grandchildren in tree (covers children !== undefined branch)', async () => {
       // Three-level hierarchy: root → child → grandchild
-      const root: import('../../domain/models.js').SyncedLinearIssue = {
+      const root: SyncedLinearIssue = {
         id: 'root-deep',
         identifier: 'ENG-520',
         title: 'Deep Root',
@@ -1451,7 +1451,7 @@ describe('internalIssuesRoutes', () => {
         teamId: 'team-1',
         parentId: null,
       };
-      const child: import('../../domain/models.js').SyncedLinearIssue = {
+      const child: SyncedLinearIssue = {
         id: 'child-deep',
         identifier: 'ENG-521',
         title: 'Deep Child',
@@ -1470,7 +1470,7 @@ describe('internalIssuesRoutes', () => {
         teamId: 'team-1',
         parentId: 'root-deep',
       };
-      const grandchild: import('../../domain/models.js').SyncedLinearIssue = {
+      const grandchild: SyncedLinearIssue = {
         id: 'grandchild-deep',
         identifier: 'ENG-522',
         title: 'Deep Grandchild',
