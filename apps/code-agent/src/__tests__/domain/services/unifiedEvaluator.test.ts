@@ -8,7 +8,7 @@ import type { WebhookRulesService } from '../../../domain/services/gitHubWebhook
 import type { WebhookDispatchService } from '../../../domain/services/gitHubDispatchService.js';
 import type { EventDecisionRepository } from '../../../domain/repositories/eventDecisionRepository.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
-import { createUnifiedEvaluator, buildTriageCommentBody, type UnifiedEvaluatorDeps } from '../../../domain/services/unifiedEvaluator.js';
+import { createUnifiedEvaluator, buildTriageCommentBody, buildSkipCommentBody, type UnifiedEvaluatorDeps } from '../../../domain/services/unifiedEvaluator.js';
 
 function createFakeLogger(): Logger {
   return {
@@ -1698,5 +1698,136 @@ describe('fail-closed @review triage', () => {
 
     // Should fallback dispatch when body is null (not a @review command)
     expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+  });
+});
+
+describe('skip comment posting', () => {
+  let logger: Logger;
+
+  beforeEach(() => {
+    logger = createFakeLogger();
+    vi.clearAllMocks();
+  });
+
+  it('posts skip comment to PR for pull_request events', async () => {
+    const postTriageComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'NEEDS_LLM' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(ok({
+        triage: { action: 'skip', reason: 'Config-only change' },
+        usage: { costUsd: 0.001, toolCalls: [{ tool: 'skip', args: { reason: 'Config-only change' } }] },
+        reasoning: 'Only config files changed.',
+      })),
+      postTriageComment,
+    });
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+    await evaluator.evaluate(event, logger);
+
+    expect(postTriageComment).toHaveBeenCalledOnce();
+    const body = postTriageComment.mock.calls[0]?.[3] as string;
+    expect(body).toContain('Skipped (no review needed)');
+    expect(body).toContain('Config-only change');
+    expect(body).toContain('$0.001');
+    expect(body).toContain('Only config files changed.');
+  });
+
+  it('does not post skip comment for issue_comment events', async () => {
+    const postTriageComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'NEEDS_LLM' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(ok({
+        triage: { action: 'skip', reason: 'Config-only change' },
+        usage: { costUsd: 0.001, toolCalls: [] },
+        reasoning: 'Only config files changed.',
+      })),
+      postTriageComment,
+    });
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({ eventType: 'issue_comment' });
+
+    await evaluator.evaluate(event, logger);
+
+    expect(postTriageComment).not.toHaveBeenCalled();
+  });
+
+  it('handles skip comment posting failure gracefully', async () => {
+    const postTriageComment = vi.fn().mockRejectedValue(new Error('Network error'));
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'NEEDS_LLM' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent: vi.fn().mockResolvedValue(ok({
+        triage: { action: 'skip', reason: 'Config-only change' },
+        usage: { costUsd: 0.001, toolCalls: [] },
+        reasoning: 'Only config files changed.',
+      })),
+      postTriageComment,
+    });
+    const evaluator = createUnifiedEvaluator(deps);
+    const event = createFakeEvent({ eventType: 'pull_request', action: 'opened' });
+
+    await evaluator.evaluate(event, logger);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'evt-1' }),
+      'Failed to post skip comment',
+    );
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decidedBy: 'github_agent',
+        decision: 'skip',
+      }),
+    );
+  });
+});
+
+describe('buildSkipCommentBody', () => {
+  it('contains reasoning, cost, and reason', () => {
+    const body = buildSkipCommentBody(
+      'Config-only change',
+      0.001,
+      [{ tool: 'skip', args: { reason: 'Config-only change' } }],
+      'Only config files changed.',
+    );
+
+    expect(body).toContain('@ignore');
+    expect(body).toContain('Skipped (no review needed)');
+    expect(body).toContain('**Reason:** Config-only change');
+    expect(body).toContain('**Cost:** $0.001');
+    expect(body).toContain('`skip({"reason":"Config-only change"})`');
+    expect(body).toContain('> Only config files changed.');
+  });
+
+  it('shows "None" when no tool calls', () => {
+    const body = buildSkipCommentBody('No changes', 0, [], 'Empty.');
+
+    expect(body).toContain('- None');
+  });
+
+  it('deduplicates identical tool calls', () => {
+    const body = buildSkipCommentBody(
+      'Dup test',
+      0.002,
+      [
+        { tool: 'skip', args: { reason: 'dup' } },
+        { tool: 'skip', args: { reason: 'dup' } },
+      ],
+      'Reasoning.',
+    );
+
+    const matches = body.match(/`skip\(/g);
+    expect(matches).toHaveLength(1);
+  });
+
+  it('formats multiline reasoning with blockquotes', () => {
+    const body = buildSkipCommentBody('Test', 0, [], 'Line one.\nLine two.');
+
+    expect(body).toContain('> Line one.\n> Line two.');
   });
 });
