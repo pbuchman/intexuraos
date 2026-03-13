@@ -80,7 +80,6 @@ async function handleLinearWebhook(
 
   const services = getServices();
 
-  /* v8 ignore start -- test-infra: signature validation and user lookup covered by tests @preserve */
   // Extract data from webhook payload (untrusted at this point)
   const { data, action, type, webhookTimestamp, webhookId } = request.body;
 
@@ -352,7 +351,6 @@ async function handleLinearWebhook(
 
   request.log.warn({ type }, 'Unknown webhook data structure');
   return await reply.ok({ message: 'Unknown data structure' });
-  /* v8 ignore stop @preserve */
 }
 
 const webhookSchema: FastifySchema = {

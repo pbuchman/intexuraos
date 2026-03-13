@@ -52,7 +52,6 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     const result = await connectionRepository.getConnection(user.userId);
     if (!result.ok) {
       return await handleLinearError(result.error, reply);
-/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
     }
 
     return await reply.ok(result.value);
@@ -68,7 +67,6 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const result = await linearApiClient.validateAndGetTeams(apiKey);
       if (!result.ok) {
-    /* v8 ignore stop @preserve */
         return await handleLinearError(result.error, reply);
       }
 
@@ -305,7 +303,6 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
 
     // Get connection to retrieve teamId
-    /* v8 ignore start -- test-infra: error paths require Linear API fault injection @preserve */
     const connectionResult = await connectionRepository.getFullConnection(user.userId);
     if (!connectionResult.ok || connectionResult.value === null) {
       reply.status(403);
@@ -314,15 +311,14 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         reply
       );
     }
-    /* v8 ignore stop @preserve */
 
     // Retry Linear creation
-    /* v8 ignore start -- test-infra: nullish fallbacks for optional extracted fields @preserve */
-    const createResult = await linearApiClient.createIssue(apiKeyResult.value, {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces ?? branches on optional extracted fields that cannot be undefined at runtime @preserve */
+    const createResult = await linearApiClient.createIssue(apiKeyResult.value, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) check above
       title: failedIssue.extractedTitle ?? 'Untitled Issue',
       description: failedIssue.reasoning ?? null,
       priority: failedIssue.extractedPriority ?? 3,
-      teamId: connectionResult.value.teamId,
+      teamId: connectionResult.value.teamId, // @allow-result-access -- guarded by if (!connectionResult.ok || connectionResult.value === null) check above
     });
     /* v8 ignore stop @preserve */
 
@@ -473,14 +469,12 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
       }
 
-      /* v8 ignore start -- test-infra: error paths require comment repository fault injection testing @preserve */
       // Get comments (count and last comment timestamp from single query)
       const commentsResult = await services.commentRepository.listByIssueId(issue.id);
       if (!commentsResult.ok) {
         request.log.error({ error: commentsResult.error, issueId: issue.id }, 'Failed to fetch comments');
         return await handleLinearError(commentsResult.error, reply);
       }
-      /* v8 ignore stop @preserve */
 
       const commentCount = commentsResult.value.length;
       let lastCommentAt: string | null = null;
@@ -735,7 +729,6 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info({ userId: user.userId }, 'linear/sync: starting sync');
 
-      /* v8 ignore start -- test-infra: error handling path covered by use case tests @preserve */
       const result = await fullSync(user.userId, {
         issueRepo: services.issueRepository,
         connectionRepo: services.connectionRepository,
@@ -750,7 +743,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request.log.info(
         {
           userId: user.userId,
-          created: result.value.created, // @allow-result-access -- guarded by if (!result.ok) at line 757
+          created: result.value.created, // @allow-result-access -- guarded by if (!result.ok) above
           updated: result.value.updated,
           deleted: result.value.deleted,
           total: result.value.total,
@@ -759,8 +752,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'linear/sync: sync completed'
       );
 
-      return await reply.ok(result.value); // @allow-result-access -- guarded by if (!result.ok) at line 757
-      /* v8 ignore stop @preserve */
+      return await reply.ok(result.value); // @allow-result-access -- guarded by if (!result.ok) above
     }
   );
 

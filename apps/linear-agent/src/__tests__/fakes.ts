@@ -113,10 +113,18 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     });
   }
 
+  private shouldFailGetApiKey = false;
+
   async getApiKey(userId: string): Promise<Result<string | null, LinearError>> {
+    if (this.shouldFailGetApiKey) return err(this.failError);
     const conn = this.connections.get(userId);
     if (!conn || !conn.connected) return ok(null);
     return ok(conn.apiKey);
+  }
+
+  setApiKeyFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailGetApiKey = fail;
+    if (error) this.failError = error;
   }
 
   async getFullConnection(userId: string): Promise<Result<LinearConnection | null, LinearError>> {
@@ -235,6 +243,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     this.connections.clear();
     this.shouldFailGetFullConnection = false;
     this.shouldFailGetConnection = false;
+    this.shouldFailGetApiKey = false;
     this.shouldFailSave = false;
     this.shouldFailDisconnect = false;
     this.shouldFailIsConnected = false;
