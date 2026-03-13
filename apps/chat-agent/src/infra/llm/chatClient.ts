@@ -41,7 +41,6 @@ export function createChatClient(config: ChatClientConfig): LLMClient {
         conversationHistory?: ConversationHistory[];
       }
     ): Promise<Result<LLMResponse, LLMError>> {
-      /* v8 ignore start -- upstream: LLM client error paths tested in fakes, not real LLM @preserve */
       try {
         // Build the full prompt with system prompt and conversation history
         let fullPrompt = `${options.systemPrompt}\n\n`;
@@ -88,7 +87,6 @@ export function createChatClient(config: ChatClientConfig): LLMClient {
           },
         };
       }
-      /* v8 ignore stop @preserve */
     },
   };
 }
@@ -98,7 +96,6 @@ export function createChatClient(config: ChatClientConfig): LLMClient {
  * Looks for structured action annotations in the response.
  */
 function extractSuggestedAction(response: string): SuggestedAction | null {
-  /* v8 ignore start -- upstream: Branches depend on LLM output format @preserve */
   // Look for action annotations like: [ACTION: create_command {"text": "..."}]
   const actionRegex = /\[ACTION:\s*(create_command)\s+({.*?})\]/s;
   const match = actionRegex.exec(response);
@@ -118,17 +115,14 @@ function extractSuggestedAction(response: string): SuggestedAction | null {
   } catch {
     return null;
   }
-  /* v8 ignore stop @preserve */
 }
 
 /**
  * Remove action annotation from response before returning to user.
  */
 function stripActionFromResponse(response: string, action: SuggestedAction | null): string {
-  /* v8 ignore start -- upstream: String.replace branch depends on action being present @preserve */
   if (action === null) {
     return response;
   }
   return response.replace(/\[ACTION:\s*\w+\s+{.*?}\]/s, '').trim();
-  /* v8 ignore stop @preserve */
 }
