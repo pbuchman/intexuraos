@@ -756,6 +756,28 @@ describe('compositeFeedRoutes', () => {
       // The feed should still be deleted
       expect(fakeCompositeFeedRepo.getAll()).toHaveLength(0);
     });
+
+    it('succeeds when visualization delete fails (non-fatal)', async () => {
+      const app = await buildServer();
+
+      const createResult = await fakeCompositeFeedRepo.create('user-123', 'Feed with Viz', {
+        purpose: 'Purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = createResult.ok ? createResult.value : null;
+
+      fakeVisualizationRepo.setFailNextDeleteByFeed(true);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeCompositeFeedRepo.getAll()).toHaveLength(0);
+    });
   });
 
   describe('GET /composite-feeds/:id/schema', () => {

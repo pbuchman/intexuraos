@@ -30,7 +30,6 @@ interface VisualizationDoc {
   updatedAt: string;
 }
 
-/* v8 ignore start -- upstream: Firestore infrastructure; tested via in-memory fake in domain/route tests @preserve */
 function toVisualization(id: string, doc: VisualizationDoc): Visualization {
   return {
     id,
@@ -50,9 +49,7 @@ function toVisualization(id: string, doc: VisualizationDoc): Visualization {
     updatedAt: new Date(doc.updatedAt),
   };
 }
-/* v8 ignore stop @preserve */
 
-/* v8 ignore start -- upstream: Firestore SDK interactions; domain behavior tested via in-memory fake @preserve */
 export class FirestoreVisualizationRepository implements VisualizationRepository {
   async create(
     viz: Omit<Visualization, 'id' | 'createdAt' | 'updatedAt'>
@@ -264,4 +261,3 @@ export class FirestoreVisualizationRepository implements VisualizationRepository
     }
   }
 }
-/* v8 ignore stop @preserve */
