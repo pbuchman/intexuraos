@@ -98,18 +98,6 @@ function PageHeader({
   );
 }
 
-// --- ColumnHeader ---
-
-function ColumnHeader(): React.JSX.Element {
-  return (
-    <div className="mb-1 hidden grid-cols-[minmax(0,2.5fr)_minmax(0,1.8fr)_auto] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 sm:grid">
-      <div>Event</div>
-      <div>Decision</div>
-      <div>Time</div>
-    </div>
-  );
-}
-
 // --- PREventsPage ---
 
 export function PREventsPage(): React.JSX.Element {
@@ -221,9 +209,7 @@ export function PREventsPage(): React.JSX.Element {
         </div>
       ) : (
         <div>
-          <ColumnHeader />
-
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {filteredRows.map((row) => (
               <GitHubEventLogRow
                 key={row.id}
