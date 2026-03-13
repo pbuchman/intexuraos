@@ -3,7 +3,7 @@
  *
  * Single source of truth for model names via TypeScript union types.
  * Models are categorized by their primary use case.
- * All 16 models from migrations 012+ are defined here.
+ * All 14 models from migrations 012+ are defined here.
  */
 
 // =============================================================================

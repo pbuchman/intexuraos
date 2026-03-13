@@ -115,19 +115,30 @@ describe('llmClientFactory', () => {
       expect(client.run).toBeDefined();
     });
 
-    // Note: ZAI provider tests removed - GLM-4.7 is no longer a valid model
-
-    it('throws for unsupported provider', () => {
+    it('throws for invalid model', () => {
       expect(() =>
         createToolCallingClient({
           apiKey: 'test-key',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          model: 'claude-sonnet-4-5-20250514' as any,
+          model: 'nonexistent-model' as any,
           userId: 'test-user',
           pricing: createTestPricing(),
           logger: mockLogger,
         })
       ).toThrow('Unsupported LLM model');
+    });
+
+    it('throws for valid non-Google model (provider not supported)', () => {
+      expect(() =>
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: LlmModels.ClaudeOpus45 as any,
+          userId: 'test-user',
+          pricing: createTestPricing(),
+          logger: mockLogger,
+        })
+      ).toThrow('Tool calling not supported for provider: anthropic');
     });
   });
 

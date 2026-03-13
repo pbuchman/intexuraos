@@ -52,7 +52,7 @@ import type { Logger, Result } from '@intexuraos/common-core';
 export interface LlmClientConfig {
   /** API key for the LLM provider */
   apiKey: string;
-  /** Model identifier (e.g., 'gemini-2.5-flash', 'glm-4.7') */
+  /** Model identifier (e.g., 'gemini-2.5-flash') */
   model: LLMModel;
   /** User ID for usage tracking */
   userId: string;
@@ -158,6 +158,14 @@ export function createToolCallingClient(config: ToolCallingClientConfig): ToolCa
   if (!isValidModel(config.model)) {
     const model = config.model as string;
     throw new Error(`Unsupported LLM model: ${model}`);
+  }
+
+  // Verify provider is Google (only supported provider for tool calling)
+  const providerForModel = getProviderForModel(config.model);
+  if (providerForModel !== LlmProviders.Google) {
+    throw new Error(
+      `Tool calling not supported for provider: ${providerForModel}. Only ${LlmProviders.Google} is supported.`
+    );
   }
 
   return createGeminiToolCallingClient(config);

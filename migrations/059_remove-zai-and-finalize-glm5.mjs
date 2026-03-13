@@ -47,7 +47,8 @@ async function migrateUserSettings(context) {
 
   const BATCH_SIZE = 400;
   let batch = db.batch();
-  let count = 0;
+  let batchOps = 0;
+  let totalModifications = 0;
   let docsProcessed = 0;
 
   for (const doc of snapshot.docs) {
@@ -57,13 +58,13 @@ async function migrateUserSettings(context) {
     // Remove llmApiKeys.zai if exists
     if (data.llmApiKeys !== undefined && 'zai' in data.llmApiKeys) {
       updates['llmApiKeys.zai'] = FieldValue.delete();
-      count++;
+      totalModifications++;
     }
 
     // Remove llmTestResults.zai if exists
     if (data.llmTestResults !== undefined && 'zai' in data.llmTestResults) {
       updates['llmTestResults.zai'] = FieldValue.delete();
-      count++;
+      totalModifications++;
     }
 
     // Change defaultModel if it's glm-4.7 or glm-4.7-flash
@@ -73,32 +74,36 @@ async function migrateUserSettings(context) {
       DEPRECATED_GL_MODELS.includes(data.llmPreferences.defaultModel)
     ) {
       updates['llmPreferences.defaultModel'] = TARGET_MODEL;
-      count++;
+      totalModifications++;
     }
 
     // Apply updates if any
     if (Object.keys(updates).length > 0) {
       batch.update(doc.ref, updates);
+      batchOps++;
 
-      if (count % BATCH_SIZE === 0) {
+      if (batchOps >= BATCH_SIZE) {
         await batch.commit();
-        console.log(`  Committed batch of ${BATCH_SIZE} (${count} modifications)`);
+        console.log(
+          `  Committed batch of ${batchOps} operations (${totalModifications} field modifications)`
+        );
         batch = db.batch();
+        batchOps = 0;
       }
     }
 
     docsProcessed++;
   }
 
-  if (count % BATCH_SIZE !== 0) {
+  if (batchOps > 0) {
     await batch.commit();
   }
 
   console.log(
-    `  User settings migration complete: ${count} modifications out of ${docsProcessed} documents`
+    `  User settings migration complete: ${totalModifications} modifications out of ${docsProcessed} documents`
   );
 
-  return { userSettingsModified: count };
+  return { userSettingsModified: totalModifications };
 }
 
 /**
@@ -158,8 +163,9 @@ async function migrateResearches(context) {
 
   const BATCH_SIZE = 400;
   let batch = db.batch();
-  let count = 0;
-  let deleteCount = 0;
+  let batchOps = 0;
+  let totalModified = 0;
+  let totalDeleted = 0;
   let docsProcessed = 0;
 
   for (const doc of snapshot.docs) {
@@ -208,32 +214,36 @@ async function migrateResearches(context) {
 
     if (shouldDelete) {
       batch.delete(doc.ref);
-      deleteCount++;
+      totalDeleted++;
+      batchOps++;
     } else if (Object.keys(updates).length > 0) {
       batch.update(doc.ref, updates);
-      count++;
+      totalModified++;
+      batchOps++;
     }
 
     docsProcessed++;
 
-    const opsInBatch = count + deleteCount;
-    if (opsInBatch > 0 && opsInBatch % BATCH_SIZE === 0) {
+    if (batchOps >= BATCH_SIZE) {
       await batch.commit();
-      console.log(`  Committed batch: ${count} modified, ${deleteCount} deleted`);
+      console.log(
+        `  Committed batch of ${batchOps} operations: ${totalModified} modified, ${totalDeleted} deleted`
+      );
       batch = db.batch();
+      batchOps = 0;
     }
   }
 
   // Commit any remaining operations
-  if ((count + deleteCount) % BATCH_SIZE !== 0) {
+  if (batchOps > 0) {
     await batch.commit();
   }
 
   console.log(
-    `  Researches migration complete: ${count} documents modified, ${deleteCount} documents deleted`
+    `  Researches migration complete: ${totalModified} documents modified, ${totalDeleted} documents deleted`
   );
 
-  return { researchesModified: count, researchesDeleted: deleteCount };
+  return { researchesModified: totalModified, researchesDeleted: totalDeleted };
 }
 
 /**
