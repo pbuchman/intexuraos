@@ -108,7 +108,7 @@ const verboseMarkdownResponse = [
   '#### Anomalies',
   '| Type | Severity | Evidence | Detail |',
   '| --- | --- | --- | --- |',
-  `| 🟠 Warning | 🟠 Warning | MSG-999 | ${'anomaly '.repeat(6000)} |`,
+  `| Retry loop | 🟠 Warning | MSG-999 | ${'anomaly '.repeat(6000)} |`,
 ].join('\n');
 
 function buildValidReport(overrides?: {
@@ -262,6 +262,7 @@ describe('buildDeepValidationPrompt', () => {
       planContent: undefined,
     });
 
+    expect(prompt).toContain('=== Severity Scale ===');
     expect(prompt).toContain('🔴 Critical');
     expect(prompt).toContain('🟠 Warning');
     expect(prompt).toContain('🟡 Minor');
