@@ -9,6 +9,7 @@ import type { WebhookDispatchService } from '../../../domain/services/gitHubDisp
 import type { EventDecisionRepository } from '../../../domain/repositories/eventDecisionRepository.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { createUnifiedEvaluator, buildTriageCommentBody, buildSkipCommentBody, type UnifiedEvaluatorDeps } from '../../../domain/services/unifiedEvaluator.js';
+import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
 
 function createFakeLogger(): Logger {
   return {
@@ -22,6 +23,7 @@ function createFakeLogger(): Logger {
 function createFakeEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent {
   return {
     id: 'evt-1',
+    auditEventId: 'audit-evt-1',
     githubEventId: 1001,
     deliveryId: null,
     repository: 'intexuraos/intexuraos',
@@ -59,7 +61,7 @@ function createFakeDeps(overrides: Partial<UnifiedEvaluatorDeps> = {}): UnifiedE
     eventDecisionRepo: {
       save: vi.fn().mockResolvedValue(ok({
         id: 'ed_evt-1',
-        eventId: 'evt-1',
+        eventId: 'audit-evt-1',
         repository: 'intexuraos/intexuraos',
         pullRequestNumber: 42,
         eventType: 'issue_comment',
@@ -72,6 +74,25 @@ function createFakeDeps(overrides: Partial<UnifiedEvaluatorDeps> = {}): UnifiedE
         decisionLatencyMs: 1,
       })),
     } as unknown as EventDecisionRepository,
+    gitHubEventLogEntryRepo: {
+      complete: vi.fn().mockResolvedValue(ok({
+        id: 'audit-evt-1',
+        githubEventName: 'issue_comment',
+        eventType: 'issue_comment',
+        action: 'created',
+        repository: 'intexuraos/intexuraos',
+        pullRequestNumber: 42,
+        authPassedAt: new Date(),
+        updatedAt: new Date(),
+        decisionState: 'completed',
+        decisionOutcome: 'dispatch',
+        decisionId: 'ed_evt-1',
+        rowVersion: 2,
+      })),
+      createPending: vi.fn(),
+      listRecent: vi.fn(),
+      findByIds: vi.fn(),
+    } as unknown as GitHubEventLogEntryRepository,
     evaluateEvent: vi.fn(),
     createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-1' })),
     allowedBots: new Set(['claude[bot]']),
@@ -98,8 +119,16 @@ describe('UnifiedEvaluator', () => {
       expect(deps.dispatchService.dispatch).toHaveBeenCalled();
       expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
+          eventId: 'audit-evt-1',
+          normalizedEventId: 'evt-1',
           decidedBy: 'hard_rules',
           decision: 'dispatch',
+        })
+      );
+      expect(deps.gitHubEventLogEntryRepo?.complete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'audit-evt-1',
+          decisionState: 'completed',
         })
       );
       expect(deps.evaluateEvent).not.toHaveBeenCalled();
@@ -273,6 +302,73 @@ describe('UnifiedEvaluator', () => {
   });
 
   describe('recordDecision resilience', () => {
+    it('uses normalized event id when no audit event id exists and skips live-log completion', async () => {
+      const deps = createFakeDeps();
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+      delete event.auditEventId;
+
+      await evaluator.evaluate(event, logger);
+
+      const savedDecisionInput = vi.mocked(deps.eventDecisionRepo.save).mock.calls[0]?.[0];
+      expect(savedDecisionInput).toBeDefined();
+      expect(savedDecisionInput?.eventId).toBe('evt-1');
+      expect('normalizedEventId' in (savedDecisionInput ?? {})).toBe(false);
+      expect(deps.gitHubEventLogEntryRepo?.complete).not.toHaveBeenCalled();
+    });
+
+    it('logs and returns when eventDecisionRepo.save returns an error result', async () => {
+      const deps = createFakeDeps({
+        eventDecisionRepo: {
+          save: vi.fn().mockResolvedValue(err({
+            code: 'FIRESTORE_ERROR',
+            message: 'write failed',
+          })),
+        } as unknown as EventDecisionRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 'evt-1',
+          auditEventId: 'audit-evt-1',
+          error: { code: 'FIRESTORE_ERROR', message: 'write failed' },
+        }),
+        'Failed to save event decision audit record'
+      );
+      expect(deps.gitHubEventLogEntryRepo?.complete).not.toHaveBeenCalled();
+    });
+
+    it('logs when live-log completion fails after saving the decision', async () => {
+      const deps = createFakeDeps({
+        gitHubEventLogEntryRepo: {
+          complete: vi.fn().mockResolvedValue(err({
+            code: 'FIRESTORE_ERROR',
+            message: 'completion failed',
+          })),
+          createPending: vi.fn(),
+          listRecent: vi.fn(),
+          findByIds: vi.fn(),
+        } as unknown as GitHubEventLogEntryRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 'evt-1',
+          auditEventId: 'audit-evt-1',
+          error: { code: 'FIRESTORE_ERROR', message: 'completion failed' },
+        }),
+        'Failed to complete GitHub event log entry'
+      );
+    });
+
     it('does not throw when eventDecisionRepo.save fails', async () => {
       const deps = createFakeDeps({
         eventDecisionRepo: {
