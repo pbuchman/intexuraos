@@ -32,6 +32,7 @@ export class FakeConnectionRepository {
   private shouldFailDisconnect = false;
   private shouldFailIsConnected = false;
   private shouldFailGetToken = false;
+  private shouldReturnNullToken = false;
 
   setFailNextSave(fail: boolean): void {
     this.shouldFailSave = fail;
@@ -51,6 +52,10 @@ export class FakeConnectionRepository {
 
   setFailNextGetToken(fail: boolean): void {
     this.shouldFailGetToken = fail;
+  }
+
+  setReturnNullToken(nullToken: boolean): void {
+    this.shouldReturnNullToken = nullToken;
   }
 
   saveConnection(
@@ -98,6 +103,10 @@ export class FakeConnectionRepository {
     if (this.shouldFailGetToken) {
       this.shouldFailGetToken = false;
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated getToken failure' }));
+    }
+    if (this.shouldReturnNullToken) {
+      this.shouldReturnNullToken = false;
+      return Promise.resolve(ok(null));
     }
     const conn = this.connections.get(userId);
     if (conn?.connected !== true) return Promise.resolve(ok(null));

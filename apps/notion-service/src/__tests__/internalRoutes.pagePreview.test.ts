@@ -57,6 +57,66 @@ describe('GET /internal/notion/users/:userId/pages/:pageId/preview', () => {
     });
   });
 
+  describe('repository error handling', () => {
+    it('returns 502 when getConnection fails', async () => {
+      fakeRepo.setFailNextGet(true);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/notion/users/user123/pages/page123/preview',
+        headers: validHeaders,
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Simulated get failure');
+    });
+
+    it('returns 404 when getToken fails for a connected user', async () => {
+      fakeRepo.setConnection('user123', {
+        connected: true,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      });
+      fakeRepo.setToken('user123', 'secret_token123');
+      fakeRepo.setFailNextGetToken(true);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/notion/users/user123/pages/page123/preview',
+        headers: validHeaders,
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toBe('User has no active Notion connection');
+    });
+
+    it('returns 404 when getToken returns null for a connected user', async () => {
+      fakeRepo.setConnection('user123', {
+        connected: true,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      });
+      fakeRepo.setToken('user123', 'secret_token123');
+      fakeRepo.setReturnNullToken(true);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/notion/users/user123/pages/page123/preview',
+        headers: validHeaders,
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toBe('User has no active Notion connection');
+    });
+  });
+
   describe('user connection validation', () => {
     it('returns 404 when user has no Notion connection', async () => {
       const response = await app.inject({
