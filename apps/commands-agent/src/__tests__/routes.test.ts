@@ -293,10 +293,11 @@ describe('Commands Agent Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
 
-      // Verify command was saved
+      // Verify command was saved without summary (absent summary branch)
       const commands = await fakeCommandRepo.listByUserId('user-123');
       expect(commands).toHaveLength(1);
       expect(commands[0]?.text).toBe('Buy groceries tomorrow');
+      expect(commands[0]?.summary).toBeUndefined();
     });
 
     it('processes command with optional summary field', async () => {
@@ -305,8 +306,8 @@ describe('Commands Agent Routes', () => {
       const event = {
         type: 'command.ingest',
         userId: 'user-123',
-        sourceType: 'whatsapp_voice',
-        externalId: 'wamid.voice-summary',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.with-summary',
         text: 'Buy groceries tomorrow',
         summary: 'Grocery shopping reminder',
         timestamp: '2025-01-01T12:00:00.000Z',
@@ -324,6 +325,7 @@ describe('Commands Agent Routes', () => {
             data: messageData,
             messageId: 'pubsub-summary-1',
           },
+          subscription: 'projects/test/subscriptions/commands-ingest',
         },
       });
 
@@ -331,7 +333,7 @@ describe('Commands Agent Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
 
-      // Verify command was saved with the summary field
+      // Verify command was saved with the summary field (exercises the spread conditional)
       const commands = await fakeCommandRepo.listByUserId('user-123');
       expect(commands).toHaveLength(1);
       expect(commands[0]?.summary).toBe('Grocery shopping reminder');
