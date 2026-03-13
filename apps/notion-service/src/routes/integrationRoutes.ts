@@ -11,7 +11,7 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
+/* v8 ignore start -- module-init: ESM import statement has no testable runtime behavior @preserve */
 import {
   connectNotion,
   type ConnectNotionErrorCode,
@@ -22,23 +22,18 @@ import {
 
 /**
  * Map domain error codes to HTTP error codes.
+ * Exported for direct unit testing of all branches.
  */
-function mapConnectErrorToHttp(
+export function mapConnectErrorToHttp(
   code: ConnectNotionErrorCode
 ): 'INVALID_REQUEST' | 'UNAUTHORIZED' | 'DOWNSTREAM_ERROR' {
   switch (code) {
-    /* v8 ignore start -- test-infra: validation errors require malformed OAuth responses @preserve */
     case 'VALIDATION_ERROR':
       return 'INVALID_REQUEST';
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- test-infra: INVALID_TOKEN switch case @preserve */
     case 'INVALID_TOKEN':
       return 'UNAUTHORIZED';
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- test-infra: DOWNSTREAM_ERROR case @preserve */
     case 'DOWNSTREAM_ERROR':
       return 'DOWNSTREAM_ERROR';
-    /* v8 ignore stop @preserve */
   }
 }
 
