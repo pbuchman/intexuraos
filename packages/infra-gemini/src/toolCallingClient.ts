@@ -84,7 +84,14 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 
   return {
     async run(params): Promise<Result<ToolCallingResult, LLMError>> {
-      const { systemPrompt, messages, tools, maxIterations = DEFAULT_MAX_ITERATIONS } = params;
+      const {
+        systemPrompt,
+        messages,
+        tools,
+        maxIterations = DEFAULT_MAX_ITERATIONS,
+        onExhausted,
+        repairIterations,
+      } = params;
 
       const auditContext: AuditContext = createAuditContext(
         {
@@ -127,156 +134,179 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
       // Track last response parts for maxIterations fallback
       let lastResponseParts: Part[] = [];
 
+      let effectiveMax = maxIterations;
+      let onExhaustedFn = onExhausted;
+      const repairIters = repairIterations ?? 2;
+
       try {
-        while (iteration < maxIterations) {
-          iteration++;
-          const iterationStart = Date.now();
+        // Outer: allows one re-entry after repair injection
+        for (let attempt = 0; attempt < 2; attempt++) {
+          while (iteration < effectiveMax) {
+            iteration++;
+            const iterationStart = Date.now();
 
-          const response = await ai.models.generateContent({
-            model,
-            contents,
-            config: {
-              systemInstruction: systemPrompt,
-              tools: [{ functionDeclarations }],
-            },
-          });
+            const response = await ai.models.generateContent({
+              model,
+              contents,
+              config: {
+                systemInstruction: systemPrompt,
+                tools: [{ functionDeclarations }],
+              },
+            });
 
-          // Aggregate usage
-          const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
-          const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-          const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, pricing);
-          aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);
+            // Aggregate usage
+            const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+            const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+            const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, pricing);
+            aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);
 
-          // Extract parts from response
-          const parts: Part[] = response.candidates?.[0]?.content?.parts ?? [];
-          lastResponseParts = parts;
+            // Extract parts from response
+            const parts: Part[] = response.candidates?.[0]?.content?.parts ?? [];
+            lastResponseParts = parts;
 
-          // Check for function call
-          const functionCallPart = parts.find((p) => p.functionCall !== undefined);
+            // Check for function call
+            const functionCallPart = parts.find((p) => p.functionCall !== undefined);
 
-          if (functionCallPart?.functionCall !== undefined) {
-            const { name: toolName, args: toolArgs } = functionCallPart.functionCall;
-            const resolvedName = toolName ?? '';
-            const resolvedArgs = toolArgs ?? {};
+            if (functionCallPart?.functionCall !== undefined) {
+              const { name: toolName, args: toolArgs } = functionCallPart.functionCall;
+              const resolvedName = toolName ?? '';
+              const resolvedArgs = toolArgs ?? {};
 
-            totalToolCalls++;
+              totalToolCalls++;
 
-            // Find matching tool definition
-            const toolDef = toolMap.get(resolvedName);
-            let toolResponse: string;
+              // Find matching tool definition
+              const toolDef = toolMap.get(resolvedName);
+              let toolResponse: string;
 
-            if (toolDef === undefined) {
-              // Hallucinated tool name — send error back for self-correction
-              toolResponse = JSON.stringify({
-                error: `Unknown tool: ${resolvedName}`,
-              });
-              logger.warn(
-                { iteration, toolName: resolvedName },
-                'Tool calling: hallucinated tool name'
-              );
-            } else {
-              try {
-                toolResponse = await toolDef.run(resolvedArgs);
-              } catch (runError: unknown) {
-                const runErrorMsg = getErrorMessage(runError);
-                toolResponse = JSON.stringify({ error: runErrorMsg });
+              if (toolDef === undefined) {
+                // Hallucinated tool name — send error back for self-correction
+                toolResponse = JSON.stringify({
+                  error: `Unknown tool: ${resolvedName}`,
+                });
                 logger.warn(
-                  { iteration, toolName: resolvedName, error: runErrorMsg },
-                  'Tool calling: run callback threw'
+                  { iteration, toolName: resolvedName },
+                  'Tool calling: hallucinated tool name'
                 );
+              } else {
+                try {
+                  toolResponse = await toolDef.run(resolvedArgs);
+                } catch (runError: unknown) {
+                  const runErrorMsg = getErrorMessage(runError);
+                  toolResponse = JSON.stringify({ error: runErrorMsg });
+                  logger.warn(
+                    { iteration, toolName: resolvedName, error: runErrorMsg },
+                    'Tool calling: run callback threw'
+                  );
+                }
               }
+
+              const durationMs = Date.now() - iterationStart;
+              logger.info(
+                {
+                  iteration,
+                  toolName: resolvedName,
+                  toolArgs: resolvedArgs,
+                  toolResponseTruncated:
+                    toolResponse.length > 200 ? toolResponse.slice(0, 200) + '...' : toolResponse,
+                  usage: {
+                    inputTokens: iterationUsage.inputTokens,
+                    outputTokens: iterationUsage.outputTokens,
+                    costUsd: iterationUsage.costUsd,
+                  },
+                  durationMs,
+                },
+                'Tool calling: iteration with tool call'
+              );
+
+              // Append the model's function call and our response to conversation
+              contents.push({
+                role: 'model',
+                parts: [
+                  {
+                    functionCall: {
+                      name: resolvedName,
+                      args: resolvedArgs,
+                    },
+                  },
+                ],
+              });
+              contents.push({
+                role: 'user',
+                parts: [
+                  {
+                    functionResponse: {
+                      name: resolvedName,
+                      response: { result: toolResponse },
+                    },
+                  },
+                ],
+              });
+
+              // Continue loop
+              continue;
             }
 
+            // No function call — check for text response
+            const textPart = parts.find((p) => p.text !== undefined);
+            const finalText = textPart?.text ?? '';
+
+            if (finalText === '') {
+              // Empty response
+              await auditContext.error({ error: 'Empty response from model' });
+              trackUsage(aggregatedUsage, false, 'Empty response from model');
+              return err({
+                code: 'API_ERROR',
+                message: 'Empty response from model',
+              });
+            }
+
+            // Success — return final text
             const durationMs = Date.now() - iterationStart;
             logger.info(
               {
                 iteration,
-                toolName: resolvedName,
-                toolArgs: resolvedArgs,
-                toolResponseTruncated:
-                  toolResponse.length > 200 ? toolResponse.slice(0, 200) + '...' : toolResponse,
+                totalToolCalls,
+                finalTextLength: finalText.length,
                 usage: {
-                  inputTokens: iterationUsage.inputTokens,
-                  outputTokens: iterationUsage.outputTokens,
-                  costUsd: iterationUsage.costUsd,
+                  inputTokens: aggregatedUsage.inputTokens,
+                  outputTokens: aggregatedUsage.outputTokens,
+                  costUsd: aggregatedUsage.costUsd,
                 },
                 durationMs,
               },
-              'Tool calling: iteration with tool call'
+              'Tool calling: completed'
             );
 
-            // Append the model's function call and our response to conversation
-            contents.push({
-              role: 'model',
-              parts: [
-                {
-                  functionCall: {
-                    name: resolvedName,
-                    args: resolvedArgs,
-                  },
-                },
-              ],
+            await auditContext.success({
+              response: finalText,
+              inputTokens: aggregatedUsage.inputTokens,
+              outputTokens: aggregatedUsage.outputTokens,
             });
-            contents.push({
-              role: 'user',
-              parts: [
-                {
-                  functionResponse: {
-                    name: resolvedName,
-                    response: { result: toolResponse },
-                  },
-                },
-              ],
-            });
+            trackUsage(aggregatedUsage, true);
 
-            // Continue loop
-            continue;
-          }
-
-          // No function call — check for text response
-          const textPart = parts.find((p) => p.text !== undefined);
-          const finalText = textPart?.text ?? '';
-
-          if (finalText === '') {
-            // Empty response
-            await auditContext.error({ error: 'Empty response from model' });
-            trackUsage(aggregatedUsage, false, 'Empty response from model');
-            return err({
-              code: 'API_ERROR',
-              message: 'Empty response from model',
+            return ok({
+              content: finalText,
+              toolCallsMade: totalToolCalls,
+              iterationCount: iteration,
+              usage: aggregatedUsage,
             });
           }
 
-          // Success — return final text
-          const durationMs = Date.now() - iterationStart;
-          logger.info(
-            {
-              iteration,
-              totalToolCalls,
-              finalTextLength: finalText.length,
-              usage: {
-                inputTokens: aggregatedUsage.inputTokens,
-                outputTokens: aggregatedUsage.outputTokens,
-                costUsd: aggregatedUsage.costUsd,
-              },
-              durationMs,
-            },
-            'Tool calling: completed'
-          );
-
-          await auditContext.success({
-            response: finalText,
-            inputTokens: aggregatedUsage.inputTokens,
-            outputTokens: aggregatedUsage.outputTokens,
-          });
-          trackUsage(aggregatedUsage, true);
-
-          return ok({
-            content: finalText,
-            toolCallsMade: totalToolCalls,
-            iterationCount: iteration,
-            usage: aggregatedUsage,
-          });
+          // Post-loop: try repair on first attempt only
+          if (attempt === 0 && onExhaustedFn !== undefined) {
+            const repairMessage = onExhaustedFn({
+              iterationCount: iteration,
+              toolCallsMade: totalToolCalls,
+            });
+            onExhaustedFn = undefined;
+            if (repairMessage !== undefined) {
+              logger.info({ iteration, totalToolCalls }, 'Tool calling: repair message injected');
+              contents.push({ role: 'user', parts: [{ text: repairMessage }] });
+              effectiveMax = iteration + repairIters;
+              continue; // re-enter outer for loop → inner while loop runs again
+            }
+          }
+          break; // no repair needed or repair already done
         }
 
         // maxIterations exhausted — check if last Gemini response had text
