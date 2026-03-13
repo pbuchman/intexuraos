@@ -1193,11 +1193,11 @@ describe('Linear Webhook Routes', () => {
       });
 
       it('falls back to issue.userId when findUserIdsByIssueId returns empty array', async () => {
-        // Seed the issue but no users have it stored in issueRepo via findUserIdsByIssueId
+        // Use override to return ok([]) from findUserIdsByIssueId while findById still works
         issueRepo.seedIssue({
-          id: 'issue-uuid-1',
-          identifier: 'INT-123',
-          title: 'Test Issue',
+          id: 'issue-uuid-fallback-empty',
+          identifier: 'INT-789',
+          title: 'Test Issue Empty UserIds',
           description: null,
           state: 'In Progress',
           stateType: 'started',
@@ -1205,57 +1205,7 @@ describe('Linear Webhook Routes', () => {
           assigneeId: null,
           assigneeName: null,
           labels: [],
-          url: 'https://linear.app/team/issue/INT-123',
-          userId: 'user-fallback',
-          createdAt: '2025-01-01T00:00:00.000Z',
-          updatedAt: '2025-01-01T00:00:00.000Z',
-          syncedAt: '2025-01-01T00:00:00.000Z',
-          teamId,
-          parentId: null,
-        });
-        // issueRepo has issue stored for 'user-fallback' but findUserIdsByIssueId
-        // won't find it because the issueRepo has it stored under a different userId key
-        // Actually, we need to ensure findUserIdsByIssueId returns empty.
-        // The fake stores using compositeKey, so issue.userId = 'user-fallback' won't be found
-        // via findUserIdsByIssueId because it looks for issue.id match.
-        // But it IS stored, so findUserIdsByIssueId WILL return ['user-fallback'].
-        // Instead, let's make findUserIdsByIssueId fail to trigger else branch (line 308).
-        // Reset and use a different approach: empty repo but issue findById returns it.
-        issueRepo.reset();
-        // We need findById to succeed but findUserIdsByIssueId to return empty.
-        // The fake's findById searches all issues, and findUserIdsByIssueId also searches all issues.
-        // So if we store the issue, both will find it. We need failure on findUserIdsByIssueId.
-        issueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
-
-        // Use a fresh issueRepo approach: seed with a manual approach.
-        // Actually the simplest is to make findUserIdsByIssueId return err
-        // The setFailure(true) makes ALL methods fail including findById.
-        // Let's use the issueRepo differently: seed the issue first, then use
-        // a custom approach. Since FakeLinearIssueRepository's findUserIdsByIssueId
-        // uses shouldFail, and findById also uses shouldFail, we can't separate them.
-        // So instead: store issue for findById, then after findById succeeds, make
-        // the repo fail findUserIdsByIssueId.
-        // The simplest test: just test the successful path where userId is found via findUserIdsByIssueId.
-        // For the fallback path, we need findUserIdsByIssueId to return err.
-        // Since the error path (line 308) is: commentUserId = issue.userId
-        // Let's test it: call with issue seeded, findUserIdsByIssueId fails -> falls back to issue.userId.
-        // But we can't use setFailure(true) because that breaks findById too.
-        // Skip this subtest - instead test the error path for findUserIdsByIssueId.
-        issueRepo.setFailure(false);
-
-        // Seed issue with userId matching the connection user
-        issueRepo.seedIssue({
-          id: 'issue-uuid-fallback',
-          identifier: 'INT-123',
-          title: 'Test Issue',
-          description: null,
-          state: 'In Progress',
-          stateType: 'started',
-          priority: 2,
-          assigneeId: null,
-          assigneeName: null,
-          labels: [],
-          url: 'https://linear.app/team/issue/INT-123',
+          url: 'https://linear.app/team/issue/INT-789',
           userId,
           createdAt: '2025-01-01T00:00:00.000Z',
           updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1263,16 +1213,18 @@ describe('Linear Webhook Routes', () => {
           teamId,
           parentId: null,
         });
+        // Override findUserIdsByIssueId to return empty array → else branch, !userIdsResult.ok is FALSE
+        issueRepo.setFindUserIdsByIssueIdOverride({ ok: true, value: [] });
 
         const payload = {
           action: 'create',
           type: 'Comment',
           webhookTimestamp: Date.now(),
-          webhookId: 'webhook-comment-fallback',
+          webhookId: 'webhook-comment-fallback-empty',
           data: {
-            id: 'comment-uuid-fallback',
-            issueId: 'issue-uuid-fallback',
-            issueIdentifier: 'INT-123',
+            id: 'comment-uuid-fallback-empty',
+            issueId: 'issue-uuid-fallback-empty',
+            issueIdentifier: 'INT-789',
             user: { id: 'linear-user-1', name: 'Test User' },
             body: 'A comment',
             createdAt: '2025-01-01T00:00:00.000Z',
@@ -1291,10 +1243,94 @@ describe('Linear Webhook Routes', () => {
           payload: JSON.stringify(payload),
         });
 
-        // Should succeed (comment synced using issue.userId as fallback since findUserIdsByIssueId returned empty)
+        // Should succeed - falls back to issue.userId since findUserIdsByIssueId returned []
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
         expect(body.success).toBe(true);
+      });
+
+      it('falls back to issue.userId when findUserIdsByIssueId fails', async () => {
+        // Use override to return err → else branch with !userIdsResult.ok TRUE (logs warning)
+        issueRepo.seedIssue({
+          id: 'issue-uuid-fallback-err',
+          identifier: 'INT-790',
+          title: 'Test Issue UserIds Error',
+          description: null,
+          state: 'In Progress',
+          stateType: 'started',
+          priority: 2,
+          assigneeId: null,
+          assigneeName: null,
+          labels: [],
+          url: 'https://linear.app/team/issue/INT-790',
+          userId,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+          syncedAt: '2025-01-01T00:00:00.000Z',
+          teamId,
+          parentId: null,
+        });
+        // Override findUserIdsByIssueId to return err → else branch, !userIdsResult.ok is TRUE
+        issueRepo.setFindUserIdsByIssueIdOverride({
+          ok: false,
+          error: { code: 'INTERNAL_ERROR', message: 'DB error for userIds' },
+        });
+
+        const payload = {
+          action: 'create',
+          type: 'Comment',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-comment-fallback-err',
+          data: {
+            id: 'comment-uuid-fallback-err',
+            issueId: 'issue-uuid-fallback-err',
+            issueIdentifier: 'INT-790',
+            user: { id: 'linear-user-1', name: 'Test User' },
+            body: 'A comment',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        };
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        // Should succeed - falls back to issue.userId despite findUserIdsByIssueId error
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+      });
+
+      it('returns 200 Ignored for Issue type with unrecognized data shape (covers isCommentData FALSE branch)', async () => {
+        // type='Issue' passes the early type guard, but data has neither 'team' (isIssueData)
+        // nor 'issueId' (isCommentData) fields → falls through to unknown data structure handler
+        const payload = {
+          action: 'create',
+          type: 'Issue',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-malformed-1',
+          data: { id: 'malformed-issue-id' }, // no 'team' → isIssueData=false, no 'issueId' → isCommentData=false
+        };
+        // No signature header needed - signature validation not reached
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: { 'content-type': 'application/json' },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.data.message).toBe('Unknown data structure');
       });
 
       it('returns 500 when syncCommentFromWebhook fails (commentRepo save fails)', async () => {

@@ -668,8 +668,11 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(undefined);
   }
 
+  private findUserIdsByIssueIdOverride: Result<string[], LinearError> | null = null;
+
   async findUserIdsByIssueId(issueId: string): Promise<Result<string[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
+    if (this.findUserIdsByIssueIdOverride !== null) return this.findUserIdsByIssueIdOverride;
     const userIds: string[] = [];
     for (const issue of this.issues.values()) {
       if (issue.id === issueId) {
@@ -677,6 +680,10 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
       }
     }
     return ok(userIds);
+  }
+
+  setFindUserIdsByIssueIdOverride(result: Result<string[], LinearError> | null): void {
+    this.findUserIdsByIssueIdOverride = result;
   }
 
   setFailure(fail: boolean, error?: LinearError): void {
@@ -713,6 +720,7 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     this.shouldFailListByUserId = false;
     this.shouldFailDeleteById = false;
     this.saveFailUserIds.clear();
+    this.findUserIdsByIssueIdOverride = null;
   }
 
   seedIssue(issue: SyncedLinearIssue): void {
