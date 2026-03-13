@@ -226,6 +226,17 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const task = taskResult.value;
       const completedAt = new Date();
 
+      // Step 2.5: Ignore stale callbacks for already-cancelled tasks
+      if (task.status === 'cancelled') {
+        if (status !== 'cancelled') {
+          request.log.info({ taskId, incomingStatus: status }, 'Ignoring stale callback for cancelled task');
+        } else {
+          request.log.info({ taskId }, 'Ignoring duplicate cancelled callback');
+        }
+        // @allow-raw-send: external webhook callback contract requires simple acknowledgment
+        return await reply.send({ received: true });
+      }
+
       const enforcePlanningOutcome = async (
         outcome: 'planned' | 'unclear',
         planningResult: NonNullable<typeof result>,
@@ -930,6 +941,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   userId: task.userId,
                   outcome: 'review_failed',
                   errorCode: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
+                  ...(task.workerType != null && { workerType: task.workerType }),
                 },
               );
             }
@@ -981,6 +993,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   outcome: 'review_failed',
                   errorCode: reviewEnforcement.code,
                   ...(reviewTypes !== undefined && { reviewTypes }),
+                  ...(task.workerType != null && { workerType: task.workerType }),
                 },
               );
             }
@@ -1000,6 +1013,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               userId: task.userId,
               outcome: 'review_completed',
               ...(reviewTypes !== undefined && { reviewTypes }),
+              ...(task.workerType != null && { workerType: task.workerType }),
             };
           }
         }

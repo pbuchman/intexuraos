@@ -106,6 +106,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findPlannedTaskByLinearIssue(): ReturnType<CodeTaskRepository['findPlannedTaskByLinearIssue']> {
       return ok(null);
     },
+    async findLatestNonReviewTaskByPR(): ReturnType<CodeTaskRepository['findLatestNonReviewTaskByPR']> {
+      return ok(null);
+    },
   };
 }
 

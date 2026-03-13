@@ -61,7 +61,7 @@ vi.mock('@intexuraos/internal-clients', async () => ({
 
 describe('parseLinearIdentifierFromUrl', () => {
   it('extracts identifier from valid Linear URL', () => {
-    expect(parseLinearIdentifierFromUrl('https://linear.app/intexuraos/issue/INT-200/subtask-title')).toBe('INT-200');
+    expect(parseLinearIdentifierFromUrl('https://linear.app/pbuchman/issue/INT-200/subtask-title')).toBe('INT-200');
   });
 
   it('returns null for non-linear.app hostname', () => {
@@ -77,7 +77,7 @@ describe('parseLinearIdentifierFromUrl', () => {
   });
 
   it('extracts URL from markdown link wrapper', () => {
-    expect(parseLinearIdentifierFromUrl('[Subtask](https://linear.app/intexuraos/issue/INT-300/title)')).toBe('INT-300');
+    expect(parseLinearIdentifierFromUrl('[Subtask](https://linear.app/pbuchman/issue/INT-300/title)')).toBe('INT-300');
   });
 });
 
@@ -152,7 +152,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         id: 'linear-issue-uuid',
         identifier: 'INT-123',
         title: 'Test issue',
-        url: 'https://linear.app/intexuraos/issue/INT-123',
+        url: 'https://linear.app/pbuchman/issue/INT-123',
         labels: [],
         childCount: 0,
         parentId: null,
@@ -163,7 +163,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         root: {
           id: 'linear-issue-uuid',
           identifier: 'INT-999',
-          url: 'https://linear.app/intexuraos/issue/INT-999',
+          url: 'https://linear.app/pbuchman/issue/INT-999',
           parentId: 'linear-issue-uuid',
           labels: [],
           assigneeId: null,
@@ -654,7 +654,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Created planning issue and plan PR',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
@@ -718,7 +718,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 2,
           parentId: null,
@@ -729,7 +729,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           root: {
             id: 'original-uuid',
             identifier: 'INT-123',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             parentId: null,
             labels: [],
             assigneeId: null,
@@ -739,7 +739,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             {
               id: 'child-1-uuid',
               identifier: 'INT-200',
-              url: 'https://linear.app/intexuraos/issue/INT-200',
+              url: 'https://linear.app/pbuchman/issue/INT-200',
               parentId: 'original-uuid',
               labels: ['code-task'],
               assigneeId: null,
@@ -748,7 +748,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             {
               id: 'child-2-uuid',
               identifier: 'INT-201',
-              url: 'https://linear.app/intexuraos/issue/INT-201',
+              url: 'https://linear.app/pbuchman/issue/INT-201',
               parentId: 'original-uuid',
               labels: ['code-task'],
               assigneeId: null,
@@ -768,7 +768,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Created complex plan with subtasks',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
@@ -845,7 +845,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 1,
           parentId: null,
@@ -856,7 +856,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           root: {
             id: 'original-uuid',
             identifier: 'INT-123',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             parentId: null,
             labels: [],
             assigneeId: null,
@@ -866,7 +866,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             {
               id: 'child-uuid',
               identifier: 'INT-200',
-              url: 'https://linear.app/intexuraos/issue/INT-200',
+              url: 'https://linear.app/pbuchman/issue/INT-200',
               parentId: 'original-uuid',
               labels: [],
               assigneeId: 'some-user',
@@ -883,7 +883,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Subtask not delivered correctly',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
           planning_pr_url: '',
@@ -937,7 +937,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 1,
           parentId: null,
@@ -948,7 +948,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           root: {
             id: 'original-uuid',
             identifier: 'INT-123',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             parentId: null,
             labels: [],
             assigneeId: null,
@@ -958,7 +958,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             {
               id: 'grandchild-uuid',
               identifier: 'INT-300',
-              url: 'https://linear.app/intexuraos/issue/INT-300',
+              url: 'https://linear.app/pbuchman/issue/INT-300',
               parentId: 'some-other-parent',
               labels: [],
               assigneeId: null,
@@ -975,7 +975,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Planned with non-direct subtask',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
           planning_pr_url: '',
@@ -1035,7 +1035,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 1,
           parentId: null,
@@ -1046,7 +1046,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           root: {
             id: 'original-uuid',
             identifier: 'INT-123',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             parentId: null,
             labels: [],
             assigneeId: null,
@@ -1056,7 +1056,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             {
               id: 'child-uuid',
               identifier: 'INT-200',
-              url: 'https://linear.app/intexuraos/issue/INT-200',
+              url: 'https://linear.app/pbuchman/issue/INT-200',
               parentId: 'original-uuid',
               labels: ['code-task'],
               assigneeId: null,
@@ -1074,7 +1074,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Complex but no PR',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
           planning_pr_url: '',
@@ -1133,7 +1133,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             id: 'original-uuid',
             identifier: 'INT-123',
             title: 'Original issue',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             labels: [],
             childCount: 2,
             parentId: null,
@@ -1144,7 +1144,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             id: 'child-1-uuid',
             identifier: 'INT-200',
             title: 'Subtask 1',
-            url: 'https://linear.app/intexuraos/issue/INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
             labels: [],
             childCount: 0,
             parentId: 'original-uuid',
@@ -1155,7 +1155,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             id: 'child-2-uuid',
             identifier: 'INT-201',
             title: 'Subtask 2',
-            url: 'https://linear.app/intexuraos/issue/INT-201',
+            url: 'https://linear.app/pbuchman/issue/INT-201',
             labels: [],
             childCount: 0,
             parentId: 'original-uuid',
@@ -1172,9 +1172,9 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Complex plan with URL-based subtasks',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
-          planning_subtask_urls: 'https://linear.app/intexuraos/issue/INT-200/subtask-1,https://linear.app/intexuraos/issue/INT-201/subtask-2',
+          planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/subtask-1,https://linear.app/pbuchman/issue/INT-201/subtask-2',
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
         },
@@ -1251,7 +1251,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 2,
           parentId: null,
@@ -1265,9 +1265,9 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Complex plan with bad URLs',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
-          planning_subtask_urls: 'not-a-url,https://linear.app/intexuraos/issue/INT-200/subtask-1',
+          planning_subtask_urls: 'not-a-url,https://linear.app/pbuchman/issue/INT-200/subtask-1',
           planning_pr_url: '',
           planning_unclear_clarification: '',
         },
@@ -1324,7 +1324,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 0,
           parentId: null,
@@ -1335,7 +1335,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           root: {
             id: 'original-uuid',
             identifier: 'INT-123',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             parentId: null,
             labels: [],
             assigneeId: null,
@@ -1353,7 +1353,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Complex plan without URLs',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_subtask_urls: '',
           planning_pr_url: '',
@@ -1420,7 +1420,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 3,
           parentId: null,
@@ -1431,7 +1431,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           root: {
             id: 'original-uuid',
             identifier: 'INT-123',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             parentId: null,
             labels: [],
             assigneeId: null,
@@ -1441,7 +1441,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             {
               id: 'child-1-uuid',
               identifier: 'INT-200',
-              url: 'https://linear.app/intexuraos/issue/INT-200',
+              url: 'https://linear.app/pbuchman/issue/INT-200',
               parentId: 'original-uuid',
               labels: [],
               assigneeId: null,
@@ -1450,7 +1450,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             {
               id: 'child-2-uuid',
               identifier: 'INT-201',
-              url: 'https://linear.app/intexuraos/issue/INT-201',
+              url: 'https://linear.app/pbuchman/issue/INT-201',
               parentId: 'original-uuid',
               labels: [],
               assigneeId: null,
@@ -1459,7 +1459,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             {
               id: 'child-3-uuid',
               identifier: 'INT-202',
-              url: 'https://linear.app/intexuraos/issue/INT-202',
+              url: 'https://linear.app/pbuchman/issue/INT-202',
               parentId: 'original-uuid',
               labels: [],
               assigneeId: null,
@@ -1479,10 +1479,10 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Complex plan with partial URL extraction',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '1' as const,
           // Only 1 of 3 subtask URLs extracted by LLM
-          planning_subtask_urls: 'https://linear.app/intexuraos/issue/INT-200/subtask-1',
+          planning_subtask_urls: 'https://linear.app/pbuchman/issue/INT-200/subtask-1',
           planning_pr_url: '',
           planning_unclear_clarification: '',
         },
@@ -1563,7 +1563,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 0,
           parentId: null,
@@ -1581,7 +1581,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Simple task planned in-place',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '0' as const,
           planning_pr_url: '',
           planning_unclear_clarification: '',
@@ -1671,7 +1671,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 0,
           parentId: null,
@@ -1689,7 +1689,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Simple task',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '0' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '0' as const,
           planning_pr_url: '',
           planning_unclear_clarification: '',
@@ -1749,7 +1749,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'original-uuid',
           identifier: 'INT-123',
           title: 'Original issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: [],
           childCount: 0,
           parentId: null,
@@ -1769,7 +1769,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Simple task',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '0' as const,
-          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/pbuchman/issue/INT-123',
           planning_is_complex: '0' as const,
           planning_pr_url: '',
           planning_unclear_clarification: '',
@@ -1833,7 +1833,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             id: 'routed-uuid',
             identifier: 'INT-123',
             title: 'Routed issue',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             labels: ['code-task'],
             childCount: 0,
             parentId: null,
@@ -1844,7 +1844,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             id: 'routed-uuid',
             identifier: 'INT-123',
             title: 'Routed issue',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             labels: ['code-task'],
             childCount: 0,
             parentId: null,
@@ -1866,7 +1866,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           execution_outcome_label: 'implemented' as const,
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
-          execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
       };
 
@@ -1936,7 +1936,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             id: 'routed-uuid',
             identifier: 'INT-123',
             title: 'Routed issue',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             labels: ['code-task'],
             childCount: 0,
             parentId: null,
@@ -1947,7 +1947,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             id: 'routed-uuid',
             identifier: 'INT-123',
             title: 'Routed issue',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             labels: ['code-task'],
             childCount: 0,
             parentId: null,
@@ -1969,7 +1969,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           execution_outcome_label: 'implemented' as const,
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
-          execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
       };
 
@@ -2017,7 +2017,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'routed-uuid',
           identifier: 'INT-123',
           title: 'Routed issue',
-          url: 'https://linear.app/intexuraos/issue/INT-123',
+          url: 'https://linear.app/pbuchman/issue/INT-123',
           labels: ['code-task'],
           childCount: 0,
           parentId: null,
@@ -2035,7 +2035,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           execution_outcome_label: 'implemented' as const,
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
-          execution_linear_issue_url: '[INT-123](https://linear.app/intexuraos/issue/INT-123)',
+          execution_linear_issue_url: '[INT-123](https://linear.app/pbuchman/issue/INT-123)',
         },
       };
 
@@ -2091,7 +2091,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             id: 'routed-uuid',
             identifier: 'INT-123',
             title: 'Routed issue',
-            url: 'https://linear.app/intexuraos/issue/INT-123',
+            url: 'https://linear.app/pbuchman/issue/INT-123',
             labels: ['code-task'],
             childCount: 0,
             parentId: null,
@@ -2102,7 +2102,7 @@ describe('POST /internal/webhooks/task-complete', () => {
             id: 'different-uuid',
             identifier: 'INT-999',
             title: 'Wrong issue',
-            url: 'https://linear.app/intexuraos/issue/INT-999',
+            url: 'https://linear.app/pbuchman/issue/INT-999',
             labels: ['code-task'],
             childCount: 0,
             parentId: null,
@@ -2120,7 +2120,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           execution_outcome_label: 'implemented' as const,
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
-          execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-999',
+          execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-999',
         },
       };
 
@@ -2183,7 +2183,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           execution_outcome_label: 'implemented' as const,
           execution_superpowers_executing_plans_used: '1' as const,
           execution_superpowers_requesting_code_review_used: '1' as const,
-          execution_linear_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
         },
       };
 
@@ -2391,7 +2391,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'routed-uuid-456',
           identifier: 'INT-456',
           title: 'Pull request issue',
-          url: 'https://linear.app/intexuraos/issue/INT-456',
+          url: 'https://linear.app/pbuchman/issue/INT-456',
           labels: ['code-task'],
           childCount: 0,
           parentId: null,
@@ -2470,7 +2470,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           id: 'routed-uuid-456',
           identifier: 'INT-456',
           title: 'Pull request issue',
-          url: 'https://linear.app/intexuraos/issue/INT-456',
+          url: 'https://linear.app/pbuchman/issue/INT-456',
           labels: ['code-task'],
           childCount: 0,
           parentId: null,
@@ -2724,6 +2724,165 @@ describe('POST /internal/webhooks/task-complete', () => {
       );
 
       updateSpy.mockRestore();
+    });
+
+    it('includes workerType in review completion comment when task has workerType', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'qwen',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Reviewed the PR.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'pbuchman',
+        'intexuraos',
+        42,
+        expect.stringContaining('**Reviewer:** `qwen`')
+      );
+    });
+
+    it('includes workerType in review failure comment when task has workerType', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Review failed due to enforcement.',
+          review_comments_posted: '0',
+          review_types: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
+        'ghp_test_token',
+        'pbuchman',
+        'intexuraos',
+        42,
+        expect.stringContaining('**Reviewer:** `opus`')
+      );
+    });
+
+    it('omits workerType in review comment when task has no workerType', async () => {
+      const { gitHubPRClient } = installPRNotificationServices();
+      // Create task, then update to remove workerType (simulating legacy data)
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review the PR',
+        sanitizedPrompt: 'Review the PR',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        prNumber: 42,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Simulate legacy task by setting workerType to undefined via raw update
+      // This tests the webhook handler's handling of undefined workerType
+      await fakeFirestore.collection('code_tasks').doc(task.id).update({ workerType: null });
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Reviewed the PR.',
+          review_comments_posted: '1',
+          review_types: 'security',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const commentBody = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+      expect(commentBody).not.toContain('**Reviewer:**');
     });
 
     it('handles execution-agent failed webhook without any Linear mutations', async () => {
@@ -5527,5 +5686,229 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const params = publishCall?.[0] as { message: string };
     expect(params.message).toContain('✅');
     expect(params.message).not.toContain('🔁');
+  });
+
+  describe('stale callback handling for cancelled tasks', () => {
+    it('ignores completed callback for already cancelled task', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review task',
+        sanitizedPrompt: 'Review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'sonnet',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_cancelled',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Cancel the task first
+      await codeTaskRepo.update(task.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Review was replaced' },
+      });
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Review completed',
+          review_comments_posted: '3',
+          review_types: 'code_quality',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ received: true });
+
+      // Verify task is still cancelled
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('cancelled');
+    });
+
+    it('ignores failed callback for already cancelled task', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review task',
+        sanitizedPrompt: 'Review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_cancelled_fail',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Cancel the task first
+      await codeTaskRepo.update(task.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Review was replaced' },
+      });
+
+      const payload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: { code: 'TIMEOUT', message: 'Review timed out' },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ received: true });
+
+      // Verify task is still cancelled
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('cancelled');
+    });
+
+    it('ignores interrupted callback for already cancelled task', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review task',
+        sanitizedPrompt: 'Review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'minimax',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_cancelled_interrupt',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Cancel the task first
+      await codeTaskRepo.update(task.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Review was replaced' },
+      });
+
+      const payload = {
+        taskId: task.id,
+        status: 'interrupted' as const,
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ received: true });
+
+      // Verify task is still cancelled
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('cancelled');
+    });
+
+    it('ignores duplicate cancelled callback', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Review task',
+        sanitizedPrompt: 'Review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'qwen',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_cancelled_dup',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'review',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      // Cancel the task first
+      await codeTaskRepo.update(task.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Review was replaced' },
+      });
+
+      const payload = {
+        taskId: task.id,
+        status: 'cancelled' as const,
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ received: true });
+
+      // Verify task is still cancelled
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('cancelled');
+    });
   });
 });
