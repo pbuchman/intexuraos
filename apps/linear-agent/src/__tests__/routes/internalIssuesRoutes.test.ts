@@ -8,6 +8,10 @@ import {
   FakeLinearIssueRepository,
   FakeLinearCommentRepository,
   FakeCodeAgentClient,
+  FakeFailedIssueRepository,
+  FakeLinearActionExtractionService,
+  FakeProcessedActionRepository,
+  FakeUserServiceClient,
 } from '../fakes.js';
 import type { LinearConnection, LinearIssue, SyncedLinearIssue, LinearComment } from '../../domain/models.js';
 
@@ -27,7 +31,7 @@ describe('internalIssuesRoutes', () => {
     userId: testUserId,
     apiKey: testApiKey,
     teamId: 'team-1',
-      teamName: 'Engineering',
+    teamName: 'Engineering',
     webhookSecret: null,
     connected: true,
     createdAt: '2024-01-01T00:00:00.000Z',
@@ -43,11 +47,11 @@ describe('internalIssuesRoutes', () => {
     setServices({
       connectionRepository: fakeConnectionRepo,
       linearApiClient: fakeLinearClient,
-      failedIssueRepository: null as unknown as import('../../domain/index.js').FailedIssueRepository,
-      extractionService: null as unknown as import('../../domain/index.js').LinearActionExtractionService,
-      processedActionRepository: null as unknown as import('../../domain/index.js').ProcessedActionRepository,
+      failedIssueRepository: new FakeFailedIssueRepository(),
+      extractionService: new FakeLinearActionExtractionService(),
+      processedActionRepository: new FakeProcessedActionRepository(),
       issueRepository: fakeIssueRepo,
-      userServiceClient: null as unknown as import('@intexuraos/internal-clients').UserServiceClient,
+      userServiceClient: new FakeUserServiceClient(),
       commentRepository: fakeCommentRepo,
       codeAgentClient: new FakeCodeAgentClient(),
     });

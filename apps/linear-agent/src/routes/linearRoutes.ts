@@ -314,11 +314,11 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
     // Retry Linear creation
     /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces ?? branches on optional extracted fields that cannot be undefined at runtime @preserve */
-    const createResult = await linearApiClient.createIssue(apiKeyResult.value, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) check above
+    const createResult = await linearApiClient.createIssue(apiKeyResult.value, { // @allow-result-access -- apiKeyResult.ok checked above
       title: failedIssue.extractedTitle ?? 'Untitled Issue',
       description: failedIssue.reasoning ?? null,
       priority: failedIssue.extractedPriority ?? 3,
-      teamId: connectionResult.value.teamId, // @allow-result-access -- guarded by if (!connectionResult.ok || connectionResult.value === null) check above
+      teamId: connectionResult.value.teamId, // @allow-result-access -- connectionResult.ok and value checked above
     });
     /* v8 ignore stop @preserve */
 
@@ -719,11 +719,9 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request);
       const user = await requireAuth(request, reply);
-      /* v8 ignore start -- test-infra: auth validation early return covered by other endpoint tests @preserve */
       if (user === null) {
         return;
       }
-      /* v8 ignore stop @preserve */
 
       const services = getServices();
 
