@@ -299,6 +299,44 @@ describe('Commands Agent Routes', () => {
       expect(commands[0]?.text).toBe('Buy groceries tomorrow');
     });
 
+    it('processes command with optional summary field', async () => {
+      app = await buildServer();
+
+      const event = {
+        type: 'command.ingest',
+        userId: 'user-123',
+        sourceType: 'whatsapp_voice',
+        externalId: 'wamid.voice-summary',
+        text: 'Buy groceries tomorrow',
+        summary: 'Grocery shopping reminder',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/commands',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          message: {
+            data: messageData,
+            messageId: 'pubsub-summary-1',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      // Verify command was saved with the summary field
+      const commands = await fakeCommandRepo.listByUserId('user-123');
+      expect(commands).toHaveLength(1);
+      expect(commands[0]?.summary).toBe('Grocery shopping reminder');
+    });
+
     it('handles idempotency - skips duplicate commands', async () => {
       app = await buildServer();
 
