@@ -306,11 +306,9 @@ export const visualizationRoutes: FastifyPluginCallback = (fastify, _opts, done)
         visualizationRepository: services.visualizationRepository,
       });
 
-      /* v8 ignore start -- upstream: fake repo getById never errors after successful create @preserve */
       if (!updated.ok) {
         return await reply.fail('INTERNAL_ERROR', updated.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       return await reply.ok(formatVisualization(updated.value));
     }
