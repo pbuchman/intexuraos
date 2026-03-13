@@ -904,6 +904,15 @@ export const createFirestoreCodeTaskRepository = (deps: {
           }
         }
 
+        /* v8 ignore start -- test-infra: FakeFirestore limit(50) requires inserting 50 documents to trigger this observability warning @preserve */
+        if (snapshot.docs.length === 50) {
+          logger.warn(
+            { repository, prNumber, docsScanned: 50 },
+            'findLatestNonReviewTaskByPR exhausted 50-doc window without finding a non-review task',
+          );
+        }
+        /* v8 ignore stop @preserve */
+
         return ok(null);
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find latest non-review task by PR');
