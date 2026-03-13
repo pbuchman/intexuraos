@@ -231,7 +231,7 @@ async function handleLinearWebhook(
           firstSuccessIssueId = result.value.value.issueId; // @allow-result-access -- guarded by result.value.ok
         }
       } else {
-        /* v8 ignore start -- upstream: syncSingleIssue returns Result and never rejects; the 'rejected' Promise.allSettled branch and the unreachable 'value.ok true' inner-ternary branch cannot be triggered via FakeLinearIssueRepository @preserve */
+        /* v8 ignore start -- upstream: FakeLinearIssueRepository's syncSingleIssue always returns a resolved Result, so Promise.allSettled never produces a 'rejected' entry; the inner ok===true ternary branch is also unreachable because the else branch only executes when result.value.ok is false @preserve */
         const error = result.status === 'rejected' ? String(result.reason) : (result.value.ok ? '' : result.value.error);
         /* v8 ignore stop @preserve */
         request.log.error({ error, issueId: data.id, userId: uid }, 'Failed to sync issue from webhook for user');
