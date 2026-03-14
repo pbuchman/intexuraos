@@ -17,11 +17,8 @@
       "description": "Write tests for tightened v8 ignore blocks in apps/actions-agent"
     },
     "PENDING-apps-bookmarks-agent": {
-      "files": [
-        "apps/bookmarks-agent/src/domain/usecases/summarizeBookmark.ts",
-        "apps/bookmarks-agent/src/infra/firestore/firestoreBookmarkRepository.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/bookmarks-agent"
+      "files": ["apps/bookmarks-agent/src/infra/firestore/firestoreBookmarkRepository.ts"],
+      "description": "Firestore findByUserIdAndUrl ts-type guard fails pattern validation despite valid undefined check"
     },
     "PENDING-apps-chat-agent": {
       "files": [
