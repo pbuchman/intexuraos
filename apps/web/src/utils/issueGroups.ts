@@ -21,7 +21,7 @@ export interface IssueGroup {
   aggregateStatus: GroupStatus;
 }
 
-export type SortOption = 'linear-id' | 'pr-number' | 'finished-time' | 'started-time';
+export type SortOption = 'linear-id' | 'pr-number' | 'finished-time' | 'started-time' | 'created-time';
 
 const PR_URL_REGEX = /\/pull\/(\d+)/;
 const LINEAR_ID_REGEX = /\w+-(\d+)/;
@@ -290,6 +290,12 @@ export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): Issue
       // Non-done: fall back to updatedAt desc
       return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
     });
+    return sorted;
+  }
+
+  // created-time: sort by createdAt desc
+  if (sortBy === 'created-time') {
+    sorted.sort((a, b) => b.latestTask.createdAt.localeCompare(a.latestTask.createdAt));
     return sorted;
   }
 
