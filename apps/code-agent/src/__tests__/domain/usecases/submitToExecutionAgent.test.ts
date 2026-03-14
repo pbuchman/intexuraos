@@ -350,6 +350,55 @@ describe('submitToExecutionAgent', () => {
         expect(result.error.code).toBe('worker_not_configured');
       }
     });
+
+    it('returns internal_error when getSettings returns an error', async () => {
+      const mockTask = createMockTask();
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Database error' })
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Failed to fetch worker settings');
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId,
+          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        }),
+        'Failed to fetch worker settings for Execution Agent submission'
+      );
+    });
+
+    it('returns worker_not_configured when getSettings returns null (no settings)', async () => {
+      const mockTask = createMockTask();
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok(null));
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_not_configured');
+        expect(result.error.message).toContain('No workers configured');
+      }
+    });
   });
 
   describe('label validation', () => {
@@ -619,6 +668,89 @@ describe('submitToExecutionAgent', () => {
         })
       );
     });
+
+    it('logs error when lock rollback fails during dispatch failure path', async () => {
+      setupHappyPathMocks();
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'worker_unavailable', message: 'No workers available' })
+      );
+
+      // First update = optimistic lock (succeeds), subsequent updates have different outcomes
+      let updateCallCount = 0;
+      mockCodeTaskRepo.update.mockImplementation(() => {
+        updateCallCount++;
+        if (updateCallCount === 1) {
+          // Optimistic lock succeeds
+          return Promise.resolve(ok({}));
+        }
+        if (updateCallCount === 2) {
+          // Lock rollback fails
+          return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Rollback failed' }));
+        }
+        // Fail-mark succeeds
+        return Promise.resolve(ok({}));
+      });
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
+
+      // Should log the rollback failure
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: originalTaskId,
+          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        }),
+        'Failed to rollback implementationTaskId after dispatch failure'
+      );
+    });
+
+    it('logs error when fail-mark fails during dispatch failure path', async () => {
+      setupHappyPathMocks();
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'worker_unavailable', message: 'No workers available' })
+      );
+
+      // First update = optimistic lock (succeeds), subsequent updates have different outcomes
+      let updateCallCount = 0;
+      mockCodeTaskRepo.update.mockImplementation(() => {
+        updateCallCount++;
+        if (updateCallCount === 1) {
+          // Optimistic lock succeeds
+          return Promise.resolve(ok({}));
+        }
+        if (updateCallCount === 2) {
+          // Lock rollback succeeds
+          return Promise.resolve(ok({}));
+        }
+        // Fail-mark fails (3rd call)
+        return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Fail-mark failed' }));
+      });
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
+
+      // Should log the fail-mark failure
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        }),
+        'Failed to mark Execution Agent task as failed after dispatch failure'
+      );
+    });
   });
 
   describe('queueing on at_capacity', () => {
@@ -786,6 +918,91 @@ describe('submitToExecutionAgent', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.objectContaining({ code: 'notification_failed' }) }),
         'Failed to send task queued notification'
+      );
+    });
+
+    it('logs error when lock rollback fails in queue_full path', async () => {
+      setupHappyPathMocks();
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: 'All workers at capacity' })
+      );
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(11)); // Queue full
+
+      // First update = optimistic lock (succeeds), subsequent updates fail
+      let updateCallCount = 0;
+      mockCodeTaskRepo.update.mockImplementation(() => {
+        updateCallCount++;
+        if (updateCallCount === 1) {
+          // Optimistic lock succeeds
+          return Promise.resolve(ok({}));
+        }
+        if (updateCallCount === 2) {
+          // Lock rollback fails
+          return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Rollback failed' }));
+        }
+        // Fail-mark succeeds
+        return Promise.resolve(ok({}));
+      });
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+
+      // Should log the rollback failure
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: originalTaskId,
+          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        }),
+        'Failed to rollback implementationTaskId after queue full'
+      );
+    });
+
+    it('logs error when fail-mark fails in queue_full path', async () => {
+      setupHappyPathMocks();
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: 'All workers at capacity' })
+      );
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(11)); // Queue full
+
+      // First update = optimistic lock (succeeds), subsequent updates have different outcomes
+      let updateCallCount = 0;
+      mockCodeTaskRepo.update.mockImplementation(() => {
+        updateCallCount++;
+        if (updateCallCount === 1) {
+          // Optimistic lock succeeds
+          return Promise.resolve(ok({}));
+        }
+        if (updateCallCount === 2) {
+          // Lock rollback succeeds
+          return Promise.resolve(ok({}));
+        }
+        // Fail-mark fails (3rd call)
+        return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Fail-mark failed' }));
+      });
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+
+      // Should log the fail-mark failure
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        }),
+        'Failed to mark execution task as failed after queue full'
       );
     });
   });
@@ -977,6 +1194,79 @@ describe('submitToExecutionAgent', () => {
       expect(createCall).toBeDefined();
       expect(createCall?.['actionId']).toBeUndefined();
       expect(createCall?.['approvalEventId']).toBeUndefined();
+    });
+
+    it('logs warning when cancel nonce update fails after successful dispatch', async () => {
+      setupHappyPathMocks();
+      // Dispatch succeeds
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' })
+      );
+      // Final update (cancel nonce) fails
+      let updateCallCount = 0;
+      mockCodeTaskRepo.update.mockImplementation(() => {
+        updateCallCount++;
+        if (updateCallCount === 1) {
+          // Optimistic lock succeeds
+          return Promise.resolve(ok({}));
+        }
+        // Cancel nonce update fails
+        return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Update failed' }));
+      });
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      // Should still succeed (the task was dispatched successfully)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toMatch(/^task_/);
+      }
+
+      // Should log warning about the update failure
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+        }),
+        'Failed to update Execution Agent task with cancel nonce'
+      );
+    });
+
+    it('logs warning when WhatsApp notification fails after successful update', async () => {
+      setupHappyPathMocks();
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' })
+      );
+      // All updates succeed
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok({ cancelNonce: 'test-nonce', cancelNonceExpiresAt: new Date().toISOString() })
+      );
+      // Notification fails
+      mockWhatsAppNotifier.notifyTaskStarted.mockResolvedValue(
+        err({ code: 'NOTIFICATION_FAILED', message: 'WhatsApp down' })
+      );
+
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId,
+        userId,
+      });
+
+      // Should still succeed (best-effort notification)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toMatch(/^task_/);
+      }
+
+      // Should log warning about the notification failure
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: expect.stringMatching(/^task_/),
+          error: expect.objectContaining({ code: 'NOTIFICATION_FAILED' }),
+        }),
+        'Failed to send task started notification for Execution Agent'
+      );
     });
   });
 
