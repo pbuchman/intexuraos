@@ -77,6 +77,29 @@ describe('agentRoutingContractMigration', () => {
     );
   });
 
+  it('truncates offenders at 10 when asserting no legacy values', async () => {
+    const tasks = firestore.collection('code_tasks');
+
+    for (let i = 0; i < 11; i++) {
+      await tasks.doc(`legacy-offender-${String(i)}`).set({
+        status: 'designed',
+      });
+    }
+
+    await expect(
+      assertNoLegacyAgentRoutingContractValues({ firestore, logger })
+    ).rejects.toThrow(/Legacy agent-routing values remain/);
+
+    // Verify the error message contains exactly 10 IDs (truncated, not all 11)
+    try {
+      await assertNoLegacyAgentRoutingContractValues({ firestore, logger });
+    } catch (error: unknown) {
+      const message = (error as Error).message;
+      const ids = message.replace(/^.*\(sample task IDs: /, '').replace(/\)$/, '').split(', ');
+      expect(ids).toHaveLength(10);
+    }
+  });
+
   it('fails on conflicting legacy executionPhase and agentType values', async () => {
     const tasks = firestore.collection('code_tasks');
     await tasks.doc('conflict').set({
