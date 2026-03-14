@@ -5,6 +5,21 @@
  * - DELETE /notion/disconnect
  */
 import { createToken, describe, expect, it, setupTestContext } from './testUtils.js';
+import { mapConnectErrorToHttp } from '../routes/integrationRoutes.js';
+
+describe('mapConnectErrorToHttp', () => {
+  it('maps VALIDATION_ERROR to INVALID_REQUEST', () => {
+    expect(mapConnectErrorToHttp('VALIDATION_ERROR')).toBe('INVALID_REQUEST');
+  });
+
+  it('maps INVALID_TOKEN to UNAUTHORIZED', () => {
+    expect(mapConnectErrorToHttp('INVALID_TOKEN')).toBe('UNAUTHORIZED');
+  });
+
+  it('maps DOWNSTREAM_ERROR to DOWNSTREAM_ERROR', () => {
+    expect(mapConnectErrorToHttp('DOWNSTREAM_ERROR')).toBe('DOWNSTREAM_ERROR');
+  });
+});
 
 describe('Notion Integration Routes', () => {
   const ctx = setupTestContext();

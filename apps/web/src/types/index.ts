@@ -1349,3 +1349,78 @@ export interface GitHubPRSummary {
 export interface GitHubPRSummariesResponse {
   prs: GitHubPRSummary[];
 }
+
+export type GitHubWebhookEventType =
+  | 'pull_request'
+  | 'pull_request_review'
+  | 'pull_request_review_comment'
+  | 'issue_comment'
+  | 'push'
+  | 'ping'
+  | 'unknown';
+
+export type GitHubWebhookAction =
+  | 'opened'
+  | 'closed'
+  | 'edited'
+  | 'synchronize'
+  | 'reopened'
+  | 'ready_for_review'
+  | 'converted_to_draft'
+  | 'assigned'
+  | 'unassigned'
+  | 'labeled'
+  | 'unlabeled'
+  | 'locked'
+  | 'unlocked'
+  | 'review_requested'
+  | 'review_request_removed'
+  | 'milestoned'
+  | 'demilestoned'
+  | 'enqueued'
+  | 'dequeued'
+  | 'auto_merge_enabled'
+  | 'auto_merge_disabled'
+  | 'submitted'
+  | 'dismissed'
+  | 'created'
+  | 'deleted'
+  | 'unknown';
+
+export type GitHubDecisionState = 'pending' | 'completed';
+export type GitHubDecisionOutcome = 'dispatch' | 'skip' | 'request_review';
+export type GitHubDecisionMaker = 'hard_rules' | 'github_agent' | 'webhook_route';
+export type GitHubDispatchAction = 'create_task' | 'send_message' | 'create_review_task';
+export type GitHubReviewType = 'code_quality' | 'security' | 'architecture';
+
+export interface GitHubEventLogRow {
+  id: string;
+  decisionId: string | null;
+  normalizedEventId: string | null;
+  deliveryId: string | null;
+  githubEventName: string;
+  eventType: GitHubWebhookEventType;
+  action: GitHubWebhookAction | null;
+  repository: string | null;
+  repositoryId: number | null;
+  pullRequestNumber: number | null;
+  pullRequestId: number | null;
+  senderLogin: string | null;
+  senderType: string | null;
+  authPassedAt: string;
+  updatedAt: string;
+  decisionState: GitHubDecisionState;
+  decisionOutcome: GitHubDecisionOutcome | null;
+  decidedBy: GitHubDecisionMaker | null;
+  reason: string | null;
+  dispatchAction: GitHubDispatchAction | null;
+  reviewTypes: GitHubReviewType[];
+  taskId: string | null;
+  workerType: string | null;
+  decisionLatencyMs: number | null;
+}
+
+export interface GitHubEventLogResponse {
+  rows: GitHubEventLogRow[];
+  nextCursor?: string;
+}

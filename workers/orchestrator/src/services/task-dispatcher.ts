@@ -1214,6 +1214,14 @@ export class TaskDispatcher {
         result.review_types = task.lastSuccessResult.review_types;
       }
     }
+    if (task.agentType === 'pull_request' && task.lastSuccessResult !== undefined) {
+      if (
+        result.comment_replied === undefined &&
+        task.lastSuccessResult.comment_replied !== undefined
+      ) {
+        result.comment_replied = task.lastSuccessResult.comment_replied;
+      }
+    }
     return result;
   }
 

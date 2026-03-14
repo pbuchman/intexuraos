@@ -88,6 +88,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           processedAt: unknown;
           mergedAt: unknown;
         } = {
+          ...(input.auditEventId !== undefined && { auditEventId: input.auditEventId }),
           githubEventId: input.githubEventId,
           deliveryId: input.deliveryId,
           repository: input.repository,
@@ -113,6 +114,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
 
         return ok({
           id: eventId,
+          ...(eventData.auditEventId !== undefined && { auditEventId: eventData.auditEventId }),
           githubEventId: eventData.githubEventId,
           deliveryId: eventData.deliveryId,
           repository: eventData.repository,
@@ -164,6 +166,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
             deliveryId: readDeliveryId(data as Record<string, unknown>),
             baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
@@ -208,6 +211,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
             deliveryId: readDeliveryId(data as Record<string, unknown>),
             baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
@@ -260,6 +264,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             events.push({
               ...data,
               id: doc.id,
+              ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
               deliveryId: readDeliveryId(data as Record<string, unknown>),
               baseBranch: data.baseBranch ?? null,
               createdAt: toDate(data.createdAt),
@@ -299,6 +304,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
             deliveryId: readDeliveryId(data as Record<string, unknown>),
             baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),

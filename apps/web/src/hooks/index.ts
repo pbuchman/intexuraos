@@ -11,6 +11,7 @@ export { useCodeTaskLogs, type CodeTaskLogsState } from './useCodeTaskLogs.js';
 export { useFailedCalendarEvents } from './useFailedCalendarEvents.js';
 export { useFailedLinearIssues } from './useFailedLinearIssues.js';
 export { useGitHubPREvents } from './useGitHubPREvents.js';
+export { useGitHubEventLog, type GitHubEventLogListRow, type UseGitHubEventLogResult } from './useGitHubEventLog.js';
 export { useGitHubPRSummaries } from './useGitHubPRSummaries.js';
 export { useLinearIssueOptions } from './useLinearIssueOptions.js';
 export { useChartDefinition } from './useChartDefinition.js';
