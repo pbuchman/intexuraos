@@ -17,13 +17,20 @@ import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
 const execFileAsync = promisify(execFile);
 
-export const DEEP_VALIDATION_PROMPT_VERSION = '4.1.0';
+export const DEEP_VALIDATION_PROMPT_VERSION = '5.1.0';
 
 const MAX_TRANSCRIPT_CHARS = 200_000;
 const GITHUB_COMMENT_MAX_CHARS = 65_536;
 const GITHUB_COMMENT_SAFETY_MARGIN_CHARS = 512;
 const SAFE_GITHUB_COMMENT_MAX_CHARS = GITHUB_COMMENT_MAX_CHARS - GITHUB_COMMENT_SAFETY_MARGIN_CHARS;
 const TEMP_COMMENT_DIR_PREFIX = 'orchestrator-deep-validation-';
+const SEVERITY_SCALE = [
+  '🔴 Critical — Blocking issue, fabricated evidence, or complete contract violation',
+  '🟠 Warning — Partial compliance, missed requirement, or ignored error',
+  '🟡 Minor — Non-blocking observation, minor deviation, or style concern',
+  '🟢 Pass — Verified, compliant, no issues found',
+] as const;
+
 const REQUIRED_SECTION_HEADINGS = [
   '#### Overall',
   '#### Claim Verification',
@@ -72,6 +79,11 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
     'If a section has nothing noteworthy, include a single table row that says None.',
     'Be concise. Preserve all warnings, failures, contradictions, and anomalies, but summarize what went well instead of exhaustively listing positive details.',
     'Keep each section compact enough to fit in a GitHub PR comment as a complete table.',
+    '',
+    '=== Severity Scale ===',
+    'Use ONLY these severity levels in the Result or Severity column of every table row.',
+    'Do not invent your own severity levels. Use the emoji prefix exactly as shown:',
+    ...SEVERITY_SCALE,
     '',
     '=== Section 1: Claim Verification ===',
     'The agent made these claims in its final report:',
@@ -320,7 +332,7 @@ function buildPrComment(
     totalParts === 1
       ? '### Deep Validation Report — IntexuraOS Agent-Based Code Task Execution Flow'
       : `### Deep Validation Report (Part ${String(partNumber)}/${String(totalParts)}) — IntexuraOS Agent-Based Code Task Execution Flow`;
-  const lines = [title, ''];
+  const lines = ['@ignore', '', title, ''];
 
   if (partNumber === 1) {
     lines.push(`**Cost:** $${String(costUsd)}`, '');
