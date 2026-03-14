@@ -5,6 +5,8 @@
  * with per-user encrypted credentials.
  */
 
+import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+
 /**
  * Worker name validation regex.
  * Rules: 3-32 chars, lowercase alphanumeric + hyphens, must start/end with alphanumeric.
@@ -66,6 +68,8 @@ export interface UserWorkerSettings {
   createdAt: string;
   /** ISO timestamp of last update */
   updatedAt: string;
+  /** Default worker type for review tasks (when not explicitly specified) */
+  defaultReviewWorkerType?: CodeTaskWorkerType;
   /** Cached health statuses for workers (name -> status) */
   workerHealthStatuses?: Record<string, WorkerHealthStatus>;
 }
@@ -115,6 +119,7 @@ export interface MaskedWorkerConfig {
  */
 export interface UserWorkerSettingsResponse {
   workers: MaskedWorkerConfig[];
+  defaultReviewWorkerType?: CodeTaskWorkerType;
 }
 
 /**

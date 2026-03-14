@@ -926,4 +926,61 @@ describe('workerSettingsRepository', () => {
     });
   });
 
+  describe('updateDefaultReviewWorkerType', () => {
+    it('should store default review worker type when doc exists', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // First add a worker to create the doc
+      await repo.addWorker('user-review-default', createWorkerConfig());
+
+      // Update default review worker type
+      const updateResult = await repo.updateDefaultReviewWorkerType('user-review-default', 'glm');
+      expect(updateResult.ok).toBe(true);
+
+      // Verify it's returned by getSettings
+      const settingsResult = await repo.getSettings('user-review-default');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultReviewWorkerType).toBe('glm');
+      }
+    });
+
+    it('should create doc when no doc exists', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Update without existing doc
+      const updateResult = await repo.updateDefaultReviewWorkerType('user-new-review', 'opus');
+      expect(updateResult.ok).toBe(true);
+
+      // Verify the doc was created with empty workers array
+      const settingsResult = await repo.getSettings('user-new-review');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultReviewWorkerType).toBe('opus');
+        expect(settingsResult.value.workers).toEqual([]);
+      }
+    });
+
+    it('should not include defaultReviewWorkerType in getSettings when not set', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.addWorker('user-no-review-default', createWorkerConfig());
+
+      const settingsResult = await repo.getSettings('user-no-review-default');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultReviewWorkerType).toBeUndefined();
+      }
+    });
+  });
+
 });

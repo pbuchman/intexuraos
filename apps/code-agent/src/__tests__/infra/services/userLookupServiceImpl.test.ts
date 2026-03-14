@@ -50,6 +50,7 @@ function createMockRepo(): WorkerSettingsRepository {
     updateTestResult: async (): ReturnType<WorkerSettingsRepository['updateTestResult']> => ok(undefined),
     getHealthStatuses: async (): ReturnType<WorkerSettingsRepository['getHealthStatuses']> => ok(null),
     updateHealthStatus: async (): ReturnType<WorkerSettingsRepository['updateHealthStatus']> => ok(undefined),
+    updateDefaultReviewWorkerType: async (): ReturnType<WorkerSettingsRepository['updateDefaultReviewWorkerType']> => ok(undefined),
   };
 }
 

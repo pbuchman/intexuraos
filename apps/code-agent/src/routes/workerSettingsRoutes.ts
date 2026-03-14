@@ -7,7 +7,7 @@
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest } from '@intexuraos/common-http';
-import { getErrorMessage } from '@intexuraos/common-core';
+import { getErrorMessage, CODE_TASK_WORKER_TYPES, isCodeTaskWorkerType } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import type { JwtValidator } from './codeRoutes.js';
 import type {
@@ -186,6 +186,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
                     type: 'array',
                     items: maskedWorkerConfigSchema,
                   },
+                  defaultReviewWorkerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
                 },
                 required: ['workers'],
               },
@@ -251,6 +252,9 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
 
       const response: UserWorkerSettingsResponse = {
         workers: settings?.workers.map(maskWorkerConfig) ?? [],
+        ...(settings?.defaultReviewWorkerType !== undefined && {
+          defaultReviewWorkerType: settings.defaultReviewWorkerType,
+        }),
       };
 
       return await reply.ok(response);
@@ -931,6 +935,127 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       request.log.info({ userId, workerNames }, 'Workers reordered successfully');
 
       return await reply.ok({ reordered: true });
+    }
+  );
+
+  // PATCH /code/worker-settings/default-review-worker-type - Update default review worker type
+  fastify.patch<{
+    Body: { workerType: string };
+  }>(
+    '/code/worker-settings/default-review-worker-type',
+    {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'updateDefaultReviewWorkerType',
+        summary: 'Update default review worker type',
+        description: 'Set the default worker type for automated PR reviews. Requires Auth0 JWT.',
+        tags: ['public', 'worker-settings'],
+        body: {
+          type: 'object',
+          properties: {
+            workerType: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
+          },
+          required: ['workerType'],
+        },
+        response: {
+          200: {
+            description: 'Default review worker type updated',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  updated: { type: 'boolean', enum: [true] },
+                },
+                required: ['updated'],
+              },
+            },
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { workerType: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /code/worker-settings/default-review-worker-type',
+      });
+
+      const { workerSettingsRepo } = getServices();
+      /* v8 ignore start -- auth-guard: FakeAuthPlugin always returns valid user, cannot simulate null userId @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
+      const { workerType } = request.body;
+
+      /* v8 ignore start -- schema: Fastify body schema enum validation rejects invalid values before handler runs @preserve */
+      if (!isCodeTaskWorkerType(workerType)) {
+        return await reply.fail('INVALID_REQUEST', `Invalid worker type: ${workerType}`);
+      }
+      /* v8 ignore stop @preserve */
+
+      request.log.info({ userId, workerType }, 'Updating default review worker type');
+
+      const result = await workerSettingsRepo.updateDefaultReviewWorkerType(userId, workerType);
+
+      /* v8 ignore start -- test-infra: FakeWorkerSettingsRepo.updateDefaultReviewWorkerType cannot simulate internal failure @preserve */
+      if (!result.ok) {
+        request.log.error({ error: result.error }, 'Failed to update default review worker type');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+      /* v8 ignore stop @preserve */
+
+      request.log.info({ userId, workerType }, 'Default review worker type updated');
+
+      return await reply.ok({ updated: true });
     }
   );
 

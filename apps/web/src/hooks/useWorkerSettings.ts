@@ -11,6 +11,7 @@ import {
   deleteWorker as deleteWorkerApi,
   testWorkerConnectivity,
   reorderWorkers as reorderWorkersApi,
+  updateDefaultReviewWorkerType as updateDefaultReviewWorkerTypeApi,
 } from '@/services/workerSettingsApi';
 import type {
   WorkerSettingsResponse,
@@ -29,6 +30,7 @@ interface UseWorkerSettingsResult {
   deleteWorker: (workerName: string) => Promise<void>;
   testConnectivity: (workerName: string) => Promise<TestWorkerConnectivityResponse>;
   reorderWorkers: (workerNames: string[]) => Promise<void>;
+  updateDefaultReviewWorkerType: (workerType: string) => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
 }
 
@@ -161,6 +163,23 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     [user?.sub, getAccessToken]
   );
 
+  const handleUpdateDefaultReviewWorkerType = useCallback(
+    async (workerType: string): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      try {
+        const token = await getAccessToken();
+        await updateDefaultReviewWorkerTypeApi(token, workerType);
+        await refresh(false);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to update default review worker type'));
+        throw err;
+      }
+    },
+    [user?.sub, getAccessToken, refresh]
+  );
+
   const handleReorderWorkers = useCallback(
     async (workerNames: string[]): Promise<void> => {
       const userId = user?.sub;
@@ -188,6 +207,7 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     deleteWorker: handleDeleteWorker,
     testConnectivity,
     reorderWorkers: handleReorderWorkers,
+    updateDefaultReviewWorkerType: handleUpdateDefaultReviewWorkerType,
     refresh,
   };
 }
