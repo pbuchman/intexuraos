@@ -1,21 +1,6 @@
 {
   "_comment": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
   "overrides": {
-    "PENDING-apps-actions-agent": {
-      "files": [
-        "apps/actions-agent/src/domain/models/approvalMessage.ts",
-        "apps/actions-agent/src/domain/usecases/executeCodeAction.ts",
-        "apps/actions-agent/src/domain/usecases/handleApprovalReply.ts",
-        "apps/actions-agent/src/infra/firestore/approvalMessageRepository.ts",
-        "apps/actions-agent/src/infra/http/calendarServiceHttpClient.ts",
-        "apps/actions-agent/src/infra/http/codeAgentHttpClient.ts",
-        "apps/actions-agent/src/infra/http/notesServiceHttpClient.ts",
-        "apps/actions-agent/src/infra/http/todosServiceHttpClient.ts",
-        "apps/actions-agent/src/routes/internalRoutes.ts",
-        "apps/actions-agent/src/routes/publicRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/actions-agent"
-    },
     "PENDING-apps-bookmarks-agent": {
       "files": ["apps/bookmarks-agent/src/infra/firestore/firestoreBookmarkRepository.ts"],
       "description": "Firestore findByUserIdAndUrl ts-type guard fails pattern validation despite valid undefined check"
