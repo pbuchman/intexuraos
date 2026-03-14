@@ -62,11 +62,9 @@ function validateCredentialsNotMasked(
  * Shows only last 3 characters, rest as dots.
  */
 function maskSecret(secret: string): string {
-  /* v8 ignore start -- test-infra: edge case for very short secrets rarely occurs @preserve */
   if (secret.length <= 3) {
     return MASK_CHAR.repeat(3);
   }
-  /* v8 ignore stop @preserve */
   return MASK_CHAR.repeat(Math.min(secret.length - 3, 20)) + secret.slice(-3);
 }
 
