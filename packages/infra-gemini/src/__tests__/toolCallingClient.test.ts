@@ -1037,9 +1037,7 @@ describe('createGeminiToolCallingClient', () => {
 
   describe('toolConfig mode enforcement', () => {
     it('sends mode ANY on first iteration when tools are provided', async () => {
-      mockGenerateContent.mockResolvedValueOnce(
-        textResponse('done')
-      );
+      mockGenerateContent.mockResolvedValueOnce(textResponse('done'));
 
       const client = createClient();
       await client.run({
@@ -1049,7 +1047,11 @@ describe('createGeminiToolCallingClient', () => {
           {
             name: 'skip',
             description: 'Skip this PR',
-            parameters: { type: 'object', properties: { reason: { type: 'string' } }, required: ['reason'] },
+            parameters: {
+              type: 'object',
+              properties: { reason: { type: 'string' } },
+              required: ['reason'],
+            },
             run: async (): Promise<string> => JSON.stringify({ success: true }),
           },
         ],
@@ -1065,17 +1067,17 @@ describe('createGeminiToolCallingClient', () => {
       const skipTool = {
         name: 'skip',
         description: 'Skip',
-        parameters: { type: 'object', properties: { reason: { type: 'string' } }, required: ['reason'] },
+        parameters: {
+          type: 'object',
+          properties: { reason: { type: 'string' } },
+          required: ['reason'],
+        },
         run: async (): Promise<string> => JSON.stringify({ success: true }),
       };
 
       mockGenerateContent
-        .mockResolvedValueOnce(
-          functionCallResponse('skip', { reason: 'trivial' })
-        )
-        .mockResolvedValueOnce(
-          textResponse('Skipped because trivial.')
-        );
+        .mockResolvedValueOnce(functionCallResponse('skip', { reason: 'trivial' }))
+        .mockResolvedValueOnce(textResponse('Skipped because trivial.'));
 
       const client = createClient();
       await client.run({
