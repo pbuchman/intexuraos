@@ -315,7 +315,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
     ]);
 
     const bodyArg = postedCommentBodies[0] ?? '';
-    expect(bodyArg).toContain('### Deep Validation Report');
+    expect(bodyArg).toContain('### Deep Validation Report — IntexuraOS Agent-Based Code Task Execution Flow');
     expect(bodyArg).toContain('**Cost:** $0.05');
     expect(bodyArg).toContain(markdownResponse);
 
@@ -401,7 +401,7 @@ describe('OrchestratorExecutionDeepValidator', () => {
     const result = await validator.validate(defaultInput);
 
     expect(result).toBe(true);
-    expect(postedCommentBodies[0]).toContain('### Deep Validation Report');
+    expect(postedCommentBodies[0]).toContain('### Deep Validation Report — IntexuraOS Agent-Based Code Task Execution Flow');
     expect(postedCommentBodies[0]).toContain(markdownResponse);
   });
 
