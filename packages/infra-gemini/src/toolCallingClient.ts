@@ -150,8 +150,8 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               contents,
               config: {
                 systemInstruction: systemPrompt,
-                tools: [{ functionDeclarations }],
                 ...(functionDeclarations.length > 0 && {
+                  tools: [{ functionDeclarations }],
                   toolConfig: {
                     functionCallingConfig: {
                       mode:
