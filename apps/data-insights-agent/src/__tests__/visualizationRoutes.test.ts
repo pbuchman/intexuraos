@@ -14,6 +14,7 @@ import {
   FakeVisualizationRepository,
 } from './fakes.js';
 import type { Visualization } from '../domain/visualization/index.js';
+import type { Result } from '@intexuraos/common-core';
 
 vi.mock('@intexuraos/common-http', async () => {
   const actual = await vi.importActual('@intexuraos/common-http');
@@ -690,6 +691,34 @@ describe('visualizationRoutes', () => {
     it('returns 500 when repository get fails', async () => {
       const app = await buildServer();
       fakeVizRepo.setFailNextGet(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/visualizations/viz-1/refresh',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when second getVisualization call fails during refresh', async () => {
+      const app = await buildServer();
+      fakeVizRepo.addVisualization(
+        makeVisualization({ id: 'viz-1', status: 'ready', chartData: [{ old: true }] })
+      );
+
+      let getCallCount = 0;
+      const originalGetById = fakeVizRepo.getById.bind(fakeVizRepo);
+      fakeVizRepo.getById = async (id: string, userId: string): Promise<Result<Visualization | null, string>> => {
+        getCallCount++;
+        if (getCallCount >= 2) {
+          return { ok: false as const, error: 'Simulated second get failure' };
+        }
+        return originalGetById(id, userId);
+      };
 
       const response = await app.inject({
         method: 'POST',
