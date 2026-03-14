@@ -154,9 +154,21 @@ describe('syncSingleIssue', () => {
   });
 
   describe('error handling', () => {
-    it('returns error when repository save fails', async () => {
+    it('returns error when repository save fails on create', async () => {
       issueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
       const event = createTestEvent({ action: 'create' });
+
+      const result = await syncSingleIssue(event, userId, deps);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when repository save fails on update', async () => {
+      issueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
+      const event = createTestEvent({ action: 'update' });
 
       const result = await syncSingleIssue(event, userId, deps);
 

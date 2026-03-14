@@ -7,7 +7,6 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import type { Logger } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import type { Result } from '@intexuraos/common-core';
 import type { LinearError } from '../domain/errors.js';
 
 // Request/response types
@@ -105,7 +104,6 @@ function buildIssueDisplayResponse(
   };
 }
 
-/* v8 ignore start -- test-infra: error paths require Linear API fault injection testing @preserve */
 async function handleLinearError(
   error: LinearError,
   reply: FastifyReply
@@ -117,25 +115,20 @@ async function handleLinearError(
   reply.status(500);
   return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }
-/* v8 ignore stop @preserve */
 
 /**
  * Find a workflow state ID by name from the team's states.
  * Returns null if no matching state is found.
  */
-/* v8 ignore start -- test-infra: requires Linear API with multiple workflow states @preserve */
 function findStateId(
-  statesResult: Result<{ id: string; name: string; type: string }[], LinearError>,
+  states: { id: string; name: string; type: string }[],
   stateName: string
 ): string | null {
-  if (!statesResult.ok) return null;
-
-  const state = statesResult.value.find(
+  const state = states.find(
     (s) => s.name.toLowerCase() === stateName.toLowerCase()
   );
   return state?.id ?? null;
 }
-/* v8 ignore stop @preserve */
 
 export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /internal/issues - Create a Linear issue
@@ -227,7 +220,6 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
 
       logger.info({ userId, title }, 'internal/createIssue: creating issue');
 
-      /* v8 ignore start -- test-infra: error paths require Linear API fault injection @preserve */
       const services = getServices();
 
       // Get user's API key and connection
@@ -250,16 +242,18 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
 
       const connection = connectionResult.value;
+      /* v8 ignore start -- upstream: FakeLinearConnectionRepository cannot return null after getApiKey succeeded; TOCTOU race untestable with synchronous fakes @preserve */
       if (!connection) {
         return await handleLinearError(
           { code: 'NOT_CONNECTED', message: 'User not connected to Linear' },
           reply
         );
       }
+      /* v8 ignore stop @preserve */
 
       // Create the issue
-      const createResult = await services.linearApiClient.createIssue(apiKey, {
-        teamId: connection.teamId,
+      const createResult = await services.linearApiClient.createIssue(apiKey, { // @allow-result-access -- apiKey guarded by if (!apiKeyResult.ok) above
+        teamId: connection.teamId, // @allow-result-access -- connection guarded by if (!connectionResult.ok) above
         title,
         description,
         priority: 0,
@@ -268,9 +262,8 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       if (!createResult.ok) {
         return await handleLinearError(createResult.error, reply);
       }
-      /* v8 ignore stop @preserve */
 
-      const issue = createResult.value;
+      const issue = createResult.value; // @allow-result-access -- guarded by if (!createResult.ok) above
 
       logger.info(
         { userId, issueId: issue.id, identifier: issue.identifier },
@@ -293,7 +286,6 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
   fastify.post<{ Params: IssueIdParams; Body: AddCommentBody }>(
     '/internal/linear/issues/:issueId/comments',
     async (request, reply) => {
-      /* v8 ignore start -- test-infra: internal auth/header/error branches require exhaustive route fixtures @preserve */
       logIncomingRequest(request);
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
@@ -316,13 +308,12 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
 
       const commentResult = await services.linearApiClient.createComment(
-        apiKeyResult.value,
+        apiKeyResult.value, // @allow-result-access -- guarded by if (!apiKeyResult.ok) above
         issueId,
         request.body.body
       );
       if (!commentResult.ok) return await handleLinearError(commentResult.error, reply);
-      return await reply.ok({ id: commentResult.value.id });
-      /* v8 ignore stop @preserve */
+      return await reply.ok({ id: commentResult.value.id }); // @allow-result-access -- guarded by if (!commentResult.ok) above
     }
   );
 
@@ -330,7 +321,6 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
   fastify.patch<{ Params: IssueIdParams; Body: UpdateIssueMetadataBody }>(
     '/internal/linear/issues/:issueId/metadata',
     async (request, reply) => {
-      /* v8 ignore start -- test-infra: internal auth/repository/error/label normalization branches require exhaustive route fixtures @preserve */
       logIncomingRequest(request);
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
@@ -351,7 +341,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         reply.status(404);
         return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
       }
-      const syncedIssue = issueResult.value;
+      const syncedIssue = issueResult.value; // @allow-result-access -- guarded by if (!issueResult.ok) and null check above
 
       // Ownership check: return 404 (not 403) to prevent information leakage
       if (syncedIssue.userId !== userId) {
@@ -365,29 +355,30 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await handleLinearError({ code: 'NOT_CONNECTED', message: 'User not connected to Linear' }, reply);
       }
 
-      const labelsResult = await services.linearApiClient.listIssueLabels(apiKeyResult.value, syncedIssue.teamId);
+      const labelsResult = await services.linearApiClient.listIssueLabels(apiKeyResult.value, syncedIssue.teamId); // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
       if (!labelsResult.ok) return await handleLinearError(labelsResult.error, reply);
 
       const currentLabelNames = new Set(syncedIssue.labels.map((l) => l.name));
+      /* v8 ignore start -- schema: Fastify schema validates addLabels/removeLabels as optional arrays; ?? [] fallback unreachable when schema-validated request provides them @preserve */
       for (const label of request.body.addLabels ?? []) currentLabelNames.add(label);
       for (const label of request.body.removeLabels ?? []) currentLabelNames.delete(label);
+      /* v8 ignore stop @preserve */
 
-      const desiredLabelIds = labelsResult.value
+      const desiredLabelIds = labelsResult.value // @allow-result-access -- guarded by if (!labelsResult.ok) above
         .filter((label) => currentLabelNames.has(label.name))
         .map((label) => label.id);
 
-      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, issueId, {
+      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, issueId, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
         ...(request.body.assigneeId !== undefined && { assigneeId: request.body.assigneeId }),
         labelIds: desiredLabelIds,
       });
       if (!updateResult.ok) return await handleLinearError(updateResult.error, reply);
 
       return await reply.ok({
-        id: updateResult.value.id,
+        id: updateResult.value.id, // @allow-result-access -- guarded by if (!updateResult.ok) above
         labels: updateResult.value.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
         assignee: updateResult.value.assignee ?? null,
       });
-      /* v8 ignore stop @preserve */
     }
   );
 
@@ -489,11 +480,8 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       const { state } = request.body;
       const logger = request.log as Logger;
 
-      /* v8 ignore start -- test-infra: logging branch detection artifact @preserve */
       logger.info({ userId, issueId, state }, 'internal/updateIssueState: updating state');
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: error paths require Linear API fault injection @preserve */
       const services = getServices();
 
       // Get user's API key and connection
@@ -516,43 +504,40 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
 
       const connection = connectionResult.value;
+      /* v8 ignore start -- upstream: FakeLinearConnectionRepository cannot return null after getApiKey succeeded; TOCTOU race untestable with synchronous fakes @preserve */
       if (!connection) {
         return await handleLinearError(
           { code: 'NOT_CONNECTED', message: 'User not connected to Linear' },
           reply
         );
       }
+      /* v8 ignore stop @preserve */
 
       // Get workflow states to find the state ID for the requested state name
       const statesResult = await services.linearApiClient.getWorkflowStates(apiKey, connection.teamId);
       if (!statesResult.ok) {
         return await handleLinearError(statesResult.error, reply);
       }
-      /* v8 ignore stop @preserve */
 
       // Map state name to Linear state ID
-      /* v8 ignore start -- test-infra: fallback state requires specific test setup @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces ?? on STATE_NAME_MAP lookup; statesResult.value safe after .ok check @preserve */
       const targetStateName = STATE_NAME_MAP[state] ?? state;
-      const stateId = findStateId(statesResult, targetStateName);
+      const stateId = findStateId(statesResult.value, targetStateName); // @allow-result-access -- statesResult.ok checked above
       /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: null state check requires specific test setup @preserve */
       if (stateId === null) {
         reply.status(400);
         return await reply.fail('INVALID_REQUEST', `Invalid state: ${state}`);
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: update failure requires Linear API fault injection @preserve */
       // Update the issue state
       const updateResult = await services.linearApiClient.updateIssueState(apiKey, issueId, stateId);
       if (!updateResult.ok) {
         return await handleLinearError(updateResult.error, reply);
       }
-      /* v8 ignore stop @preserve */
 
       logger.info(
-        { userId, issueId, newState: updateResult.value.state.name },
+        { userId, issueId, newState: updateResult.value.state.name }, // @allow-result-access -- guarded by if (!updateResult.ok) above
         'internal/updateIssueState: state updated'
       );
 
@@ -829,14 +814,12 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
 
       // Get comments (count and last comment timestamp from single query)
-      /* v8 ignore start -- test-infra: error paths require Linear API fault injection testing @preserve */
       const commentsResult = await services.commentRepository.listByIssueId(issue.id);
       if (!commentsResult.ok) {
         logger.error({ error: commentsResult.error, issueId: issue.id, identifier }, 'Failed to fetch comments');
         reply.status(500);
         return await handleLinearError(commentsResult.error, reply);
       }
-      /* v8 ignore stop @preserve */
 
       const displayIssue = buildIssueDisplayResponse(issue, commentsResult.value);
 
@@ -862,7 +845,6 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
   fastify.get<{ Params: IssueIdParams }>(
     '/internal/issues/:issueId/tree',
     async (request, reply) => {
-      /* v8 ignore start -- test-infra: auth/header/not-found/tree traversal branches require exhaustive route fixtures @preserve */
       logIncomingRequest(request);
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
@@ -880,7 +862,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       const allIssuesResult = await services.issueRepository.listByUserId(userId);
       if (!allIssuesResult.ok) return await handleLinearError(allIssuesResult.error, reply);
 
-      const allIssues = allIssuesResult.value;
+      const allIssues = allIssuesResult.value; // @allow-result-access -- guarded by if (!allIssuesResult.ok) above
       const root = allIssues.find((issue) => issue.id === issueId);
       if (root === undefined) {
         reply.status(404);
@@ -896,13 +878,15 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
 
       const descendants: typeof allIssues = [];
-      const queue = [...(byParent.get(root.id) ?? [])];
-      while (queue.length > 0) {
-        const next = queue.shift();
-        if (next === undefined) continue;
-        descendants.push(next);
-        const children = byParent.get(next.id);
-        if (children !== undefined) queue.push(...children);
+      let queueItem = byParent.get(root.id) ?? [];
+      while (queueItem.length > 0) {
+        const nextBatch = queueItem;
+        queueItem = [];
+        for (const node of nextBatch) {
+          descendants.push(node);
+          const children = byParent.get(node.id);
+          if (children !== undefined) queueItem.push(...children);
+        }
       }
 
       return await reply.ok({
@@ -925,7 +909,6 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
           state: issue.state,
         })),
       });
-      /* v8 ignore stop @preserve */
     }
   );
 

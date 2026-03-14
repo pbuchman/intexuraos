@@ -66,11 +66,9 @@ export async function fullSync(
 
   // Get existing local issues to track deletions
   const existingResult = await issueRepo.listByUserId(userId);
-  /* v8 ignore start -- test-infra: error return path tested @preserve */
   if (!existingResult.ok) {
     return existingResult;
   }
-  /* v8 ignore stop @preserve */
 
   const existingIssueIds = new Set(existingResult.value.map((i) => i.id));
   const linearIssueIds = new Set(linearIssues.map((i) => i.id));
@@ -80,7 +78,6 @@ export async function fullSync(
   let deleted = 0;
 
   // Upsert all issues from Linear
-  /* v8 ignore start -- test-infra: save error with continue path tested @preserve */
   for (const linearIssue of linearIssues) {
     const syncedIssue = mapApiIssueToSyncedIssue(linearIssue, userId, connection.teamId);
     const saveResult = await issueRepo.save(syncedIssue);
@@ -95,10 +92,8 @@ export async function fullSync(
       created++;
     }
   }
-  /* v8 ignore stop @preserve */
 
   // Delete issues that no longer exist in Linear (scoped to this user)
-  /* v8 ignore start -- test-infra: delete operation with error logging tested @preserve */
   for (const existingId of existingIssueIds) {
     if (!linearIssueIds.has(existingId)) {
       const deleteResult = await issueRepo.deleteById(existingId, userId);
@@ -109,7 +104,6 @@ export async function fullSync(
       }
     }
   }
-  /* v8 ignore stop @preserve */
 
   const durationMs = Date.now() - startTime;
   const stats: SyncStats = {
@@ -128,7 +122,6 @@ export async function fullSync(
 /**
  * Full sync for all connected users (used by Cloud Scheduler).
  */
-/* v8 ignore start -- test-infra: error return and error logging paths tested @preserve */
 export async function fullSyncAllUsers(deps: FullSyncDeps & {
   getAllConnectedUserIds: () => Promise<Result<string[], LinearError>>;
 }): Promise<Result<{ userCount: number; totalIssues: number }, LinearError>> {
@@ -155,4 +148,3 @@ export async function fullSyncAllUsers(deps: FullSyncDeps & {
 
   return ok({ userCount: userIds.length, totalIssues });
 }
-/* v8 ignore stop @preserve */

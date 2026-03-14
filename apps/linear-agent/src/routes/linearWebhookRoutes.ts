@@ -80,7 +80,6 @@ async function handleLinearWebhook(
 
   const services = getServices();
 
-  /* v8 ignore start -- test-infra: signature validation and user lookup covered by tests @preserve */
   // Extract data from webhook payload (untrusted at this point)
   const { data, action, type, webhookTimestamp, webhookId } = request.body;
 
@@ -218,7 +217,9 @@ async function handleLinearWebhook(
     for (let i = 0; i < syncResults.length; i++) {
       const result = syncResults[i];
       const uid = userIds[i];
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check on syncResults[i] and userIds[i] despite length-guarded loop @preserve */
       if (result === undefined || uid === undefined) continue;
+      /* v8 ignore stop @preserve */
 
       if (result.status === 'fulfilled' && result.value.ok) {
         request.log.info(
@@ -230,7 +231,9 @@ async function handleLinearWebhook(
           firstSuccessIssueId = result.value.value.issueId; // @allow-result-access -- guarded by result.value.ok
         }
       } else {
+        /* v8 ignore start -- upstream: FakeLinearIssueRepository's syncSingleIssue always returns a resolved Result, so Promise.allSettled never produces a 'rejected' entry; the inner ok===true ternary branch is also unreachable because the else branch only executes when result.value.ok is false @preserve */
         const error = result.status === 'rejected' ? String(result.reason) : (result.value.ok ? '' : result.value.error);
+        /* v8 ignore stop @preserve */
         request.log.error({ error, issueId: data.id, userId: uid }, 'Failed to sync issue from webhook for user');
       }
     }
@@ -243,7 +246,9 @@ async function handleLinearWebhook(
     // Trigger code task only for the first user (avoid duplicate tasks)
     if (shouldTriggerCodeTask(event)) {
       const firstUserId = userIds[0];
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check on userIds[0] despite length check above @preserve */
       if (firstUserId !== undefined) {
+      /* v8 ignore stop @preserve */
         void triggerCodeTaskFromAssignment(event, firstUserId, {
           codeAgentClient: services.codeAgentClient,
           logger: request.log as unknown as Logger,
@@ -304,7 +309,9 @@ async function handleLinearWebhook(
     const userIdsResult = await services.issueRepository.findUserIdsByIssueId(data.issueId);
     let commentUserId: string;
     if (userIdsResult.ok && userIdsResult.value.length > 0) {
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces ?? fallback on userIdsResult.value[0] despite length guard @preserve */
       commentUserId = userIdsResult.value[0] ?? issue.userId; // noUncheckedIndexedAccess
+      /* v8 ignore stop @preserve */
     } else {
       if (!userIdsResult.ok) {
         request.log.warn({ error: userIdsResult.error, issueId: data.issueId }, 'Failed to find users by issue ID, falling back to issue.userId');
@@ -352,7 +359,6 @@ async function handleLinearWebhook(
 
   request.log.warn({ type }, 'Unknown webhook data structure');
   return await reply.ok({ message: 'Unknown data structure' });
-  /* v8 ignore stop @preserve */
 }
 
 const webhookSchema: FastifySchema = {
