@@ -439,6 +439,7 @@ ${feedback.trim()}
 
   const updateResult = await codeTaskRepo.update(followUpTask.id, {
     status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,

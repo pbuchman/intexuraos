@@ -347,7 +347,7 @@ export async function createReviewTask(
     return err({ code: 'dispatch_failed', message: dispatchResult.error.message, taskId: task.id });
   }
 
-  await codeTaskRepo.update(task.id, { status: 'dispatched' });
+  await codeTaskRepo.update(task.id, { status: 'dispatched', dispatchedAt: new Date() });
 
   logger.info(
     { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner },

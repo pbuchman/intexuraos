@@ -642,6 +642,7 @@ async function createMergeConflictTask(
 
   await deps.codeTaskRepo.update(taskId, {
     status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchResult.value.workerLocation,
   });
 
