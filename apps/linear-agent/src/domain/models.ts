@@ -206,6 +206,13 @@ export interface SyncedLinearIssue {
   teamId: string; /* Linear team ID (for webhook secret lookup) */
 }
 
+/** Aggregated comment statistics for an issue (used by batch display) */
+export interface CommentSummary {
+  issueId: string;
+  commentCount: number;
+  lastCommentAt: string | null;
+}
+
 /** Locally synced Linear comment (stored in Firestore) */
 export interface LinearComment {
   id: string; /* Linear UUID (document ID) */

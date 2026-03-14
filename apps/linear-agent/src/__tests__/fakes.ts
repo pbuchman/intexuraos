@@ -24,6 +24,7 @@ import type {
   SyncedLinearIssue,
   LinearCommentRepository,
   LinearComment,
+  CommentSummary,
 } from '../domain/index.js';
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../domain/index.js';
@@ -656,6 +657,25 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(null);
   }
 
+  private shouldFailFindByIdentifiers = false;
+
+  async findByIdentifiers(identifiers: string[], userId: string): Promise<Result<SyncedLinearIssue[], LinearError>> {
+    if (this.shouldFail || this.shouldFailFindByIdentifiers) return err(this.failError);
+    const identifierSet = new Set(identifiers);
+    const matched: SyncedLinearIssue[] = [];
+    for (const issue of this.issues.values()) {
+      if (issue.userId === userId && identifierSet.has(issue.identifier)) {
+        matched.push(issue);
+      }
+    }
+    return ok(matched);
+  }
+
+  setFindByIdentifiersFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailFindByIdentifiers = fail;
+    if (error) this.failError = error;
+  }
+
   async listByUserId(userId: string): Promise<Result<SyncedLinearIssue[], LinearError>> {
     if (this.shouldFail || this.shouldFailListByUserId) return err(this.failError);
     const userIssues = Array.from(this.issues.values()).filter((i) => i.userId === userId);
@@ -719,6 +739,7 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     this.shouldFailSave = false;
     this.shouldFailListByUserId = false;
     this.shouldFailDeleteById = false;
+    this.shouldFailFindByIdentifiers = false;
     this.saveFailUserIds.clear();
     this.findUserIdsByIssueIdOverride = null;
   }
@@ -859,6 +880,40 @@ export class FakeLinearCommentRepository implements LinearCommentRepository {
     return ok(undefined);
   }
 
+  private shouldFailGetCommentSummaries = false;
+
+  async getCommentSummaries(issueIds: string[]): Promise<Result<CommentSummary[], LinearError>> {
+    if (this.shouldFail || this.shouldFailGetCommentSummaries) return err(this.failError);
+    const issueIdSet = new Set(issueIds);
+    const summaryMap = new Map<string, { count: number; lastCommentAt: string | null }>();
+    for (const comment of this.comments.values()) {
+      if (!issueIdSet.has(comment.issueId)) continue;
+      const existing = summaryMap.get(comment.issueId);
+      if (existing === undefined) {
+        summaryMap.set(comment.issueId, { count: 1, lastCommentAt: comment.createdAt });
+      } else {
+        existing.count++;
+        if (existing.lastCommentAt === null || comment.createdAt > existing.lastCommentAt) {
+          existing.lastCommentAt = comment.createdAt;
+        }
+      }
+    }
+    const summaries: CommentSummary[] = issueIds.map((issueId) => {
+      const entry = summaryMap.get(issueId);
+      return {
+        issueId,
+        commentCount: entry?.count ?? 0,
+        lastCommentAt: entry?.lastCommentAt ?? null,
+      };
+    });
+    return ok(summaries);
+  }
+
+  setGetCommentSummariesFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailGetCommentSummaries = fail;
+    if (error) this.failError = error;
+  }
+
   setFailure(fail: boolean, error?: LinearError): void {
     this.shouldFail = fail;
     if (error) this.failError = error;
@@ -891,6 +946,7 @@ export class FakeLinearCommentRepository implements LinearCommentRepository {
     this.shouldFailListByIssueId = false;
     this.shouldFailCountByIssueId = false;
     this.shouldFailDeleteById = false;
+    this.shouldFailGetCommentSummaries = false;
   }
 }
 

@@ -155,6 +155,46 @@ export async function findLinearIssueByIdentifier(
   }
 }
 
+const FIRESTORE_IN_LIMIT = 30;
+
+/**
+ * Find multiple issues by identifiers, scoped to a user.
+ * Chunks identifiers into groups of 30 (Firestore `in` operator limit).
+ */
+/* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+export async function findLinearIssuesByIdentifiers(
+  identifiers: string[],
+  userId: string
+): Promise<Result<SyncedLinearIssue[], LinearError>> {
+  if (identifiers.length === 0) return ok([]);
+
+  try {
+    const db = getFirestore();
+    const allIssues: SyncedLinearIssue[] = [];
+
+    for (let i = 0; i < identifiers.length; i += FIRESTORE_IN_LIMIT) {
+      const chunk = identifiers.slice(i, i + FIRESTORE_IN_LIMIT);
+      const snapshot = await db
+        .collection(COLLECTION_NAME)
+        .where('identifier', 'in', chunk)
+        .where('userId', '==', userId)
+        .get();
+
+      for (const doc of snapshot.docs) {
+        allIssues.push(docToIssue(doc.data() as SyncedLinearIssueDoc));
+      }
+    }
+
+    return ok(allIssues);
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to find issues by identifiers: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+/* v8 ignore stop @preserve */
+
 export async function listLinearIssuesByUserId(
   userId: string
 ): Promise<Result<SyncedLinearIssue[], LinearError>> {
@@ -245,6 +285,7 @@ export function createLinearIssueRepository(): LinearIssueRepository {
     save: saveLinearIssue,
     findById: findLinearIssueById,
     findByIdentifier: findLinearIssueByIdentifier,
+    findByIdentifiers: findLinearIssuesByIdentifiers,
     listByUserId: listLinearIssuesByUserId,
     deleteById: deleteLinearIssueById,
     findUserIdsByIssueId,

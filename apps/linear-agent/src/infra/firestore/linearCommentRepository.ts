@@ -5,7 +5,7 @@
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import type { LinearComment, LinearCommentRepository, LinearError } from '../../domain/index.js';
+import type { LinearComment, LinearCommentRepository, LinearError, CommentSummary } from '../../domain/index.js';
 
 interface LinearCommentDoc {
   id: string;
@@ -112,6 +112,63 @@ export async function countCommentsByIssueId(
   }
 }
 
+const FIRESTORE_IN_LIMIT = 30;
+
+/**
+ * Get comment count and last comment timestamp for multiple issues.
+ * Chunks issueIds into groups of 30 (Firestore `in` operator limit).
+ * Aggregates count and max createdAt per issueId in memory.
+ */
+/* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+export async function getCommentSummaries(
+  issueIds: string[]
+): Promise<Result<CommentSummary[], LinearError>> {
+  if (issueIds.length === 0) return ok([]);
+
+  try {
+    const db = getFirestore();
+    const summaryMap = new Map<string, { count: number; lastCommentAt: string | null }>();
+
+    for (let i = 0; i < issueIds.length; i += FIRESTORE_IN_LIMIT) {
+      const chunk = issueIds.slice(i, i + FIRESTORE_IN_LIMIT);
+      const snapshot = await db
+        .collection(COLLECTION_NAME)
+        .where('issueId', 'in', chunk)
+        .get();
+
+      for (const doc of snapshot.docs) {
+        const data = doc.data() as LinearCommentDoc;
+        const existing = summaryMap.get(data.issueId);
+        if (existing === undefined) {
+          summaryMap.set(data.issueId, { count: 1, lastCommentAt: data.createdAt });
+        } else {
+          existing.count++;
+          if (existing.lastCommentAt === null || data.createdAt > existing.lastCommentAt) {
+            existing.lastCommentAt = data.createdAt;
+          }
+        }
+      }
+    }
+
+    const summaries: CommentSummary[] = issueIds.map((issueId) => {
+      const entry = summaryMap.get(issueId);
+      return {
+        issueId,
+        commentCount: entry?.count ?? 0,
+        lastCommentAt: entry?.lastCommentAt ?? null,
+      };
+    });
+
+    return ok(summaries);
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to get comment summaries: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+/* v8 ignore stop @preserve */
+
 export async function deleteCommentById(id: string): Promise<Result<void, LinearError>> {
   try {
     const db = getFirestore();
@@ -146,6 +203,7 @@ export function createLinearCommentRepository(): LinearCommentRepository {
     findById: findCommentById,
     listByIssueId: listCommentsByIssueId,
     countByIssueId: countCommentsByIssueId,
+    getCommentSummaries,
     deleteById: deleteCommentById,
   };
 }
