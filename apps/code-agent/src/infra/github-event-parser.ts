@@ -125,6 +125,11 @@ export function parsePullRequestEvent(
 
   const baseBranch = extractBaseBranch(pr);
 
+  const prUser = pr['user'];
+  const rawPrAuthorLogin = prUser !== null && typeof prUser === 'object'
+    ? (prUser as Record<string, unknown>)['login']
+    : undefined;
+
   if (typeof prNumber !== 'number' || typeof prId !== 'number') {
     return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data' });
   }
@@ -147,6 +152,7 @@ export function parsePullRequestEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: typeof rawPrAuthorLogin === 'string' ? rawPrAuthorLogin : null,
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof prBody === 'string' ? prBody : null,
     state: typeof prState === 'string' ? prState : null,
@@ -257,6 +263,11 @@ export function parsePullRequestReviewEvent(
 
   const baseBranch = extractBaseBranch(pr);
 
+  const reviewPrUser = pr['user'];
+  const rawReviewPrAuthorLogin = reviewPrUser !== null && typeof reviewPrUser === 'object'
+    ? (reviewPrUser as Record<string, unknown>)['login']
+    : undefined;
+
   if (typeof prNumber !== 'number' || typeof prId !== 'number') {
     return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data' });
   }
@@ -279,6 +290,7 @@ export function parsePullRequestReviewEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: typeof rawReviewPrAuthorLogin === 'string' ? rawReviewPrAuthorLogin : null,
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof prBody === 'string' ? prBody : null,
     state: typeof prState === 'string' ? prState : null,
@@ -340,6 +352,11 @@ export function parsePullRequestReviewCommentEvent(
 
   const baseBranch = extractBaseBranch(pr);
 
+  const commentPrUser = pr['user'];
+  const rawCommentPrAuthorLogin = commentPrUser !== null && typeof commentPrUser === 'object'
+    ? (commentPrUser as Record<string, unknown>)['login']
+    : undefined;
+
   if (typeof prNumber !== 'number' || typeof prId !== 'number') {
     return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data' });
   }
@@ -369,6 +386,7 @@ export function parsePullRequestReviewCommentEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: typeof rawCommentPrAuthorLogin === 'string' ? rawCommentPrAuthorLogin : null,
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof commentBody === 'string' ? commentBody : null,
     state: typeof prState === 'string' ? prState : null,
@@ -466,6 +484,7 @@ export function parseIssueCommentEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: null,
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof commentBody === 'string' ? commentBody : null,
     state: typeof prState === 'string' ? prState : null,
@@ -525,6 +544,7 @@ export function parsePushEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: null,
     title: `Push to ${typeof ref === 'string' ? ref.replace('refs/heads/', '') : 'unknown'}`,
     body: null,
     state: null,

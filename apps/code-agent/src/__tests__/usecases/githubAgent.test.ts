@@ -34,6 +34,7 @@ function createFakePREvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREven
     senderLogin: 'dev-user',
     senderId: 1,
     senderType: 'User',
+    prAuthorLogin: null,
     title: 'feat: add new feature',
     body: 'This PR adds a new feature.',
     state: 'open',

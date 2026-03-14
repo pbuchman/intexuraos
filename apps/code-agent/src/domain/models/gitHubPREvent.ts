@@ -56,6 +56,7 @@ export interface GitHubPREvent {
   senderLogin: string;
   senderId: number;
   senderType: string;
+  prAuthorLogin: string | null;
   title: string | null;
   body: string | null;
   state: string | null;
@@ -82,6 +83,7 @@ export interface CreateGitHubPREventInput {
   senderLogin: string;
   senderId: number;
   senderType: string;
+  prAuthorLogin: string | null;
   title: string | null;
   body: string | null;
   state: string | null;
