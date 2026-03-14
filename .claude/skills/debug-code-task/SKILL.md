@@ -88,3 +88,4 @@ Only available while the container exists (running or exited but not yet removed
 2. **NEVER run node scripts from `/tmp`.** `firebase-admin` resolves from monorepo `node_modules`.
 3. **NEVER use `node -e` for scripts with `!`.** Shell escapes `!` — use the script file.
 4. **NEVER speculate about what went wrong.** Present facts from the task document and logs. Let the user drive analysis.
+5. **NEVER present partial investigation results.** No hedging ("maybe", "possibly", "there are multiple possible causes", "could be"). Fetch ALL evidence (task document, logs, orchestrator logs if needed) before presenting findings. Present a definitive root cause backed by concrete evidence. If evidence is genuinely insufficient, state exactly what is missing and go fetch it — do not guess. Non-negotiable.
