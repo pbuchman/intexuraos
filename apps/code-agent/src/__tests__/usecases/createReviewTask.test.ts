@@ -76,6 +76,7 @@ function createFakeWorkerSettingsRepo(): WorkerSettingsRepository {
       }],
     })),
     saveSettings: vi.fn().mockResolvedValue(ok(undefined)),
+    updateDefaultReviewWorkerType: vi.fn().mockResolvedValue(ok(undefined)),
   } as unknown as WorkerSettingsRepository;
 }
 
@@ -1171,6 +1172,129 @@ describe('createReviewTask', () => {
         const description = createIssueCall[0].description;
         expect(description).not.toContain(longBody);
         expect(description).toContain('...');
+      }
+    });
+  });
+
+  describe('default review worker type resolution', () => {
+    it('uses explicit workerType when provided, ignoring user default', async () => {
+      const deps = createFakeDeps({
+        workerSettingsRepo: {
+          ...createFakeWorkerSettingsRepo(),
+          getSettings: vi.fn().mockResolvedValue(ok({
+            workers: [{
+              name: 'worker-1',
+              url: 'https://worker.example.com',
+              cfAccessClientId: 'cf-id',
+              cfAccessClientSecret: 'cf-secret',
+              dispatchSigningSecret: 'dispatch-secret',
+              enabled: true,
+            }],
+            defaultReviewWorkerType: 'glm',
+          })),
+        } as unknown as WorkerSettingsRepository,
+      });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        workerType: 'opus',
+        eventId: 'evt-explicit-wt',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerType).toBe('opus');
+      }
+    });
+
+    it('uses user default when workerType is undefined', async () => {
+      const deps = createFakeDeps({
+        workerSettingsRepo: {
+          ...createFakeWorkerSettingsRepo(),
+          getSettings: vi.fn().mockResolvedValue(ok({
+            workers: [{
+              name: 'worker-1',
+              url: 'https://worker.example.com',
+              cfAccessClientId: 'cf-id',
+              cfAccessClientSecret: 'cf-secret',
+              dispatchSigningSecret: 'dispatch-secret',
+              enabled: true,
+            }],
+            defaultReviewWorkerType: 'glm',
+          })),
+        } as unknown as WorkerSettingsRepository,
+      });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-default-wt',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerType).toBe('glm');
+      }
+    });
+
+    it('falls back to auto when no user default is set', async () => {
+      const deps = createFakeDeps({
+        workerSettingsRepo: {
+          ...createFakeWorkerSettingsRepo(),
+          getSettings: vi.fn().mockResolvedValue(ok({
+            workers: [{
+              name: 'worker-1',
+              url: 'https://worker.example.com',
+              cfAccessClientId: 'cf-id',
+              cfAccessClientSecret: 'cf-secret',
+              dispatchSigningSecret: 'dispatch-secret',
+              enabled: true,
+            }],
+          })),
+        } as unknown as WorkerSettingsRepository,
+      });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-no-default',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerType).toBe('auto');
+      }
+    });
+
+    it('falls back to auto when getSettings fails', async () => {
+      const deps = createFakeDeps({
+        workerSettingsRepo: {
+          ...createFakeWorkerSettingsRepo(),
+          getSettings: vi.fn().mockResolvedValue(err({
+            code: 'internal_error',
+            message: 'Firestore error',
+          })),
+        } as unknown as WorkerSettingsRepository,
+      });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-settings-fail',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerType).toBe('auto');
       }
     });
   });

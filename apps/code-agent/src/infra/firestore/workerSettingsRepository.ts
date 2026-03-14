@@ -9,7 +9,7 @@
 
 import type { Firestore } from '@intexuraos/infra-firestore';
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
-import type { Logger } from '@intexuraos/common-core';
+import type { Logger, CodeTaskWorkerType } from '@intexuraos/common-core';
 import type {
   WorkerSettingsRepository,
   WorkerSettingsError,
@@ -43,6 +43,7 @@ interface WorkerSettingsDoc {
   workers: EncryptedWorkerConfig[];
   createdAt: string;
   updatedAt: string;
+  defaultReviewWorkerType?: string;
   workerHealthStatuses?: Record<string, {
     state: unknown;
     checkedAt: string;
@@ -129,6 +130,9 @@ export function createWorkerSettingsRepository(
           workers,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
+          ...(data.defaultReviewWorkerType !== undefined && {
+            defaultReviewWorkerType: data.defaultReviewWorkerType as CodeTaskWorkerType,
+          }),
         };
 
         return ok(settings);
@@ -505,6 +509,38 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, workerName }, 'Failed to update health status');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async updateDefaultReviewWorkerType(
+      userId: string,
+      workerType: CodeTaskWorkerType
+    ): Promise<Result<void, WorkerSettingsError>> {
+      try {
+        const docRef = collection.doc(userId);
+        const doc = await docRef.get();
+        const now = new Date().toISOString();
+
+        if (doc.exists) {
+          await docRef.update({ defaultReviewWorkerType: workerType, updatedAt: now });
+        } else {
+          await docRef.set({
+            userId,
+            workers: [],
+            defaultReviewWorkerType: workerType,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        return ok(undefined);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId }, 'Failed to update default review worker type');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
