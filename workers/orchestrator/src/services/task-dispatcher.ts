@@ -1561,6 +1561,9 @@ export class TaskDispatcher {
           taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
           linearIssueLabels: task.linearIssueLabels,
           workerType: task.workerType,
+          ...(WORKER_TYPES[task.workerType].model !== undefined && {
+            modelName: WORKER_TYPES[task.workerType].model,
+          }),
           ...(task.agentType !== undefined && { agentType: task.agentType }),
           ...(task.trackingCommentId !== undefined && {
             trackingCommentId: task.trackingCommentId,

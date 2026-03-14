@@ -9,6 +9,7 @@ export interface SystemPromptParams {
   taskUrl?: string;
   linearIssueLabels: string[];
   workerType?: WorkerType;
+  modelName?: string;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
   trackingCommentId?: string;
   continuationPrNumber?: number;
@@ -18,9 +19,9 @@ export interface SystemPromptParams {
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '1.0.1',
+  version: '2.0.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
@@ -125,10 +126,13 @@ Note: The volume of test code does NOT influence complexity. A task with 500 lin
 The PR title MUST follow this format: \`[INT-XXX] [plan] title\`
 Example: \`[INT-665] [plan] Update orchestrator PR title format\`
 
-### PR Description Format
+### PR Description Format (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
 - Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Model: \`${modelName ?? 'default'}\`
+
+⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
@@ -157,9 +161,9 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '2.0.0',
+  version: '3.0.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
       params.continuationPrNumber !== undefined && params.continuationPrBranch !== undefined;
     const continuationPrNumber: number = params.continuationPrNumber ?? 0;
@@ -249,10 +253,13 @@ BEFORE creating the PR:
 The PR title MUST follow this format: \`[INT-XXX] title\`
 Example: \`[INT-665] Update orchestrator PR title format\`
 
-### PR Description Format
+### PR Description Format (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
 - Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Model: \`${modelName ?? 'default'}\`
+
+⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
 
 ### Resource Limits
 NONE. Complete the task regardless of token usage and time. Time is unlimited.
@@ -285,10 +292,17 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '2.2.0',
+  version: '3.0.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, trackingCommentId } =
-      params;
+    const {
+      taskId,
+      linearIssueId,
+      linearIssueTitle,
+      taskUrl,
+      workerType,
+      modelName,
+      trackingCommentId,
+    } = params;
 
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
@@ -335,10 +349,13 @@ When the user mentions reviews, comments, suggestions, or feedback, you MUST sea
 
 All three are MANDATORY. PR reviews and PR comments alone are NOT sufficient — issue comments often contain critical feedback that does not appear in the review thread. Skipping any source means missing feedback.
 
-### PR Description Update
+### PR Description Update (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
 - Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Model: \`${modelName ?? 'default'}\`
+
+⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
 
 ### Tracking Comment (MANDATORY — single comment, work in-place)
 
@@ -503,9 +520,9 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '2.4.0',
+  version: '3.0.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
 
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
@@ -617,10 +634,13 @@ ${taskUrl !== undefined ? '- Include that line in the same `POST /reviews` body,
 - Group related findings. Don't post more than 10 comments per review.
 - If the PR is clean and well-written, say so. Don't invent issues.
 
-### PR Description Update
+### PR Description Update (MANDATORY — never skip, never restructure)
 ${linearIssueId !== undefined ? `- Linear: [${linearIssueId}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId})` : ''}
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
 - Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Model: \`${modelName ?? 'default'}\`
+
+⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
