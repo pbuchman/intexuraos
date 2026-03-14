@@ -1,7 +1,7 @@
 import { memo, useState } from 'react';
 import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, ScrollText, Trash2 } from 'lucide-react';
 import type { IssueGroup, StepState } from '@/utils/issueGroups';
-import { formatElapsedTime, formatRelative } from '@/utils/dateFormat';
+import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
 
 interface IssueGroupRowProps {
@@ -155,14 +155,6 @@ function summaryOrPrompt(task: { result?: { summary?: string }; sanitizedPrompt:
   return words.length > 100 ? words.slice(0, 100).join(' ') + '...' : task.sanitizedPrompt;
 }
 
-// --- Duration calculation ---
-
-function computeDurationSeconds(createdAt: string, updatedAt: string, isActive: boolean): number {
-  const start = new Date(createdAt).getTime();
-  const end = isActive ? Date.now() : new Date(updatedAt).getTime();
-  return Math.floor((end - start) / 1000);
-}
-
 // --- Main component ---
 
 const IssueGroupRow = memo(function IssueGroupRow({
@@ -174,8 +166,6 @@ const IssueGroupRow = memo(function IssueGroupRow({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { latestTask, pipeline, aggregateStatus } = group;
-  const isActive = aggregateStatus === 'active';
-  const durationSec = computeDurationSeconds(latestTask.createdAt, latestTask.updatedAt, isActive);
 
   const handleRowClick = (): void => {
     setExpanded((prev) => !prev);
@@ -232,10 +222,12 @@ const IssueGroupRow = memo(function IssueGroupRow({
           {/* Time column */}
           <div className="text-xs">
             <p className="text-slate-400 dark:text-slate-500">
-              {formatRelative(latestTask.updatedAt)}
+              <span className="text-slate-500 dark:text-slate-600">Created</span>{' '}
+              {formatRelative(latestTask.createdAt)}
             </p>
-            <p className="text-slate-500 dark:text-slate-600">
-              {formatElapsedTime(durationSec)}
+            <p className="text-slate-400 dark:text-slate-500">
+              <span className="text-slate-500 dark:text-slate-600">Started</span>{' '}
+              {latestTask.dispatchedAt !== undefined ? formatRelative(latestTask.dispatchedAt) : 'Pending'}
             </p>
           </div>
 
@@ -389,7 +381,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
           </div>
           <div className="flex items-center gap-3 pl-6 text-xs text-slate-500 dark:text-slate-400">
             <PipelineVisualization group={group} />
-            <span>{formatRelative(latestTask.updatedAt)}</span>
+            <span>{formatRelative(latestTask.createdAt)}</span>
           </div>
         </div>
 
