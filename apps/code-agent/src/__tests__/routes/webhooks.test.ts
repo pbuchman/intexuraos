@@ -3129,7 +3129,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         workerLocation: 'mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
-        traceId: 'trace_123_cancelled',
+        traceId: 'trace_cancelled_task_unique_775',
         webhookSecret: 'test-webhook-secret',
       });
 
