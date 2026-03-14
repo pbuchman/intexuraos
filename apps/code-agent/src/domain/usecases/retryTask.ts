@@ -554,6 +554,7 @@ ${additionalContext.trim()}
 
   const updateResult = await codeTaskRepo.update(retryTask.id, {
     status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchValue.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,

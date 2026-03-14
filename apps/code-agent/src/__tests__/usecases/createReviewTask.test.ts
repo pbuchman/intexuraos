@@ -150,7 +150,7 @@ describe('createReviewTask', () => {
     // Verify task status is updated to dispatched after successful dispatch
     expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
       'task-review-1',
-      { status: 'dispatched' }
+      { status: 'dispatched', dispatchedAt: expect.any(Date) }
     );
   });
 

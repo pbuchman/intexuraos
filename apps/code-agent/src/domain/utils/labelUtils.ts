@@ -4,7 +4,7 @@
  * Re-exports from @intexuraos/common-core.
  */
 
-import { normalizeLabel, hasCodeTaskLabel, hasPlanningTaskLabel } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES, normalizeLabel, hasCodeTaskLabel, hasPlanningTaskLabel } from '@intexuraos/common-core';
 import type { WorkerType } from '../models/codeTask.js';
 
 export { hasCodeTaskLabel, hasPlanningTaskLabel };
@@ -13,14 +13,14 @@ export function hasUnclearLabel(labels: string[]): boolean {
   return labels.some((label) => normalizeLabel(label) === 'unclear');
 }
 
-const WORKER_TYPE_LABELS = ['opus', 'sonnet', 'minimax', 'glm', 'kimi'] as const satisfies readonly WorkerType[];
-type WorkerTypeLabel = typeof WORKER_TYPE_LABELS[number];
-const WORKER_TYPE_LABEL_SET = new Set<WorkerTypeLabel>(WORKER_TYPE_LABELS);
+const WORKER_TYPE_LABEL_SET = new Set<string>(
+  CODE_TASK_WORKER_TYPES.filter((t) => t !== 'auto')
+);
 
 export function getWorkerTypeFromLabels(labels: string[]): WorkerType | undefined {
   const matches = labels
     .map((label) => normalizeLabel(label))
-    .filter((normalized): normalized is WorkerTypeLabel => WORKER_TYPE_LABEL_SET.has(normalized as WorkerTypeLabel));
+    .filter((normalized): normalized is WorkerType => WORKER_TYPE_LABEL_SET.has(normalized));
 
   // Filter to unique types
   const unique = [...new Set(matches)];

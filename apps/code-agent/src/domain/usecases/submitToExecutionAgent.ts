@@ -514,6 +514,7 @@ export async function submitToExecutionAgent(
 
   const updateResult = await codeTaskRepo.update(executionTaskId, {
     status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
