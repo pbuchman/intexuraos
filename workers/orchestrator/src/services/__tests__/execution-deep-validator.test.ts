@@ -61,54 +61,54 @@ const markdownResponse = [
   '#### Overall',
   '| Result | Evidence |',
   '| --- | --- |',
-  '| Passed | Validation completed against the transcript at MSG-001. |',
+  '| 🟢 Pass | Validation completed against the transcript at MSG-001. |',
   '',
   '#### Claim Verification',
   '| Claim | Result | Evidence |',
   '| --- | --- | --- |',
-  '| CI ran | Verified | MSG-001 shows pnpm run ci:tracked. |',
+  '| CI ran | 🟢 Pass | MSG-001 shows pnpm run ci:tracked. |',
   '',
   '#### Contract Verification',
   '| Obligation | Result | Evidence |',
   '| --- | --- | --- |',
-  '| Code review subagent | Verified | MSG-010 shows a code-reviewer subagent dispatch. |',
+  '| Code review subagent | 🟢 Pass | MSG-010 shows a code-reviewer subagent dispatch. |',
   '',
   '#### Plan vs Reality',
   '| Requirement | Result | Evidence |',
   '| --- | --- | --- |',
-  '| Header fix | Implemented | MSG-020 and MSG-021 show edits and tests. |',
+  '| Header fix | 🟢 Pass | MSG-020 and MSG-021 show edits and tests. |',
   '',
   '#### Anomalies',
   '| Type | Severity | Evidence | Detail |',
   '| --- | --- | --- | --- |',
-  '| None | None | None | None |',
+  '| None | 🟢 Pass | None | None |',
 ].join('\n');
 
 const verboseMarkdownResponse = [
   '#### Overall',
   '| Result | Evidence |',
   '| --- | --- |',
-  `| Passed | ${'overall '.repeat(6000)} |`,
+  `| 🟢 Pass | ${'overall '.repeat(6000)} |`,
   '',
   '#### Claim Verification',
   '| Claim | Result | Evidence |',
   '| --- | --- | --- |',
-  `| CI ran | Verified | ${'claim '.repeat(6000)} |`,
+  `| CI ran | 🟢 Pass | ${'claim '.repeat(6000)} |`,
   '',
   '#### Contract Verification',
   '| Obligation | Result | Evidence |',
   '| --- | --- | --- |',
-  `| Code review subagent | Verified | ${'contract '.repeat(6000)} |`,
+  `| Code review subagent | 🟢 Pass | ${'contract '.repeat(6000)} |`,
   '',
   '#### Plan vs Reality',
   '| Requirement | Result | Evidence |',
   '| --- | --- | --- |',
-  `| Header fix | Implemented | ${'plan '.repeat(6000)} |`,
+  `| Header fix | 🟢 Pass | ${'plan '.repeat(6000)} |`,
   '',
   '#### Anomalies',
   '| Type | Severity | Evidence | Detail |',
   '| --- | --- | --- | --- |',
-  `| Warning | Low | MSG-999 | ${'anomaly '.repeat(6000)} |`,
+  `| Retry loop | 🟠 Warning | MSG-999 | ${'anomaly '.repeat(6000)} |`,
 ].join('\n');
 
 function buildValidReport(overrides?: {
@@ -247,6 +247,27 @@ describe('buildDeepValidationPrompt', () => {
     });
 
     expect(prompt).toContain('No plan document referenced in Linear issue');
+  });
+
+  it('includes severity scale definitions in prompt', () => {
+    const prompt = buildDeepValidationPrompt({
+      formattedTranscript: 'test',
+      agentClaims: {
+        superpowers_executing_plans: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: '',
+        summary: 'Done.',
+      },
+      linearIssueBody: 'task',
+      planContent: undefined,
+    });
+
+    expect(prompt).toContain('=== Severity Scale ===');
+    expect(prompt).toContain('🔴 Critical');
+    expect(prompt).toContain('🟠 Warning');
+    expect(prompt).toContain('🟡 Minor');
+    expect(prompt).toContain('🟢 Pass');
+    expect(prompt).toContain('Use ONLY these severity levels');
   });
 
   it('truncates transcript exceeding MAX_TRANSCRIPT_CHARS', () => {
