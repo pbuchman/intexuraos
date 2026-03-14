@@ -406,7 +406,6 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
       // Parse the event
       const parseResult = parseGitHubWebhookEvent(eventType, request.body);
 
-      /* v8 ignore start -- upstream: error handling for malformed GitHub webhook payloads @preserve */
       if (!parseResult.ok) {
         logger.warn({ error: parseResult.error }, 'Failed to parse GitHub webhook event'); // @allow-result-access -- narrowed by !parseResult.ok
         const saved = await persistRouteDecision({
@@ -422,11 +421,9 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         }
         return await reply.ok({ message: 'acknowledged' });
       }
-      /* v8 ignore stop @preserve */
 
       const parsedEvent = parseResult.value; // @allow-result-access -- narrowed by !parseResult.ok
 
-      /* v8 ignore start -- upstream: null check for unhandled GitHub event types @preserve */
       // Null means event type is not stored (e.g., unknown events)
       if (parsedEvent === null) {
         logger.info({ eventType }, 'Unhandled GitHub event type, acknowledging');
@@ -443,7 +440,6 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         }
         return await reply.ok({ message: 'acknowledged' });
       }
-      /* v8 ignore stop @preserve */
 
       if (!shouldProcessNormalizedRepository(parsedEvent.repository)) {
         logger.info(
@@ -527,12 +523,10 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
             authorLogin: parsedEvent.prAuthorLogin,
           }),
         };
-        /* v8 ignore start -- upstream: non-critical summary upsert, does not affect webhook response @preserve */
         const summaryResult = await gitHubPRSummaryRepo.upsert(summaryInput);
         if (!summaryResult.ok) {
           logger.warn({ error: summaryResult.error.message }, 'Failed to upsert PR summary'); // @allow-result-access -- narrowed by !summaryResult.ok
         }
-        /* v8 ignore stop @preserve */
       }
 
       logger.info(
