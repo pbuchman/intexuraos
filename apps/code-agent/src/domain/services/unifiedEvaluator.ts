@@ -165,7 +165,18 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         return;
       }
 
-      const llmResult = await deps.evaluateEvent(event);
+      let llmResult = await deps.evaluateEvent(event);
+
+      // Retry once on any LLM failure for pull_request events.
+      // PRs are high-value: a transient API error (e.g. empty response) should not silently skip a review.
+      // Cost of an extra call (~$0.001) is negligible compared to a missed review.
+      if (!llmResult.ok && event.eventType === 'pull_request') {
+        logger.warn(
+          { eventId: event.id, error: llmResult.error },
+          'LLM triage failed — retrying for pull_request event'
+        );
+        llmResult = await deps.evaluateEvent(event);
+      }
 
       if (!llmResult.ok) {
         logger.warn(
