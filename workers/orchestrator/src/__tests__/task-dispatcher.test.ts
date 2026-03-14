@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { exec, type ChildProcess } from 'node:child_process';
-import { TaskDispatcher, type IsolationConfig, parsePrUrl } from '../services/task-dispatcher.js';
+import {
+  TaskDispatcher,
+  type IsolationConfig,
+  parsePrUrl,
+  getTaskEventUrl,
+} from '../services/task-dispatcher.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { StatePersistence } from '../services/state-persistence.js';
 import type { WorktreeManager } from '../services/worktree-manager.js';
@@ -1236,9 +1241,12 @@ describe('TaskDispatcher', () => {
 
       // Webhook should be sent with completed/failed status
       expect(mockWebhookClient.send).toHaveBeenCalled();
-      const call = vi.mocked(mockWebhookClient.send).mock.calls[0];
-      if (!call) throw new Error('No webhook call');
-      const payload = call[0]?.payload as { status?: string } | undefined;
+      const terminalCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status !== undefined;
+      });
+      if (!terminalCall) throw new Error('No terminal webhook call');
+      const payload = terminalCall[0]?.payload as { status?: string } | undefined;
       expect(['completed', 'failed']).toContain(payload?.status);
     });
   });
@@ -3112,7 +3120,12 @@ describe('TaskDispatcher', () => {
 
       const task = await duplicateDispatcher.getTask('duplicate-guard-task');
       expect(task?.status).toBe('running');
-      expect(mockWebhookClient.send).not.toHaveBeenCalled();
+      // Only a fire-and-forget task_started event may have been sent — no completion/failure webhook
+      const completionCalls = vi.mocked(mockWebhookClient.send).mock.calls.filter((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'completed' || p?.status === 'failed';
+      });
+      expect(completionCalls).toHaveLength(0);
       vi.useRealTimers();
     });
   });
@@ -4148,6 +4161,9 @@ describe('TaskDispatcher', () => {
       repository: 'pbuchman/intexuraos',
       worktreePath: '/tmp/worktrees/finalize-test',
       linearIssueLabels: [],
+      webhookUrl: 'https://example.com/internal/webhooks/task-complete',
+      webhookSecret: 'secret',
+      startedAt: new Date().toISOString(),
     } as unknown as Task;
 
     it('skips logForwarder.close when keepLogForwarderOpen is true', async () => {
@@ -5994,6 +6010,209 @@ describe('TaskDispatcher', () => {
       }).not.toThrow();
     });
   });
+
+  describe('task_started event', () => {
+    it('should send task_started event after successful worker start', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'task-started-event-test',
+        workerType: 'auto',
+        prompt: 'Test task_started event',
+        webhookUrl: 'https://example.com/internal/webhooks/task-complete',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      // The task_started event should be sent to the task-event URL
+      const calls = vi.mocked(mockWebhookClient.send).mock.calls;
+      const taskEventCall = calls.find((c) => {
+        const url = c[0]?.url;
+        return typeof url === 'string' && url.includes('task-event');
+      });
+
+      expect(taskEventCall).toBeDefined();
+      if (taskEventCall === undefined) return;
+
+      const payload = taskEventCall[0]?.payload as Record<string, unknown>;
+      expect(payload['taskId']).toBe('task-started-event-test');
+      expect(payload['event']).toBe('task_started');
+      expect(payload['attempt']).toBe(1);
+      expect(payload['workerType']).toBe('auto');
+      expect(taskEventCall[0]?.url).toBe('https://example.com/internal/webhooks/task-event');
+    });
+
+    it('should not block task on task_started event failure', async () => {
+      // Make webhook.send reject for the task-event URL but resolve for others
+      vi.mocked(mockWebhookClient.send).mockImplementation(async (params) => {
+        if (typeof params.url === 'string' && params.url.includes('task-event')) {
+          return Promise.reject(new Error('Network error'));
+        }
+        return { ok: true, value: undefined };
+      });
+
+      const request: CreateTaskRequest = {
+        taskId: 'task-started-fail-test',
+        workerType: 'auto',
+        prompt: 'Test task_started failure',
+        webhookUrl: 'https://example.com/internal/webhooks/task-complete',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      // Task should still start successfully
+      expect(result.ok).toBe(true);
+      expect(dispatcher.getRunningCount()).toBe(1);
+
+      // Warning should have been logged
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-started-fail-test' }),
+        'Failed to send task_started event (best-effort)'
+      );
+    });
+  });
+
+  describe('task lifecycle events in finalizeTask', () => {
+    it('should send task_completed lifecycle event before task-complete webhook', async () => {
+      vi.useFakeTimers();
+
+      const lifecycleState = createStatePersistence();
+      const lifecycleDispatcher = new TaskDispatcher(
+        mockConfig,
+        lifecycleState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'lifecycle-completed-test',
+        workerType: 'auto',
+        prompt: 'Test lifecycle event',
+        webhookUrl: 'https://example.com/internal/webhooks/task-complete',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await lifecycleDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = lifecycleDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue({
+        branch: 'feat/lifecycle',
+        commits: 2,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/800',
+        commitDetails: [
+          { sha: 'abc123', message: 'First commit' },
+          { sha: 'def456', message: 'Second commit' },
+        ],
+      });
+
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        executionFinalAssistantLog()
+      );
+
+      // Clear previous send calls to isolate lifecycle event calls
+      vi.mocked(mockWebhookClient.send).mockClear();
+
+      // Trigger completion
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      if (typeof onComplete === 'function') {
+        onComplete(0);
+      }
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const calls = vi.mocked(mockWebhookClient.send).mock.calls;
+      const lifecycleCall = calls.find((c) => {
+        const url = c[0]?.url;
+        return typeof url === 'string' && url.includes('task-event');
+      });
+
+      expect(lifecycleCall).toBeDefined();
+      if (lifecycleCall === undefined) {
+        vi.useRealTimers();
+        return;
+      }
+
+      const payload = lifecycleCall[0]?.payload as Record<string, unknown>;
+      expect(payload['event']).toBe('task_completed');
+      expect(payload['taskId']).toBe('lifecycle-completed-test');
+      expect(payload['prUrl']).toBe('https://github.com/pbuchman/intexuraos/pull/800');
+      expect(payload['status']).toBe('implemented');
+      expect(payload['commits']).toEqual([
+        { sha: 'abc123', message: 'First commit' },
+        { sha: 'def456', message: 'Second commit' },
+      ]);
+      expect(typeof payload['duration']).toBe('number');
+
+      vi.useRealTimers();
+    });
+
+    it('should not send lifecycle event for cancelled status', async () => {
+      vi.useFakeTimers();
+
+      const cancelState = createStatePersistence();
+      const cancelDispatcher = new TaskDispatcher(
+        mockConfig,
+        cancelState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'lifecycle-cancel-test',
+        workerType: 'auto',
+        prompt: 'Test cancel lifecycle',
+        webhookUrl: 'https://example.com/internal/webhooks/task-complete',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await cancelDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Clear send calls before cancellation
+      vi.mocked(mockWebhookClient.send).mockClear();
+
+      const cancelResult = await cancelDispatcher.cancelTask('lifecycle-cancel-test');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(cancelResult.ok).toBe(true);
+
+      const calls = vi.mocked(mockWebhookClient.send).mock.calls;
+      const lifecycleCall = calls.find((c) => {
+        const url = c[0]?.url;
+        return typeof url === 'string' && url.includes('task-event');
+      });
+
+      // cancelled status should NOT produce a lifecycle event
+      expect(lifecycleCall).toBeUndefined();
+
+      vi.useRealTimers();
+    });
+  });
 });
 
 describe('parsePrUrl', () => {
@@ -6011,5 +6230,27 @@ describe('parsePrUrl', () => {
     expect(parsePrUrl('https://example.com/not-a-pr')).toBeUndefined();
     expect(parsePrUrl('')).toBeUndefined();
     expect(parsePrUrl('random string')).toBeUndefined();
+  });
+});
+
+describe('getTaskEventUrl', () => {
+  it('should replace task-complete with task-event in webhook URL', () => {
+    const url = 'https://code-agent.example.com/internal/webhooks/task-complete';
+    expect(getTaskEventUrl(url)).toBe(
+      'https://code-agent.example.com/internal/webhooks/task-event'
+    );
+  });
+
+  it('should return the original URL if task-complete is not present', () => {
+    const url = 'https://code-agent.example.com/internal/webhooks/other';
+    expect(getTaskEventUrl(url)).toBe(url);
+  });
+
+  it('should only replace the first occurrence', () => {
+    const url =
+      'https://example.com/internal/webhooks/task-complete?fallback=/internal/webhooks/task-complete';
+    expect(getTaskEventUrl(url)).toBe(
+      'https://example.com/internal/webhooks/task-event?fallback=/internal/webhooks/task-complete'
+    );
   });
 });

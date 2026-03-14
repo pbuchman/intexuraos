@@ -195,6 +195,7 @@ describe('retryTask use case', () => {
       userServiceClient: mockUserServiceClient as unknown as RetryTaskDeps['userServiceClient'],
       orchestratorSecret: 'test-orchestrator-secret',
       serviceUrl: 'https://test.example.com',
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     };
   }
 
