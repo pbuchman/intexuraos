@@ -21,10 +21,7 @@
       "description": "Firestore findByUserIdAndUrl ts-type guard fails pattern validation despite valid undefined check"
     },
     "PENDING-apps-chat-agent": {
-      "files": [
-        "apps/chat-agent/src/domain/usecases/generateResponse.ts",
-        "apps/chat-agent/src/infra/llm/chatClient.ts"
-      ],
+      "files": [],
       "description": "Write tests for tightened v8 ignore blocks in apps/chat-agent"
     },
     "PENDING-apps-code-agent": {
