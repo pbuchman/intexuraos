@@ -64,6 +64,7 @@ const mockEvent: GitHubPREvent = {
   senderLogin: 'test-sender',
   senderId: 999,
   senderType: 'User',
+  prAuthorLogin: null,
   title: 'Test PR',
   body: 'Test description',
   state: 'open',

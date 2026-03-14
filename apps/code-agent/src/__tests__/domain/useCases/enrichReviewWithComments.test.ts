@@ -36,6 +36,7 @@ function createCommentEvent(overrides: {
     senderLogin: overrides.author,
     senderId: 999,
     senderType: 'User',
+    prAuthorLogin: null,
     title: null,
     body: overrides.body,
     state: 'open',
