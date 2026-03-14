@@ -17,6 +17,7 @@ import type {
   WorkflowState,
   SyncedLinearIssue,
   LinearComment,
+  CommentSummary,
 } from './models.js';
 import type { LinearError } from './errors.js';
 
@@ -184,6 +185,9 @@ export interface LinearIssueRepository {
   /** Find issue by identifier (e.g., INT-444), optionally scoped to a user */
   findByIdentifier(identifier: string, userId?: string): Promise<Result<SyncedLinearIssue | null, LinearError>>;
 
+  /** Find multiple issues by identifiers, scoped to a user (batch operation) */
+  findByIdentifiers(identifiers: string[], userId: string): Promise<Result<SyncedLinearIssue[], LinearError>>;
+
   /** List all issues for a user */
   listByUserId(userId: string): Promise<Result<SyncedLinearIssue[], LinearError>>;
 
@@ -230,6 +234,9 @@ export interface LinearCommentRepository {
 
   /** Count comments for an issue */
   countByIssueId(issueId: string): Promise<Result<number, LinearError>>;
+
+  /** Get comment count and last comment timestamp for multiple issues (batch operation) */
+  getCommentSummaries(issueIds: string[]): Promise<Result<CommentSummary[], LinearError>>;
 
   /** Delete comment by ID */
   deleteById(id: string): Promise<Result<void, LinearError>>;
