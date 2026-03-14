@@ -248,6 +248,38 @@ describe('Worker Settings Routes', () => {
       expect(body.data.workers[0]?.cfAccessClientSecret.endsWith('def')).toBe(true);
       expect(body.data.workers[0]?.enabled).toBe(true);
     });
+
+    it('should mask short secrets (≤3 chars) as three bullets', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+
+      // Add worker with very short secrets (2 chars) to test edge case masking
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'short-secret-worker',
+        url: 'https://worker.example.com',
+        cfAccessClientId: 'ab',
+        cfAccessClientSecret: 'xy',
+        dispatchSigningSecret: '12',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { workers: { name: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toHaveLength(1);
+      expect(body.data.workers[0]?.name).toBe('short-secret-worker');
+      // Short secrets (≤3 chars) should be masked as exactly three bullets
+      expect(body.data.workers[0]?.cfAccessClientId).toBe('•••');
+      expect(body.data.workers[0]?.cfAccessClientSecret).toBe('•••');
+      expect(body.data.workers[0]?.dispatchSigningSecret).toBe('•••');
+    });
   });
 
   describe('POST /code/worker-settings/workers', () => {
