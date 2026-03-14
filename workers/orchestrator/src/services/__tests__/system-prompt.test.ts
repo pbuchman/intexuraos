@@ -116,12 +116,13 @@ describe('system-prompt', () => {
     expect(judgmentIdx).toBeLessThan(simpleComplexIdx);
   });
 
-  it('includes PR Description Format in planning prompt with Linear link, task URL, and worker type', () => {
+  it('includes PR Description Format in planning prompt with Linear link, task URL, worker type, and model', () => {
     const result = buildSystemPrompt({
       ...baseParams,
       linearIssueLabels: ['bug'],
       linearIssueTitle: 'Fix login bug',
       taskUrl: 'https://intexuraos.cloud/tasks/task-123',
+      modelName: 'glm-5',
     });
 
     expect(result).toContain('### PR Description Format');
@@ -132,6 +133,7 @@ describe('system-prompt', () => {
       '- IntexuraOS Code Task: [View task](https://intexuraos.cloud/tasks/task-123)'
     );
     expect(result).toContain('- Worker Type: `auto`');
+    expect(result).toContain('- Model: `glm-5`');
   });
 
   it('renders PR Description Format with fallback values when optional fields are missing', () => {
@@ -140,6 +142,31 @@ describe('system-prompt', () => {
     expect(result).toContain('- Linear: [INT-123](https://linear.app/pbuchman/issue/INT-123)');
     expect(result).not.toContain('IntexuraOS Code Task');
     expect(result).toContain('- Worker Type: `auto`');
+    expect(result).toContain('- Model: `default`');
+  });
+
+  it('includes mandatory Worker Type and Model emphasis in all prompt types', () => {
+    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+    });
+    const prResult = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+    const reviewResult = buildSystemPrompt({
+      ...baseParams,
+      agentType: 'review',
+    });
+
+    for (const result of [planningResult, executionResult, prResult, reviewResult]) {
+      expect(result).toContain(
+        'Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE'
+      );
+      expect(result).toContain('- Worker Type:');
+      expect(result).toContain('- Model:');
+    }
   });
 
   it('includes PR Title Format section in planning prompt with [plan] tag', () => {
