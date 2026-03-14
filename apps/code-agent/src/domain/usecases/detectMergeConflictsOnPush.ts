@@ -15,6 +15,7 @@ import type { MergeConflictDetector } from '../services/mergeConflictDetector.js
 import type { StatusMirrorService } from '../services/statusMirrorService.js';
 import type { DispatchWorkerCredentials, TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
+import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.js';
 import { fetchGitHubToken } from '../utils/prTaskNotification.js';
 import { parseOwnerRepo } from '../utils/parseOwnerRepo.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
@@ -114,6 +115,7 @@ export interface DetectMergeConflictsOnPushDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   statusMirrorService: StatusMirrorService;
   whatsappNotifier: WhatsAppNotifier;
+  allowedBots: Set<string>;
   serviceUrl: string;
   orchestratorSecret: string;
   sleep?: (ms: number) => Promise<void>;
@@ -459,7 +461,7 @@ function findOpenedPRAuthorLogin(events: GitHubPREvent[]): string | null {
 }
 
 async function resolveGitHubAccessContext(
-  deps: Pick<DetectMergeConflictsOnPushDeps, 'userServiceClient' | 'gitHubPREventRepo'>,
+  deps: Pick<DetectMergeConflictsOnPushDeps, 'userServiceClient' | 'gitHubPREventRepo' | 'allowedBots'>,
   summary: GitHubPRSummary,
   logger: Logger
 ): Promise<GitHubAccessContext | null> {
@@ -472,7 +474,10 @@ async function resolveGitHubAccessContext(
   }
 
   if (summary.authorLogin !== null) {
-    const authorUserId = await resolveUserIdFromGitHubLogin(deps.userServiceClient, summary.authorLogin, logger);
+    const resolvedAuthorLogin = resolveLoginForTaskCreation(
+      summary.authorLogin, summary.repository, deps.allowedBots
+    );
+    const authorUserId = await resolveUserIdFromGitHubLogin(deps.userServiceClient, resolvedAuthorLogin, logger);
     if (authorUserId !== null) {
       const authorToken = await fetchGitHubToken(deps.userServiceClient, authorUserId, logger);
       if (authorToken !== null) {
@@ -495,7 +500,10 @@ async function resolveGitHubAccessContext(
     return null;
   }
 
-  const fallbackUserId = await resolveUserIdFromGitHubLogin(deps.userServiceClient, fallbackLogin, logger);
+  const resolvedFallbackLogin = resolveLoginForTaskCreation(
+    fallbackLogin, summary.repository, deps.allowedBots
+  );
+  const fallbackUserId = await resolveUserIdFromGitHubLogin(deps.userServiceClient, resolvedFallbackLogin, logger);
   if (fallbackUserId === null) {
     return null;
   }
@@ -959,6 +967,7 @@ async function processOpenSummaryOnPush(
     {
       userServiceClient: deps.userServiceClient,
       gitHubPREventRepo: deps.gitHubPREventRepo,
+      allowedBots: deps.allowedBots,
     },
     existingSummary,
     logger
