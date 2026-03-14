@@ -1002,20 +1002,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             return await reply.send({ received: true });
           }
 
-          if (task.prNumber !== undefined) {
-            const reviewTypes = result.review_types
-              ? result.review_types.split(',').map((t) => t.trim()).filter((t) => t !== '')
-              : undefined;
-            successTaskOutcome = {
-              taskId,
-              repository: task.repository,
-              prNumber: task.prNumber,
-              userId: task.userId,
-              outcome: 'review_completed',
-              ...(reviewTypes !== undefined && { reviewTypes }),
-              ...(task.workerType != null && { workerType: task.workerType }),
-            };
-          }
         }
 
         // Extract PR number from prUrl for findByPR correlation (INT-465)

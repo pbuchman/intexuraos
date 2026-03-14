@@ -43,7 +43,6 @@ export type PRTaskDispatchOutcome =
 export type PRCommentOutcome =
   | 'review_dispatch_failed'
   | 'pr_task_dispatch_failed'
-  | 'review_completed'
   | 'review_failed'
   | 'implementation_completed'
   | 'implementation_failed'
@@ -124,7 +123,7 @@ export interface TaskOutcomeCommentRequest {
   repository: string;
   prNumber: number;
   userId: string;
-  outcome: 'review_completed' | 'review_failed' | 'implementation_completed' | 'implementation_failed' | 'reply_completed' | 'reply_failed';
+  outcome: 'review_failed' | 'implementation_completed' | 'implementation_failed' | 'reply_completed' | 'reply_failed';
   reviewTypes?: string[];
   errorCode?: string;
   workerType?: string;
@@ -162,7 +161,6 @@ export function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): str
   const isFailure = request.outcome.endsWith('_failed');
 
   const outcomeLabels: Record<typeof request.outcome, string> = {
-    review_completed: 'Automated Review Completed',
     review_failed: 'Automated Review Failed',
     implementation_completed: 'Implementation Completed',
     implementation_failed: 'Implementation Failed',
@@ -197,9 +195,7 @@ export function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): str
     }
   } else {
     // Success case - all non-failure outcomes
-    if (isReview) {
-      lines.push('', '**Review finished.** Check the PR files tab for review comments.');
-    } else if (request.outcome === 'implementation_completed') {
+    if (request.outcome === 'implementation_completed') {
       lines.push('', '**Implementation finished.** Changes have been pushed to the PR.');
     } else {
       // reply_completed is the only remaining success outcome
