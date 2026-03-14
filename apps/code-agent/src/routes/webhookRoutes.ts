@@ -57,7 +57,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       planning_subtask_urls?: string;
       planning_pr_url?: string;
       planning_unclear_clarification?: string;
-      execution_outcome_label?: 'implemented';
+      execution_outcome_label?: 'implemented' | 'already_completed';
       execution_superpowers_executing_plans_used?: '0' | '1';
       execution_superpowers_requesting_code_review_used?: '0' | '1';
       execution_linear_issue_url?: string;
@@ -449,6 +449,65 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             message: 'Execution enforcement requires routed linearIssueId',
           };
         }
+
+        if (executionResult.execution_outcome_label === 'already_completed') {
+          const routedIssueValidation = await linearAgentClient.validateIssue({
+            userId: task.userId,
+            identifier: task.linearIssueId,
+          });
+          if (!routedIssueValidation.ok) {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: `Failed to validate routed issue: ${routedIssueValidation.error.message}`,
+            };
+          }
+
+          const summaryText = executionResult.summary ?? 'No details provided';
+          const commentResult = await linearAgentClient.addComment({
+            userId: task.userId,
+            issueId: routedIssueValidation.value.id,
+            body: `Work already completed: ${summaryText}`,
+          });
+          if (!commentResult.ok) {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: `Failed to comment already-completed issue: ${commentResult.error.message}`,
+            };
+          }
+
+          const markDone = await linearAgentClient.updateIssueState({
+            userId: task.userId,
+            issueId: routedIssueValidation.value.id,
+            state: 'done',
+          });
+          if (!markDone.ok) {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: `Failed to move already-completed issue to Done: ${markDone.error.message}`,
+            };
+          }
+
+          const keepCodeTaskLabel = await linearAgentClient.updateIssueMetadata({
+            userId: task.userId,
+            issueId: routedIssueValidation.value.id,
+            assigneeId: null,
+            addLabels: ['code-task'],
+            removeLabels: ['unclear', 'planning-task'],
+          });
+          if (!keepCodeTaskLabel.ok) {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: `Failed to preserve code-task label on already-completed issue: ${keepCodeTaskLabel.error.message}`,
+            };
+          }
+
+          return { ok: true };
+        }
+
         if (!executionResult.prUrl) {
           return {
             ok: false,

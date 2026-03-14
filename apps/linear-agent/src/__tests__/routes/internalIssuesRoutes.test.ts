@@ -249,6 +249,24 @@ describe('internalIssuesRoutes', () => {
       expect(body.success).toBe(true);
     });
 
+    it('should update state to done', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/internal/issues/${testIssue.id}/state`,
+        headers: {
+          ...internalAuthHeader,
+          'x-user-id': testUserId,
+        },
+        payload: {
+          state: 'done',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+
     it('should update state to backlog', async () => {
       const response = await app.inject({
         method: 'PATCH',

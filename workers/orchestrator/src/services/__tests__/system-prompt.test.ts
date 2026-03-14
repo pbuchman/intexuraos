@@ -170,7 +170,7 @@ describe('system-prompt', () => {
     expect(result).toContain('superpowers:requesting-code-review');
     expect(result).toContain('gh pr create');
     expect(result).toContain('EXECUTION_AGENT_FINAL:');
-    expect(result).toContain('- Outcome: implemented');
+    expect(result).toContain('- Outcome: <implemented|already_completed>');
     expect(result).toContain('- Review iterations: <number>');
     expect(result).toContain('- Skill sequence proof:');
     expect(result).not.toContain('- Turn summary:');
