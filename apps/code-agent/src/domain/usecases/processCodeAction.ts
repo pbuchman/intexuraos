@@ -379,6 +379,7 @@ export async function processCodeAction(
 
   const updateResult = await codeTaskRepo.update(task.id, {
     status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchValue.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
