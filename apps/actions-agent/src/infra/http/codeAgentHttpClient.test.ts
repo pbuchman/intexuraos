@@ -47,7 +47,7 @@ describe('codeAgentHttpClient', () => {
     nock.cleanAll();
   });
 
-  describe('logger fallback (v8-ignore block 1)', () => {
+  describe('logger fallback (default logger fallback)', () => {
     it('creates client without logger using default', () => {
       const client = makeClient();
       expect(client).toBeDefined();
@@ -79,7 +79,7 @@ describe('codeAgentHttpClient', () => {
       }
     });
 
-    it('returns err on 200 with invalid body (success: false) (v8-ignore block 2)', async () => {
+    it('returns err on 200 with invalid body (success: false) (invalid response body)', async () => {
       nock(BASE_URL)
         .post('/internal/code/process')
         .reply(200, { success: false });
@@ -94,7 +94,7 @@ describe('codeAgentHttpClient', () => {
       }
     });
 
-    it('returns err on 200 with missing data (v8-ignore block 2)', async () => {
+    it('returns err on 200 with missing data (invalid response body)', async () => {
       nock(BASE_URL)
         .post('/internal/code/process')
         .reply(200, { success: true });
@@ -179,7 +179,7 @@ describe('codeAgentHttpClient', () => {
       }
     });
 
-    it('returns err with WORKER_UNAVAILABLE on 503 without error.message (v8-ignore block 3)', async () => {
+    it('returns err with WORKER_UNAVAILABLE on 503 without error.message (error message fallback)', async () => {
       nock(BASE_URL)
         .post('/internal/code/process')
         .reply(503, {
