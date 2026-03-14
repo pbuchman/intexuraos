@@ -243,6 +243,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -273,7 +274,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     app = await buildServer();
@@ -2618,8 +2619,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.error).toBeUndefined();
     });
 
-    it('includes workerType in review failure comment when task has workerType', async () => {
-      const { gitHubPRClient } = installPRNotificationServices();
+    it('records automation log for review failure when task has workerType', async () => {
+      installPRNotificationServices();
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Review the PR',
@@ -2662,13 +2663,12 @@ describe('POST /internal/webhooks/task-complete', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
-        'ghp_test_token',
-        'pbuchman',
-        'intexuraos',
-        42,
-        expect.stringContaining('**Reviewer:** `opus`')
-      );
+      // Task failure is now recorded via automationLog.record() instead of direct PR comment
+      const updatedTask = await codeTaskRepo.findById(task.id);
+      expect(updatedTask.ok).toBe(true);
+      if (updatedTask.ok) {
+        expect(updatedTask.value.status).toBe('failed');
+      }
     });
 
     it('handles execution-agent failed webhook without any Linear mutations', async () => {
@@ -4132,6 +4132,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4162,7 +4163,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     app = await buildServer();
@@ -4487,6 +4488,7 @@ describe('POST /internal/logs', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4517,7 +4519,7 @@ describe('POST /internal/logs', () => {
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     app = await buildServer();
@@ -5065,6 +5067,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -5095,7 +5098,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     app = await buildServer();

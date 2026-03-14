@@ -97,6 +97,7 @@ function createFakeDeps(overrides: Partial<UnifiedEvaluatorDeps> = {}): UnifiedE
     evaluateEvent: vi.fn(),
     createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-1' })),
     allowedBots: new Set(['claude[bot]']),
+    automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     ...overrides,
   };
 }
@@ -698,6 +699,70 @@ describe('UnifiedEvaluator', () => {
 
       expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
       expect(deps.createReviewTask).not.toHaveBeenCalled();
+    });
+
+    it('passes resolved userId to automation log when resolveTokenUserId is provided', async () => {
+      const automationLog = { record: vi.fn().mockResolvedValue(undefined) };
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'dispatch', template: 'pr_comment' },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'LLM reasoning.',
+        })),
+        automationLog,
+        resolveTokenUserId: vi.fn().mockResolvedValue('user-resolved-1'),
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(automationLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ repository: 'intexuraos/intexuraos', prNumber: 42 }),
+        expect.objectContaining({ type: 'triage_dispatch' }),
+        'user-resolved-1',
+      );
+    });
+
+    it('deduplicates identical tool calls in automation log for LLM dispatch', async () => {
+      const automationLog = { record: vi.fn().mockResolvedValue(undefined) };
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'dispatch', template: 'pr_comment' },
+          usage: {
+            costUsd: 0.003,
+            toolCalls: [
+              { tool: 'get_file', args: { path: 'README.md' } },
+              { tool: 'get_file', args: { path: 'README.md' } },
+              { tool: 'list_files', args: { dir: 'src' } },
+            ],
+          },
+          reasoning: 'LLM reasoning.',
+        })),
+        automationLog,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(automationLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ repository: 'intexuraos/intexuraos', prNumber: 42 }),
+        expect.objectContaining({
+          type: 'triage_dispatch',
+          toolCalls: [
+            'get_file({"path":"README.md"})',
+            'list_files({"dir":"src"})',
+          ],
+        }),
+        undefined,
+      );
     });
   });
 

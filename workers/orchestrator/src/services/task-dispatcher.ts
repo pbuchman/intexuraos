@@ -42,6 +42,10 @@ import {
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
+export function getTaskEventUrl(webhookUrl: string): string {
+  return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
+}
+
 const TASK_TIMEOUT_WARNING_MS = 115 * 60 * 1000; // 1h 55m
 const TASK_TIMEOUT_KILL_MS = 120 * 60 * 1000; // 2h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
@@ -1622,6 +1626,27 @@ export class TaskDispatcher {
         task.taskId,
         `Worker container ready: containerId=${handle.containerId}`
       );
+
+      // Best-effort: send task_started event to code-agent
+      this.webhookClient
+        .send({
+          url: getTaskEventUrl(task.webhookUrl),
+          secret: task.webhookSecret,
+          payload: {
+            taskId: task.taskId,
+            event: 'task_started',
+            attempt: task.attemptCount ?? 1,
+            workerType: task.workerType,
+          },
+          taskId: task.taskId,
+        })
+        .catch((sendError: unknown) => {
+          this.logger.warn(
+            { taskId: task.taskId, error: sendError },
+            'Failed to send task_started event (best-effort)'
+          );
+        });
+
       return { ok: true, containerId: handle.containerId };
     } catch (error) {
       this.appendOrchestratorTaskLog(
@@ -1730,6 +1755,55 @@ export class TaskDispatcher {
     /* v8 ignore stop @preserve */
     this.clearTaskTimers(task.taskId);
 
+    // Send task lifecycle event to code-agent (best-effort)
+    const taskLifecycleEvent =
+      finalStatus === 'completed'
+        ? 'task_completed'
+        : finalStatus === 'failed'
+          ? 'task_failed'
+          : finalStatus === 'interrupted'
+            ? 'task_interrupted'
+            : undefined;
+
+    if (taskLifecycleEvent !== undefined) {
+      const agentStatusMap: Record<string, string> = {
+        execution: 'implemented',
+        review: 'reviewed',
+        planning: 'planned',
+      };
+      const taskEventPayload: Record<string, unknown> = {
+        taskId: task.taskId,
+        event: taskLifecycleEvent,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: completedAt set above but test mocks may bypass assignment
+        ...(task.completedAt !== undefined && {
+          duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
+        }),
+        ...(payload.result?.prUrl !== undefined && { prUrl: payload.result.prUrl }),
+        ...(payload.result?.commitDetails !== undefined && {
+          commits: payload.result.commitDetails,
+        }),
+        ...(payload.error !== undefined && { error: payload.error }),
+        ...(task.agentType !== undefined &&
+          agentStatusMap[task.agentType] !== undefined && {
+            status: agentStatusMap[task.agentType],
+          }),
+      };
+
+      this.webhookClient
+        .send({
+          url: getTaskEventUrl(task.webhookUrl),
+          secret: task.webhookSecret,
+          payload: taskEventPayload,
+          taskId: task.taskId,
+        })
+        .catch((sendError: unknown) => {
+          this.logger.warn(
+            { taskId: task.taskId, error: sendError },
+            'Failed to send task lifecycle event (best-effort)'
+          );
+        });
+    }
+
     await this.webhookClient.send({
       url: task.webhookUrl,
       secret: task.webhookSecret,
@@ -1819,7 +1893,7 @@ export class TaskDispatcher {
         url: string;
         number: number;
         headRefName: string;
-        commits?: unknown[];
+        commits?: { oid: string; messageHeadline: string }[];
         title: string;
       }[];
 
@@ -1831,6 +1905,9 @@ export class TaskDispatcher {
         }
         const branch = pr.headRefName;
         const commits = Array.isArray(pr.commits) ? pr.commits.length : 0;
+        const commitDetails = Array.isArray(pr.commits)
+          ? pr.commits.map((c) => ({ sha: c.oid, message: c.messageHeadline }))
+          : undefined;
 
         // Check for rebase result
         let rebaseResult: TaskResult['rebaseResult'] | undefined;
@@ -1866,6 +1943,7 @@ export class TaskDispatcher {
           commits,
           prUrl: pr.url,
           summary: pr.title,
+          ...(commitDetails !== undefined && { commitDetails }),
           /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
           ...(rebaseResult !== undefined && { rebaseResult }),
           /* v8 ignore stop @preserve */

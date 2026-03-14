@@ -98,6 +98,7 @@ export interface TaskResult {
   prUrl?: string;
   branch?: string;
   commits?: number;
+  commitDetails?: { sha: string; message: string }[];
   summary?: string;
   ciFailed?: boolean;
   comment_replied?: boolean;

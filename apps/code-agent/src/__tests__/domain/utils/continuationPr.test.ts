@@ -37,6 +37,10 @@ describe('continuationPr utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockAutomationLog = {
+      record: vi.fn().mockResolvedValue(undefined),
+    };
+
     mockLogger = {
       info: vi.fn(),
       warn: vi.fn(),
@@ -98,11 +102,16 @@ describe('continuationPr utilities', () => {
     };
   }
 
+  let mockAutomationLog: {
+    record: ReturnType<typeof vi.fn>;
+  };
+
   function createCommentDeps(): PostContinuationCommentDeps {
     return {
       logger: mockLogger,
       gitHubPRClient: mockGitHubPRClient as unknown as GitHubPRClient,
       userServiceClient: mockUserServiceClient as unknown as UserServiceClient,
+      automationLog: mockAutomationLog as PostContinuationCommentDeps['automationLog'],
     };
   }
 
