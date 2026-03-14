@@ -1146,6 +1146,55 @@ describe('Worker Settings Routes', () => {
     });
   });
 
+  describe('PATCH /code/worker-settings/default-review-worker-type', () => {
+    it('should update default review worker type with valid type', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/default-review-worker-type',
+        headers: { Authorization: 'Bearer valid-token' },
+        payload: { workerType: 'glm' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { updated: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.updated).toBe(true);
+
+      // Verify GET returns the saved value
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      const getBody = JSON.parse(getResponse.body) as { success: boolean; data: { defaultReviewWorkerType?: string } };
+      expect(getBody.data.defaultReviewWorkerType).toBe('glm');
+    });
+
+    it('should reject invalid worker type', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/default-review-worker-type',
+        headers: { Authorization: 'Bearer valid-token' },
+        payload: { workerType: 'invalid-type' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should not include defaultReviewWorkerType in GET when not set', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { defaultReviewWorkerType?: string } };
+      expect(body.data.defaultReviewWorkerType).toBeUndefined();
+    });
+  });
+
   describe('authentication', () => {
     it('should return 401 without valid token', async () => {
       mockedJwtVerify.mockRejectedValue(new Error('Invalid token'));

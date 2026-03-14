@@ -180,13 +180,13 @@ export async function createReviewTask(
     return err({ code: 'task_creation_failed', message: activeReviewResult.error.message });
   }
 
-  // Resolve effective worker type early
-  const effectiveWorkerType = request.workerType ?? 'auto';
+  // Resolve requested worker type for early logging
+  const requestedWorkerType = request.workerType ?? 'auto';
 
   if (activeReviewResult.value !== null) {
     const existingTask = activeReviewResult.value;
     logger.info(
-      { repository, prNumber, taskId: existingTask.id, effectiveWorkerType },
+      { repository, prNumber, taskId: existingTask.id, requestedWorkerType },
       'Active review task exists for PR, replacing with fresh review'
     );
 
@@ -258,6 +258,16 @@ export async function createReviewTask(
   }
 
   const { userId, worker } = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
+
+  // Resolution chain: explicit request > user setting > 'auto'
+  let effectiveWorkerType: WorkerType = requestedWorkerType;
+  if (request.workerType === undefined) {
+    const settingsResult = await workerSettingsRepo.getSettings(userId);
+    if (settingsResult.ok && settingsResult.value?.defaultReviewWorkerType !== undefined) {
+      effectiveWorkerType = settingsResult.value.defaultReviewWorkerType;
+      logger.info({ userId, defaultReviewWorkerType: effectiveWorkerType }, 'Using user default review worker type');
+    }
+  }
 
   // Best-effort Linear issue linking for UI grouping
   let linearIssueId: string | undefined;

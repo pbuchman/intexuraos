@@ -547,6 +547,41 @@ describe('evaluateEvent', () => {
       }
     });
 
+    it('returns request_review triage without workerType when worker_type is omitted', async () => {
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 'architecture' });
+          }
+          return ok({
+            content: 'Architecture review without specifying worker type.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 30, totalTokens: 130, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review architecture',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.triage).toEqual({
+          action: 'request_review',
+          reviewTypes: ['architecture'],
+        });
+        // workerType should NOT be present
+        expect('workerType' in result.value.triage).toBe(false);
+      }
+    });
+
     it('returns LLM_FAILED when @review comment does not call request_review', async () => {
       const deps = createDeps({
         toolCallingClient: createFakeToolCallingClient({ callTools: false }),
