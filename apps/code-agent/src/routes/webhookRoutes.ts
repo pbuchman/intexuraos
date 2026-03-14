@@ -10,7 +10,7 @@ import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
-import { notifyTaskOutcome, type TaskOutcomeCommentRequest } from '../domain/utils/prTaskNotification.js';
+import { notifyTaskOutcome } from '../domain/utils/prTaskNotification.js';
 
 export const parseLinearIdentifierFromUrl = (url: string): string | null => {
   const mdMatch = /\[.*?\]\((.*?)\)/.exec(url);
@@ -657,18 +657,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           await deletePRTaskLock(firestore, task.repository, task.prNumber, request.log);
         }
       };
-      const prNotificationDeps = {
-        logger,
-        gitHubPRClient: getServices().gitHubPRClient,
-        userServiceClient: getServices().userServiceClient,
-      };
-
       // Step 3: Update task based on status
       if (status === 'completed') {
         // Trace which agent type is being handled for debugging
         request.log.info({ taskId, agentType: task.agentType }, 'Processing completed task');
-        let successTaskOutcome: TaskOutcomeCommentRequest | undefined;
-
         if (task.agentType === 'execution') {
           if (result === undefined) {
             request.log.error(
@@ -755,15 +747,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             return await reply.send({ received: true });
           }
 
-          if (task.prNumber !== undefined) {
-            successTaskOutcome = {
-              taskId,
-              repository: task.repository,
-              prNumber: task.prNumber,
-              userId: task.userId,
-              outcome: 'implementation_completed',
-            };
-          }
         }
 
         if (task.agentType === 'pull_request') {
@@ -852,15 +835,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             return await reply.send({ received: true });
           }
 
-          if (task.prNumber !== undefined) {
-            successTaskOutcome = {
-              taskId,
-              repository: task.repository,
-              prNumber: task.prNumber,
-              userId: task.userId,
-              outcome: result.comment_replied ? 'reply_completed' : 'implementation_completed',
-            };
-          }
         }
 
         if (task.agentType === 'planning') {
@@ -1030,10 +1004,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
         await cleanupLockIfPR();
-
-        if (successTaskOutcome !== undefined) {
-          await notifyTaskOutcome(prNotificationDeps, successTaskOutcome);
-        }
 
         // Best-effort In Review transition for agent types without deterministic enforcement
         // (planning, execution, and pull_request agents handle this in their own enforcement paths)

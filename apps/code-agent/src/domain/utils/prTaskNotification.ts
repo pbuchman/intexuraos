@@ -44,9 +44,7 @@ export type PRCommentOutcome =
   | 'review_dispatch_failed'
   | 'pr_task_dispatch_failed'
   | 'review_failed'
-  | 'implementation_completed'
   | 'implementation_failed'
-  | 'reply_completed'
   | 'reply_failed';
 
 /**
@@ -80,9 +78,14 @@ const dispatchOutcomeLabels: Record<PRTaskDispatchOutcome, string> = {
 };
 
 function buildTaskDispatchComment(request: PRTaskNotificationRequest): string {
+  const isReview = request.reviewTypes !== undefined && request.reviewTypes.length > 0;
+  const title = isReview
+    ? '### IntexuraOS Automation: Code Review Dispatched'
+    : '### IntexuraOS Automation: Task Accepted';
+
   const lines: string[] = [
     '@ignore',
-    '### Automated Code Review Task Accepted',
+    title,
     '',
     `**Task ID:** \`${request.taskId}\``,
   ];
@@ -123,7 +126,7 @@ export interface TaskOutcomeCommentRequest {
   repository: string;
   prNumber: number;
   userId: string;
-  outcome: 'review_failed' | 'implementation_completed' | 'implementation_failed' | 'reply_completed' | 'reply_failed';
+  outcome: 'review_failed' | 'implementation_failed' | 'reply_failed';
   reviewTypes?: string[];
   errorCode?: string;
   workerType?: string;
@@ -154,17 +157,14 @@ function buildDispatchFailedComment(request: DispatchFailedCommentRequest): stri
 }
 
 /**
- * Build comment for task completion outcome (success or failure).
+ * Build comment for task failure outcome.
  */
-export function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): string {
+export function buildTaskFailureComment(request: TaskOutcomeCommentRequest): string {
   const isReview = request.outcome.startsWith('review_');
-  const isFailure = request.outcome.endsWith('_failed');
 
   const outcomeLabels: Record<typeof request.outcome, string> = {
     review_failed: 'Automated Review Failed',
-    implementation_completed: 'Implementation Completed',
     implementation_failed: 'Implementation Failed',
-    reply_completed: 'Reply Posted',
     reply_failed: 'Reply Failed',
   };
 
@@ -184,7 +184,7 @@ export function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): str
     lines.push(`**Review types:** ${reviewTypesStr}`);
   }
 
-  if (isFailure && request.errorCode !== undefined) {
+  if (request.errorCode !== undefined) {
     /* v8 ignore start -- ts-type: split always returns at least one element but TypeScript noUncheckedIndexedAccess narrows @preserve */
     const safeErrorCode = request.errorCode.split('/')[0]?.toUpperCase() ?? 'UNKNOWN_ERROR';
     /* v8 ignore stop @preserve */
@@ -192,14 +192,6 @@ export function buildTaskOutcomeComment(request: TaskOutcomeCommentRequest): str
 
     if (request.outcome === 'review_failed') {
       lines.push('', '**Review output did not complete.** Check internal logs for details.');
-    }
-  } else {
-    // Success case - all non-failure outcomes
-    if (request.outcome === 'implementation_completed') {
-      lines.push('', '**Implementation finished.** Changes have been pushed to the PR.');
-    } else {
-      // reply_completed is the only remaining success outcome
-      lines.push('', '**Reply posted.** Check the PR comments for the response.');
     }
   }
 
@@ -332,7 +324,7 @@ export async function notifyDispatchFailed(
 }
 
 /**
- * Post comment when task completes (success or failure).
+ * Post comment when task fails.
  */
 export async function notifyTaskOutcome(
   deps: PRTaskNotificationDeps,
@@ -354,7 +346,7 @@ export async function notifyTaskOutcome(
       return;
     }
 
-    const commentBody = buildTaskOutcomeComment(request);
+    const commentBody = buildTaskFailureComment(request);
     const commentResult = await gitHubPRClient.postPRComment(
       githubToken, owner, repo, request.prNumber, commentBody,
     );

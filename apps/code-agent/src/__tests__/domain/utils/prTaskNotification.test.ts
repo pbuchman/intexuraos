@@ -11,7 +11,7 @@ import {
   fetchGitHubToken,
   notifyDispatchFailed,
   notifyTaskOutcome,
-  buildTaskOutcomeComment,
+  buildTaskFailureComment,
   buildReviewReplacementComment,
   notifyReviewReplaced,
   type PRTaskNotificationDeps,
@@ -136,7 +136,7 @@ describe('notifyPROfTaskDispatch', () => {
     expect(body).toContain('task_abc123');
     expect(body).toContain('[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/task_abc123)');
     expect(body).toContain('intexuraos.cloud/#/code-tasks/task_abc123');
-    expect(body).toContain('Automated Code Review Task');
+    expect(body).toContain('IntexuraOS Automation: Task Accepted');
     expect(body).toContain('**Dispatch outcome:** Created and dispatched');
   });
 
@@ -161,6 +161,31 @@ describe('notifyPROfTaskDispatch', () => {
 
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).toContain('`code_quality`, `security`');
+  });
+
+  it('uses Code Review Dispatched title when reviewTypes are present', async () => {
+    const deps = createFakeDeps();
+    const request = createFakeRequest({
+      dispatchOutcome: 'review_task_dispatched',
+      reviewTypes: ['code_quality'],
+    });
+
+    await notifyPROfTaskDispatch(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### IntexuraOS Automation: Code Review Dispatched');
+    expect(body).not.toContain('Task Accepted');
+  });
+
+  it('uses Task Accepted title when reviewTypes are absent', async () => {
+    const deps = createFakeDeps();
+    const request = createFakeRequest();
+
+    await notifyPROfTaskDispatch(deps, request);
+
+    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
+    expect(body).toContain('### IntexuraOS Automation: Task Accepted');
+    expect(body).not.toContain('Code Review Dispatched');
   });
 
   it('uses outcome-specific wording for existing-task resumes', async () => {
@@ -512,7 +537,7 @@ describe('notifyTaskOutcome', () => {
       repository: 'pbuchman/intexuraos',
       prNumber: 42,
       userId: 'user-1',
-      outcome: 'implementation_completed',
+      outcome: 'implementation_failed',
       ...overrides,
     };
   }
@@ -532,18 +557,6 @@ describe('notifyTaskOutcome', () => {
     expect(body).toContain('Review output did not complete.');
   });
 
-  it('posts implementation completed comment', async () => {
-    const deps = createFakeDeps();
-    const request = createTaskOutcomeRequest({ outcome: 'implementation_completed' });
-
-    await notifyTaskOutcome(deps, request);
-
-    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(body).toContain('### Implementation Completed');
-    expect(body).toContain('Implementation finished.');
-    expect(body).toContain('Changes have been pushed to the PR.');
-  });
-
   it('posts implementation failed comment', async () => {
     const deps = createFakeDeps();
     const request = createTaskOutcomeRequest({
@@ -556,18 +569,6 @@ describe('notifyTaskOutcome', () => {
     const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
     expect(body).toContain('### Implementation Failed');
     expect(body).toContain('**Error:** EXECUTION_ERROR');
-  });
-
-  it('posts reply completed comment', async () => {
-    const deps = createFakeDeps();
-    const request = createTaskOutcomeRequest({ outcome: 'reply_completed' });
-
-    await notifyTaskOutcome(deps, request);
-
-    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(body).toContain('### Reply Posted');
-    expect(body).toContain('Reply posted.');
-    expect(body).toContain('Check the PR comments for the response.');
   });
 
   it('posts reply failed comment with error code', async () => {
@@ -636,9 +637,9 @@ describe('notifyTaskOutcome', () => {
   });
 });
 
-describe('buildTaskOutcomeComment', () => {
+describe('buildTaskFailureComment', () => {
   it('builds review failed comment with error code', () => {
-    const comment = buildTaskOutcomeComment({
+    const comment = buildTaskFailureComment({
       taskId: 'task_123',
       repository: 'pbuchman/intexuraos',
       prNumber: 42,
@@ -653,7 +654,7 @@ describe('buildTaskOutcomeComment', () => {
   });
 
   it('builds review failed comment with review types', () => {
-    const comment = buildTaskOutcomeComment({
+    const comment = buildTaskFailureComment({
       taskId: 'task_123',
       repository: 'pbuchman/intexuraos',
       prNumber: 42,
@@ -668,7 +669,7 @@ describe('buildTaskOutcomeComment', () => {
   });
 
   it('builds review failed comment without error code', () => {
-    const comment = buildTaskOutcomeComment({
+    const comment = buildTaskFailureComment({
       taskId: 'task_123',
       repository: 'pbuchman/intexuraos',
       prNumber: 42,
@@ -680,22 +681,8 @@ describe('buildTaskOutcomeComment', () => {
     expect(comment).not.toContain('**Error:**');
   });
 
-  it('builds implementation completed comment', () => {
-    const comment = buildTaskOutcomeComment({
-      taskId: 'task_123',
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      userId: 'user-1',
-      outcome: 'implementation_completed',
-    });
-
-    expect(comment).toContain('### Implementation Completed');
-    expect(comment).toContain('Implementation finished.');
-    expect(comment).toContain('Changes have been pushed to the PR.');
-  });
-
   it('builds implementation failed comment', () => {
-    const comment = buildTaskOutcomeComment({
+    const comment = buildTaskFailureComment({
       taskId: 'task_123',
       repository: 'pbuchman/intexuraos',
       prNumber: 42,
@@ -708,22 +695,8 @@ describe('buildTaskOutcomeComment', () => {
     expect(comment).toContain('**Error:** EXECUTION_ERROR');
   });
 
-  it('builds reply completed comment', () => {
-    const comment = buildTaskOutcomeComment({
-      taskId: 'task_123',
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      userId: 'user-1',
-      outcome: 'reply_completed',
-    });
-
-    expect(comment).toContain('### Reply Posted');
-    expect(comment).toContain('Reply posted.');
-    expect(comment).toContain('Check the PR comments for the response.');
-  });
-
   it('builds reply failed comment', () => {
-    const comment = buildTaskOutcomeComment({
+    const comment = buildTaskFailureComment({
       taskId: 'task_123',
       repository: 'pbuchman/intexuraos',
       prNumber: 42,
@@ -737,7 +710,7 @@ describe('buildTaskOutcomeComment', () => {
   });
 
   it('builds review failed comment with worker type', () => {
-    const comment = buildTaskOutcomeComment({
+    const comment = buildTaskFailureComment({
       taskId: 'task_123',
       repository: 'pbuchman/intexuraos',
       prNumber: 42,
@@ -753,16 +726,16 @@ describe('buildTaskOutcomeComment', () => {
   });
 
   it('omits reviewer line for non-review outcomes even when workerType provided', () => {
-    const comment = buildTaskOutcomeComment({
+    const comment = buildTaskFailureComment({
       taskId: 'task_123',
       repository: 'pbuchman/intexuraos',
       prNumber: 42,
       userId: 'user-1',
-      outcome: 'implementation_completed',
+      outcome: 'implementation_failed',
       workerType: 'claude-code',
     });
 
-    expect(comment).toContain('### Implementation Completed');
+    expect(comment).toContain('### Implementation Failed');
     expect(comment).not.toContain('**Reviewer:**');
   });
 });
