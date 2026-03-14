@@ -512,26 +512,10 @@ describe('notifyTaskOutcome', () => {
       repository: 'pbuchman/intexuraos',
       prNumber: 42,
       userId: 'user-1',
-      outcome: 'review_completed',
+      outcome: 'implementation_completed',
       ...overrides,
     };
   }
-
-  it('posts review completed comment with review types', async () => {
-    const deps = createFakeDeps();
-    const request = createTaskOutcomeRequest({
-      outcome: 'review_completed',
-      reviewTypes: ['code_quality', 'security'],
-    });
-
-    await notifyTaskOutcome(deps, request);
-
-    const body = vi.mocked(deps.gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(body).toContain('### Automated Review Completed');
-    expect(body).toContain('**Task ID:** `task_outcome_test`');
-    expect(body).toContain('**Review types:** `code_quality`, `security`');
-    expect(body).toContain('Review finished.');
-  });
 
   it('posts review failed comment with error code', async () => {
     const deps = createFakeDeps();
@@ -653,35 +637,6 @@ describe('notifyTaskOutcome', () => {
 });
 
 describe('buildTaskOutcomeComment', () => {
-  it('builds review completed comment with review types', () => {
-    const comment = buildTaskOutcomeComment({
-      taskId: 'task_123',
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      userId: 'user-1',
-      outcome: 'review_completed',
-      reviewTypes: ['code_quality', 'security'],
-    });
-
-    expect(comment).toContain('### Automated Review Completed');
-    expect(comment).toContain('**Review types:** `code_quality`, `security`');
-    expect(comment).toContain('Review finished.');
-  });
-
-  it('builds review completed comment without review types', () => {
-    const comment = buildTaskOutcomeComment({
-      taskId: 'task_123',
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      userId: 'user-1',
-      outcome: 'review_completed',
-    });
-
-    expect(comment).toContain('### Automated Review Completed');
-    expect(comment).toContain('Review finished.');
-    expect(comment).not.toContain('**Review types:**');
-  });
-
   it('builds review failed comment with error code', () => {
     const comment = buildTaskOutcomeComment({
       taskId: 'task_123',
@@ -695,6 +650,21 @@ describe('buildTaskOutcomeComment', () => {
     expect(comment).toContain('### Automated Review Failed');
     expect(comment).toContain('**Error:** TIMEOUT');
     expect(comment).toContain('Review output did not complete.');
+  });
+
+  it('builds review failed comment with review types', () => {
+    const comment = buildTaskOutcomeComment({
+      taskId: 'task_123',
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-1',
+      outcome: 'review_failed',
+      errorCode: 'TIMEOUT',
+      reviewTypes: ['code_quality', 'security'],
+    });
+
+    expect(comment).toContain('### Automated Review Failed');
+    expect(comment).toContain('**Review types:** `code_quality`, `security`');
   });
 
   it('builds review failed comment without error code', () => {
@@ -764,20 +734,6 @@ describe('buildTaskOutcomeComment', () => {
 
     expect(comment).toContain('### Reply Failed');
     expect(comment).toContain('**Error:** COMMENT_ERROR');
-  });
-
-  it('builds review completed comment with worker type', () => {
-    const comment = buildTaskOutcomeComment({
-      taskId: 'task_123',
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      userId: 'user-1',
-      outcome: 'review_completed',
-      workerType: 'claude-code',
-    });
-
-    expect(comment).toContain('### Automated Review Completed');
-    expect(comment).toContain('**Reviewer:** `claude-code`');
   });
 
   it('builds review failed comment with worker type', () => {
