@@ -24,7 +24,7 @@ export interface CreateIssueResponse {
 export interface UpdateIssueStateRequest {
   userId: string;
   issueId: string;
-  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa';
+  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa' | 'done';
 }
 
 export interface ValidateIssueRequest {

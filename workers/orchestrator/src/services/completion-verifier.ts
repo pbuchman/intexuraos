@@ -45,6 +45,7 @@ export interface PlanningAgentData {
 
 export interface ExecutionAgentData {
   agentType: 'execution';
+  outcome: 'implemented' | 'already_completed';
   superpowers_executing_plans: 'used' | 'not used';
   superpowers_requesting_code_review: 'used' | 'not used';
   gh_pr_url: string;
@@ -91,6 +92,7 @@ export const PLANNING_SCHEMA = z.object({
 });
 
 export const EXECUTION_SCHEMA = z.object({
+  outcome: z.enum(['implemented', 'already_completed']),
   superpowers_executing_plans: z.enum(['used', 'not used']),
   superpowers_requesting_code_review: z.enum(['used', 'not used']),
   gh_pr_url: z.string(),
@@ -188,13 +190,15 @@ export function buildExecutionPrompt(transcript: string): string {
     '',
     ...sharedPreamble(),
     'Fields:',
+    '- outcome: "implemented" if the agent created a PR with new code, "already_completed" if the agent determined the work was already done/merged',
     '- superpowers_executing_plans: "used" if the agent invoked the executing-plans skill, "not used" otherwise',
     '- superpowers_requesting_code_review: "used" if the agent invoked the requesting-code-review skill, "not used" otherwise',
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
     '- summary: 3-5 sentence summary of what was implemented — the LLM agent typically states this clearly as a summary block in its final output',
     '',
-    'Example valid response:',
-    '{"superpowers_executing_plans":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","summary":"The execution agent implemented the feature as planned, adding 3 new API endpoints and updating the database schema. CI passed on the first attempt. A PR was created targeting the development branch."}',
+    'Example valid responses:',
+    '{"outcome":"implemented","superpowers_executing_plans":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","summary":"The execution agent implemented the feature as planned, adding 3 new API endpoints and updating the database schema. CI passed on the first attempt. A PR was created targeting the development branch."}',
+    '{"outcome":"already_completed","superpowers_executing_plans":"used","superpowers_requesting_code_review":"not used","gh_pr_url":"","summary":"The agent discovered that the requested work was already implemented and merged into the development branch. All tests pass and the feature is present in the codebase. No PR was needed."}',
     '',
     'Transcript (last 50 lines):',
     transcript,

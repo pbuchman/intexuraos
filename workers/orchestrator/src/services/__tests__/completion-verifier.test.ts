@@ -165,6 +165,7 @@ describe('PLANNING_SCHEMA', () => {
 describe('EXECUTION_SCHEMA', () => {
   it('accepts valid execution data', () => {
     const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'implemented',
       superpowers_executing_plans: 'used',
       superpowers_requesting_code_review: 'not used',
       gh_pr_url: 'https://github.com/org/repo/pull/1',
@@ -536,6 +537,7 @@ describe('OrchestratorCompletionVerifier', () => {
 
   describe('verify — execution agent', () => {
     const validExecutionResponse = JSON.stringify({
+      outcome: 'implemented',
       superpowers_executing_plans: 'used',
       superpowers_requesting_code_review: 'used',
       gh_pr_url: 'https://github.com/org/repo/pull/901',
@@ -561,6 +563,7 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.passed).toBe(true);
       expect(result.agentData).toEqual({
         agentType: 'execution',
+        outcome: 'implemented',
         superpowers_executing_plans: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/org/repo/pull/901',
@@ -971,6 +974,7 @@ describe('verify — fatal exit code pre-check', () => {
       ok: true,
       value: {
         content: JSON.stringify({
+          outcome: 'implemented',
           superpowers_executing_plans: 'used',
           superpowers_requesting_code_review: 'not used',
           gh_pr_url: '',
