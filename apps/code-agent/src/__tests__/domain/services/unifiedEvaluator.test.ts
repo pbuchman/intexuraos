@@ -1928,3 +1928,85 @@ describe('buildSkipCommentBody', () => {
     expect(body).toContain('> Line one.\n> Line two.');
   });
 });
+
+describe('LLM retry for pull_request events', () => {
+  let logger: Logger;
+
+  beforeEach(() => {
+    logger = createFakeLogger();
+  });
+
+  it('retry recovers on second attempt', async () => {
+    const evaluateEvent = vi.fn()
+      .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model' }))
+      .mockResolvedValueOnce(ok({
+        triage: { action: 'skip', reason: 'No review needed' },
+        usage: { costUsd: 0.001, toolCalls: [] },
+        reasoning: 'Test reasoning',
+      }));
+
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'NEEDS_LLM' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent,
+    });
+
+    const event = createFakeEvent({ eventType: 'pull_request', action: 'opened', body: null });
+    const evaluator = createUnifiedEvaluator(deps);
+    await evaluator.evaluate(event, logger);
+
+    expect(evaluateEvent).toHaveBeenCalledTimes(2);
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledTimes(1);
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decidedBy: 'github_agent',
+        decision: 'skip',
+        reason: 'LLM skip: No review needed',
+      }),
+    );
+  });
+
+  it('no retry for issue_comment', async () => {
+    const evaluateEvent = vi.fn()
+      .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model' }));
+
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'NEEDS_LLM' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent,
+    });
+
+    const event = createFakeEvent({ eventType: 'issue_comment', action: 'created', body: 'some comment' });
+    const evaluator = createUnifiedEvaluator(deps);
+    await evaluator.evaluate(event, logger);
+
+    expect(evaluateEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('fallback to skip on double failure', async () => {
+    const evaluateEvent = vi.fn()
+      .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model' }))
+      .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model again' }));
+
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'NEEDS_LLM' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent,
+    });
+
+    const event = createFakeEvent({ eventType: 'pull_request', action: 'opened', body: null });
+    const evaluator = createUnifiedEvaluator(deps);
+    await evaluator.evaluate(event, logger);
+
+    expect(evaluateEvent).toHaveBeenCalledTimes(2);
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: 'skip',
+        reason: expect.stringContaining('fallback_skip'),
+      }),
+    );
+  });
+});

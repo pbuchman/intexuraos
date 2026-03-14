@@ -10,7 +10,7 @@
  * @packageDocumentation
  */
 
-import { GoogleGenAI } from '@google/genai';
+import { FunctionCallingConfigMode, GoogleGenAI } from '@google/genai';
 import type { Content, FunctionDeclaration, Part } from '@google/genai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
@@ -151,6 +151,16 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               config: {
                 systemInstruction: systemPrompt,
                 tools: [{ functionDeclarations }],
+                ...(functionDeclarations.length > 0 && {
+                  toolConfig: {
+                    functionCallingConfig: {
+                      mode:
+                        totalToolCalls > 0
+                          ? FunctionCallingConfigMode.AUTO
+                          : FunctionCallingConfigMode.ANY,
+                    },
+                  },
+                }),
               },
             });
 
