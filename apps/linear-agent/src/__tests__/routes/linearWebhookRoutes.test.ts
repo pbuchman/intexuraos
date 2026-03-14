@@ -969,5 +969,425 @@ describe('Linear Webhook Routes', () => {
         expect(lastRequest?.userId).toBe('user-123');
       });
     });
+
+    describe('Additional error paths', () => {
+      it('returns 500 when findWebhookSecretByTeamId fails specifically for issue webhook', async () => {
+        connectionRepo.setFindWebhookSecretFailure(true, { code: 'INTERNAL_ERROR', message: 'Database error' });
+
+        const payload = createLinearWebhookPayload();
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      });
+
+      it('logs error for fulfilled-but-err sync result (partial failure with ok=false)', async () => {
+        // Two users, first fails with err result (fulfilled but not ok)
+        connectionRepo.seedConnection({
+          userId: 'user-456',
+          apiKey: 'test-api-key-2',
+          teamId,
+          teamName: 'Engineering',
+          webhookSecret,
+          connected: true,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        });
+
+        // Make save fail for user-456 only (err result, not rejected)
+        issueRepo.setSaveFailureForUsers(['user-456']);
+
+        const payload = createLinearWebhookPayload();
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        // user-123 succeeds, so overall 200
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+      });
+
+      it('returns 200 for non-Issue non-Comment webhook type (isCommentData false branch)', async () => {
+        const payload = {
+          action: 'create',
+          type: 'Label',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-label-1',
+          data: {
+            id: 'label-uuid-1',
+            name: 'Bug',
+          },
+        };
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.data.message).toBe('Ignored');
+      });
+
+      it('returns 500 when issueRepository.findById fails for comment webhook', async () => {
+        issueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'DB error' });
+
+        const payload = {
+          action: 'create',
+          type: 'Comment',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-comment-err',
+          data: {
+            id: 'comment-uuid-err',
+            issueId: 'issue-uuid-1',
+            issueIdentifier: 'INT-123',
+            user: { id: 'linear-user-1', name: 'Test User' },
+            body: 'A comment',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        };
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      });
+
+      it('returns 200 with Issue not found when issue does not exist for comment webhook', async () => {
+        // issueRepo is empty, so findById returns null
+
+        const payload = {
+          action: 'create',
+          type: 'Comment',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-comment-notfound',
+          data: {
+            id: 'comment-uuid-notfound',
+            issueId: 'nonexistent-issue',
+            issueIdentifier: 'INT-999',
+            user: { id: 'linear-user-1', name: 'Test User' },
+            body: 'A comment on missing issue',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        };
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.data.message).toBe('Issue not found');
+      });
+
+      it('returns 200 ignored when comment webhook issue has no webhookSecret configured', async () => {
+        // Seed issue with a teamId that has no webhook secret
+        issueRepo.seedIssue({
+          id: 'issue-uuid-nosecret',
+          identifier: 'INT-789',
+          title: 'Issue Without Secret',
+          description: null,
+          state: 'In Progress',
+          stateType: 'started',
+          priority: 2,
+          assigneeId: null,
+          assigneeName: null,
+          labels: [],
+          url: 'https://linear.app/team/issue/INT-789',
+          userId,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+          syncedAt: '2025-01-01T00:00:00.000Z',
+          teamId: 'team-no-secret',
+          parentId: null,
+        });
+
+        // Seed connection for team-no-secret without webhookSecret
+        connectionRepo.seedConnection({
+          userId: 'user-no-secret',
+          apiKey: 'test-api-key-nosecret',
+          teamId: 'team-no-secret',
+          teamName: 'No Secret Team',
+          webhookSecret: null,
+          connected: true,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        });
+
+        const payload = {
+          action: 'create',
+          type: 'Comment',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-comment-nosecret',
+          data: {
+            id: 'comment-uuid-nosecret',
+            issueId: 'issue-uuid-nosecret',
+            issueIdentifier: 'INT-789',
+            user: { id: 'linear-user-1', name: 'Test User' },
+            body: 'A comment',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        };
+        // No valid signature needed - we expect it to be ignored before signature check
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.data.message).toBe('Webhook not configured');
+        expect(body.data.action).toBe('ignored');
+      });
+
+      it('falls back to issue.userId when findUserIdsByIssueId returns empty array', async () => {
+        // Use override to return ok([]) from findUserIdsByIssueId while findById still works
+        issueRepo.seedIssue({
+          id: 'issue-uuid-fallback-empty',
+          identifier: 'INT-789',
+          title: 'Test Issue Empty UserIds',
+          description: null,
+          state: 'In Progress',
+          stateType: 'started',
+          priority: 2,
+          assigneeId: null,
+          assigneeName: null,
+          labels: [],
+          url: 'https://linear.app/team/issue/INT-789',
+          userId,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+          syncedAt: '2025-01-01T00:00:00.000Z',
+          teamId,
+          parentId: null,
+        });
+        // Override findUserIdsByIssueId to return empty array → else branch, !userIdsResult.ok is FALSE
+        issueRepo.setFindUserIdsByIssueIdOverride({ ok: true, value: [] });
+
+        const payload = {
+          action: 'create',
+          type: 'Comment',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-comment-fallback-empty',
+          data: {
+            id: 'comment-uuid-fallback-empty',
+            issueId: 'issue-uuid-fallback-empty',
+            issueIdentifier: 'INT-789',
+            user: { id: 'linear-user-1', name: 'Test User' },
+            body: 'A comment',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        };
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        // Should succeed - falls back to issue.userId since findUserIdsByIssueId returned []
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+      });
+
+      it('falls back to issue.userId when findUserIdsByIssueId fails', async () => {
+        // Use override to return err → else branch with !userIdsResult.ok TRUE (logs warning)
+        issueRepo.seedIssue({
+          id: 'issue-uuid-fallback-err',
+          identifier: 'INT-790',
+          title: 'Test Issue UserIds Error',
+          description: null,
+          state: 'In Progress',
+          stateType: 'started',
+          priority: 2,
+          assigneeId: null,
+          assigneeName: null,
+          labels: [],
+          url: 'https://linear.app/team/issue/INT-790',
+          userId,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+          syncedAt: '2025-01-01T00:00:00.000Z',
+          teamId,
+          parentId: null,
+        });
+        // Override findUserIdsByIssueId to return err → else branch, !userIdsResult.ok is TRUE
+        issueRepo.setFindUserIdsByIssueIdOverride({
+          ok: false,
+          error: { code: 'INTERNAL_ERROR', message: 'DB error for userIds' },
+        });
+
+        const payload = {
+          action: 'create',
+          type: 'Comment',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-comment-fallback-err',
+          data: {
+            id: 'comment-uuid-fallback-err',
+            issueId: 'issue-uuid-fallback-err',
+            issueIdentifier: 'INT-790',
+            user: { id: 'linear-user-1', name: 'Test User' },
+            body: 'A comment',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        };
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        // Should succeed - falls back to issue.userId despite findUserIdsByIssueId error
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+      });
+
+      it('returns 200 Ignored for Issue type with unrecognized data shape (covers isCommentData FALSE branch)', async () => {
+        // type='Issue' passes the early type guard, but data has neither 'team' (isIssueData)
+        // nor 'issueId' (isCommentData) fields → falls through to unknown data structure handler
+        const payload = {
+          action: 'create',
+          type: 'Issue',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-malformed-1',
+          data: { id: 'malformed-issue-id' }, // no 'team' → isIssueData=false, no 'issueId' → isCommentData=false
+        };
+        // No signature header needed - signature validation not reached
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: { 'content-type': 'application/json' },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.data.message).toBe('Unknown data structure');
+      });
+
+      it('returns 500 when syncCommentFromWebhook fails (commentRepo save fails)', async () => {
+        issueRepo.seedIssue({
+          id: 'issue-uuid-1',
+          identifier: 'INT-123',
+          title: 'Test Issue',
+          description: null,
+          state: 'In Progress',
+          stateType: 'started',
+          priority: 2,
+          assigneeId: null,
+          assigneeName: null,
+          labels: [],
+          url: 'https://linear.app/team/issue/INT-123',
+          userId,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+          syncedAt: '2025-01-01T00:00:00.000Z',
+          teamId,
+          parentId: null,
+        });
+
+        commentRepo.setSaveFailure(true, { code: 'INTERNAL_ERROR', message: 'Comment save failed' });
+
+        const payload = {
+          action: 'create',
+          type: 'Comment',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-comment-savefail',
+          data: {
+            id: 'comment-uuid-savefail',
+            issueId: 'issue-uuid-1',
+            issueIdentifier: 'INT-123',
+            user: { id: 'linear-user-1', name: 'Test User' },
+            body: 'A comment',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        };
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      });
+    });
   });
 });

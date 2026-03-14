@@ -61,6 +61,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   private connections = new Map<string, LinearConnection>();
   private shouldFailGetFullConnection = false;
   private shouldFailGetConnection = false;
+  private shouldFailFindWebhookSecret = false;
   private shouldFailSave = false;
   private shouldFailDisconnect = false;
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
@@ -113,10 +114,18 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     });
   }
 
+  private shouldFailGetApiKey = false;
+
   async getApiKey(userId: string): Promise<Result<string | null, LinearError>> {
+    if (this.shouldFailGetApiKey) return err(this.failError);
     const conn = this.connections.get(userId);
     if (!conn || !conn.connected) return ok(null);
     return ok(conn.apiKey);
+  }
+
+  setApiKeyFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailGetApiKey = fail;
+    if (error) this.failError = error;
   }
 
   async getFullConnection(userId: string): Promise<Result<LinearConnection | null, LinearError>> {
@@ -133,6 +142,11 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
 
   setGetConnectionFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailGetConnection = fail;
+    if (error) this.failError = error;
+  }
+
+  setFindWebhookSecretFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailFindWebhookSecret = fail;
     if (error) this.failError = error;
   }
 
@@ -194,6 +208,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   async findWebhookSecretByTeamId(
     teamId: string
   ): Promise<Result<{ userId: string; webhookSecret: string } | null, LinearError>> {
+    if (this.shouldFailFindWebhookSecret) return err(this.failError);
     if (this.shouldFailGetConnection) return err(this.failError);
 
     for (const [userId, conn] of this.connections.entries()) {
@@ -235,6 +250,8 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     this.connections.clear();
     this.shouldFailGetFullConnection = false;
     this.shouldFailGetConnection = false;
+    this.shouldFailFindWebhookSecret = false;
+    this.shouldFailGetApiKey = false;
     this.shouldFailSave = false;
     this.shouldFailDisconnect = false;
     this.shouldFailIsConnected = false;
@@ -651,8 +668,11 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(undefined);
   }
 
+  private findUserIdsByIssueIdOverride: Result<string[], LinearError> | null = null;
+
   async findUserIdsByIssueId(issueId: string): Promise<Result<string[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
+    if (this.findUserIdsByIssueIdOverride !== null) return this.findUserIdsByIssueIdOverride;
     const userIds: string[] = [];
     for (const issue of this.issues.values()) {
       if (issue.id === issueId) {
@@ -660,6 +680,10 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
       }
     }
     return ok(userIds);
+  }
+
+  setFindUserIdsByIssueIdOverride(result: Result<string[], LinearError> | null): void {
+    this.findUserIdsByIssueIdOverride = result;
   }
 
   setFailure(fail: boolean, error?: LinearError): void {
@@ -696,6 +720,7 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     this.shouldFailListByUserId = false;
     this.shouldFailDeleteById = false;
     this.saveFailUserIds.clear();
+    this.findUserIdsByIssueIdOverride = null;
   }
 
   seedIssue(issue: SyncedLinearIssue): void {
