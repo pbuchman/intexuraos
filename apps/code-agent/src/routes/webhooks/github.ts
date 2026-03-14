@@ -524,6 +524,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
             state: parsedEvent.state,
             mergedAt: parsedEvent.mergedAt ?? null,
             baseBranch: parsedEvent.baseBranch,
+            authorLogin: parsedEvent.prAuthorLogin,
           }),
         };
         /* v8 ignore start -- upstream: non-critical summary upsert, does not affect webhook response @preserve */

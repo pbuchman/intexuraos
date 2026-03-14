@@ -53,6 +53,7 @@ describe('github-event-parser', () => {
         state: 'open',
         merged_at: null,
         base: { ref: 'main' },
+        user: { login: 'pr-author' },
       },
       sender: {
         login: 'testuser',
@@ -77,6 +78,7 @@ describe('github-event-parser', () => {
           action: 'opened',
           senderLogin: 'testuser',
           senderId: 111,
+          prAuthorLogin: 'pr-author',
           title: 'Test PR',
           body: 'Test description',
           state: 'open',
@@ -114,6 +116,7 @@ describe('github-event-parser', () => {
         expect(result.value.baseBranch).toBeNull(); // @allow-result-access -- no base in payload
         expect(result.value.action).toBeNull(); // Not a valid action
         expect(result.value.mergedAt).toBeNull(); // @allow-result-access -- narrowed by result.ok
+        expect(result.value.prAuthorLogin).toBeNull(); // @allow-result-access -- no user in payload
       }
     });
 
@@ -289,6 +292,44 @@ describe('github-event-parser', () => {
         expect(result.value.action).toBeNull(); // @allow-result-access -- narrowed by result.ok
       }
     });
+
+    it('should return prAuthorLogin as null when pull_request.user is missing', () => {
+      const payload = {
+        ...validPRPayload,
+        pull_request: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test description',
+          state: 'open',
+          base: { ref: 'main' },
+        },
+      };
+
+      const result = parsePullRequestEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.prAuthorLogin).toBeNull(); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should return prAuthorLogin as null when pull_request.user.login is not a string', () => {
+      const payload = {
+        ...validPRPayload,
+        pull_request: {
+          ...validPRPayload.pull_request,
+          user: { login: 12345 },
+        },
+      };
+
+      const result = parsePullRequestEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.prAuthorLogin).toBeNull(); // @allow-result-access -- narrowed by result.ok
+      }
+    });
   });
 
   describe('parsePullRequestReviewEvent', () => {
@@ -305,6 +346,7 @@ describe('github-event-parser', () => {
         title: 'Test PR',
         state: 'open',
         base: { ref: 'main' },
+        user: { login: 'pr-author' },
       },
       review: {
         id: 456,
@@ -331,6 +373,7 @@ describe('github-event-parser', () => {
           eventType: 'pull_request_review',
           action: 'submitted',
           senderLogin: 'reviewer',
+          prAuthorLogin: 'pr-author',
           body: 'LGTM',
           baseBranch: 'main',
         });
@@ -512,6 +555,7 @@ describe('github-event-parser', () => {
           pullRequestNumber: 0,
           pullRequestId: 0,
           action: null,
+          prAuthorLogin: null,
           title: 'Push to main',
           baseBranch: null,
         });
@@ -578,6 +622,7 @@ describe('github-event-parser', () => {
         title: 'Test PR',
         state: 'open',
         base: { ref: 'main' },
+        user: { login: 'pr-author' },
       },
       comment: {
         id: 789,
@@ -605,6 +650,7 @@ describe('github-event-parser', () => {
           eventType: 'pull_request_review_comment',
           action: 'created',
           senderLogin: 'reviewer',
+          prAuthorLogin: 'pr-author',
           body: 'Nice code!',
           baseBranch: 'main',
         });
@@ -919,6 +965,7 @@ describe('github-event-parser', () => {
           eventType: 'issue_comment',
           action: 'created',
           senderLogin: 'commenter',
+          prAuthorLogin: null,
           body: 'Great work on this PR!',
           title: 'Test PR',
           state: 'open',

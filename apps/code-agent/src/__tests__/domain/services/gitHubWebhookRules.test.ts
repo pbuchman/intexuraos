@@ -26,6 +26,7 @@ describe('GitHubWebhookRules', () => {
     senderLogin: 'test-user',
     senderId: 999,
     senderType: 'User',
+    prAuthorLogin: null,
     title: 'Test PR',
     body: 'Test description',
     state: 'open',

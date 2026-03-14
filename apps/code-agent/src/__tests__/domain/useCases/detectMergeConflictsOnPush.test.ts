@@ -51,6 +51,7 @@ interface TestDeps {
   whatsappNotifier: {
     notifyTaskResumed: ReturnType<typeof vi.fn>;
   };
+  allowedBots: Set<string>;
   serviceUrl: string;
   orchestratorSecret: string;
   sleep?: ReturnType<typeof vi.fn>;
@@ -79,6 +80,7 @@ function createPushEvent(ref: string): GitHubPREvent {
     senderLogin: 'pusher',
     senderId: 1,
     senderType: 'User',
+    prAuthorLogin: null,
     title: null,
     body: null,
     state: null,
@@ -234,6 +236,7 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
     },
     statusMirrorService: { mirrorStatus: vi.fn() },
     whatsappNotifier: { notifyTaskResumed: vi.fn() },
+    allowedBots: new Set(['intexuraos-code-worker[bot]', 'claude[bot]']),
     serviceUrl: 'https://code-agent.test',
     orchestratorSecret: 'orchestrator-secret',
     ...(includeSleep ? { sleep: vi.fn().mockResolvedValue(undefined) } : {}),
@@ -1317,5 +1320,115 @@ describe('createDetectMergeConflictsOnPush', () => {
       managedConflictTaskId: 'task-existing',
       managedConflictTaskOwnerUserId: 'user-1',
     }));
+  });
+
+  describe('bot login remapping', () => {
+    it('remaps bot authorLogin to repo owner on personal fork', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+
+      deps.gitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok([
+        createSummary({
+          repository: 'pbuchman/intexuraos',
+          authorLogin: 'intexuraos-code-worker[bot]',
+          managedConflictTaskOwnerUserId: null,
+        }),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails()));
+
+      const event = createPushEvent('refs/heads/release/2026.03');
+      event.repository = 'pbuchman/intexuraos';
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      await detector.detectOnPush(event, logger);
+
+      expect(deps.userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('pbuchman');
+    });
+
+    it('remaps bot fallback login from event history to repo owner on personal fork', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+
+      deps.gitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok([
+        createSummary({
+          repository: 'pbuchman/intexuraos',
+          authorLogin: null,
+          managedConflictTaskOwnerUserId: null,
+        }),
+      ]));
+      deps.gitHubPREventRepo.findByPullRequest.mockResolvedValue(ok([
+        {
+          id: 'ev-1',
+          githubEventId: 10,
+          deliveryId: null,
+          repository: 'pbuchman/intexuraos',
+          repositoryId: 1,
+          pullRequestNumber: 42,
+          pullRequestId: 100,
+          eventType: 'pull_request',
+          action: 'opened',
+          senderLogin: 'intexuraos-code-worker[bot]',
+          senderId: 99,
+          senderType: 'Bot',
+          prAuthorLogin: null,
+          title: null,
+          body: null,
+          state: null,
+          baseBranch: null,
+          mergedAt: null,
+          createdAt: new Date('2026-03-11T10:00:00Z'),
+          processedAt: new Date('2026-03-11T10:00:01Z'),
+          payload: {},
+        } satisfies GitHubPREvent,
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails()));
+
+      const event = createPushEvent('refs/heads/release/2026.03');
+      event.repository = 'pbuchman/intexuraos';
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      await detector.detectOnPush(event, logger);
+
+      expect(deps.userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('pbuchman');
+    });
+
+    it('does NOT remap bot login on org repos', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+
+      deps.gitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok([
+        createSummary({
+          repository: 'intexuraos/intexuraos',
+          authorLogin: 'intexuraos-code-worker[bot]',
+          managedConflictTaskOwnerUserId: null,
+        }),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails()));
+
+      const event = createPushEvent('refs/heads/release/2026.03');
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      await detector.detectOnPush(event, logger);
+
+      expect(deps.userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('intexuraos-code-worker[bot]');
+    });
+
+    it('does NOT remap non-bot login on personal fork', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+
+      deps.gitHubPRSummaryRepo.findOpenByBaseBranch.mockResolvedValue(ok([
+        createSummary({
+          repository: 'pbuchman/intexuraos',
+          authorLogin: 'alice',
+          managedConflictTaskOwnerUserId: null,
+        }),
+      ]));
+      deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails()));
+
+      const event = createPushEvent('refs/heads/release/2026.03');
+      event.repository = 'pbuchman/intexuraos';
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      await detector.detectOnPush(event, logger);
+
+      expect(deps.userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('alice');
+    });
   });
 });

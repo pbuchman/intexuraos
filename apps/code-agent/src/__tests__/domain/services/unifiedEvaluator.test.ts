@@ -35,6 +35,7 @@ function createFakeEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent 
     senderLogin: 'dev-user',
     senderId: 1,
     senderType: 'User',
+    prAuthorLogin: null,
     title: 'feat: new feature',
     body: 'Can you fix the lint?',
     state: 'open',
