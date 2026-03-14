@@ -332,7 +332,7 @@ function buildPrComment(
     totalParts === 1
       ? '### Deep Validation Report'
       : `### Deep Validation Report (Part ${String(partNumber)}/${String(totalParts)})`;
-  const lines = [title, ''];
+  const lines = ['@ignore', '', title, ''];
 
   if (partNumber === 1) {
     lines.push(`**Cost:** $${String(costUsd)}`, '');
