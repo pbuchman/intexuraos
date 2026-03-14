@@ -149,6 +149,59 @@ describe('firestoreLogLineRepository', () => {
       expect(mockBatch.commit).toHaveBeenCalledTimes(1);
       expect(mockBatch.set).toHaveBeenCalledTimes(500);
     });
+
+    describe('error handling', () => {
+      it('returns FIRESTORE_ERROR when commit fails', async () => {
+        mockBatch.commit.mockRejectedValue(new Error('Connection timeout'));
+
+        const repo = createFirestoreLogLineRepository({ firestore: mockFirestore, logger });
+
+        const result = await repo.storeBatch('task-err', [createLine()]);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('FIRESTORE_ERROR');
+          expect(result.error.message).toBe('Connection timeout');
+        }
+      });
+
+      it('logs error with taskId and message', async () => {
+        mockBatch.commit.mockRejectedValue(new Error('Write quota exceeded'));
+
+        const repo = createFirestoreLogLineRepository({ firestore: mockFirestore, logger });
+
+        await repo.storeBatch('task-quota', [createLine()]);
+
+        expect(logger.error).toHaveBeenCalledWith(
+          { taskId: 'task-quota', error: 'Write quota exceeded' },
+          'Failed to store log lines'
+        );
+      });
+
+      it('handles non-Error thrown values with fallback message', async () => {
+        mockBatch.commit.mockRejectedValue('string error');
+
+        const repo = createFirestoreLogLineRepository({ firestore: mockFirestore, logger });
+
+        const result = await repo.storeBatch('task-str', [createLine()]);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('FIRESTORE_ERROR');
+          expect(result.error.message).toBe('string error');
+        }
+      });
+
+      it('does not log debug message on failure', async () => {
+        mockBatch.commit.mockRejectedValue(new Error('Failed'));
+
+        const repo = createFirestoreLogLineRepository({ firestore: mockFirestore, logger });
+
+        await repo.storeBatch('task-fail', [createLine()]);
+
+        expect(logger.debug).not.toHaveBeenCalled();
+      });
+    });
   });
 
 });
