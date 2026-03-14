@@ -110,6 +110,26 @@ describe('submitToExecutionAgent', () => {
     };
   }
 
+  /**
+   * Creates a mock implementation for update that returns different results for each call.
+   * Useful for testing sequential update operations (optimistic lock, rollback, fail-mark).
+   * @param outcomes - Array of results to return in sequence. Last result is reused for subsequent calls.
+   */
+  function createSequentialUpdateMock<T>(
+    outcomes: (ReturnType<typeof ok<T>> | ReturnType<typeof err>)[]
+  ): () => Promise<ReturnType<typeof ok<T>> | ReturnType<typeof err>> {
+    let callCount = 0;
+    return () => {
+      callCount++;
+      const index = Math.min(callCount, outcomes.length) - 1;
+      const outcome = outcomes[index];
+      if (outcome === undefined) {
+        throw new Error(`No outcome defined for call ${callCount}`);
+      }
+      return Promise.resolve(outcome);
+    };
+  }
+
   function setupHappyPathMocks(taskOverrides: Partial<CodeTask> = {}): CodeTask {
     const mockTask = createMockTask(taskOverrides);
 
@@ -599,16 +619,10 @@ describe('submitToExecutionAgent', () => {
           parentId: null,
         })
       );
-      // First update = optimistic lock (succeeds), second update = rollback (fails)
-      let updateCallCount = 0;
-      mockCodeTaskRepo.update.mockImplementation(() => {
-        updateCallCount++;
-        if (updateCallCount <= 1) {
-          return Promise.resolve(ok(mockTask));
-        }
-        // Rollback fails
-        return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Rollback write failed' }));
-      });
+      // First update = optimistic lock (succeeds), subsequent updates fail
+      mockCodeTaskRepo.update.mockImplementation(
+        createSequentialUpdateMock([ok(mockTask), err({ code: 'FIRESTORE_ERROR', message: 'Rollback write failed' })])
+      );
       // Create fails, triggering the rollback
       mockCodeTaskRepo.create.mockResolvedValue(
         err({ code: 'FIRESTORE_ERROR', message: 'Create failed' })
@@ -675,21 +689,10 @@ describe('submitToExecutionAgent', () => {
         err({ code: 'worker_unavailable', message: 'No workers available' })
       );
 
-      // First update = optimistic lock (succeeds), subsequent updates have different outcomes
-      let updateCallCount = 0;
-      mockCodeTaskRepo.update.mockImplementation(() => {
-        updateCallCount++;
-        if (updateCallCount === 1) {
-          // Optimistic lock succeeds
-          return Promise.resolve(ok({}));
-        }
-        if (updateCallCount === 2) {
-          // Lock rollback fails
-          return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Rollback failed' }));
-        }
-        // Fail-mark succeeds
-        return Promise.resolve(ok({}));
-      });
+      // First update = optimistic lock (succeeds), lock rollback fails, fail-mark succeeds
+      mockCodeTaskRepo.update.mockImplementation(
+        createSequentialUpdateMock([ok({}), err({ code: 'FIRESTORE_ERROR', message: 'Rollback failed' }), ok({})])
+      );
 
       const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
@@ -717,21 +720,10 @@ describe('submitToExecutionAgent', () => {
         err({ code: 'worker_unavailable', message: 'No workers available' })
       );
 
-      // First update = optimistic lock (succeeds), subsequent updates have different outcomes
-      let updateCallCount = 0;
-      mockCodeTaskRepo.update.mockImplementation(() => {
-        updateCallCount++;
-        if (updateCallCount === 1) {
-          // Optimistic lock succeeds
-          return Promise.resolve(ok({}));
-        }
-        if (updateCallCount === 2) {
-          // Lock rollback succeeds
-          return Promise.resolve(ok({}));
-        }
-        // Fail-mark fails (3rd call)
-        return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Fail-mark failed' }));
-      });
+      // First update = optimistic lock (succeeds), lock rollback succeeds, fail-mark fails
+      mockCodeTaskRepo.update.mockImplementation(
+        createSequentialUpdateMock([ok({}), ok({}), err({ code: 'FIRESTORE_ERROR', message: 'Fail-mark failed' })])
+      );
 
       const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
@@ -928,21 +920,10 @@ describe('submitToExecutionAgent', () => {
       );
       mockCodeTaskRepo.countQueued.mockResolvedValue(ok(11)); // Queue full
 
-      // First update = optimistic lock (succeeds), subsequent updates fail
-      let updateCallCount = 0;
-      mockCodeTaskRepo.update.mockImplementation(() => {
-        updateCallCount++;
-        if (updateCallCount === 1) {
-          // Optimistic lock succeeds
-          return Promise.resolve(ok({}));
-        }
-        if (updateCallCount === 2) {
-          // Lock rollback fails
-          return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Rollback failed' }));
-        }
-        // Fail-mark succeeds
-        return Promise.resolve(ok({}));
-      });
+      // First update = optimistic lock (succeeds), lock rollback fails, fail-mark succeeds
+      mockCodeTaskRepo.update.mockImplementation(
+        createSequentialUpdateMock([ok({}), err({ code: 'FIRESTORE_ERROR', message: 'Rollback failed' }), ok({})])
+      );
 
       const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
@@ -971,21 +952,10 @@ describe('submitToExecutionAgent', () => {
       );
       mockCodeTaskRepo.countQueued.mockResolvedValue(ok(11)); // Queue full
 
-      // First update = optimistic lock (succeeds), subsequent updates have different outcomes
-      let updateCallCount = 0;
-      mockCodeTaskRepo.update.mockImplementation(() => {
-        updateCallCount++;
-        if (updateCallCount === 1) {
-          // Optimistic lock succeeds
-          return Promise.resolve(ok({}));
-        }
-        if (updateCallCount === 2) {
-          // Lock rollback succeeds
-          return Promise.resolve(ok({}));
-        }
-        // Fail-mark fails (3rd call)
-        return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Fail-mark failed' }));
-      });
+      // First update = optimistic lock (succeeds), lock rollback succeeds, fail-mark fails
+      mockCodeTaskRepo.update.mockImplementation(
+        createSequentialUpdateMock([ok({}), ok({}), err({ code: 'FIRESTORE_ERROR', message: 'Fail-mark failed' })])
+      );
 
       const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
@@ -1202,17 +1172,10 @@ describe('submitToExecutionAgent', () => {
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-dev' })
       );
-      // Final update (cancel nonce) fails
-      let updateCallCount = 0;
-      mockCodeTaskRepo.update.mockImplementation(() => {
-        updateCallCount++;
-        if (updateCallCount === 1) {
-          // Optimistic lock succeeds
-          return Promise.resolve(ok({}));
-        }
-        // Cancel nonce update fails
-        return Promise.resolve(err({ code: 'FIRESTORE_ERROR', message: 'Update failed' }));
-      });
+      // Optimistic lock succeeds, cancel nonce update fails
+      mockCodeTaskRepo.update.mockImplementation(
+        createSequentialUpdateMock([ok({}), err({ code: 'FIRESTORE_ERROR', message: 'Update failed' })])
+      );
 
       const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
