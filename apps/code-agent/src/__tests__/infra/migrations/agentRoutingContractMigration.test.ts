@@ -86,18 +86,22 @@ describe('agentRoutingContractMigration', () => {
       });
     }
 
-    await expect(
-      assertNoLegacyAgentRoutingContractValues({ firestore, logger })
-    ).rejects.toThrow(/Legacy agent-routing values remain/);
+    const error: Error = await assertNoLegacyAgentRoutingContractValues({
+      firestore,
+      logger,
+    }).then(
+      () => new Error('Expected rejection but resolved'),
+      (e: unknown) => e as Error
+    );
+
+    expect(error.message).toMatch(/Legacy agent-routing values remain/);
 
     // Verify the error message contains exactly 10 IDs (truncated, not all 11)
-    try {
-      await assertNoLegacyAgentRoutingContractValues({ firestore, logger });
-    } catch (error: unknown) {
-      const message = (error as Error).message;
-      const ids = message.replace(/^.*\(sample task IDs: /, '').replace(/\)$/, '').split(', ');
-      expect(ids).toHaveLength(10);
-    }
+    const ids = error.message
+      .replace(/^.*\(sample task IDs: /, '')
+      .replace(/\)$/, '')
+      .split(', ');
+    expect(ids).toHaveLength(10);
   });
 
   it('fails on conflicting legacy executionPhase and agentType values', async () => {
