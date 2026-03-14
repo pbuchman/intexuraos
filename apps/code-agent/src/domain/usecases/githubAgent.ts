@@ -372,48 +372,51 @@ async function evaluateCommentEventInternal(
           worker_type: {
             type: 'string',
             enum: [...SUPPORTED_REVIEW_WORKER_TYPES],
-            description: 'The worker type to use.',
+            description: 'The worker type to use. Optional — omit to use the user\'s default.',
           },
         },
-        required: ['review_type', 'worker_type'],
+        required: ['review_type'],
       },
       run(args: Record<string, unknown>): Promise<string> {
         toolCalls.push({ tool: 'request_review', args });
         const rawReviewType = args['review_type'];
         const rawWorkerType = args['worker_type'];
         const reviewType = typeof rawReviewType === 'string' ? rawReviewType : '';
-        const workerType = typeof rawWorkerType === 'string' ? rawWorkerType : '';
 
         if (!(VALID_REVIEW_TYPES as readonly string[]).includes(reviewType)) {
           logger.warn({ reviewType }, 'GitHub Agent requested unknown review type');
           return Promise.resolve(JSON.stringify({ error: `Unknown review type: ${reviewType}` }));
         }
 
-        const normalizedWorkerType = normalizeReviewWorkerType(workerType);
-        if (normalizedWorkerType === undefined) {
-          logger.warn({ workerType }, 'GitHub Agent used unknown review worker type');
-          return Promise.resolve(JSON.stringify({ error: `Unknown worker type: ${workerType}` }));
+        // worker_type is optional — omit to use user's default
+        if (typeof rawWorkerType === 'string' && rawWorkerType !== '') {
+          const normalizedWorkerType = normalizeReviewWorkerType(rawWorkerType);
+          if (normalizedWorkerType === undefined) {
+            logger.warn({ workerType: rawWorkerType }, 'GitHub Agent used unknown review worker type');
+            return Promise.resolve(JSON.stringify({ error: `Unknown worker type: ${rawWorkerType}` }));
+          }
+
+          if (state.reviewWorkerType !== undefined && state.reviewWorkerType !== normalizedWorkerType) {
+            logger.warn(
+              { existingWorkerType: state.reviewWorkerType, workerType: normalizedWorkerType },
+              'GitHub Agent requested conflicting review worker types'
+            );
+            return Promise.resolve(JSON.stringify({ error: `Conflicting worker type: ${normalizedWorkerType}` }));
+          }
+
+          state.reviewWorkerType = normalizedWorkerType;
         }
 
-        if (state.reviewWorkerType !== undefined && state.reviewWorkerType !== normalizedWorkerType) {
-          logger.warn(
-            { existingWorkerType: state.reviewWorkerType, workerType: normalizedWorkerType },
-            'GitHub Agent requested conflicting review worker types'
-          );
-          return Promise.resolve(JSON.stringify({ error: `Conflicting worker type: ${normalizedWorkerType}` }));
-        }
-
-        state.reviewWorkerType = normalizedWorkerType;
         state.reviewTypes.push(reviewType);
         logger.info(
-          { repository: event.repository, prNumber: event.pullRequestNumber, reviewType, workerType: normalizedWorkerType },
+          { repository: event.repository, prNumber: event.pullRequestNumber, reviewType, workerType: state.reviewWorkerType },
           'GitHub Agent requested review from comment'
         );
         return Promise.resolve(JSON.stringify({
           success: true,
           reviewType,
-          workerType: normalizedWorkerType,
-          message: `Review recorded: ${reviewType} on ${normalizedWorkerType}`,
+          ...(state.reviewWorkerType !== undefined && { workerType: state.reviewWorkerType }),
+          message: `Review recorded: ${reviewType}${state.reviewWorkerType !== undefined ? ` on ${state.reviewWorkerType}` : ''}`,
         }));
       },
     });
