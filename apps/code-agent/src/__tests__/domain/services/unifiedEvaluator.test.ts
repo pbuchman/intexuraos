@@ -1936,7 +1936,7 @@ describe('LLM retry for pull_request events', () => {
     logger = createFakeLogger();
   });
 
-  it('retry recovers on second attempt', async () => {
+  it('retry recovers on second attempt with correction context', async () => {
     const evaluateEvent = vi.fn()
       .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model' }))
       .mockResolvedValueOnce(ok({
@@ -1957,6 +1957,15 @@ describe('LLM retry for pull_request events', () => {
     await evaluator.evaluate(event, logger);
 
     expect(evaluateEvent).toHaveBeenCalledTimes(2);
+
+    // First call: no correction context (only event arg)
+    expect(evaluateEvent.mock.calls[0]).toHaveLength(1);
+
+    // Second call: includes correction context with the original error
+    const secondCallArgs = evaluateEvent.mock.calls[1] as [unknown, string];
+    expect(secondCallArgs[1]).toContain('Empty response from model');
+    expect(secondCallArgs[1]).toContain('MUST call one of the provided tools');
+
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledTimes(1);
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1967,7 +1976,7 @@ describe('LLM retry for pull_request events', () => {
     );
   });
 
-  it('no retry for issue_comment', async () => {
+  it('no retry for issue_comment — no correction context passed', async () => {
     const evaluateEvent = vi.fn()
       .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model' }));
 
@@ -1983,9 +1992,11 @@ describe('LLM retry for pull_request events', () => {
     await evaluator.evaluate(event, logger);
 
     expect(evaluateEvent).toHaveBeenCalledTimes(1);
+    // Only event arg passed — no correction context
+    expect(evaluateEvent.mock.calls[0]).toHaveLength(1);
   });
 
-  it('fallback to skip on double failure', async () => {
+  it('fallback to skip on double failure — correction context passed on retry', async () => {
     const evaluateEvent = vi.fn()
       .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model' }))
       .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'Empty response from model again' }));
@@ -2002,6 +2013,15 @@ describe('LLM retry for pull_request events', () => {
     await evaluator.evaluate(event, logger);
 
     expect(evaluateEvent).toHaveBeenCalledTimes(2);
+
+    // First call: no correction context (only event arg)
+    expect(evaluateEvent.mock.calls[0]).toHaveLength(1);
+
+    // Second call: includes correction context with the first error message
+    const secondCallArgs = evaluateEvent.mock.calls[1] as [unknown, string];
+    expect(secondCallArgs[1]).toContain('Empty response from model');
+    expect(secondCallArgs[1]).toContain('MUST call one of the provided tools');
+
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({
         decision: 'skip',
