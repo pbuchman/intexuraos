@@ -17,7 +17,7 @@ import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
 const execFileAsync = promisify(execFile);
 
-export const DEEP_VALIDATION_PROMPT_VERSION = '4.0.0';
+export const DEEP_VALIDATION_PROMPT_VERSION = '4.1.0';
 
 const MAX_TRANSCRIPT_CHARS = 200_000;
 const GITHUB_COMMENT_MAX_CHARS = 65_536;
@@ -60,7 +60,7 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
 
   return [
     `[deep-validation-prompt v${DEEP_VALIDATION_PROMPT_VERSION}]`,
-    'You are a post-execution validator for an autonomous coding agent.',
+    'You are a post-execution validator for the IntexuraOS Agent-Based Code Task Execution Flow.',
     'Analyze the full session transcript below and write a concise Deep Validation Report for human review on the PR.',
     'Return ONLY markdown.',
     'Return the report explicitly as markdown tables.',
@@ -318,8 +318,8 @@ function buildPrComment(
 ): string {
   const title =
     totalParts === 1
-      ? '### Deep Validation Report'
-      : `### Deep Validation Report (Part ${String(partNumber)}/${String(totalParts)})`;
+      ? '### Deep Validation Report — IntexuraOS Agent-Based Code Task Execution Flow'
+      : `### Deep Validation Report (Part ${String(partNumber)}/${String(totalParts)}) — IntexuraOS Agent-Based Code Task Execution Flow`;
   const lines = [title, ''];
 
   if (partNumber === 1) {
