@@ -139,7 +139,8 @@ export interface GitHubAgentEvalResult {
  */
 export async function evaluateEvent(
   deps: GitHubAgentDeps,
-  event: GitHubPREvent
+  event: GitHubPREvent,
+  correctionContext?: string,
 ): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> {
   const { logger } = deps;
 
@@ -171,10 +172,10 @@ export async function evaluateEvent(
   );
 
   if (event.eventType === 'pull_request') {
-    return await evaluatePREventInternal(deps, event, owner, repo);
+    return await evaluatePREventInternal(deps, event, owner, repo, correctionContext);
   }
 
-  return await evaluateCommentEventInternal(deps, event);
+  return await evaluateCommentEventInternal(deps, event, correctionContext);
 }
 
 async function evaluatePREventInternal(
@@ -182,6 +183,7 @@ async function evaluatePREventInternal(
   event: GitHubPREvent,
   owner: string,
   repo: string,
+  correctionContext?: string,
 ): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> {
   const { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots } = deps;
 
@@ -295,9 +297,16 @@ async function evaluatePREventInternal(
     files,
   });
 
+  const messages: { role: 'user' | 'assistant'; content: string }[] = [
+    { role: 'user', content: 'Evaluate this PR and decide what reviews to request.' },
+  ];
+  if (correctionContext !== undefined) {
+    messages.push({ role: 'user', content: correctionContext });
+  }
+
   const agentResult = await toolCallingClient.run({
     systemPrompt,
-    messages: [{ role: 'user', content: 'Evaluate this PR and decide what reviews to request.' }],
+    messages,
     tools,
     maxIterations: 5,
     onExhausted: () => buildTriageRepairMessage(
@@ -343,6 +352,7 @@ async function evaluatePREventInternal(
 async function evaluateCommentEventInternal(
   deps: GitHubAgentDeps,
   event: GitHubPREvent,
+  correctionContext?: string,
 ): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> {
   const { logger, toolCallingClient, allowedBots } = deps;
   const commentBody = event.body ?? '';
@@ -497,9 +507,16 @@ async function evaluateCommentEventInternal(
     isBotSender,
   });
 
+  const commentMessages: { role: 'user' | 'assistant'; content: string }[] = [
+    { role: 'user', content: 'Evaluate this comment and decide what action to take.' },
+  ];
+  if (correctionContext !== undefined) {
+    commentMessages.push({ role: 'user', content: correctionContext });
+  }
+
   const agentResult = await toolCallingClient.run({
     systemPrompt,
-    messages: [{ role: 'user', content: 'Evaluate this comment and decide what action to take.' }],
+    messages: commentMessages,
     tools,
     maxIterations: 5,
     onExhausted: () => buildTriageRepairMessage(

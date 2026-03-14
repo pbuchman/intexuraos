@@ -30,7 +30,7 @@ export interface UnifiedEvaluatorDeps {
   dispatchService: WebhookDispatchService;
   eventDecisionRepo: EventDecisionRepository;
   gitHubEventLogEntryRepo?: GitHubEventLogEntryRepository;
-  evaluateEvent?: ((event: GitHubPREvent) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
+  evaluateEvent?: ((event: GitHubPREvent, correctionContext?: string) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
   /** Pre-bound review task creator. Logger is injected at call time; all other deps are closed over at wiring. */
   createReviewTask: (logger: Logger, request: CreateReviewTaskRequest) => Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>>;
   postTriageComment?: ((
@@ -167,14 +167,23 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
 
       let llmResult = await deps.evaluateEvent(event);
 
-      // Retry once for pull_request events — cost of extra call (~$0.001) is
-      // negligible compared to a missed review
+      // Retry once for pull_request events with corrective context —
+      // includes the failed response so the LLM can learn from its mistake
       if (!llmResult.ok && event.eventType === 'pull_request') {
+        const correctionContext = [
+          'Your previous attempt produced the following error:',
+          `"${llmResult.error.message}"`,
+          '',
+          'This is unacceptable. You MUST call one of the provided tools (request_review or skip) to make your triage decision.',
+          'Empty responses, malformed output, and failing to call a tool are never valid outcomes.',
+          'Analyze the PR again and use the correct tool.',
+        ].join('\n');
+
         logger.warn(
           { eventId: event.id, error: llmResult.error },
-          'LLM triage failed for pull_request event, retrying once'
+          'LLM triage failed for pull_request event, retrying with correction context'
         );
-        llmResult = await deps.evaluateEvent(event);
+        llmResult = await deps.evaluateEvent(event, correctionContext);
       }
 
       if (!llmResult.ok) {
