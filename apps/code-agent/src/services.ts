@@ -375,6 +375,7 @@ export function initServices(config: ServiceConfig): void {
     workerSettingsRepo,
     statusMirrorService,
     whatsappNotifier,
+    allowedBots: ALLOWED_BOTS,
     serviceUrl: config.serviceUrl,
     orchestratorSecret: config.orchestratorSecret,
   });
