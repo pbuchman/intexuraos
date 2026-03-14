@@ -54,10 +54,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/code-agent"
     },
-    "PENDING-apps-commands-agent": {
-      "files": ["apps/commands-agent/src/routes/internalRoutes.ts"],
-      "description": "Write tests for tightened v8 ignore blocks in apps/commands-agent"
-    },
     "PENDING-apps-data-insights-agent": {
       "files": [
         "apps/data-insights-agent/src/infra/firestore/visualizationRepository.ts",
