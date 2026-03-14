@@ -1001,7 +1001,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
-
         }
 
         // Extract PR number from prUrl for findByPR correlation (INT-465)
