@@ -87,6 +87,10 @@ describe('labelUtils', () => {
       expect(getWorkerTypeFromLabels(['kimi'])).toBe('kimi');
     });
 
+    it('returns qwen for single qwen label', () => {
+      expect(getWorkerTypeFromLabels(['qwen'])).toBe('qwen');
+    });
+
     it('returns worker type when mixed with non-worker labels', () => {
       expect(getWorkerTypeFromLabels(['bug', 'opus', 'feature'])).toBe('opus');
     });

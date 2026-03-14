@@ -481,6 +481,7 @@ export async function createTaskForPR(
   // Update task with dispatched status and worker location
   await codeTaskRepo.update(taskId, {
     status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchResult.value.workerLocation, // @allow-result-access -- narrowed by !dispatchResult.ok above
   });
 
