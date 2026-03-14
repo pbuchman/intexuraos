@@ -17,7 +17,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'getInternalNotionContext',
         summary: 'Get Notion connection context (internal)',
         description:
-/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
+/* v8 ignore start -- schema: string literal in Fastify route schema definition @preserve */
           'Internal endpoint for service-to-service communication. Returns connection state and token.',
           /* v8 ignore stop @preserve */
         tags: ['internal'],
@@ -193,22 +193,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Get user's Notion connection
       const connectionResult = await connectionRepository.getConnection(userId);
-      /* v8 ignore start -- test-infra: fake repository getConnection always succeeds @preserve */
       if (!connectionResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', connectionResult.error.message);
       }
-      /* v8 ignore stop @preserve */
       if (connectionResult.value?.connected !== true) {
         return await reply.fail('NOT_FOUND', 'User has no active Notion connection');
       }
 
       // Get token from connection
       const tokenResult = await connectionRepository.getToken(userId);
-      /* v8 ignore start -- test-infra: fake repository getToken always succeeds when connected @preserve */
       if (!tokenResult.ok || tokenResult.value === null) {
         return await reply.fail('NOT_FOUND', 'User has no active Notion connection');
       }
-      /* v8 ignore stop @preserve */
 
       // Fetch page preview from Notion
       const previewResult = await notionApi.getPageWithPreview(tokenResult.value, pageId);

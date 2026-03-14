@@ -9,7 +9,7 @@ import type {
   NotionError,
 } from '../../domain/integration/ports/ConnectionRepository.js';
 
-/* v8 ignore start -- ts-type: query is performed with a specific document id @preserve */
+/* v8 ignore start -- schema: Firestore document shape used only in `as` type casts @preserve */
 /**
  * Internal document structure stored in Firestore.
  */
@@ -142,9 +142,7 @@ export async function disconnectNotion(
 
     return ok({
       connected: false,
-      /* v8 ignore start -- ts-type: fallback for new connections @preserve */
       createdAt: existingData?.createdAt ?? now,
-      /* v8 ignore stop @preserve */
       updatedAt: now,
     });
   } catch (error) {

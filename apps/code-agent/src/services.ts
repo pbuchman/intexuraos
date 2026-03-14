@@ -67,6 +67,10 @@ import { createReviewTask } from './domain/usecases/createReviewTask.js';
 import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
 import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
 import { parseOwnerRepo } from './domain/utils/parseOwnerRepo.js';
+import type { GitHubWebhookAuditEventRepository } from './domain/repositories/gitHubWebhookAuditEventRepository.js';
+import { createFirestoreGitHubWebhookAuditEventRepository } from './infra/firestore/gitHubWebhookAuditEventRepository.js';
+import type { GitHubEventLogEntryRepository } from './domain/repositories/gitHubEventLogEntryRepository.js';
+import { createFirestoreGitHubEventLogEntryRepository } from './infra/firestore/gitHubEventLogEntryRepository.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
@@ -92,6 +96,8 @@ export interface ServiceContainer {
   workerHealthProbe: WorkerHealthProbe;
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
+  gitHubWebhookAuditEventRepo?: GitHubWebhookAuditEventRepository;
+  gitHubEventLogEntryRepo?: GitHubEventLogEntryRepository;
   turnMetricsRepo: TurnMetricsRepository;
   userServiceClient: UserServiceClient;
   gitHubPRClient: GitHubPRClient;
@@ -352,6 +358,8 @@ export function initServices(config: ServiceConfig): void {
 
   const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
   const gitHubPRSummaryRepo = createFirestoreGitHubPRSummariesRepository({ logger });
+  const gitHubWebhookAuditEventRepo = createFirestoreGitHubWebhookAuditEventRepository({ logger });
+  const gitHubEventLogEntryRepo = createFirestoreGitHubEventLogEntryRepository({ logger });
   const dispatchRetryRepo = createFirestoreDispatchRetryRepository({ logger });
 
   const mergeConflictDetector = createDetectMergeConflictsOnPush({
@@ -397,6 +405,7 @@ export function initServices(config: ServiceConfig): void {
     webhookRules,
     dispatchService,
     eventDecisionRepo,
+    gitHubEventLogEntryRepo,
     evaluateEvent: toolCallingClient !== undefined
       ? (event: GitHubPREvent): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
           { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS },
@@ -472,6 +481,8 @@ export function initServices(config: ServiceConfig): void {
     workerHealthProbe,
     gitHubPREventRepo,
     gitHubPRSummaryRepo,
+    gitHubWebhookAuditEventRepo,
+    gitHubEventLogEntryRepo,
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
     userServiceClient,
     gitHubPRClient,
