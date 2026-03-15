@@ -65,6 +65,12 @@ export type AutomationEvent =
       errorCode?: string;
     }
 
+  // Phase 4b: Linear issue linking failure (best-effort, non-blocking)
+  | {
+      type: 'linear_issue_failed';
+      error: string;
+    }
+
   // Phase 5: Task lifecycle (from orchestrator via task-event endpoint)
   | {
       type: 'task_started';

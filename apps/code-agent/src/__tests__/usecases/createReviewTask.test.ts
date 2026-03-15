@@ -1160,6 +1160,67 @@ describe('createReviewTask', () => {
       }
     });
 
+    it('records linear_issue_failed event when createIssue returns err', async () => {
+      const linearAgentClient = createFakeLinearAgentClient();
+      vi.mocked(linearAgentClient.createIssue).mockResolvedValue(
+        err({ code: 'UNAVAILABLE' as const, message: 'Usage limit exceeded' })
+      );
+      const deps = createFakeDeps({
+        codeTaskRepo: {
+          create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
+          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+          findByPR: vi.fn().mockResolvedValue(ok(null)),
+          findById: vi.fn().mockResolvedValue(ok(null)),
+          findByUser: vi.fn().mockResolvedValue(ok([])),
+          update: vi.fn().mockResolvedValue(ok(undefined)),
+        } as unknown as CodeTaskRepository,
+        linearAgentClient,
+      });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-linear-fail-1',
+        prTitle: 'Fix bug',
+      });
+
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'intexuraos/intexuraos', prNumber: 42 },
+        { type: 'linear_issue_failed', error: 'Usage limit exceeded' },
+        'user-1',
+      );
+    });
+
+    it('records linear_issue_failed event when resolveLinearIssueId throws', async () => {
+      const deps = createFakeDeps({
+        codeTaskRepo: {
+          create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
+          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+          findByPR: vi.fn().mockRejectedValue(new Error('Unexpected crash')),
+          findById: vi.fn().mockResolvedValue(ok(null)),
+          findByUser: vi.fn().mockResolvedValue(ok([])),
+          update: vi.fn().mockResolvedValue(ok(undefined)),
+        } as unknown as CodeTaskRepository,
+      });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-linear-fail-2',
+        prTitle: 'Fix bug',
+      });
+
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'intexuraos/intexuraos', prNumber: 42 },
+        { type: 'linear_issue_failed', error: 'Unexpected crash' },
+        'user-1',
+      );
+    });
+
     it('proceeds without linearIssueId when resolveLinearIssueId throws', async () => {
       const deps = createFakeDeps({
         codeTaskRepo: {
