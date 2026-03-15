@@ -211,6 +211,7 @@ describe('TaskDispatcher', () => {
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
     listWorkers: vi.fn(async () => []),
     cleanupTaskSession: vi.fn(async () => undefined),
+    isHealthy: vi.fn(() => true),
   };
 
   // Mock TokenRefresher
@@ -6265,6 +6266,152 @@ describe('TaskDispatcher', () => {
       // cancelled status should NOT produce a lifecycle event
       expect(lifecycleCall).toBeUndefined();
 
+      vi.useRealTimers();
+    });
+  });
+
+  describe('Docker health gate', () => {
+    let statePersistence: StatePersistence;
+    let healthDispatcher: TaskDispatcher;
+    let unhealthyProvider: IsolationProvider;
+
+    beforeEach(() => {
+      statePersistence = createStatePersistence();
+      unhealthyProvider = {
+        ...mockIsolationProvider,
+        isHealthy: vi.fn(() => false),
+      };
+      const unhealthyIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: unhealthyProvider,
+      };
+      healthDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        unhealthyIsolation,
+        singleAttemptCompletionControl
+      );
+    });
+
+    it('submitTask returns docker_unavailable when Docker is unhealthy', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'health-gate-submit',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await healthDispatcher.submitTask(request);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('docker_unavailable');
+      }
+    });
+
+    it('submitTask accepts task when Docker is healthy', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- test mock always has isHealthy
+      vi.mocked(unhealthyProvider.isHealthy!).mockReturnValue(true);
+
+      const request: CreateTaskRequest = {
+        taskId: 'health-gate-healthy',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await healthDispatcher.submitTask(request);
+      expect(result.ok).toBe(true);
+    });
+
+    it('adoptTask returns docker_unavailable when Docker is unhealthy', async () => {
+      const task: Task = {
+        taskId: 'health-gate-adopt',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        worktreePath: '/tmp/worktrees/test',
+        baseBranch: 'development',
+        linearIssueLabels: [],
+        hasChildren: false,
+        repository: 'pbuchman/intexuraos',
+        containerId: 'container-health-gate-adopt',
+        startedAt: new Date().toISOString(),
+      };
+
+      const result = await healthDispatcher.adoptTask(task);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('docker_unavailable');
+      }
+    });
+  });
+
+  describe('Container creation timeout', () => {
+    it('adoptTask fails when createWorker times out', async () => {
+      vi.useFakeTimers();
+      const statePersistence = createStatePersistence();
+      const hangingProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        createWorker: vi.fn(
+          // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentionally never resolves to simulate Docker hang
+          (): Promise<WorkerHandle> => new Promise(() => {})
+        ),
+        isHealthy: vi.fn(() => true),
+      };
+      const hangingIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: hangingProvider,
+      };
+      const timeoutDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        hangingIsolation,
+        singleAttemptCompletionControl
+      );
+
+      const task: Task = {
+        taskId: 'timeout-test',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        worktreePath: '/tmp/worktrees/test',
+        baseBranch: 'development',
+        linearIssueLabels: [],
+        hasChildren: false,
+        repository: 'pbuchman/intexuraos',
+        containerId: 'container-timeout-test',
+        startedAt: new Date().toISOString(),
+      };
+
+      const adoptPromise = timeoutDispatcher.adoptTask(task);
+      await vi.advanceTimersByTimeAsync(120_000);
+      const result = await adoptPromise;
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('service_error');
+        expect(result.error.message).toContain('Failed to start worker');
+      }
       vi.useRealTimers();
     });
   });
