@@ -22,7 +22,6 @@ import type {
   CreateReviewTaskResult,
 } from '../usecases/createReviewTask.js';
 import { isReviewCommandComment, extractReviewWorkerType } from '../utils/reviewTriage.js';
-import type { WorkerType } from '../models/codeTask.js';
 import type { GitHubEventLogEntryRepository } from '../repositories/gitHubEventLogEntryRepository.js';
 import type { AutomationLog } from '../ports/automationLog.js';
 
@@ -34,12 +33,6 @@ export interface UnifiedEvaluatorDeps {
   evaluateEvent?: ((event: GitHubPREvent, correctionContext?: string) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
   /** Pre-bound review task creator. Logger is injected at call time; all other deps are closed over at wiring. */
   createReviewTask: (logger: Logger, request: CreateReviewTaskRequest) => Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>>;
-  postTriageComment?: ((
-    senderLogin: string,
-    repository: string,
-    prNumber: number,
-    body: string,
-  ) => Promise<Result<{ commentId: number }, { code: string; message: string }>>) | undefined;
   automationLog: AutomationLog;
   /** Resolve a GitHub login to a platform userId for OAuth token lookup. */
   resolveTokenUserId?: ((senderLogin: string) => Promise<string | undefined>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
@@ -48,91 +41,6 @@ export interface UnifiedEvaluatorDeps {
 
 export interface UnifiedEvaluator {
   evaluate(event: GitHubPREvent, logger: Logger): Promise<void>;
-}
-
-export function buildTriageCommentBody(
-  reviewTypes: string[],
-  costUsd: number,
-  toolCalls: { tool: string; args: Record<string, unknown> }[],
-  reasoning: string,
-  options?: { workerType?: string; taskId?: string },
-): string {
-  const reviewTypesStr = reviewTypes.map((t) => `\`${t}\``).join(', ');
-
-  // Deduplicate identical tool calls
-  const seen = new Set<string>();
-  const uniqueToolCalls = toolCalls.filter((tc) => {
-    const key = `${tc.tool}:${JSON.stringify(tc.args)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  const toolCallLines = uniqueToolCalls
-    .map((tc) => `- \`${tc.tool}(${JSON.stringify(tc.args)})\``)
-    .join('\n');
-  const costStr = `$${String(costUsd)}`;
-  const workerTypeLine = options?.workerType !== undefined
-    ? `**Worker type:** \`${options.workerType}\``
-    : null;
-
-  return [
-    '@ignore',
-    '### Automated Code Review Triage Decision',
-    '',
-    '**Action:** Dispatching review',
-    `**Review types:** ${reviewTypesStr}`,
-    ...(workerTypeLine !== null ? [workerTypeLine] : []),
-    `**Cost:** ${costStr}`,
-    '',
-    '**Tool calls:**',
-    toolCallLines === '' ? '- None' : toolCallLines,
-    '',
-    '**Reasoning:**',
-    reasoning.split('\n').map((line) => `> ${line}`).join('\n'),
-    ...(options?.taskId !== undefined ? [
-      '',
-      `**Task ID:** \`${options.taskId}\``,
-      `[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/${options.taskId})`,
-    ] : []),
-  ].join('\n');
-}
-
-export function buildSkipCommentBody(
-  reason: string,
-  costUsd: number,
-  toolCalls: { tool: string; args: Record<string, unknown> }[],
-  reasoning: string,
-): string {
-  const costStr = `$${String(costUsd)}`;
-
-  // Deduplicate identical tool calls
-  const seen = new Set<string>();
-  const uniqueToolCalls = toolCalls.filter((tc) => {
-    const key = `${tc.tool}:${JSON.stringify(tc.args)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  const toolCallLines = uniqueToolCalls
-    .map((tc) => `- \`${tc.tool}(${JSON.stringify(tc.args)})\``)
-    .join('\n');
-
-  return [
-    '@ignore',
-    '### Automated Code Review Triage Decision',
-    '',
-    '**Action:** Skipped (no review needed)',
-    `**Reason:** ${reason}`,
-    `**Cost:** ${costStr}`,
-    '',
-    '**Tool calls:**',
-    toolCallLines === '' ? '- None' : toolCallLines,
-    '',
-    '**Reasoning:**',
-    reasoning.split('\n').map((line) => `> ${line}`).join('\n'),
-  ].join('\n');
 }
 
 export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvaluator {
@@ -240,7 +148,12 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             fallbackAction: 'skip',
           }, userId);
 
-          await handleReviewTriageFailure(deps, event, llmResult.error.message, workerType, startTime, logger);
+          await recordDecision(deps, event, {
+            decidedBy: 'github_agent',
+            decision: 'skip',
+            reason: `review_triage_failed: ${llmResult.error.message}`,
+            ...(workerType !== undefined && { dispatchParams: { workerType } }),
+          }, startTime, logger);
           return;
         }
 
@@ -319,40 +232,6 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             fallbackAction: 'skip',
           }, userId);
 
-          // Post error comment (best-effort)
-          if (deps.postTriageComment !== undefined) {
-            try {
-              const errorBody = [
-                '@ignore',
-                '### Automated Code Review Triage Decision',
-                '',
-                '**Action:** Review task creation failed',
-                `**Error code:** ${reviewResult.error.code}`,
-                ...(reviewResult.error.taskId !== undefined
-                  ? [`**Task ID:** \`${reviewResult.error.taskId}\``]
-                  : []),
-                '',
-                'The triage agent decided to request a review but the review task could not be created.',
-                '**Status:** Task was NOT queued. Review is not currently in progress.',
-                '',
-                ...(reviewResult.error.taskId !== undefined
-                  ? [`[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/${reviewResult.error.taskId})`]
-                  : []),
-              ].join('\n');
-              await deps.postTriageComment(
-                resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
-                event.repository,
-                event.pullRequestNumber,
-                errorBody,
-              );
-            } catch (commentError: unknown) {
-              logger.warn(
-                { eventId: event.id, error: commentError },
-                'Failed to post error comment for review task failure (best-effort)'
-              );
-            }
-          }
-
           await recordDecision(deps, event, {
             decidedBy: 'github_agent',
             decision: 'skip',
@@ -377,19 +256,6 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           reasoning,
           toolCalls: toolCallSummaries,
         }, userId);
-
-        await postReviewTriageComment(
-          deps,
-          event,
-          logger,
-          buildTriageCommentBody(
-            triage.reviewTypes,
-            usage.costUsd,
-            usage.toolCalls,
-            reasoning,
-            { workerType: reviewResult.value.workerType, taskId: reviewResult.value.taskId }, // @allow-result-access -- narrowed by !reviewResult.ok above
-          ),
-        );
 
         await recordDecision(deps, event, {
           decidedBy: 'github_agent',
@@ -424,21 +290,6 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         toolCalls: toolCallSummaries,
       }, userId);
 
-      // Post skip comment to PR (pull_request events only)
-      if (event.eventType === 'pull_request' && deps.postTriageComment !== undefined) {
-        try {
-          const skipBody = buildSkipCommentBody(triage.reason, usage.costUsd, usage.toolCalls, reasoning);
-          await deps.postTriageComment(
-            resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
-            event.repository,
-            event.pullRequestNumber,
-            skipBody,
-          );
-        } catch (commentError: unknown) {
-          logger.warn({ eventId: event.id, error: commentError }, 'Failed to post skip comment');
-        }
-      }
-
       await recordDecision(deps, event, {
         decidedBy: 'github_agent',
         decision: 'skip',
@@ -452,37 +303,6 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       }, startTime, logger);
     },
   };
-}
-
-async function postReviewTriageComment(
-  deps: UnifiedEvaluatorDeps,
-  event: GitHubPREvent,
-  logger: Logger,
-  body: string,
-): Promise<void> {
-  if (deps.postTriageComment === undefined) {
-    return;
-  }
-
-  try {
-    const commentResult = await deps.postTriageComment(
-      resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
-      event.repository,
-      event.pullRequestNumber,
-      body,
-    );
-    if (!commentResult.ok) {
-      logger.warn(
-        { eventId: event.id, error: commentResult.error },
-        'Failed to post triage comment'
-      );
-    }
-  } catch (commentError: unknown) {
-    logger.warn(
-      { eventId: event.id, error: commentError },
-      'Unexpected error posting triage comment'
-    );
-  }
 }
 
 async function dispatchAndRecord(
@@ -560,57 +380,6 @@ async function handleFallback(
       reason: `fallback_skip: ${reason}`,
     }, startTime, logger);
   }
-}
-
-/**
- * Fail-closed handling for explicit @review triage failures.
- * Posts a failure comment and records a skip decision - does NOT fallback dispatch.
- */
-async function handleReviewTriageFailure(
-  deps: UnifiedEvaluatorDeps,
-  event: GitHubPREvent,
-  errorMessage: string,
-  workerType: WorkerType | undefined, // @allow-undefined-type -- function parameter, not object property
-  startTime: number,
-  logger: Logger,
-): Promise<void> {
-  // Post failure comment (best-effort)
-  if (deps.postTriageComment !== undefined) {
-    try {
-      const lines = [
-        '@ignore',
-        '### Automated Code Review Triage Decision',
-        '',
-        '**Action:** Review triage failed',
-        `**Error:** ${errorMessage}`,
-      ];
-
-      if (workerType !== undefined) {
-        lines.push(`**Worker type:** \`${workerType}\``);
-      }
-
-      lines.push('', 'The review request could not be processed. Please try again.');
-
-      await deps.postTriageComment(
-        resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
-        event.repository,
-        event.pullRequestNumber,
-        lines.join('\n'),
-      );
-    } catch (commentError: unknown) {
-      logger.warn(
-        { eventId: event.id, error: commentError },
-        'Failed to post review triage failure comment (best-effort)'
-      );
-    }
-  }
-
-  await recordDecision(deps, event, {
-    decidedBy: 'github_agent',
-    decision: 'skip',
-    reason: `review_triage_failed: ${errorMessage}`,
-    ...(workerType !== undefined && { dispatchParams: { workerType } }),
-  }, startTime, logger);
 }
 
 async function recordDecision(
