@@ -17,7 +17,7 @@ interface CreateIssueBody {
 }
 
 interface UpdateStateBody {
-  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa';
+  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa' | 'done';
 }
 
 interface IssueIdParams {
@@ -41,6 +41,7 @@ const STATE_NAME_MAP: Record<string, string> = {
   in_progress: 'In Progress',
   in_review: 'In Review',
   qa: 'QA',
+  done: 'Done',
 };
 
 // Response shape matching code-agent expectations
@@ -76,19 +77,8 @@ function buildIssueDisplayResponse(
     labels: { id: string; name: string; color: string }[];
     url: string;
   },
-  comments: { createdAt: string }[]
+  commentSummary: { commentCount: number; lastCommentAt: string | null }
 ): IssueDisplayResponse {
-  const commentCount = comments.length;
-  let lastCommentAt: string | null = null;
-  if (commentCount > 0) {
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
-    const lastComment = comments[commentCount - 1];
-    if (lastComment !== undefined) {
-      lastCommentAt = lastComment.createdAt;
-    }
-    /* v8 ignore stop @preserve */
-  }
-
   return {
     identifier: issue.identifier,
     title: issue.title,
@@ -99,8 +89,17 @@ function buildIssueDisplayResponse(
     /* v8 ignore stop @preserve */
     labels: issue.labels.map((label) => ({ id: label.id, name: label.name })),
     url: issue.url,
-    commentCount,
-    lastCommentAt,
+    commentCount: commentSummary.commentCount,
+    lastCommentAt: commentSummary.lastCommentAt,
+  };
+}
+
+function toCommentSummary(comments: { createdAt: string }[]): { commentCount: number; lastCommentAt: string | null } {
+  return {
+    commentCount: comments.length,
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes indexed access possibly undefined despite length > 0 guard @preserve */
+    lastCommentAt: comments.length > 0 ? (comments[comments.length - 1]?.createdAt ?? null) : null,
+    /* v8 ignore stop @preserve */
   };
 }
 
@@ -404,7 +403,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
           properties: {
             state: {
               type: 'string',
-              enum: ['backlog', 'todo', 'in_progress', 'in_review', 'qa'],
+              enum: ['backlog', 'todo', 'in_progress', 'in_review', 'qa', 'done'],
               description: 'Target workflow state',
             },
           },
@@ -657,28 +656,46 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
 
       const services = getServices();
-      const issues: IssueDisplayResponse[] = [];
 
-      for (const identifier of request.body.identifiers) {
-        const issueResult = await services.issueRepository.findByIdentifier(identifier, userId);
-        if (!issueResult.ok) {
-          reply.status(500);
-          return await handleLinearError(issueResult.error, reply);
-        }
-
-        const issue = issueResult.value;
-        if (issue === null) {
-          continue;
-        }
-
-        const commentsResult = await services.commentRepository.listByIssueId(issue.id);
-        if (!commentsResult.ok) {
-          reply.status(500);
-          return await handleLinearError(commentsResult.error, reply);
-        }
-
-        issues.push(buildIssueDisplayResponse(issue, commentsResult.value));
+      // 1. Batch-fetch all issues
+      const issuesResult = await services.issueRepository.findByIdentifiers(
+        request.body.identifiers, userId
+      );
+      if (!issuesResult.ok) {
+        reply.status(500);
+        return await handleLinearError(issuesResult.error, reply);
       }
+
+      const foundIssues = issuesResult.value; // @allow-result-access -- guarded by if (!issuesResult.ok) above
+      if (foundIssues.length === 0) {
+        return await reply.ok({ issues: [] });
+      }
+
+      // 2. Batch-fetch comment summaries
+      const issueIds = foundIssues.map((issue) => issue.id);
+      const summariesResult = await services.commentRepository.getCommentSummaries(issueIds);
+      if (!summariesResult.ok) {
+        reply.status(500);
+        return await handleLinearError(summariesResult.error, reply);
+      }
+
+      // 3. Assemble response (preserve input identifier order)
+      const summaryMap = new Map(summariesResult.value.map((s) => [s.issueId, s])); // @allow-result-access -- guarded by if (!summariesResult.ok) above
+      const identifierOrder = new Map(
+        request.body.identifiers.map((id, idx) => [id, idx])
+      );
+      /* v8 ignore start -- ts-type: Map.get() returns T | undefined but all found issues have identifiers in the input map @preserve */
+      const sortedIssues = [...foundIssues].sort(
+        (a, b) => (identifierOrder.get(a.identifier) ?? 0) - (identifierOrder.get(b.identifier) ?? 0)
+      );
+      /* v8 ignore stop @preserve */
+
+      const issues: IssueDisplayResponse[] = sortedIssues.map((issue) => {
+        /* v8 ignore start -- ts-type: Map.get() returns T | undefined but getCommentSummaries returns entry for every issueId @preserve */
+        const summary = summaryMap.get(issue.id) ?? { commentCount: 0, lastCommentAt: null };
+        /* v8 ignore stop @preserve */
+        return buildIssueDisplayResponse(issue, summary);
+      });
 
       return await reply.ok({ issues });
     }
@@ -821,7 +838,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await handleLinearError(commentsResult.error, reply);
       }
 
-      const displayIssue = buildIssueDisplayResponse(issue, commentsResult.value);
+      const displayIssue = buildIssueDisplayResponse(issue, toCommentSummary(commentsResult.value)); // @allow-result-access -- guarded by if (!commentsResult.ok) above
 
       return await reply.ok({
         id: issue.id,

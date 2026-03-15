@@ -3254,6 +3254,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerSettingsRepo,
         gitHubPRClient,
         userServiceClient,
+        automationLog,
       } =
         getServices();
       const userId = request.user?.userId;
@@ -3300,6 +3301,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           userServiceClient,
           orchestratorSecret: loadConfig().orchestratorSecret,
           serviceUrl: loadConfig().serviceUrl,
+          automationLog,
         },
         retryRequest
       );
@@ -3475,6 +3477,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerSettingsRepo,
         gitHubPRClient,
         userServiceClient,
+        automationLog: feedbackAutomationLog,
       } =
         getServices();
       const userId = request.user?.userId;
@@ -3503,6 +3506,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           userServiceClient,
           orchestratorSecret: loadConfig().orchestratorSecret,
           serviceUrl: loadConfig().serviceUrl,
+          automationLog: feedbackAutomationLog,
         },
         {
           originalTaskId: taskId,

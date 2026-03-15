@@ -170,6 +170,7 @@ describe('submitTaskFeedback use case', () => {
       userServiceClient: mockUserServiceClient as unknown as SubmitTaskFeedbackDeps['userServiceClient'],
       orchestratorSecret: 'test-orchestrator-secret',
       serviceUrl: 'https://test.example.com',
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     };
   }
 
