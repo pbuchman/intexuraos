@@ -3498,6 +3498,53 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.error?.code).toBe('worker_interrupted');
       expect(getResult.value.callbackReceived).toBe(true);
     });
+
+    it('stores error for cancelled tasks', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_cancelled_task_unique_775',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'cancelled' as const,
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Verify task was updated
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('cancelled');
+      expect(getResult.value.error?.code).toBe('task_cancelled');
+      expect(getResult.value.callbackReceived).toBe(true);
+    });
   });
 
   describe('planning-agent unclear failure mapping', () => {
