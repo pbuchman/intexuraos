@@ -243,6 +243,12 @@ describe('pubsubRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({ success: true });
+
+      const findResult = await ctx.bookmarkRepository.findById(createResult.value.id);
+      expect(findResult.ok).toBe(true);
+      if (findResult.ok && findResult.value !== null) {
+        expect(findResult.value.ogFetchStatus).toBe('pending');
+      }
     });
   });
 
