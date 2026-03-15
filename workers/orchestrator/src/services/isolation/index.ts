@@ -8,6 +8,7 @@
 import type { Logger } from '@intexuraos/common-core';
 import { DockerProvider, type DockerProviderConfig } from './docker-provider.js';
 import type { IsolationProvider } from './types.js';
+import { withTimeout } from '../../with-timeout.js';
 
 /**
  * Create a Docker isolation provider.
@@ -22,26 +23,17 @@ export async function createIsolationProvider(
 ): Promise<IsolationProvider> {
   const provider = new DockerProvider(config, logger);
 
-  // Timeout wrapper for Docker availability verification
   const DOCKER_CHECK_TIMEOUT_MS = 30 * 1000; // 30 seconds
-  const cleanupPromise = provider.assertDockerAvailable();
-  let timeoutHandle: NodeJS.Timeout | undefined;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutHandle = setTimeout(() => {
-      reject(new Error('Docker availability check timeout'));
-    }, DOCKER_CHECK_TIMEOUT_MS);
-  });
 
   try {
-    await Promise.race([cleanupPromise, timeoutPromise]);
-    if (timeoutHandle !== undefined) {
-      clearTimeout(timeoutHandle);
-    }
+    await withTimeout(
+      provider.assertDockerAvailable(),
+      DOCKER_CHECK_TIMEOUT_MS,
+      'Docker availability check timeout'
+    );
     provider.startPeriodicCleanup();
+    provider.startHealthMonitor();
   } catch (error) {
-    if (timeoutHandle !== undefined) {
-      clearTimeout(timeoutHandle);
-    }
     const errMsg = error instanceof Error ? error.message : String(error);
     if (
       errMsg.includes('timeout') ||
