@@ -80,7 +80,7 @@ describe('FirestorePRAutomationCommentRepository', () => {
   });
 
   describe('document ID format', () => {
-    it('uses {repository}:{prNumber} as document ID', async () => {
+    it('uses {repository_with_slash_replaced}#{prNumber} as document ID', async () => {
       await repo.create(sampleComment);
 
       // Verify by accessing with correct repository + prNumber
