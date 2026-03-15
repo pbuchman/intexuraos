@@ -161,7 +161,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '3.0.0',
+  version: '4.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -238,8 +238,9 @@ ${prFlowSection}
 1. Use TDD where practical (tests before behavior changes).
 2. Commit changes locally — do NOT push yet.
 3. Run \`pnpm run ci:tracked\` — must pass.
-4. Run the code review loop using \`superpowers:requesting-code-review\`.
-5. ${implementationFlowStep5}
+4. Run \`/simplify\` on all changed files — MANDATORY, NON-NEGOTIABLE. This reviews code for reuse, quality, and efficiency. After simplify makes changes, re-run \`pnpm run ci:tracked\`.
+5. Run the code review loop using \`superpowers:requesting-code-review\`.
+6. ${implementationFlowStep5}
 
 ### MANDATORY Code Review (zero-tolerance loop)
 BEFORE creating the PR:
