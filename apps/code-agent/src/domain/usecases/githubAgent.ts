@@ -311,7 +311,6 @@ async function evaluatePREventInternal(
     maxIterations: 5,
     onExhausted: () => buildTriageRepairMessage(
       { skipped: state.skipped, skipReason: state.skipReason, reviewsRequested },
-      'No triage tool was called. You must call either request_review or skip.',
     ),
     repairIterations: 2,
   });
@@ -521,7 +520,6 @@ async function evaluateCommentEventInternal(
     maxIterations: 5,
     onExhausted: () => buildTriageRepairMessage(
       { skipped: state.skipped, skipReason: state.skipReason, reviewsRequested: state.reviewTypes },
-      'No triage tool was called. You must call a tool to make your decision.',
     ),
     repairIterations: 2,
   });

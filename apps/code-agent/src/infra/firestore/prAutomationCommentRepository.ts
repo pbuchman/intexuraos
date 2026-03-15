@@ -1,7 +1,7 @@
 /**
  * Firestore repository for PR automation comments.
  *
- * Doc ID: `${repository}:${prNumber}` e.g. "pbuchman/intexuraos:42"
+ * Doc ID: `${repository_safe}#${prNumber}` e.g. "pbuchman__intexuraos#42"
  * Stores one document per PR tracking the GitHub comment used for the unified automation log.
  */
 
@@ -14,7 +14,7 @@ export type { PRAutomationComment, PRAutomationCommentRepository };
 const COLLECTION_NAME = 'pr_automation_comments';
 
 function buildDocId(repository: string, prNumber: number): string {
-  return `${repository}:${String(prNumber)}`;
+  return `${repository.replace('/', '__')}#${String(prNumber)}`;
 }
 
 export function createFirestorePRAutomationCommentRepository(_deps: {
