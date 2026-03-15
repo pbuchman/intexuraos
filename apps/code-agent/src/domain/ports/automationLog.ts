@@ -19,6 +19,8 @@ export type AutomationEvent =
       action: string; // e.g., "opened"
       sender: string; // GitHub login
       deliveryId: string; // X-GitHub-Delivery header
+      eventUrl?: string; // html_url from the GitHub webhook payload
+      summary?: string; // Short human-readable preview of the event content
     }
 
   // Phase 2: Decision -- skip

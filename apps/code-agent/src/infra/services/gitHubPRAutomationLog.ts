@@ -63,6 +63,12 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
         }
         const { owner, repo } = parsed;
         const eventLine = renderEvent(event, { repository: prRef.repository });
+
+        // Filtered events (e.g., deterministic skips) return null — skip recording entirely
+        if (eventLine === null) {
+          return;
+        }
+
         const now = new Date().toISOString();
 
         if (existing === undefined) {
