@@ -689,6 +689,9 @@ describe('processLinearAction', () => {
         expect(result.value.status).toBe('failed');
         expect(result.value.message).toBe('LLM service unavailable');
       }
+
+      // Verify the create failure was triggered (no failed issue persisted)
+      expect(fakeFailedIssueRepo.count).toBe(0);
     });
 
     it('still returns failed status when failedIssueRepository.create fails during invalid extraction', async () => {
@@ -720,6 +723,9 @@ describe('processLinearAction', () => {
         expect(result.value.status).toBe('failed');
         expect(result.value.message).toBe('Too vague');
       }
+
+      // Verify the create failure was triggered (no failed issue persisted)
+      expect(fakeFailedIssueRepo.count).toBe(0);
     });
 
     it('still returns failed status when failedIssueRepository.create fails during Linear API failure', async () => {
@@ -755,6 +761,9 @@ describe('processLinearAction', () => {
         expect(result.value.status).toBe('failed');
         expect(result.value.message).toBe('API down');
       }
+
+      // Verify the create failure was triggered (no failed issue persisted)
+      expect(fakeFailedIssueRepo.count).toBe(0);
     });
   });
 
