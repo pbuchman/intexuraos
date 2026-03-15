@@ -1812,6 +1812,110 @@ describe('linearRoutes', () => {
       expect(body.data.offset).toBe(3);
       expect(body.data.hasMore).toBe(false);
     });
+
+    it('pagination offset=total returns empty', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      // Create exactly 5 comments
+      for (let i = 1; i <= 5; i++) {
+        await ctx.commentRepository.save({
+          id: `comment-${i}`,
+          issueId: 'issue-1',
+          issueIdentifier: 'ENG-123',
+          userId: 'test-user-123',
+          userName: 'Test User',
+          body: `Comment ${i}`,
+          createdAt: `2025-01-15T1${i}:00:00Z`,
+          updatedAt: `2025-01-15T1${i}:00:00Z`,
+          syncedAt: `2025-01-15T1${i}:00:00Z`,
+        });
+      }
+
+      const token = await createToken({ sub: 'test-user-123' });
+      // offset=5 equals total=5, should return empty array
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments?offset=5',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data.comments).toHaveLength(0);
+      expect(body.data.offset).toBe(5);
+      expect(body.data.total).toBe(5);
+      expect(body.data.hasMore).toBe(false);
+    });
+
+    it('pagination offset>total returns empty', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      // Create exactly 5 comments
+      for (let i = 1; i <= 5; i++) {
+        await ctx.commentRepository.save({
+          id: `comment-${i}`,
+          issueId: 'issue-1',
+          issueIdentifier: 'ENG-123',
+          userId: 'test-user-123',
+          userName: 'Test User',
+          body: `Comment ${i}`,
+          createdAt: `2025-01-15T1${i}:00:00Z`,
+          updatedAt: `2025-01-15T1${i}:00:00Z`,
+          syncedAt: `2025-01-15T1${i}:00:00Z`,
+        });
+      }
+
+      const token = await createToken({ sub: 'test-user-123' });
+      // offset=10 exceeds total=5, should return empty array
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments?offset=10',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data.comments).toHaveLength(0);
+      expect(body.data.offset).toBe(10);
+      expect(body.data.total).toBe(5);
+      expect(body.data.hasMore).toBe(false);
+    });
   });
 });
 
