@@ -433,6 +433,7 @@ describe('Automation log integration flows', () => {
         err({ code: 'LLM_FAILED' as const, message: 'Model unavailable' }),
       );
 
+
       const { statusCode } = await sendWebhook('pull_request', createPullRequestPayload());
       expect(statusCode).toBe(200);
 
