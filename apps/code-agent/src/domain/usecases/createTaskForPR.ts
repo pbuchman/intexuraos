@@ -33,6 +33,8 @@ import { generateWebhookSecret } from '../utils/secrets.js';
 import type { AutomationLog } from '../ports/automationLog.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
 
+const DEFAULT_LINEAR_FALLBACK_ERROR = 'Linear unavailable';
+
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
   repository: string;
@@ -240,15 +242,13 @@ export async function createTaskForPR(
       { userId },
       'Linear issue creation failed, using fallback mode'
     );
-    /* v8 ignore start -- async-timing: fire-and-forget .catch() callback only runs on rejected promise timing @preserve */
     deps.automationLog.record(
       { repository, prNumber },
-      { type: 'linear_issue_failed', error: linearResult.linearFallbackError ?? 'Linear unavailable' },
+      { type: 'linear_issue_failed', error: linearResult.linearFallbackError ?? DEFAULT_LINEAR_FALLBACK_ERROR },
       userId,
     ).catch((logError: unknown) => {
       logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
     });
-    /* v8 ignore stop @preserve */
   }
 
   try {
