@@ -118,6 +118,7 @@ function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateRe
     workerSettingsRepo: createFakeWorkerSettingsRepo(),
     orchestratorSecret: 'test-secret',
     serviceUrl: 'https://code-agent.example.com',
+    automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     ...overrides,
   };
 }
@@ -150,7 +151,7 @@ describe('createReviewTask', () => {
     // Verify task status is updated to dispatched after successful dispatch
     expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
       'task-review-1',
-      { status: 'dispatched' }
+      { status: 'dispatched', dispatchedAt: expect.any(Date) }
     );
   });
 
@@ -200,16 +201,16 @@ describe('createReviewTask', () => {
       workerType: 'auto',
     });
 
-    // Verify replacement comment was posted
-    expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
-      'ghp_test_token',
-      'intexuraos',
-      'intexuraos',
-      42,
-      expect.stringContaining('### Automated Code Review Cancelled')
+    // Verify replacement was recorded in automation log
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'intexuraos/intexuraos', prNumber: 42 },
+      expect.objectContaining({
+        type: 'review_replaced',
+        replacedTaskId: 'task-review-existing',
+        replacedWorkerType: 'auto',
+      }),
+      'user-existing',
     );
-    const commentBody = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0]?.[4];
-    expect(commentBody).toContain('**Cancelled Task ID:** `task-review-existing`');
 
     // Verify old task was cancelled locally
     expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
@@ -528,10 +529,15 @@ describe('createReviewTask', () => {
     expect(result.value.status).toBe('created');
     expect(result.value.taskId).toBe('task-review-new');
 
-    // Verify replacement comment was posted without worker type
-    const commentBody = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0]?.[4] as string;
-    expect(commentBody).toContain('### Automated Code Review Cancelled');
-    expect(commentBody).not.toContain('**Previous Reviewer:**');
+    // Verify replacement was recorded in automation log without worker type
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      expect.objectContaining({
+        type: 'review_replaced',
+        replacedTaskId: 'task-review-existing',
+      }),
+      'user-existing',
+    );
   });
 
   it('returns worker type in result', async () => {
@@ -577,7 +583,7 @@ describe('createReviewTask', () => {
     });
   });
 
-  it('posts replacement notification using the active task owner token', async () => {
+  it('records replacement in automation log with existing task details', async () => {
     const gitHubPRClient = createFakeGitHubPRClient();
     const userServiceClient = createFakeUserServiceClient();
     const deps = createFakeDeps({
@@ -607,18 +613,16 @@ describe('createReviewTask', () => {
       eventId: 'evt-replacement-comment',
     });
 
-    // Verify replacement comment uses existing task owner's token
-    expect(userServiceClient.getOAuthToken).toHaveBeenCalledWith('user-existing', 'github');
-    expect(gitHubPRClient.postPRComment).toHaveBeenCalledWith(
-      'ghp_test_token',
-      'pbuchman',
-      'intexuraos',
-      42,
-      expect.stringContaining('### Automated Code Review Cancelled')
+    // Verify replacement was recorded in automation log with existing task owner
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      expect.objectContaining({
+        type: 'review_replaced',
+        replacedTaskId: 'task-review-existing',
+        replacedWorkerType: 'claude-code',
+      }),
+      'user-existing',
     );
-    const commentBody = vi.mocked(gitHubPRClient.postPRComment).mock.calls[0]?.[4];
-    expect(commentBody).toContain('**Cancelled Task ID:** `task-review-existing`');
-    expect(commentBody).toContain('**Previous Reviewer:** `claude-code`');
   });
 
   it('returns task_creation_failed when active review lookup fails', async () => {
@@ -946,6 +950,68 @@ describe('createReviewTask', () => {
       });
 
       expect(result.ok).toBe(true);
+    });
+
+    it('skips PR title update when repository format is invalid (no slash)', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'no-slash-repo',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-invalid-repo',
+        prTitle: 'Fix bug',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+    });
+
+    it('skips PR title update when GitHub token is not available', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      const userServiceClient = createFakeUserServiceClient();
+      vi.mocked(userServiceClient.getOAuthToken).mockResolvedValue(
+        err({ code: 'CONNECTION_NOT_FOUND' as const, message: 'No GitHub token' })
+      );
+      const deps = createFakeDeps({ gitHubPRClient, userServiceClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-no-token',
+        prTitle: 'Fix bug',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(gitHubPRClient.updatePRTitle).not.toHaveBeenCalled();
+    });
+
+    it('logs warning when updatePRTitle fails (best-effort)', async () => {
+      const gitHubPRClient = createFakeGitHubPRClient();
+      vi.mocked(gitHubPRClient.updatePRTitle).mockResolvedValue(
+        err({ code: 'UNAUTHORIZED' as const, message: 'Bad credentials' })
+      );
+      const deps = createFakeDeps({ gitHubPRClient });
+
+      const result = await createReviewTask(deps, {
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-title-fail',
+        prTitle: 'Fix bug',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(gitHubPRClient.updatePRTitle).toHaveBeenCalled();
+      expect(deps.logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ prNumber: 42, linearIssueId: 'INT-300' }),
+        expect.stringContaining('Failed to update PR title'),
+      );
     });
   });
 

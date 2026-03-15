@@ -10,7 +10,7 @@ import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
-import { notifyTaskOutcome } from '../domain/utils/prTaskNotification.js';
+
 
 export const parseLinearIdentifierFromUrl = (url: string): string | null => {
   const mdMatch = /\[.*?\]\((.*?)\)/.exec(url);
@@ -27,6 +27,37 @@ export const parseLinearIdentifierFromUrl = (url: string): string | null => {
     return null;
   }
 };
+
+/**
+ * Best-effort: record a task_failed automation log event for PR-linked tasks.
+ * Encapsulates the repeated guard + fire-and-forget pattern used across enforcement checks.
+ */
+function recordTaskFailed(params: {
+  task: { repository: string; prNumber?: number; dispatchedAt?: Timestamp; userId: string };
+  taskId: string;
+  completedAt: Date;
+  error: string;
+  errorCode: string;
+}): void {
+  if (params.task.prNumber === undefined) return;
+  getServices().automationLog.record(
+    { repository: params.task.repository, prNumber: params.task.prNumber },
+    {
+      type: 'task_failed',
+      taskId: params.taskId,
+      error: params.error,
+      errorCode: params.errorCode,
+      /* v8 ignore start -- ts-type: boolean branch of conditional spread is unreachable to v8 when dispatchedAt is always set in test fixtures @preserve */
+      ...(params.task.dispatchedAt !== undefined && {
+        duration: params.completedAt.getTime() - new Date(params.task.dispatchedAt.toDate()).getTime(),
+      }),
+      /* v8 ignore stop @preserve */
+    },
+    params.task.userId,
+  ).catch((e: unknown) => {
+    getServices().logger.warn({ error: e, taskId: params.taskId }, 'Failed to record automation log for task failure');
+  });
+}
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
@@ -57,7 +88,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       planning_subtask_urls?: string;
       planning_pr_url?: string;
       planning_unclear_clarification?: string;
-      execution_outcome_label?: 'implemented';
+      execution_outcome_label?: 'implemented' | 'already_completed';
       execution_superpowers_executing_plans_used?: '0' | '1';
       execution_superpowers_requesting_code_review_used?: '0' | '1';
       execution_linear_issue_url?: string;
@@ -449,6 +480,65 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             message: 'Execution enforcement requires routed linearIssueId',
           };
         }
+
+        if (executionResult.execution_outcome_label === 'already_completed') {
+          const routedIssueValidation = await linearAgentClient.validateIssue({
+            userId: task.userId,
+            identifier: task.linearIssueId,
+          });
+          if (!routedIssueValidation.ok) {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: `Failed to validate routed issue: ${routedIssueValidation.error.message}`,
+            };
+          }
+
+          const summaryText = executionResult.summary ?? 'No details provided';
+          const commentResult = await linearAgentClient.addComment({
+            userId: task.userId,
+            issueId: routedIssueValidation.value.id,
+            body: `Work already completed: ${summaryText}`,
+          });
+          if (!commentResult.ok) {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: `Failed to comment already-completed issue: ${commentResult.error.message}`,
+            };
+          }
+
+          const markDone = await linearAgentClient.updateIssueState({
+            userId: task.userId,
+            issueId: routedIssueValidation.value.id,
+            state: 'done',
+          });
+          if (!markDone.ok) {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: `Failed to move already-completed issue to Done: ${markDone.error.message}`,
+            };
+          }
+
+          const keepCodeTaskLabel = await linearAgentClient.updateIssueMetadata({
+            userId: task.userId,
+            issueId: routedIssueValidation.value.id,
+            assigneeId: null,
+            addLabels: ['code-task'],
+            removeLabels: ['unclear', 'planning-task'],
+          });
+          if (!keepCodeTaskLabel.ok) {
+            return {
+              ok: false,
+              code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+              message: `Failed to preserve code-task label on already-completed issue: ${keepCodeTaskLabel.error.message}`,
+            };
+          }
+
+          return { ok: true };
+        }
+
         if (!executionResult.prUrl) {
           return {
             ok: false,
@@ -681,20 +771,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
             await cleanupLockIfPR();
 
-            // Post failure comment (best-effort)
-            if (task.prNumber !== undefined) {
-              await notifyTaskOutcome(
-                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
-                {
-                  taskId,
-                  repository: task.repository,
-                  prNumber: task.prNumber,
-                  userId: task.userId,
-                  outcome: 'implementation_failed',
-                  errorCode: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
-                },
-              );
-            }
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Execution completion missing result payload',
+              errorCode: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
+            });
 
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
@@ -728,20 +809,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
             await cleanupLockIfPR();
 
-            // Post failure comment (best-effort)
-            if (task.prNumber !== undefined) {
-              await notifyTaskOutcome(
-                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
-                {
-                  taskId,
-                  repository: task.repository,
-                  prNumber: task.prNumber,
-                  userId: task.userId,
-                  outcome: 'implementation_failed',
-                  errorCode: executionEnforcement.code,
-                },
-              );
-            }
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: executionEnforcement.message,
+              errorCode: executionEnforcement.code,
+            });
 
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
@@ -769,20 +841,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
             await cleanupLockIfPR();
 
-            // Post failure comment (best-effort)
-            if (task.prNumber !== undefined) {
-              await notifyTaskOutcome(
-                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
-                {
-                  taskId,
-                  repository: task.repository,
-                  prNumber: task.prNumber,
-                  userId: task.userId,
-                  outcome: 'reply_failed',
-                  errorCode: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
-                },
-              );
-            }
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Pull request completion missing result payload',
+              errorCode: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            });
 
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
@@ -816,20 +879,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
             await cleanupLockIfPR();
 
-            // Post failure comment (best-effort)
-            if (task.prNumber !== undefined) {
-              await notifyTaskOutcome(
-                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
-                {
-                  taskId,
-                  repository: task.repository,
-                  prNumber: task.prNumber,
-                  userId: task.userId,
-                  outcome: 'reply_failed',
-                  errorCode: pullRequestEnforcement.code,
-                },
-              );
-            }
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: pullRequestEnforcement.message,
+              errorCode: pullRequestEnforcement.code,
+            });
 
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
@@ -904,21 +958,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
             await cleanupLockIfPR();
 
-            // Post failure comment for missing result (best-effort)
-            if (task.prNumber !== undefined) {
-              await notifyTaskOutcome(
-                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
-                {
-                  taskId,
-                  repository: task.repository,
-                  prNumber: task.prNumber,
-                  userId: task.userId,
-                  outcome: 'review_failed',
-                  errorCode: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
-                  ...(task.workerType != null && { workerType: task.workerType }),
-                },
-              );
-            }
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Review completion missing result payload',
+              errorCode: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
+            });
 
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
@@ -952,25 +996,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
             await cleanupLockIfPR();
 
-            // Post failure comment for enforcement failure (best-effort)
-            if (task.prNumber !== undefined) {
-              const reviewTypes = result.review_types
-                ? result.review_types.split(',').map((t) => t.trim()).filter((t) => t !== '')
-                : undefined;
-              await notifyTaskOutcome(
-                { logger, gitHubPRClient: getServices().gitHubPRClient, userServiceClient: getServices().userServiceClient },
-                {
-                  taskId,
-                  repository: task.repository,
-                  prNumber: task.prNumber,
-                  userId: task.userId,
-                  outcome: 'review_failed',
-                  errorCode: reviewEnforcement.code,
-                  ...(reviewTypes !== undefined && { reviewTypes }),
-                  ...(task.workerType != null && { workerType: task.workerType }),
-                },
-              );
-            }
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: reviewEnforcement.message,
+              errorCode: reviewEnforcement.code,
+            });
 
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });

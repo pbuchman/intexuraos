@@ -249,6 +249,24 @@ describe('internalIssuesRoutes', () => {
       expect(body.success).toBe(true);
     });
 
+    it('should update state to done', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/internal/issues/${testIssue.id}/state`,
+        headers: {
+          ...internalAuthHeader,
+          'x-user-id': testUserId,
+        },
+        payload: {
+          state: 'done',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+
     it('should update state to backlog', async () => {
       const response = await app.inject({
         method: 'PATCH',
@@ -660,7 +678,7 @@ describe('internalIssuesRoutes', () => {
     });
 
     it('returns 500 when issue lookup fails', async () => {
-      fakeIssueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'Issue repo unavailable' });
+      fakeIssueRepo.setFindByIdentifiersFailure(true, { code: 'INTERNAL_ERROR', message: 'Issue repo unavailable' });
 
       const response = await app.inject({
         method: 'POST',
@@ -679,7 +697,7 @@ describe('internalIssuesRoutes', () => {
       expect(body.error.message).toBe('Issue repo unavailable');
     });
 
-    it('returns 500 when comment lookup fails', async () => {
+    it('returns 500 when comment summary lookup fails', async () => {
       fakeIssueRepo.seedIssue({
         id: 'issue-1',
         identifier: 'ENG-101',
@@ -699,7 +717,7 @@ describe('internalIssuesRoutes', () => {
         teamId: 'team-1',
         parentId: null,
       });
-      fakeCommentRepo.setListByIssueIdFailure(true, {
+      fakeCommentRepo.setGetCommentSummariesFailure(true, {
         code: 'INTERNAL_ERROR',
         message: 'Comment repo unavailable',
       });
@@ -719,6 +737,82 @@ describe('internalIssuesRoutes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
       expect(body.error.message).toBe('Comment repo unavailable');
+    });
+
+    it('preserves identifier order in response', async () => {
+      fakeIssueRepo.seedIssue({
+        id: 'issue-z',
+        identifier: 'ENG-300',
+        title: 'Third Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-300',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+      fakeIssueRepo.seedIssue({
+        id: 'issue-a',
+        identifier: 'ENG-100',
+        title: 'First Issue',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 1,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/test/ENG-100',
+        userId: testUserId,
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        syncedAt: '2024-01-02T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: {
+          identifiers: ['ENG-300', 'ENG-100'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { issues: { identifier: string }[] };
+      };
+      expect(body.data.issues.map((i) => i.identifier)).toEqual(['ENG-300', 'ENG-100']);
+    });
+
+    it('returns empty array when no identifiers match', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/display-batch',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: {
+          identifiers: ['ENG-999', 'ENG-888'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { issues: { identifier: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.issues).toHaveLength(0);
     });
   });
 

@@ -35,11 +35,9 @@ export function createApprovalMessage(params: {
 }): ApprovalMessage {
   // Validate required fields are not empty
   // These are defensive checks - in practice, callers always provide valid values
-  /* v8 ignore start -- test-infra: block coverage @preserve */
   if (params.wamid.trim() === '') {
     throw new Error('wamid is required');
   }
-  /* v8 ignore stop @preserve */
   if (params.actionId.trim() === '') {
     throw new Error('actionId is required');
   }

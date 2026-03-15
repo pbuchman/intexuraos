@@ -16,7 +16,7 @@ import type { StatusMirrorService } from '../services/statusMirrorService.js';
 import type { DispatchWorkerCredentials, TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.js';
-import { fetchGitHubToken } from '../utils/prTaskNotification.js';
+import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
 import { parseOwnerRepo } from '../utils/parseOwnerRepo.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { sendTaskMessage } from './sendTaskMessage.js';
@@ -642,6 +642,7 @@ async function createMergeConflictTask(
 
   await deps.codeTaskRepo.update(taskId, {
     status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchResult.value.workerLocation,
   });
 

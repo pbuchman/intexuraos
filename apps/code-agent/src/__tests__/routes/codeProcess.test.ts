@@ -192,6 +192,7 @@ describe('POST /internal/code/process', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -222,7 +223,7 @@ describe('POST /internal/code/process', () => {
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     // Set up worker settings for the test user

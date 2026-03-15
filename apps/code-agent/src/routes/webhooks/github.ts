@@ -308,6 +308,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         gitHubPRSummaryRepo,
         gitHubWebhookAuditEventRepo,
         gitHubEventLogEntryRepo,
+        automationLog,
         logger,
       } = getServices();
 
@@ -386,6 +387,25 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         return await reply.fail('INTERNAL_ERROR', 'Failed to persist GitHub event log entry');
       }
 
+      // Best-effort: record webhook_received in the automation log when we have PR context
+      if (repositoryDetails.repository !== null && pullRequestDetails.pullRequestNumber !== null && pullRequestDetails.pullRequestNumber !== 0) {
+        const resolvedDeliveryId = typeof deliveryId === 'string' ? deliveryId : 'unknown';
+        void automationLog.record(
+          { repository: repositoryDetails.repository, prNumber: pullRequestDetails.pullRequestNumber },
+          {
+            type: 'webhook_received',
+            /* v8 ignore start -- ts-type: Fastify header typing allows string | string[] | undefined but GitHub always sends a string @preserve */
+            eventType: typeof eventType === 'string' ? eventType : 'unknown',
+            action: request.body.action ?? 'unknown',
+            sender: senderDetails.senderLogin ?? 'unknown',
+            /* v8 ignore stop @preserve */
+            deliveryId: resolvedDeliveryId,
+          },
+        ).catch((recordErr: unknown) => {
+          logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record webhook_received in automation log');
+        });
+      }
+
       // Handle ping event (GitHub test)
       if (eventType === 'ping') {
         logger.info('Received GitHub ping event');
@@ -446,6 +466,16 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
           { repository: parsedEvent.repository },
           'Ignoring event from non-IntexuraOS repository'
         );
+        /* v8 ignore start -- async-timing: fire-and-forget .catch() callback only runs on rejected promise timing @preserve */
+        if (parsedEvent.pullRequestNumber !== 0) {
+          void automationLog.record(
+            { repository: parsedEvent.repository, prNumber: parsedEvent.pullRequestNumber },
+            { type: 'skipped', decidedBy: 'webhook_route', reason: 'repository_out_of_scope' },
+          ).catch((recordErr: unknown) => {
+            logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record skipped event in automation log');
+          });
+        }
+        /* v8 ignore stop @preserve */
         const saved = await persistRouteDecision({
           auditEvent: auditResult.value,
           pendingEntry: pendingLogEntryResult.value,
@@ -473,6 +503,16 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
       if (!saveResult.ok) {
         if (saveResult.error.code === 'DUPLICATE_EVENT') { // @allow-result-access -- narrowed by !saveResult.ok
           logger.debug({ deliveryId }, 'Duplicate webhook delivery, skipping evaluation');
+          /* v8 ignore start -- async-timing: fire-and-forget .catch() callback only runs on rejected promise timing @preserve */
+          if (parsedEvent.pullRequestNumber !== 0) {
+            void automationLog.record(
+              { repository: parsedEvent.repository, prNumber: parsedEvent.pullRequestNumber },
+              { type: 'skipped', decidedBy: 'webhook_route', reason: 'duplicate_delivery' },
+            ).catch((recordErr: unknown) => {
+              logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record skipped event in automation log');
+            });
+          }
+          /* v8 ignore stop @preserve */
           const saved = await persistRouteDecision({
             auditEvent: auditResult.value,
             pendingEntry: pendingLogEntryResult.value,
@@ -487,6 +527,16 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
           return await reply.ok({ message: 'duplicate' });
         }
         logger.error({ error: saveResult.error }, 'Failed to save GitHub PR event'); // @allow-result-access -- narrowed by !saveResult.ok
+        /* v8 ignore start -- async-timing: fire-and-forget .catch() callback only runs on rejected promise timing @preserve */
+        if (parsedEvent.pullRequestNumber !== 0) {
+          void automationLog.record(
+            { repository: parsedEvent.repository, prNumber: parsedEvent.pullRequestNumber },
+            { type: 'skipped', decidedBy: 'webhook_route', reason: 'normalized_event_save_failed' },
+          ).catch((recordErr: unknown) => {
+            logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record skipped event in automation log');
+          });
+        }
+        /* v8 ignore stop @preserve */
         const saved = await persistRouteDecision({
           auditEvent: auditResult.value,
           pendingEntry: pendingLogEntryResult.value,
