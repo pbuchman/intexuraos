@@ -215,9 +215,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     );
     const result = await this.client.generate(repairPrompt);
 
-    /* v8 ignore start -- test-infra: LLM API error handling requires external service mocking @preserve */
     if (!result.ok) {
-    /* v8 ignore stop @preserve */
       const error = mapToLlmError(result.error);
       return { ok: false, error: `${error.message} (repair attempt)` };
     }
@@ -265,9 +263,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     );
     const result = await this.client.generate(repairPrompt);
 
-    /* v8 ignore start -- test-infra: LLM API error handling requires external service mocking @preserve */
     if (!result.ok) {
-    /* v8 ignore stop @preserve */
       const error = mapToLlmError(result.error);
       return { ok: false, error: `${error.message} (repair attempt)` };
     }

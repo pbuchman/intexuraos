@@ -1,14 +1,8 @@
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
 import { z } from 'zod';
 
 // Worker type validation
-export const WorkerTypeSchema = z.enum([
-  'opus',
-  'auto',
-  'sonnet',
-  'minimax',
-  'glm',
-  'qwen3.5-plus',
-]);
+export const WorkerTypeSchema = z.enum(CODE_TASK_WORKER_TYPES);
 
 // Task status validation
 export const TaskStatusSchema = z.enum([
@@ -44,7 +38,10 @@ export const CreateTaskRequestSchema = z.object({
   webhookUrl: z.string().url(),
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
-  agentType: z.enum(['planning', 'execution', 'pull_request']).optional(),
+  agentType: z.enum(['planning', 'execution', 'pull_request', 'review']).optional(),
+  trackingCommentId: z.string().min(1).optional(),
+  continuationPrNumber: z.number().int().positive().optional(),
+  continuationPrBranch: z.string().min(1).optional(),
   planningPrBranch: z.string().optional(),
   planningPrUrl: z.string().url().optional(),
 });

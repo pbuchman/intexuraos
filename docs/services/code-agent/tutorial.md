@@ -80,7 +80,7 @@ Expected response:
   "data": {
     "testStatus": "success",
     "testMessage": "Connection successful",
-    "lastTestedAt": "2026-03-07T10:30:00.000Z"
+    "lastTestedAt": "2026-03-15T10:30:00.000Z"
   }
 }
 ```
@@ -129,7 +129,7 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-The task progresses through statuses: `dispatched` -> `running` -> `planned` or `implemented` (or `failed`). Tasks never reach a generic `completed` status — they finish as `planned` (planning agent) or `implemented` (execution agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
+The task progresses through statuses: `queued` -> `dispatched` -> `running` -> `planned` or `implemented` or `reviewed` (or `failed`). Tasks never reach a generic `completed` status — they finish as `planned` (planning agent), `implemented` (execution agent), or `reviewed` (review agent). If all workers are busy, the task enters `queued` status and dispatches automatically when capacity opens.
 
 ### Step 3: List your tasks
 
@@ -172,7 +172,7 @@ curl -X POST http://localhost:8128/code/retry \
   }'
 ```
 
-The retry creates a new task linked to the original via the `retriedFrom` field. The original task is archived (status: `archived`).
+The retry creates a new task linked to the original via the `retriedFrom` field. The original task is archived (status: `archived`). If the original task had an open PR branch, the new task inherits it so work is not lost.
 
 ### Submit feedback on a completed task
 
@@ -237,7 +237,18 @@ curl -X POST http://localhost:8128/code/submit \
   }'
 ```
 
-Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `glm`, `qwen3.5-plus`. If the linked Linear issue has a label matching a worker type, that label overrides the request.
+Available worker types: `auto` (default), `opus`, `sonnet`, `minimax`, `glm`, `qwen`, `kimi`. If the linked Linear issue has a label matching a worker type, that label overrides the request.
+
+### Query the GitHub event decision log
+
+View the decision log showing how each webhook event was evaluated:
+
+```bash
+curl "http://localhost:8128/code/github-event-log?limit=20" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+Each entry shows the event type, action, repository, and the evaluation outcome (dispatch, skip, or request_review). For entries decided by the GitHub Agent (LLM triage), the associated `event_decisions` record includes the model's reasoning and tool calls.
 
 ### Query GitHub PR summaries
 
@@ -335,7 +346,7 @@ curl -X POST http://localhost:8128/code/submit \
   }'
 ```
 
-**Solution verification:** The created task should have `linearIssueId: "INT-500"` and the `linearIssueLabels` field populated from the issue. The Linear issue should transition to "In Progress" when the worker starts.
+**Solution verification:** The created task should have `linearIssueId: "INT-500"` and the Linear issue should transition to "In Progress" when the worker starts.
 
 ### Exercise 3: Trigger zombie detection
 
@@ -348,20 +359,18 @@ curl -X POST http://localhost:8128/internal/code/detect-zombies \
 
 **Solution verification:** The response includes `detected` (count of stale tasks) and `interrupted` (count successfully marked as interrupted).
 
-### Exercise 4: Explore PR event deduplication
+### Exercise 4: Explore the event decision log
 
-Fetch events for a specific PR and observe the deduplication in action:
+Fetch the GitHub event decision log to see how webhook events are being evaluated:
 
 ```bash
-curl "http://localhost:8128/code/github-pr-events?repository=pbuchman/intexuraos&pullRequestNumber=42" \
+curl "http://localhost:8128/code/github-event-log?limit=10" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
 Look at the response:
 
-- Each comment appears **once** even if it was edited (body reflects the latest version).
-- The PR description (`body`) appears only on the **most recent** `pull_request` event.
-- `synchronize` events (new commits pushed) include an `eventUrl` compare link: `https://github.com/org/repo/compare/before...after`.
-- Other events include a direct link to the comment or review on GitHub.
+- Each entry shows `decisionState: 'completed'` and `decisionOutcome: 'dispatch' | 'skip' | 'request_review'`.
+- Use the `POST /code/github-event-log/rows` endpoint with specific IDs to hydrate full row details including the audit event payload and the decision record with LLM reasoning.
 
-**Solution verification:** If the same PR received 3 commits (3 `synchronize` events) and 1 edited comment, you should see 3 synchronize events (each with a unique compare URL) and 1 comment entry (not 2).
+**Solution verification:** If a PR was recently opened, you should see an entry with `eventType: 'pull_request'`, `action: 'opened'`, and a decision outcome.

@@ -2,7 +2,7 @@
  * LLM Client Factory
  *
  * Provides a unified interface for creating LLM clients
- * across different providers (Gemini, GLM, etc.).
+ * across different providers (Gemini).
  *
  * @packageDocumentation
  *
@@ -29,15 +29,20 @@
  */
 
 import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { createGlmClient } from '@intexuraos/infra-glm';
+import {
+  createGeminiToolCallingClient,
+  type ToolCallingClientConfig,
+} from '@intexuraos/infra-gemini';
 import type { AuditSink } from '@intexuraos/llm-audit';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   getProviderForModel,
+  isValidModel,
   LlmProviders,
   type LLMError,
   type LLMModel,
   type ModelPricing,
+  type ToolCallingClient,
 } from '@intexuraos/llm-contract';
 import type { Logger, Result } from '@intexuraos/common-core';
 
@@ -47,7 +52,7 @@ import type { Logger, Result } from '@intexuraos/common-core';
 export interface LlmClientConfig {
   /** API key for the LLM provider */
   apiKey: string;
-  /** Model identifier (e.g., 'gemini-2.5-flash', 'glm-4.7') */
+  /** Model identifier (e.g., 'gemini-2.5-flash') */
   model: LLMModel;
   /** User ID for usage tracking */
   userId: string;
@@ -91,8 +96,9 @@ export interface LlmGenerateClient {
 
 /**
  * Supported providers for the factory.
+ * App-side: only Google (Gemini) is supported.
  */
-type SupportedProvider = typeof LlmProviders.Google | typeof LlmProviders.Zai;
+type SupportedProvider = typeof LlmProviders.Google;
 
 /**
  * Maps model to provider and creates the appropriate client.
@@ -110,39 +116,60 @@ type SupportedProvider = typeof LlmProviders.Google | typeof LlmProviders.Zai;
  *   userId: 'user-123',
  *   pricing: getPricing('gemini-2.5-flash'),
  * });
- *
- * // Create GLM client
- * const glmClient = createLlmClient({
- *   apiKey: 'sk-...',
- *   model: 'glm-4.7',
- *   userId: 'user-123',
- *   pricing: getPricing('glm-4.7'),
- * });
  * ```
  */
 export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
-  const provider = getProviderForModel(config.model) as SupportedProvider;
-
-  switch (provider) {
-    case LlmProviders.Google:
-      return createGeminiClient(config);
-    case LlmProviders.Zai:
-      return createGlmClient(config);
-    default: {
-      // This will be caught at compile time if new providers are added
-      // without updating this factory
-      const exhaustive: never = provider;
-      throw new Error(`Unsupported LLM provider: ${String(exhaustive)}`);
-    }
+  // Validate model is supported
+  if (!isValidModel(config.model)) {
+    const model = config.model as string;
+    throw new Error(`Unsupported LLM model: ${model}`);
   }
+
+  // Check provider first, before model validation
+  const provider = LlmProviders.Google;
+  const providerForModel = getProviderForModel(config.model);
+  if (providerForModel !== provider) {
+    throw new Error(
+      `Unsupported LLM provider: ${providerForModel}. Only ${provider} is supported.`
+    );
+  }
+
+  return createGeminiClient(config);
 }
 
 /**
  * Type guard to check if a provider is supported by the factory.
  */
 export function isSupportedProvider(provider: string): provider is SupportedProvider {
-  return provider === LlmProviders.Google || provider === LlmProviders.Zai;
+  return provider === LlmProviders.Google;
 }
 
-// Re-export LLMError for convenience
-export type { LLMError };
+/**
+ * Create a tool calling client for LLM agent loops.
+ *
+ * Routes to the appropriate provider-specific tool calling implementation.
+ * Currently supports Google (Gemini) only.
+ *
+ * @param config - Tool calling client configuration
+ * @returns ToolCallingClient instance
+ */
+export function createToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
+  // Validate model is supported
+  if (!isValidModel(config.model)) {
+    const model = config.model as string;
+    throw new Error(`Unsupported LLM model: ${model}`);
+  }
+
+  // Verify provider is Google (only supported provider for tool calling)
+  const providerForModel = getProviderForModel(config.model);
+  if (providerForModel !== LlmProviders.Google) {
+    throw new Error(
+      `Tool calling not supported for provider: ${providerForModel}. Only ${LlmProviders.Google} is supported.`
+    );
+  }
+
+  return createGeminiToolCallingClient(config);
+}
+
+// Re-export for convenience
+export type { LLMError, ToolCallingClientConfig };

@@ -1,6 +1,6 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
-import type { RuleResult } from './gitHubWebhookRules.js';
+import type { RuleOutcome } from './gitHubWebhookRules.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
@@ -11,13 +11,20 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 import type { StatusMirrorService } from './statusMirrorService.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepository.js';
 import type { WebhookMessageBuilder } from './gitHubMessageBuilder.js';
 import { createTaskForPR } from '../usecases/createTaskForPR.js';
 import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
+import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
+import { isRetryableErrorCode } from '../utils/retryableErrors.js';
+import { loadConfig } from '../../config.js';
+
+import { extractDispatchWorkerType } from '../utils/dispatchWorkerTriage.js';
+import type { AutomationLog } from '../ports/automationLog.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
-  decision: RuleResult;
+  decision: Extract<RuleOutcome, { action: 'dispatch' }>;
   logger: Logger;
 }
 
@@ -33,6 +40,7 @@ export interface WebhookDispatchService {
 }
 
 export interface WebhookDispatchServiceDeps {
+  gitHubPREventRepo: GitHubPREventRepository;
   codeTaskRepo: CodeTaskRepository;
   logLineRepo: LogLineRepository;
   userLookupService?: UserLookupService;
@@ -51,13 +59,19 @@ export interface WebhookDispatchServiceDeps {
   allowedBots: Set<string>;
   orchestratorSecret: string;
   serviceUrl: string;
+  dispatchRetryRepo?: DispatchRetryRepository;
+  automationLog: AutomationLog;
 }
 
-function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
+export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
   if (!allowedBots.has(senderLogin)) return senderLogin;
   const slashIndex = repository.indexOf('/');
   if (slashIndex <= 0) return senderLogin;
-  return repository.slice(0, slashIndex);
+  const owner = repository.slice(0, slashIndex);
+  // Only remap for personal forks (e.g. pbuchman/intexuraos),
+  // not org repos (e.g. intexuraos/some-repo) where the owner is an org, not a user.
+  if (owner === 'intexuraos') return senderLogin;
+  return owner;
 }
 
 export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): WebhookDispatchService {
@@ -71,7 +85,8 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           'Starting GitHub dispatch workflow'
         );
 
-        const taskResult = await deps.codeTaskRepo.findByPR(event.repository, event.pullRequestNumber);
+        // Use non-review lookup to avoid routing generic comments into review tasks
+        const taskResult = await deps.codeTaskRepo.findLatestNonReviewTaskByPR(event.repository, event.pullRequestNumber);
 
         if (!taskResult.ok) {
           logger.error(
@@ -110,6 +125,31 @@ async function handleNewTask(
     return { success: false, dispatched: false, error: 'UserLookupService not configured' };
   }
 
+  // Resolve baseBranch from stored PR events when not in the current event
+  // (issue_comment payloads don't include base branch)
+  let resolvedBaseBranch = event.baseBranch;
+  if (resolvedBaseBranch === null) {
+    const eventsResult = await deps.gitHubPREventRepo.findByPullRequest(
+      event.repository, event.pullRequestNumber
+    );
+    if (eventsResult.ok) {
+      const eventWithBranch = eventsResult.value.find(e => e.baseBranch !== null); // @allow-result-access -- narrowed by eventsResult.ok
+      if (eventWithBranch !== undefined) {
+        resolvedBaseBranch = eventWithBranch.baseBranch;
+        logger.info(
+          { baseBranch: resolvedBaseBranch, sourceEventId: eventWithBranch.id },
+          'Resolved baseBranch from stored PR event'
+        );
+      }
+    }
+  }
+
+  // Extract @worker/@model directive from comment
+  const workerType = extractDispatchWorkerType(event.body ?? '');
+  if (workerType !== undefined) {
+    logger.info({ workerType, prNumber: event.pullRequestNumber }, 'Extracted worker type from comment');
+  }
+
   const createResult = await createTaskForPR(
     {
       logger,
@@ -123,6 +163,7 @@ async function handleNewTask(
       gitHubPRClient: deps.gitHubPRClient,
       userServiceClient: deps.userServiceClient,
       firestore: deps.firestore,
+      automationLog: deps.automationLog,
     },
     {
       repository: event.repository,
@@ -131,6 +172,8 @@ async function handleNewTask(
       comment: event.body ?? '',
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
+      ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),
+      ...(workerType !== undefined && { workerType }),
     },
   );
 
@@ -152,7 +195,7 @@ async function handleNewTask(
 async function handleExistingTask(
   deps: WebhookDispatchServiceDeps,
   event: GitHubPREvent,
-  task: { id: string; userId: string },
+  task: { id: string; userId: string; linearIssueId?: string },
   logger: Logger,
 ): Promise<WebhookDispatchResult> {
   const message = deps.messageBuilder.build(event);
@@ -175,12 +218,47 @@ async function handleExistingTask(
   );
 
   if (!sendResult.ok) {
+    // Queue retry for retryable errors
+    if (isRetryableErrorCode(sendResult.error.code) && deps.dispatchRetryRepo !== undefined) {
+      const retryConfig = loadConfig();
+      await deps.dispatchRetryRepo.create({
+        type: 'task_message',
+        eventId: event.id,
+        repository: event.repository,
+        pullRequestNumber: event.pullRequestNumber,
+        senderLogin: event.senderLogin,
+        taskId: task.id,
+        userId: task.userId,
+        message,
+        attempts: 0,
+        maxAttempts: retryConfig.retryQueue.maxAttempts,
+        lastError: sendResult.error.message,
+        ttlMinutes: retryConfig.retryQueue.ttlMinutes,
+      });
+      logger.info({ taskId: task.id }, 'Message delivery failed, queued for retry');
+      return { success: true, dispatched: true, taskId: task.id };
+    }
+    // Non-retryable: existing behavior
     logger.error(
       { taskId: task.id, error: sendResult.error },
       'Failed to send message to task'
     );
     return { success: false, dispatched: false, taskId: task.id, error: sendResult.error.message };
   }
+
+  deps.automationLog.record(
+    { repository: event.repository, prNumber: event.pullRequestNumber },
+    {
+      type: 'task_dispatched',
+      taskId: task.id,
+      workerType: 'auto',
+      agentType: 'pull_request',
+      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+    },
+    task.userId,
+  ).catch((error: unknown) => {
+    logger.warn({ error, taskId: task.id }, 'Failed to record automation log for existing task dispatch');
+  });
 
   logger.info(
     { taskId: task.id, action: sendResult.value.action },

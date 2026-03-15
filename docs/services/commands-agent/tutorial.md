@@ -1,7 +1,7 @@
 # Commands Agent — Tutorial
 
 > **Time:** 15–30 minutes
-> **Prerequisites:** Auth0 access token, Google or Zai API key configured in user-service, `curl` or HTTP client
+> **Prerequisites:** Auth0 access token, Google API key configured in user-service, `curl` or HTTP client
 > **You'll learn:** How to classify commands, handle URL isolation, use Polish phrases, and manage command lifecycle
 
 ---
@@ -253,7 +253,7 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 When no API key is configured, commands enter pending state:
 
 ```bash
-# Assuming user has no Google/Zai API key configured
+# Assuming user has no Google API key configured
 curl -X POST https://commands-agent.intexuraos.com/commands \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
@@ -316,7 +316,7 @@ Only works for status: `classified`.
 
 | Symptom                            | Cause                       | Solution                                                |
 | ---------------------------------- | --------------------------- | ------------------------------------------------------- |
-| Status `pending_classification`    | No LLM API key              | Configure Google or Zai key in user-service             |
+| Status `pending_classification`    | No LLM API key              | Configure Google API key in user-service                |
 | URL classified as `research`       | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
 | Polish phrases not recognized      | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
 | "Cannot delete classified command" | Wrong operation             | Use PATCH to archive instead                            |

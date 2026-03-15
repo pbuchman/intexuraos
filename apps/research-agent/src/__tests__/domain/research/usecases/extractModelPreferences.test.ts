@@ -83,7 +83,6 @@ describe('extractModelPreferences', () => {
       openai: 'openai-key',
       anthropic: 'anthropic-key',
       perplexity: 'perplexity-key',
-      zai: 'zai-key',
     };
 
     it('extracts selected models from valid JSON response', async () => {
@@ -367,23 +366,6 @@ describe('extractModelPreferences', () => {
       expect(result.selectedModels).toContain(LlmModels.SonarPro);
     });
 
-    it('uses zai key for GLM models', async () => {
-      const keys: ApiKeyStore = { zai: 'zai-key' };
-      const response = JSON.stringify({
-        selectedModels: [LlmModels.Glm47],
-        synthesisModel: null,
-      });
-
-      const deps: ExtractModelPreferencesDeps = {
-        llmClient: createFakeLlmClient(response),
-        availableKeys: keys,
-        logger,
-      };
-
-      const result = await extractModelPreferences('use glm', deps);
-
-      expect(result.selectedModels).toContain(LlmModels.Glm47);
-    });
   });
 
   describe('edge cases', () => {

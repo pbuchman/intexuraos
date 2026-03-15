@@ -96,7 +96,7 @@ describe('server configuration', () => {
       firestore: fakeFirestore,
       logger,
       codeTaskRepo,
-      taskDispatcher: createTaskDispatcherService({ logger }),
+      taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
       workerSettingsRepo,
       whatsappNotifier: createWhatsAppNotifier({
         whatsappPublisher: {
@@ -158,6 +158,11 @@ describe('server configuration', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
+      toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
+      unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -184,6 +189,11 @@ describe('server configuration', () => {
       gitHubPRClient: import('../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../domain/services/gitHubDispatchService.js').WebhookDispatchService;
+      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      eventDecisionRepo: import('../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
+      unifiedEvaluator: import('../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
+      automationLog: import('../domain/ports/automationLog.js').AutomationLog;
     });
 
     app = await buildServer();

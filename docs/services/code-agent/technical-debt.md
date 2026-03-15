@@ -1,7 +1,7 @@
 # Code Agent — Technical Debt
 
-**Last Updated:** 2026-03-07
-**Analysis Run:** [2026-03-07 autonomous run]
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 autonomous run]
 
 ---
 
@@ -11,12 +11,12 @@
 | -------------- | ------ | -------- |
 | TODO comments  | 2      | Medium   |
 | Code smells    | 4      | Low-Med  |
-| Future plans   | 2      | Medium   |
-| TS strictness  | 1      | Low      |
+| Future plans   | 3      | Medium   |
+| TS strictness  | 2      | Low      |
 | SRP violations | 1      | High     |
-| **Total**      | **10** | —        |
+| **Total**      | **12** | ---      |
 
-> Note: codeRoutes.ts has grown to ~3900 lines. Routing split is an ongoing priority.
+> Note: codeRoutes.ts remains at ~3900 lines. Routing split is an ongoing priority.
 
 ---
 
@@ -26,11 +26,15 @@
 
 Replace static hash placeholders with computed hashes from the real system prompt template. This enables prompt A/B testing and audit compliance.
 
-**Files:** `processCodeAction.ts:221`, `codeRoutes.ts:1270`
+**Files:** `processCodeAction.ts:214`, `codeRoutes.ts:1292`
 
 ### 2. Route splitting for codeRoutes.ts
 
 Continue the pattern established by `routes/code/` and split the remaining routes by domain concern. See Code Smells section below for details.
+
+### 3. Distributed drain queue guard
+
+Replace module-level `isDraining` and `isDrainingRetries` booleans with Firestore-based distributed locks if multi-instance deployment is planned. Currently safe for Cloud Run scale 0-1.
 
 ---
 
@@ -38,21 +42,21 @@ Continue the pattern established by `routes/code/` and split the remaining route
 
 ### 1. System prompt hash is a static placeholder
 
-**File:** `apps/code-agent/src/domain/usecases/processCodeAction.ts:221`
+**File:** `apps/code-agent/src/domain/usecases/processCodeAction.ts:214`
 
 ```typescript
 systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system prompt
 ```
 
-**File:** `apps/code-agent/src/routes/codeRoutes.ts:1270`
+**File:** `apps/code-agent/src/routes/codeRoutes.ts:1292`
 
 ```typescript
 systemPromptHash: 'default', // TODO: Use actual system prompt hash
 ```
 
-The `systemPromptHash` field is designed for audit tracking — recording which version of the system prompt was active when the task ran. Currently it stores a hardcoded string, making it impossible to audit prompt version changes.
+The `systemPromptHash` field is designed for audit tracking --- recording which version of the system prompt was active when the task ran. Currently it stores a hardcoded string, making it impossible to audit prompt version changes.
 
-**Impact:** Audit trail gap — no way to correlate task results with the system prompt version that generated them.
+**Impact:** Audit trail gap --- no way to correlate task results with the system prompt version that generated them.
 
 **Remediation:** Compute SHA-256 of the actual system prompt template at startup and inject it via config.
 
@@ -64,7 +68,7 @@ The `systemPromptHash` field is designed for audit tracking — recording which 
 
 **File:** `apps/code-agent/src/routes/codeRoutes.ts`
 
-This single file contains all internal code task routes AND all public code task routes — over 3900 lines. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, queue draining, and worker status. Each route includes inline Fastify schema definitions that consume significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`) but the original routes remain consolidated.
+This single file contains all internal code task routes AND all public code task routes. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, queue draining, and worker status. Each route includes inline Fastify schema definitions that consume significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`, `github-event-log.ts`) but the original routes remain consolidated.
 
 **Impact:** Difficult to navigate, review, and test. Changes to one route risk unintended effects on others.
 
@@ -95,11 +99,7 @@ Both files have ESLint completely disabled at the file level, silencing all lint
 
 ### 3. In-flight health probe deduplication uses module-level Map
 
-**File:** `apps/code-agent/src/routes/codeRoutes.ts:32`
-
-```typescript
-const inFlightRequests = new Map<string, Promise<void>>();
-```
+**File:** `apps/code-agent/src/routes/codeRoutes.ts`
 
 Module-level mutable state for deduplicating concurrent health probes. This map grows unbounded if entries are not cleaned up properly.
 
@@ -107,13 +107,9 @@ Module-level mutable state for deduplicating concurrent health probes. This map 
 
 **Remediation:** Add a TTL-based cleanup or use a WeakMap pattern.
 
-### 4. Drain queue guard uses module-level boolean
+### 4. Drain queue guards use module-level booleans
 
-**File:** `apps/code-agent/src/domain/usecases/drainTaskQueue.ts:22`
-
-```typescript
-let isDraining = false;
-```
+**Files:** `domain/usecases/drainTaskQueue.ts`, `domain/usecases/drainRetryQueue.ts`
 
 Module-level mutable state for preventing concurrent drain operations. Works for single-instance deployment (Cloud Run scale 0-1) but would break with multiple instances.
 
@@ -125,21 +121,30 @@ Module-level mutable state for preventing concurrent drain operations. Works for
 
 ## TypeScript Strictness Issues
 
-### Firestore Timestamp handling
+### 1. Firestore Timestamp handling
 
-Throughout the codebase, Firestore `Timestamp` objects require runtime type narrowing when serializing to JSON. The `timestampToIso()` helper handles this but requires `as` casts:
+Throughout the codebase, Firestore `Timestamp` objects require runtime type narrowing when serializing to JSON. The `timestampToIso()` helper handles this but requires `as` casts. This pattern appears in `codeRoutes.ts` and could benefit from a typed wrapper.
+
+### 2. `any` type usage in Firestore queries
+
+**File:** `infra/repositories/firestoreCodeTaskRepository.ts`
+
+Two instances of `as any` for Firestore document mapping:
 
 ```typescript
-createdAt: timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '',
+const tasks = resultDocs.map((doc: any) => ...
+const tasks = snapshot.docs.map((doc: any) => ...
 ```
 
-This pattern appears in `codeRoutes.ts` and could benefit from a typed wrapper that encapsulates the Firestore Timestamp vs. plain Date distinction.
+**Impact:** Low --- these are infrastructure-layer Firestore SDK type coercions, not domain logic.
+
+**Remediation:** Use typed Firestore converters to eliminate the `any` casts.
 
 ---
 
 ## Test Coverage Notes
 
-The service has 45+ test files covering domain models, use cases, infra adapters, and routes. Coverage exemptions use the `/* v8 ignore <CATEGORY> — reason @preserve */` pattern with valid categories.
+The service has 50+ test files covering domain models, use cases, infra adapters, and routes. Coverage exemptions use the `/* v8 ignore <CATEGORY> --- reason @preserve */` pattern with valid categories.
 
 Common exemption categories in this service:
 
@@ -166,25 +171,43 @@ Common exemption categories in this service:
 | INT-711 | Retried tasks clutter task list                   | Original task archived to `archived` status on retry                           |
 | INT-725 | Planning tasks not linked to execution            | backLinkPlanningTask sets implementationTaskId on planning task                |
 | INT-738 | WhatsApp notifications lack direct links          | CTA URL buttons with deep links to PR and task dashboard                       |
-| —       | Duplicate PR body in synchronize events           | deduplicatePRBody() pass in GET /code/github-pr-events                         |
-| —       | Edited comment creates duplicate timeline entry   | deduplicateCommentEvents() keeps first position, latest body                   |
-| —       | Turn-end metrics not collected                    | TurnMetrics subcollection + FirestoreTurnMetricsRepository                     |
-| —       | No way to send mid-task messages or resume        | sendTaskMessage use case + POST /code/tasks/:id/messages                       |
-| —       | PR list view requires O(events) query             | github-pr-summaries collection + GET /code/github-pr-summaries                 |
-| —       | Webhook dedup used shared actionId                | Unique per-submission actionId + propagated dedup errors                       |
-| —       | Sender whitelist for webhook dispatch             | Replaced scattered filters with ALLOWED_BOTS Set + owner check                 |
-| —       | Bot review edit triage                            | Dispatch message includes in-progress detection instructions                   |
-| —       | Linear not transitioned on completion             | markInReview called on task-complete webhook when PR exists                    |
-| —       | CPU cores hardcoded in metrics                    | Dynamic cgroup-based core count from orchestrator                              |
-| —       | Cloudflare errors not retryable                   | 520-530 status codes treated as retryable infrastructure errors                |
-| —       | Linear data stale in task list                    | Live hydration of Linear issue data via linearAgentClient                      |
-| —       | No PR comment task creation without existing task | createTaskForPR use case with lock guard and user lookup                       |
-| —       | Linear labels not persisted on tasks              | linearIssueLabels field added to CodeTask model                                |
+| INT-743 | GitHub Agent for PR evaluation                    | Gemini tool-calling agent with unified evaluator pipeline                      |
+| INT-744 | Unified webhook evaluator                         | Two-tier evaluation: hard rules then LLM triage with audit trail               |
+| INT-773 | Already-completed execution outcome               | `already_completed` execution outcome label added                              |
+| INT-807 | Tasks created as dispatched before confirmed      | Tasks created as `queued`, transitioned to `dispatched` on confirmed dispatch  |
+| INT-810 | Silent dispatch failures                          | Fixed nested transaction and propagated dispatch errors                        |
+| INT-823 | Failed webhook dispatch retry                     | Dispatch retry queue with bounded attempts and TTL                             |
+| INT-824 | PR branch lost on retry                           | Task retries inherit open PR branches via continuationPr utility               |
+| INT-825 | Duplicate review tasks                            | Review task dedup with active-task semantics                                   |
+| INT-826 | Dispatch acks not restart-safe                    | Tasks start as `queued`, only move to `dispatched` after worker ACK            |
+| INT-829 | @review issue comment triage                      | LLM-selected worker routing for @review commands                               |
+| INT-830 | No visibility into dispatch rejections            | Explicit PR comments for review skips, dispatch rejections, and outcomes       |
+| INT-834 | Unreliable review agent dispatch                  | Fresh-start retry logic, notification deduplication                            |
+| INT-839 | Triage produces unreliable output                 | Structured output validation with Zod schemas and repair prompts               |
+| INT-846 | Noisy "Review Completed" PR notifications         | Removed redundant automated review completed notification                      |
+| INT-847 | Merge conflicts on bot PRs undetected             | Merge conflict detection for bot-authored PRs with owner remapping             |
+| INT-852 | PR automation scattered across comments           | Unified PR automation log as single append-only GitHub comment                 |
+| INT-854 | Gemini triage failures                            | Enforced tool-call mode, retry with corrective context on LLM failure          |
+| INT-921 | Review tasks not queued when busy                 | Queue support for review tasks when workers at capacity                        |
+| INT-924 | Redundant triage PR comments                      | Removed redundant "Automated Code Review Triage Decision" comments             |
+| ---     | Duplicate PR body in synchronize events           | deduplicatePRBody() pass in GET /code/github-pr-events                         |
+| ---     | Edited comment creates duplicate timeline entry   | deduplicateCommentEvents() keeps first position, latest body                   |
+| ---     | Turn-end metrics not collected                    | TurnMetrics subcollection + FirestoreTurnMetricsRepository                     |
+| ---     | No way to send mid-task messages or resume        | sendTaskMessage use case + POST /code/tasks/:id/messages                       |
+| ---     | PR list view requires O(events) query             | github-pr-summaries collection + GET /code/github-pr-summaries                 |
+| ---     | Webhook dedup used shared actionId                | Unique per-submission actionId + propagated dedup errors                       |
+| ---     | Sender whitelist for webhook dispatch             | Replaced scattered filters with ALLOWED_BOTS Set + owner check                 |
+| ---     | Linear not transitioned on completion             | markInReview called on task-complete webhook when PR exists                    |
+| ---     | CPU cores hardcoded in metrics                    | Dynamic cgroup-based core count from orchestrator                              |
+| ---     | Cloudflare errors not retryable                   | 520-530 status codes treated as retryable infrastructure errors                |
+| ---     | Linear data stale in task list                    | Live hydration of Linear issue data via linearAgentClient                      |
+| ---     | No PR comment task creation without existing task | createTaskForPR use case with lock guard and user lookup                       |
+| ---     | Linear labels not persisted on tasks              | linearIssueLabels field added to CodeTask model                                |
 
 ---
 
 ## Related
 
-- [Features](features.md) — User-facing documentation
-- [Technical](technical.md) — Developer reference
+- [Features](features.md) --- User-facing documentation
+- [Technical](technical.md) --- Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

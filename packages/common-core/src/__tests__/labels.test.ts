@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeLabel, hasCodeTaskLabel } from '../labels.js';
+import { normalizeLabel, hasCodeTaskLabel, hasPlanningTaskLabel } from '../labels.js';
 
 describe('labels', () => {
   describe('normalizeLabel', () => {
@@ -45,6 +45,40 @@ describe('labels', () => {
 
     it('returns false for partial match', () => {
       expect(hasCodeTaskLabel(['code-task-extra'])).toBe(false);
+    });
+  });
+
+  describe('hasPlanningTaskLabel', () => {
+    it('returns true for exact match', () => {
+      expect(hasPlanningTaskLabel(['planning-task'])).toBe(true);
+    });
+
+    it('returns true for uppercase label', () => {
+      expect(hasPlanningTaskLabel(['PLANNING-TASK'])).toBe(true);
+    });
+
+    it('returns true for underscores', () => {
+      expect(hasPlanningTaskLabel(['planning_task'])).toBe(true);
+    });
+
+    it('returns true for spaces', () => {
+      expect(hasPlanningTaskLabel(['planning task'])).toBe(true);
+    });
+
+    it('returns true when multiple labels and one matches', () => {
+      expect(hasPlanningTaskLabel(['feature', 'planning-task'])).toBe(true);
+    });
+
+    it('returns false when no match', () => {
+      expect(hasPlanningTaskLabel(['feature', 'code-task'])).toBe(false);
+    });
+
+    it('returns false for empty array', () => {
+      expect(hasPlanningTaskLabel([])).toBe(false);
+    });
+
+    it('returns false for partial match', () => {
+      expect(hasPlanningTaskLabel(['planning-task-extra'])).toBe(false);
     });
   });
 });

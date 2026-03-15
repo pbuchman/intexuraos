@@ -9,6 +9,13 @@ export interface QueueConfig {
   ttlMinutes: number;
 }
 
+export interface RetryQueueConfig {
+  /** Maximum retry attempts before giving up (default 3) */
+  maxAttempts: number;
+  /** TTL for retry entries in minutes (default 10) */
+  ttlMinutes: number;
+}
+
 export interface Config {
   port: number;
   gcpProjectId: string;
@@ -30,6 +37,9 @@ export interface Config {
   auth0JwksUri: string;
   // Task queue configuration (INT-619)
   queue: QueueConfig;
+  retryQueue: RetryQueueConfig;
+  // GitHub Agent (INT-743)
+  geminiAppApiKey: string;
 }
 
 export function loadConfig(): Config {
@@ -50,6 +60,7 @@ export function loadConfig(): Config {
   const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
   const githubWebhookSecret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] ?? '';
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
+  const geminiAppApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'] ?? '';
 
   return {
     port,
@@ -73,5 +84,10 @@ export function loadConfig(): Config {
       maxSize: parseInt(process.env['INTEXURAOS_QUEUE_MAX_SIZE'] ?? '10', 10),
       ttlMinutes: parseInt(process.env['INTEXURAOS_QUEUE_TTL_MINUTES'] ?? '30', 10),
     },
+    retryQueue: {
+      maxAttempts: parseInt(process.env['INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS'] ?? '3', 10),
+      ttlMinutes: parseInt(process.env['INTEXURAOS_RETRY_QUEUE_TTL_MINUTES'] ?? '10', 10),
+    },
+    geminiAppApiKey,
   };
 }

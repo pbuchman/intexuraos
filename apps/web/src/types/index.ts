@@ -1,3 +1,4 @@
+import type { CodeTaskWorkerType as SharedCodeTaskWorkerType } from '@intexuraos/common-core';
 import type { LlmProvider } from '@intexuraos/llm-contract';
 /**
  * API Response types matching backend response format.
@@ -1104,7 +1105,7 @@ export interface CalendarPreview {
 /**
  * Worker type determines which model Claude uses.
  */
-export type CodeTaskWorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type CodeTaskWorkerType = SharedCodeTaskWorkerType;
 
 /**
  * Worker location for routing.
@@ -1120,6 +1121,7 @@ export type CodeTaskStatus =
   | 'running'
   | 'planned'
   | 'implemented'
+  | 'reviewed'
   | 'failed'
   | 'interrupted'
   | 'cancelled'
@@ -1136,6 +1138,8 @@ export interface CodeTaskResult {
   ciFailed?: boolean;
   partialWork?: boolean;
   rebaseResult?: 'success' | 'conflict' | 'skipped';
+  review_comments_posted?: string;
+  review_types?: string;
 }
 
 /**
@@ -1170,6 +1174,7 @@ export interface CodeTask {
   callbackReceived: boolean;
   createdAt: string;
   updatedAt: string;
+  dispatchedAt?: string;
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
@@ -1184,7 +1189,7 @@ export interface CodeTask {
     commentCount: number;
     lastCommentAt: string | null;
   };
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
@@ -1343,4 +1348,79 @@ export interface GitHubPRSummary {
  */
 export interface GitHubPRSummariesResponse {
   prs: GitHubPRSummary[];
+}
+
+export type GitHubWebhookEventType =
+  | 'pull_request'
+  | 'pull_request_review'
+  | 'pull_request_review_comment'
+  | 'issue_comment'
+  | 'push'
+  | 'ping'
+  | 'unknown';
+
+export type GitHubWebhookAction =
+  | 'opened'
+  | 'closed'
+  | 'edited'
+  | 'synchronize'
+  | 'reopened'
+  | 'ready_for_review'
+  | 'converted_to_draft'
+  | 'assigned'
+  | 'unassigned'
+  | 'labeled'
+  | 'unlabeled'
+  | 'locked'
+  | 'unlocked'
+  | 'review_requested'
+  | 'review_request_removed'
+  | 'milestoned'
+  | 'demilestoned'
+  | 'enqueued'
+  | 'dequeued'
+  | 'auto_merge_enabled'
+  | 'auto_merge_disabled'
+  | 'submitted'
+  | 'dismissed'
+  | 'created'
+  | 'deleted'
+  | 'unknown';
+
+export type GitHubDecisionState = 'pending' | 'completed';
+export type GitHubDecisionOutcome = 'dispatch' | 'skip' | 'request_review';
+export type GitHubDecisionMaker = 'hard_rules' | 'github_agent' | 'webhook_route';
+export type GitHubDispatchAction = 'create_task' | 'send_message' | 'create_review_task';
+export type GitHubReviewType = 'code_quality' | 'security' | 'architecture';
+
+export interface GitHubEventLogRow {
+  id: string;
+  decisionId: string | null;
+  normalizedEventId: string | null;
+  deliveryId: string | null;
+  githubEventName: string;
+  eventType: GitHubWebhookEventType;
+  action: GitHubWebhookAction | null;
+  repository: string | null;
+  repositoryId: number | null;
+  pullRequestNumber: number | null;
+  pullRequestId: number | null;
+  senderLogin: string | null;
+  senderType: string | null;
+  authPassedAt: string;
+  updatedAt: string;
+  decisionState: GitHubDecisionState;
+  decisionOutcome: GitHubDecisionOutcome | null;
+  decidedBy: GitHubDecisionMaker | null;
+  reason: string | null;
+  dispatchAction: GitHubDispatchAction | null;
+  reviewTypes: GitHubReviewType[];
+  taskId: string | null;
+  workerType: string | null;
+  decisionLatencyMs: number | null;
+}
+
+export interface GitHubEventLogResponse {
+  rows: GitHubEventLogRow[];
+  nextCursor?: string;
 }

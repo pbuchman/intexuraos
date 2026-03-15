@@ -10,6 +10,7 @@ import type {
   DeleteWorkerResponse,
   ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
+  UpdateDefaultReviewWorkerTypeResponse,
 } from './workerSettingsApi.types.js';
 
 /**
@@ -108,6 +109,21 @@ export async function testWorkerConnectivity(
   );
 }
 
+/**
+ * Update default review worker type.
+ */
+export async function updateDefaultReviewWorkerType(
+  accessToken: string,
+  workerType: string,
+): Promise<UpdateDefaultReviewWorkerTypeResponse> {
+  return await apiRequest<UpdateDefaultReviewWorkerTypeResponse>(
+    config.codeAgentUrl,
+    '/code/worker-settings/default-review-worker-type',
+    accessToken,
+    { method: 'PATCH', body: { workerType } },
+  );
+}
+
 export type {
   MaskedWorkerConfig,
   WorkerSettingsResponse,
@@ -119,4 +135,5 @@ export type {
   DeleteWorkerResponse,
   ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
+  UpdateDefaultReviewWorkerTypeResponse,
 } from './workerSettingsApi.types.js';

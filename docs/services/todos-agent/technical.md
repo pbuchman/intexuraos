@@ -93,6 +93,8 @@ sequenceDiagram
 
 | Commit     | Description                                               | Date       |
 | ---------- | --------------------------------------------------------- | ---------- |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)          | 2026-03-12 |
+| `752fd017` | Add tests for v8-ignore blocks (INT-796)                  | 2026-03-11 |
 | `44ea683a` | Release v3.2.0                                            | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration, update cross-service mocks | 2026-03-02 |
 | `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
@@ -102,7 +104,7 @@ sequenceDiagram
 | `e60eafc1` | Standardize API key secrets to APP naming (#793)          | 2026-02-15 |
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback (#792)  | 2026-02-15 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter (#790)              | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform Zai fallback     | 2026-02-08 |
+| `0f69a74b` | Add default model selector with platform fallback         | 2026-02-08 |
 | `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement          | 2026-01-31 |
 
 ## API Endpoints
@@ -267,7 +269,6 @@ When a new item is added to a completed todo, the status reverts to `in_progress
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | App-settings base URL (LLM pricing)    | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Sentry error tracking                  | No       |
 | `INTEXURAOS_ENVIRONMENT`              | Environment name                       | No       |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | Platform Zai API key (LLM fallback)    | No       |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini API key (LLM fallback) | No       |
 
 ## Gotchas
@@ -296,7 +297,7 @@ The service uses the user's configured LLM (via user-service) to extract structu
 
 **Prompt:** `itemExtractionPrompt` from `@intexuraos/llm-prompts`
 
-**Model chain:** Gemini 2.5 Flash (primary), GLM-4.7 (fallback), GLM-4.7-Flash (fallback)
+**Model chain:** Gemini 2.5 Flash (with platform Gemini fallback)
 
 **Fallback behaviors:**
 

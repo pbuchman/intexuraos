@@ -4,7 +4,7 @@
  * Handles CRUD operations for worker configurations with encryption at rest.
  */
 
-import type { Result } from '@intexuraos/common-core';
+import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
 import type {
   UserWorkerSettings,
   WorkerConfig,
@@ -102,5 +102,14 @@ export interface WorkerSettingsRepository {
     userId: string,
     workerName: string,
     status: WorkerHealthStatus
+  ): Promise<Result<void, WorkerSettingsError>>;
+
+  /**
+   * Update the default review worker type for a user.
+   * Creates the settings document if it doesn't exist.
+   */
+  updateDefaultReviewWorkerType(
+    userId: string,
+    workerType: CodeTaskWorkerType
   ): Promise<Result<void, WorkerSettingsError>>;
 }

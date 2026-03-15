@@ -8,9 +8,8 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 
-import type { Firestore } from '@google-cloud/firestore';
+import type { Firestore, QueryDocumentSnapshot, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Result } from '@intexuraos/common-core';
@@ -27,6 +26,7 @@ import type {
 } from '../../domain/repositories/codeTaskRepository.js';
 
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
+const ACTIVE_TASK_STATUSES = ['queued', 'dispatched', 'running'] as const;
 
 function stripLegacyLinearFields(data: Record<string, unknown>): Record<string, unknown> {
   const {
@@ -71,172 +71,182 @@ export const createFirestoreCodeTaskRepository = (deps: {
   const collection = firestore.collection('code_tasks');
 
   return {
-    create: async (input: CreateTaskInput): Promise<Result<CodeTask, RepositoryError>> => {
+    create: async (input: CreateTaskInput, options?: { transaction?: FirebaseFirestore.Transaction }): Promise<Result<CodeTask, RepositoryError>> => {
       const taskId = input.id ?? `task_${randomUUID()}`;
       const dedupKey = generateDedupKey(input.userId, input.prompt, input.linearIssueId);
       const now = new Date();
       const dedupWindowStart = new Date(now.getTime() - DEDUP_WINDOW_MS);
 
+      const executeInTransaction = async (transaction: FirestoreTransaction): Promise<Result<CodeTask, RepositoryError>> => {
+        // Layer 0: Check approvalEventId (design lines 1532-1536)
+        if (input.approvalEventId !== undefined) {
+          const approvalQuery = collection
+            .where('approvalEventId', '==', input.approvalEventId)
+            .limit(1);
+          const approvalSnapshot = await transaction.get(approvalQuery);
+
+          if (!approvalSnapshot.empty) {
+            const existingTask = approvalSnapshot.docs[0]!;
+            logger.info({
+              dedupLayer: 0,
+              dedupType: 'DUPLICATE_APPROVAL',
+              existingTaskId: existingTask.id,
+              approvalEventId: input.approvalEventId,
+            }, 'Dedup triggered: duplicate approval event');
+            return err({
+              code: 'DUPLICATE_APPROVAL',
+              message: 'Duplicate approval event',
+              existingTaskId: existingTask.id,
+            } as const);
+          }
+        }
+
+        // Layer 1: Check actionId (design lines 1538-1541)
+        if (input.actionId !== undefined) {
+          const actionQuery = collection.where('actionId', '==', input.actionId).limit(1);
+          const actionSnapshot = await transaction.get(actionQuery);
+
+          if (!actionSnapshot.empty) {
+            const existingTask = actionSnapshot.docs[0]!;
+            logger.info({
+              dedupLayer: 1,
+              dedupType: 'DUPLICATE_ACTION',
+              existingTaskId: existingTask.id,
+              actionId: input.actionId,
+            }, 'Dedup triggered: duplicate action');
+            return err({
+              code: 'DUPLICATE_ACTION',
+              message: 'Duplicate action',
+              existingTaskId: existingTask.id,
+            } as const);
+          }
+        }
+
+        // Layer 2: Check dedupKey within 5-minute window (design lines 1543-1554)
+        // Skip dedup for retried tasks — same prompt is intentional
+        // Skip dedup for execution follow-up tasks — implementation reuses planning prompt by design
+        if (
+          input.retriedFrom === undefined &&
+          input.followUpReason !== 'execution_implement'
+        ) {
+          const dedupQuery = collection
+            .where('dedupKey', '==', dedupKey)
+            .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
+            .limit(1);
+          const dedupSnapshot = await transaction.get(dedupQuery);
+
+          if (!dedupSnapshot.empty) {
+            const existingTask = dedupSnapshot.docs[0]!;
+            logger.info({
+              dedupLayer: 2,
+              dedupType: 'DUPLICATE_PROMPT',
+              existingTaskId: existingTask.id,
+              dedupKey,
+            }, 'Dedup triggered: duplicate prompt within 5 minutes');
+            return err({
+              code: 'DUPLICATE_PROMPT',
+              message: 'Duplicate prompt within 5 minutes',
+              existingTaskId: existingTask.id,
+            } as const);
+          }
+        }
+
+        // Layer 3: Check active task for Linear issue (design lines 448-458)
+        if (input.linearIssueId !== undefined && input.agentType !== 'review') {
+          const linearQuery = collection
+            .where('linearIssueId', '==', input.linearIssueId)
+            .where('status', 'in', ACTIVE_TASK_STATUSES);
+          const linearSnapshot = await transaction.get(linearQuery);
+
+          for (const existingTask of linearSnapshot.docs) {
+            const existingData = existingTask.data();
+            if (existingData['agentType'] === 'review') {
+              continue;
+            }
+
+            logger.info({
+              dedupLayer: 3,
+              dedupType: 'ACTIVE_TASK_EXISTS',
+              existingTaskId: existingTask.id,
+              linearIssueId: input.linearIssueId,
+            }, 'Dedup triggered: active task exists for Linear issue');
+            return err({
+              code: 'ACTIVE_TASK_EXISTS',
+              message: 'Active task exists for Linear issue',
+              existingTaskId: existingTask.id,
+            } as const);
+          }
+        }
+
+        // All checks passed - create the task
+        const taskTimestamp = Timestamp.fromDate(now);
+        const taskData: CodeTask = {
+          id: taskId,
+          userId: input.userId,
+          prompt: input.prompt,
+          sanitizedPrompt: input.sanitizedPrompt,
+          systemPromptHash: input.systemPromptHash,
+          workerType: input.workerType,
+          workerLocation: input.workerLocation,
+          repository: input.repository,
+          baseBranch: input.baseBranch,
+          traceId: input.traceId,
+          status: input.initialStatus ?? 'queued',
+          dedupKey,
+          callbackReceived: false,
+          createdAt: taskTimestamp,
+          updatedAt: taskTimestamp,
+        };
+
+        // Add optional fields only if defined
+        if (input.actionId !== undefined) {
+          taskData.actionId = input.actionId;
+        }
+        if (input.approvalEventId !== undefined) {
+          taskData.approvalEventId = input.approvalEventId;
+        }
+        if (input.linearIssueId !== undefined) {
+          taskData.linearIssueId = input.linearIssueId;
+        }
+        if (input.webhookSecret !== undefined) {
+          taskData.webhookSecret = input.webhookSecret;
+        }
+        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
+        if (input.retriedFrom !== undefined) {
+          taskData.retriedFrom = input.retriedFrom;
+        }
+        if (input.prNumber !== undefined) {
+          taskData.prNumber = input.prNumber;
+        }
+        if (input.prBranch !== undefined) {
+          taskData.prBranch = input.prBranch;
+        }
+        if (input.parentTaskId !== undefined) {
+          taskData.parentTaskId = input.parentTaskId;
+        }
+        if (input.followUpReason !== undefined) {
+          taskData.followUpReason = input.followUpReason;
+        }
+        if (input.agentType !== undefined) {
+          taskData.agentType = input.agentType;
+        }
+        /* v8 ignore stop @preserve */
+
+        const docRef = collection.doc(taskId);
+        transaction.set(docRef, taskData);
+
+        return ok(taskData);
+      };
+
       try {
-        // Use transaction for atomic deduplication (design lines 1558-1563)
-         
-        const result = await firestore.runTransaction(async (transaction: any) => {
-          // Layer 0: Check approvalEventId (design lines 1532-1536)
-          if (input.approvalEventId !== undefined) {
-            const approvalQuery = collection
-              .where('approvalEventId', '==', input.approvalEventId)
-              .limit(1);
-            const approvalSnapshot = await transaction.get(approvalQuery);
+        // If a transaction is provided (e.g., from createTaskForPR's outer transaction),
+        // reuse it to avoid nested transactions. Otherwise, create our own.
+        if (options?.transaction !== undefined) {
+          return await executeInTransaction(options.transaction);
+        }
 
-            if (!approvalSnapshot.empty) {
-              const existingTask = approvalSnapshot.docs[0]!;
-              logger.info({
-                dedupLayer: 0,
-                dedupType: 'DUPLICATE_APPROVAL',
-                existingTaskId: existingTask.id,
-                approvalEventId: input.approvalEventId,
-              }, 'Dedup triggered: duplicate approval event');
-              return err({
-                code: 'DUPLICATE_APPROVAL',
-                message: 'Duplicate approval event',
-                existingTaskId: existingTask.id,
-              } as const);
-            }
-          }
-
-          // Layer 1: Check actionId (design lines 1538-1541)
-          if (input.actionId !== undefined) {
-            const actionQuery = collection.where('actionId', '==', input.actionId).limit(1);
-            const actionSnapshot = await transaction.get(actionQuery);
-
-            if (!actionSnapshot.empty) {
-              const existingTask = actionSnapshot.docs[0]!;
-              logger.info({
-                dedupLayer: 1,
-                dedupType: 'DUPLICATE_ACTION',
-                existingTaskId: existingTask.id,
-                actionId: input.actionId,
-              }, 'Dedup triggered: duplicate action');
-              return err({
-                code: 'DUPLICATE_ACTION',
-                message: 'Duplicate action',
-                existingTaskId: existingTask.id,
-              } as const);
-            }
-          }
-
-          // Layer 2: Check dedupKey within 5-minute window (design lines 1543-1554)
-          // Skip dedup for retried tasks — same prompt is intentional
-          // Skip dedup for execution follow-up tasks — implementation reuses planning prompt by design
-          if (
-            input.retriedFrom === undefined &&
-            input.followUpReason !== 'execution_implement'
-          ) {
-            const dedupQuery = collection
-              .where('dedupKey', '==', dedupKey)
-              .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
-              .limit(1);
-            const dedupSnapshot = await transaction.get(dedupQuery);
-
-            if (!dedupSnapshot.empty) {
-              const existingTask = dedupSnapshot.docs[0]!;
-              logger.info({
-                dedupLayer: 2,
-                dedupType: 'DUPLICATE_PROMPT',
-                existingTaskId: existingTask.id,
-                dedupKey,
-              }, 'Dedup triggered: duplicate prompt within 5 minutes');
-              return err({
-                code: 'DUPLICATE_PROMPT',
-                message: 'Duplicate prompt within 5 minutes',
-                existingTaskId: existingTask.id,
-              } as const);
-            }
-          }
-
-          // Layer 3: Check active task for Linear issue (design lines 448-458)
-          if (input.linearIssueId !== undefined) {
-            const activeStatuses = ['queued', 'dispatched', 'running'] as const;
-            const linearQuery = collection
-              .where('linearIssueId', '==', input.linearIssueId)
-              .where('status', 'in', activeStatuses)
-              .limit(1);
-            const linearSnapshot = await transaction.get(linearQuery);
-
-            if (!linearSnapshot.empty) {
-              const existingTask = linearSnapshot.docs[0]!;
-              logger.info({
-                dedupLayer: 3,
-                dedupType: 'ACTIVE_TASK_EXISTS',
-                existingTaskId: existingTask.id,
-                linearIssueId: input.linearIssueId,
-              }, 'Dedup triggered: active task exists for Linear issue');
-              return err({
-                code: 'ACTIVE_TASK_EXISTS',
-                message: 'Active task exists for Linear issue',
-                existingTaskId: existingTask.id,
-              } as const);
-            }
-          }
-
-          // All checks passed - create the task
-          const taskTimestamp = Timestamp.fromDate(now);
-          const taskData: CodeTask = {
-            id: taskId,
-            userId: input.userId,
-            prompt: input.prompt,
-            sanitizedPrompt: input.sanitizedPrompt,
-            systemPromptHash: input.systemPromptHash,
-            workerType: input.workerType,
-            workerLocation: input.workerLocation,
-            repository: input.repository,
-            baseBranch: input.baseBranch,
-            traceId: input.traceId,
-            status: 'dispatched',
-            dedupKey,
-            callbackReceived: false,
-            createdAt: taskTimestamp,
-            updatedAt: taskTimestamp,
-          };
-
-          // Add optional fields only if defined
-          if (input.actionId !== undefined) {
-            taskData.actionId = input.actionId;
-          }
-          if (input.approvalEventId !== undefined) {
-            taskData.approvalEventId = input.approvalEventId;
-          }
-          if (input.linearIssueId !== undefined) {
-            taskData.linearIssueId = input.linearIssueId;
-          }
-          if (input.webhookSecret !== undefined) {
-            taskData.webhookSecret = input.webhookSecret;
-          }
-          /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-          if (input.retriedFrom !== undefined) {
-            taskData.retriedFrom = input.retriedFrom;
-          }
-          if (input.prNumber !== undefined) {
-            taskData.prNumber = input.prNumber;
-          }
-          if (input.prBranch !== undefined) {
-            taskData.prBranch = input.prBranch;
-          }
-          if (input.parentTaskId !== undefined) {
-            taskData.parentTaskId = input.parentTaskId;
-          }
-          if (input.followUpReason !== undefined) {
-            taskData.followUpReason = input.followUpReason;
-          }
-          if (input.agentType !== undefined) {
-            taskData.agentType = input.agentType;
-          }
-          /* v8 ignore stop @preserve */
-
-          const docRef = collection.doc(taskId);
-          transaction.set(docRef, taskData);
-
-          return ok(taskData);
+        const result = await firestore.runTransaction(async (transaction: FirestoreTransaction) => {
+          return executeInTransaction(transaction);
         });
 
         return result;
@@ -359,14 +369,14 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.completedAt !== undefined) {
           updateData['completedAt'] = Timestamp.fromDate(input.completedAt);
         }
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (input.logChunksDropped !== undefined) {
           updateData['logChunksDropped'] = input.logChunksDropped;
         }
-        /* v8 ignore stop @preserve */
+        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
         if (input.lastHeartbeat !== undefined) {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
         }
+        /* v8 ignore stop @preserve */
         if (input.workerLocation !== undefined) {
           updateData['workerLocation'] = input.workerLocation;
         }
@@ -423,12 +433,8 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.cursor !== undefined) {
           // For cursor-based pagination, we'd start after the cursor
           // This is simplified - full implementation would decode the cursor
-          /* v8 ignore start -- test-infra: requires non-existent cursor doc to test else branch @preserve */
           const cursorDoc = await collection.doc(input.cursor).get();
-          /* v8 ignore stop @preserve */
-          /* v8 ignore start -- test-infra: cursor doc existence check @preserve */
           if (cursorDoc.exists) {
-          /* v8 ignore stop @preserve */
             query = query.startAfter(cursorDoc);
           }
         }
@@ -475,22 +481,24 @@ export const createFirestoreCodeTaskRepository = (deps: {
       linearIssueId: string
     ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>> => {
       try {
-        const activeStatuses = ['queued', 'dispatched', 'running'] as const;
         const snapshot = await collection
           .where('linearIssueId', '==', linearIssueId)
-          .where('status', 'in', activeStatuses)
-          .limit(1)
+          .where('status', 'in', ACTIVE_TASK_STATUSES)
           .get();
 
-        if (snapshot.empty) {
-          return ok({ hasActive: false });
+        for (const task of snapshot.docs) {
+          const data = task.data();
+          if (data['agentType'] === 'review') {
+            continue;
+          }
+
+          return ok({
+            hasActive: true,
+            taskId: task.id,
+          });
         }
 
-        const task = snapshot.docs[0]!;
-        return ok({
-          hasActive: true,
-          taskId: task.id,
-        });
+        return ok({ hasActive: false });
       } catch (error) {
         logger.error({ error, linearIssueId }, 'Failed to check active task for Linear issue');
         return err({
@@ -510,7 +518,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .get();
 
          
-        const tasks = snapshot.docs.map((doc: any) =>
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
           toCodeTask(doc as { id: string; data(): Record<string, unknown> })
         );
 
@@ -587,7 +595,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const logsSnapshot = await logsRef.get();
         const logCount = logsSnapshot.docs.length;
 
-        /* v8 ignore start -- test-infra: batch delete logic depends on log count in fixture @preserve */
         if (logCount > 0) {
           let batch = firestore.batch();
           let batchCount = 0;
@@ -603,16 +610,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
+          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (batchCount > 0) {
             await batch.commit();
           }
+          /* v8 ignore stop @preserve */
         }
-        /* v8 ignore stop @preserve */
 
         const logLinesRef = taskRef.collection('log_lines');
         const logLinesSnapshot = await logLinesRef.get();
 
-        /* v8 ignore start -- test-infra: batch delete logic depends on log count in fixture @preserve */
         if (logLinesSnapshot.docs.length > 0) {
           let linesBatch = firestore.batch();
           let linesBatchCount = 0;
@@ -628,16 +635,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
+          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (linesBatchCount > 0) {
             await linesBatch.commit();
           }
+          /* v8 ignore stop @preserve */
         }
-        /* v8 ignore stop @preserve */
 
         const logEntriesRef = taskRef.collection('log_entries');
         const logEntriesSnapshot = await logEntriesRef.get();
 
-        /* v8 ignore start -- test-infra: batch delete logic for legacy log_entries subcollection @preserve */
         if (logEntriesSnapshot.docs.length > 0) {
           let entriesBatch = firestore.batch();
           let entriesBatchCount = 0;
@@ -653,16 +660,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
+          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (entriesBatchCount > 0) {
             await entriesBatch.commit();
           }
+          /* v8 ignore stop @preserve */
         }
-        /* v8 ignore stop @preserve */
 
         const turnMetricsRef = taskRef.collection('turn_metrics');
         const turnMetricsSnapshot = await turnMetricsRef.get();
 
-        /* v8 ignore start -- test-infra: batch delete logic for turn_metrics subcollection @preserve */
         if (turnMetricsSnapshot.docs.length > 0) {
           let metricsBatch = firestore.batch();
           let metricsBatchCount = 0;
@@ -678,11 +685,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }
           }
 
+          /* v8 ignore start -- test-infra: FakeFirestore batch commit not tracked by v8 coverage @preserve */
           if (metricsBatchCount > 0) {
             await metricsBatch.commit();
           }
+          /* v8 ignore stop @preserve */
         }
-        /* v8 ignore stop @preserve */
 
         const totalLogCount = logCount + logLinesSnapshot.docs.length + logEntriesSnapshot.docs.length + turnMetricsSnapshot.docs.length;
         const archivedAt = new Date();
@@ -834,6 +842,105 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok(task);
       } catch (error) {
         logger.error({ error, repository, prNumber }, 'Failed to find task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findActiveReviewForPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .where('agentType', '==', 'review')
+          .where('status', 'in', ACTIVE_TASK_STATUSES)
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find active review task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findLatestNonReviewTaskByPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        // Query the newest 50 tasks for this PR and filter in-memory.
+        // Uses limit(50) instead of a Firestore inequality filter on agentType
+        // to avoid a composite index. 50 is generous — a PR would need 50+
+        // consecutive review tasks before the oldest non-review task falls
+        // outside this window.
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .orderBy('createdAt', 'desc')
+          .limit(50)
+          .get();
+
+        // Find the first non-review task (agentType !== 'review' or missing)
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          const agentType = data['agentType'] as string | undefined;
+          // Treat missing agentType as non-review (backward compatibility)
+          if (agentType !== 'review') {
+            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
+          }
+        }
+
+        /* v8 ignore start -- test-infra: FakeFirestore limit(50) requires inserting 50 documents to trigger this observability warning @preserve */
+        if (snapshot.docs.length === 50) {
+          logger.warn(
+            { repository, prNumber, docsScanned: 50 },
+            'findLatestNonReviewTaskByPR exhausted 50-doc window without finding a non-review task',
+          );
+        }
+        /* v8 ignore stop @preserve */
+
+        return ok(null);
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find latest non-review task by PR');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findRecentTasksByLinearIssue: async (
+      linearIssueId: string,
+      limit: number
+    ): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('linearIssueId', '==', linearIssueId)
+          .orderBy('createdAt', 'desc')
+          .limit(limit)
+          .get();
+
+        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        );
+
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error, linearIssueId, limit }, 'Failed to find recent tasks by Linear issue');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

@@ -13,14 +13,17 @@ import {
   Eye,
   GitPullRequest,
   GitPullRequestArrow,
+  Globe,
   Layers,
   LayoutGrid,
   Lock,
   Mail,
   MessageSquare,
   Mic,
+  ScrollText,
   Shield,
   Smartphone,
+  Sparkles,
   Terminal,
   Waypoints,
   Zap,
@@ -282,7 +285,7 @@ function HeroSection(): React.JSX.Element {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
             </span>
-            IntexuraOS v3.2.0
+            IntexuraOS v3.3.0
           </div>
 
           <p className="mx-auto mb-4 max-w-xl text-lg leading-relaxed text-neutral-600">
@@ -583,7 +586,6 @@ function CouncilSection(): React.JSX.Element {
     { name: 'OPENAI', models: '4 models: research, reasoning, images', role: 'Deep research, synthesis, embeddings', icon: Zap },
     { name: 'GOOGLE', models: '4 models: analysis, classification, images', role: 'Classification, routing, image gen', icon: Layers },
     { name: 'PERPLEXITY', models: '3 models: search, synthesis, deep dive', role: 'Real-time web search, citations', icon: Eye },
-    { name: 'ZAI', models: '2 models: multilingual, fast', role: 'Multilingual, cost-efficient, guest access', icon: MessageSquare },
   ];
 
   return (
@@ -594,7 +596,7 @@ function CouncilSection(): React.JSX.Element {
             The Council of AI
           </p>
           <h2 className="mb-6 max-w-3xl text-4xl font-bold tracking-tight md:text-5xl">
-            Five models debate.{' '}
+            Four models debate.{' '}
             <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
               You get the truth.
             </span>
@@ -606,7 +608,7 @@ function CouncilSection(): React.JSX.Element {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {providers.map((provider) => (
             <motion.div
               key={provider.name}
@@ -681,58 +683,94 @@ function WhatsNewSection(): React.JSX.Element {
     iconColor: string;
   }[] = [
     {
-      title: 'Agent-Based Routing',
-      description: 'Requests automatically routed to the right specialist based on issue labels.',
-      icon: Waypoints,
+      title: 'GitHub Agent',
+      description:
+        'A new agent evaluates pull requests using tool calling, with a unified webhook evaluator routing GitHub events.',
+      icon: GitPullRequest,
       borderColor: 'border-purple-200',
       bgGradient: 'bg-gradient-to-br from-purple-50 to-white',
       iconBg: 'bg-purple-100',
       iconColor: 'text-purple-700',
     },
     {
-      title: 'One-Click Implement',
-      description: 'Planned tasks go from design to pull request with a single button press.',
-      icon: Zap,
+      title: 'Alibaba Cloud Model Studio',
+      description:
+        'Unified integration for Chinese LLMs — Qwen, Kimi, and GLM-5 — via Alibaba Cloud Model Studio.',
+      icon: Globe,
       borderColor: 'border-cyan-200',
       bgGradient: 'bg-gradient-to-br from-cyan-50 to-white',
       iconBg: 'bg-cyan-100',
       iconColor: 'text-cyan-700',
     },
     {
-      title: 'Task Queueing',
-      description: 'New requests wait in line when workers are busy instead of being dropped.',
-      icon: LayoutGrid,
+      title: 'Code Task Detail V2',
+      description:
+        'Completely redesigned code task experience with a modern detail page and issue-centric grouped list.',
+      icon: Code2,
       borderColor: 'border-emerald-200',
       bgGradient: 'bg-gradient-to-br from-emerald-50 to-white',
       iconBg: 'bg-emerald-100',
       iconColor: 'text-emerald-700',
     },
     {
-      title: 'PR Comment Tasks',
-      description: 'Leave a comment on a pull request and a code task is created automatically.',
-      icon: GitPullRequestArrow,
+      title: 'Unified PR Automation Log',
+      description:
+        'Every action taken on a pull request is now visible in a single, auditable automation log.',
+      icon: ScrollText,
       borderColor: 'border-blue-200',
       bgGradient: 'bg-gradient-to-br from-blue-50 to-white',
       iconBg: 'bg-blue-100',
       iconColor: 'text-blue-700',
     },
     {
-      title: 'More AI Models',
-      description: 'Qwen, Sonnet, and MiniMax worker types join the coding agent lineup.',
-      icon: Bot,
+      title: 'Structured Output Validation',
+      description:
+        'GitHub Agent triage produces reliable results with automatic repair prompts for malformed output.',
+      icon: Sparkles,
       borderColor: 'border-violet-200',
       bgGradient: 'bg-gradient-to-br from-violet-50 to-white',
       iconBg: 'bg-violet-100',
       iconColor: 'text-violet-700',
     },
     {
-      title: 'WhatsApp Deep Links',
-      description: 'Tap CTA buttons to navigate directly to tasks and dashboards.',
-      icon: Smartphone,
+      title: 'Agent-Based Routing',
+      description:
+        'Requests automatically routed to the right specialist based on issue labels.',
+      icon: Waypoints,
+      borderColor: 'border-amber-200',
+      bgGradient: 'bg-gradient-to-br from-amber-50 to-white',
+      iconBg: 'bg-amber-100',
+      iconColor: 'text-amber-700',
+    },
+    {
+      title: 'One-Click Implement',
+      description:
+        'Planned tasks go from design to pull request with a single button press.',
+      icon: Zap,
       borderColor: 'border-green-200',
       bgGradient: 'bg-gradient-to-br from-green-50 to-white',
       iconBg: 'bg-green-100',
       iconColor: 'text-green-700',
+    },
+    {
+      title: 'Task Queueing',
+      description:
+        'New requests wait in line when workers are busy instead of being dropped.',
+      icon: LayoutGrid,
+      borderColor: 'border-rose-200',
+      bgGradient: 'bg-gradient-to-br from-rose-50 to-white',
+      iconBg: 'bg-rose-100',
+      iconColor: 'text-rose-700',
+    },
+    {
+      title: 'PR Comment Tasks',
+      description:
+        'Leave a comment on a pull request and a code task is created automatically.',
+      icon: GitPullRequestArrow,
+      borderColor: 'border-indigo-200',
+      bgGradient: 'bg-gradient-to-br from-indigo-50 to-white',
+      iconBg: 'bg-indigo-100',
+      iconColor: 'text-indigo-700',
     },
   ];
 
@@ -753,13 +791,13 @@ function WhatsNewSection(): React.JSX.Element {
             </a>
           </div>
           <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
-            v3.2.0 —{' '}
+            v3.3.0 —{' '}
             <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              Six new capabilities.
+              9 new capabilities.
             </span>
           </h2>
           <p className="text-lg leading-relaxed text-neutral-600">
-            Agent-based routing, one-click implementation, task queueing, and more.
+            GitHub Agent, Alibaba Cloud Model Studio, redesigned code tasks, and more.
           </p>
         </div>
 
@@ -1026,7 +1064,7 @@ function Footer(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-md bg-cyan-600" />
           <span className="font-bold text-neutral-900">IntexuraOS</span>
-          <span className="text-xs text-neutral-400">v3.2.0</span>
+          <span className="text-xs text-neutral-400">v3.3.0</span>
         </div>
         <p className="text-sm text-neutral-500">
           &copy; {new Date().getFullYear()}{' '}

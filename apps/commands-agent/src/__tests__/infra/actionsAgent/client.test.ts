@@ -154,7 +154,7 @@ describe('ActionsAgentClient', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.message).toBe('Failed to create action: Unknown error');
+        expect(result.error.message).toBe('Failed to create action: String error');
       }
     });
 

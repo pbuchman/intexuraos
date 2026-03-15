@@ -1,6 +1,6 @@
 # Todos Agent — Technical Debt
 
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-15
 **Analysis Run:** Autonomous documentation refresh (service-scribe)
 
 ---
@@ -127,12 +127,11 @@ Added Dash0 as an OpenTelemetry observability backend (PR #803). Provides distri
 
 Standardized all LLM API key env vars to `APP` naming convention (PR #793):
 
-- `INTEXURAOS_ZAI_APP_API_KEY` — platform Zai key
-- `INTEXURAOS_GEMINI_APP_API_KEY` — platform Gemini key (new)
+- `INTEXURAOS_GEMINI_APP_API_KEY` — platform Gemini key (ZAI key removed in v3.3.0)
 
 ### Default LLM Switch to Gemini 2.5 Flash (2026-02-15)
 
-Switched the default extraction model to Gemini 2.5 Flash (PR #792). Added platform Gemini as a fallback chain alongside Zai. Increased title generation timeout to accommodate the new model's response characteristics.
+Switched the default extraction model to Gemini 2.5 Flash (PR #792). Added platform Gemini as the fallback chain (ZAI fallback removed in v3.3.0). Increased title generation timeout to accommodate the new model's response characteristics.
 
 ### Dev-Mode Log Formatting (2026-02-16)
 

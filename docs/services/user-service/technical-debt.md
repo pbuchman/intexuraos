@@ -1,6 +1,6 @@
 # User Service - Technical Debt
 
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-15
 **Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
 
 ---
@@ -44,8 +44,7 @@ Currently Google and GitHub OAuth are implemented. Planned additions:
 ### Error Formatting Improvements
 
 1. **Perplexity-specific parsing** - Currently falls through to generic parser
-2. **Zai-specific parsing** - Currently falls through to generic parser
-3. **Structured error responses** - Include error codes alongside messages
+2. **Structured error responses** - Include error codes alongside messages
 
 ### Transcription Expansion
 
@@ -68,7 +67,7 @@ The `llmKeysRoutes.ts` file is large but all routes are cohesive around the LLM 
 
 ### Acknowledged Pattern: LlmValidatorImpl
 
-The `LlmValidatorImpl.ts` (256 lines) contains similar code blocks for each provider (5 providers x 2 methods = 10 similar blocks). This is intentional for:
+The `LlmValidatorImpl.ts` contains similar code blocks for each provider (4 providers x 2 methods = 8 similar blocks). This is intentional for:
 
 - Clear debugging (each provider's logic is isolated)
 - Easy addition of new providers
@@ -126,7 +125,7 @@ Comprehensive test coverage across all layers with 100% branch coverage enforcem
 | `oauthConnectionRepository.test.ts`     | Firestore OAuth storage                       |
 | `googleOAuthClient.test.ts`             | Google OAuth client                           |
 | `gitHubOAuthClient.test.ts`             | GitHub OAuth client                           |
-| `llmValidator.test.ts`                  | LLM key validation (5 providers)              |
+| `llmValidator.test.ts`                  | LLM key validation (4 providers)              |
 | `maskApiKey.test.ts`                    | Key masking utility                           |
 
 ---

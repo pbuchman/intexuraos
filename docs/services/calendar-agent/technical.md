@@ -117,6 +117,8 @@ sequenceDiagram
 
 | Commit     | Description                                                        | Date       |
 | ---------- | ------------------------------------------------------------------ | ---------- |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)   | 2026-03-12 |
+| `155c2b6b` | Write tests for v8-ignore blocks (INT-787)                         | 2026-03-10 |
 | `99febe66` | Wire GitHub OAuth integration and update cross-service mocks       | 2026-03-02 |
 | `14a4085d` | Pass full user prompt to calendar-agent instead of title only      | 2026-02-24 |
 | `9f80098e` | Address all PR review findings for calendar preview [INT-535]      | 2026-02-23 |
@@ -126,7 +128,7 @@ sequenceDiagram
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration                                | 2026-02-16 |
 | `e60eafc1` | Standardize API key secrets to APP naming convention               | 2026-02-15 |
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallbacks             | 2026-02-15 |
-| `0f69a74b` | Add default model selector with platform Zai fallback              | 2026-02-08 |
+| `0f69a74b` | Add default model selector with platform fallback                  | 2026-02-08 |
 | `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                  | 2026-01-31 |
 | `7ae05245` | Add delete/retry for failed issues and events                      | 2026-01-31 |
 | `d60f2ee6` | Improve calendar extraction with date-only support and repair      | 2026-01-30 |
@@ -296,7 +298,6 @@ interface GeneratePreviewMessage {
 | Google Calendar API v3    | Event CRUD and free/busy queries                                 |
 | Gemini 2.5 Flash          | Primary LLM for natural language event extraction                |
 | Gemini 2.5 Pro            | Secondary LLM (fallback)                                         |
-| GLM-4.7 / GLM-4.7 Flash   | Tertiary LLM via platform Zai (fallback when Gemini unavailable) |
 
 ## Configuration
 
@@ -310,7 +311,6 @@ interface GeneratePreviewMessage {
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                   |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service URL for pricing    |
 | `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry DSN for error reporting          |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai LLM API key (fallback)     |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini LLM API key (fallback)  |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (default: development) |
 | `PORT`                                | No       | Server port (default: 8125)             |

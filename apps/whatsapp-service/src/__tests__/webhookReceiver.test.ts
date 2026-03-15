@@ -340,6 +340,40 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
     expect(events[0]?.phoneNumberId).toBe('987654321098765');
   });
 
+  it('returns 500 when publishWebhookProcess fails', async () => {
+    // Configure the fake event publisher to fail
+    ctx.eventPublisher.setWebhookProcessFailure('Simulated Pub/Sub failure');
+
+    const payload = createWebhookPayload();
+    const payloadString = JSON.stringify(payload);
+    const signature = createSignature(payloadString, testConfig.appSecret);
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/whatsapp/webhooks',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': signature,
+      },
+      payload: payloadString,
+    });
+
+    // Should return 500 so WhatsApp retries
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: string;
+    };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe('Failed to queue webhook for processing');
+
+    // Event should be saved but marked as failed
+    const events = ctx.webhookEventRepository.getAll();
+    expect(events.length).toBe(1);
+    expect(events[0]?.status).toBe('failed');
+    expect(events[0]?.failureDetails).toContain('Pub/Sub publish failed');
+  });
+
   it('accepts webhook with unexpected message type gracefully', async () => {
     const payload = {
       object: 'whatsapp_business_account',

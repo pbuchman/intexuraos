@@ -88,12 +88,10 @@ const githubPRSummariesRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastif
 
         const result = await gitHubPRSummaryRepo.findRecentlyActive(30);
 
-        /* v8 ignore start -- upstream: error handling for external database failures @preserve */
         if (!result.ok) {
           request.log.error({ error: result.error.message }, 'Failed to fetch GitHub PR summaries'); // @allow-result-access -- narrowed by !result.ok
           return await reply.fail('INTERNAL_ERROR', 'Failed to fetch PR summaries');
         }
-        /* v8 ignore stop @preserve */
 
         // Derive status and sort by PR number descending
         const prs = result.value // @allow-result-access -- narrowed by !result.ok above

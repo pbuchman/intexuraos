@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { DockerProvider, type DockerProviderConfig } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
+import * as fs from 'node:fs';
 
 function createMockExecStream(): NodeJS.ReadableStream & { resume: () => void } {
   const stream = new EventEmitter() as unknown as NodeJS.ReadableStream & { resume: () => void };
@@ -14,6 +15,7 @@ interface MockDocker {
   createContainer: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
   listContainers: ReturnType<typeof vi.fn>;
+  ping: ReturnType<typeof vi.fn>;
   pull: ReturnType<typeof vi.fn>;
   getImage: ReturnType<typeof vi.fn>;
   modem: { followProgress: ReturnType<typeof vi.fn> };
@@ -86,6 +88,7 @@ function createMockDocker(): MockDockerResult {
     createContainer: vi.fn().mockResolvedValue(mockContainer),
     getContainer: vi.fn().mockReturnValue(mockContainer),
     listContainers: vi.fn().mockResolvedValue([]),
+    ping: vi.fn().mockResolvedValue('OK'),
     pull: vi.fn().mockResolvedValue({}),
     getImage: vi.fn().mockReturnValue({
       inspect: vi.fn().mockResolvedValue({
@@ -134,6 +137,7 @@ vi.mock('node:fs', async (importOriginal) => {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
     statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
+    statfsSync: vi.fn().mockReturnValue({ bavail: 2_000_000, bsize: 4096 }),
     readFileSync: vi.fn().mockImplementation((filePath: unknown) => {
       if (
         typeof filePath === 'string' &&
@@ -152,6 +156,7 @@ vi.mock('node:fs', async (importOriginal) => {
       rm: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue(['system-prompt.txt', 'user-prompt.txt', 'github-token']),
       writeFile: vi.fn().mockResolvedValue(undefined),
+      statfs: vi.fn().mockResolvedValue({ bavail: 2_000_000, bsize: 4096 }),
     },
   };
 });
@@ -175,7 +180,6 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     ANTHROPIC_API_KEY: 'test-anthropic-key',
     LINEAR_API_KEY: 'test-linear-key',
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
-    ZAI_API_KEY: 'test-zai-key',
     MINIMAX_API_KEY: 'test-minimax-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
   },
@@ -206,6 +210,10 @@ describe('DockerProvider', () => {
     mockLogger = createMockLogger();
     mocks = createMockDocker();
     provider = new TestableDockerProvider({}, mockLogger, mocks.mockDocker);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('createWorker', () => {
@@ -1013,7 +1021,7 @@ describe('DockerProvider', () => {
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
-      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-zai-key');
+      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-dashscope-key');
     });
 
     it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for sonnet worker', async () => {
@@ -1109,7 +1117,9 @@ describe('DockerProvider', () => {
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
-      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic');
+      expect(baseUrlEntry).toBe(
+        'ANTHROPIC_BASE_URL=https://coding-intl.dashscope.aliyuncs.com/apps/anthropic'
+      );
     });
 
     it('sets ANTHROPIC_API_KEY env var when sharedCredsPath is NOT configured', async () => {
@@ -1307,60 +1317,112 @@ describe('DockerProvider', () => {
     });
   });
 
-  describe('cleanupOrphanedContainers', () => {
-    it('removes containers older than 24 hours', async () => {
-      const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
-      const orphanContainer = {
-        Id: 'orphan-container-id',
-        Names: ['/claude-worker-orphan-task'],
-        State: 'running',
-        Created: twoDaysAgo,
-      };
+  describe('runCleanupCycle', () => {
+    it('removes preserved containers after 3 hours', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'preserved-task' }));
+      await provider.preserveWorker('preserved-task');
+      (
+        (
+          provider as unknown as {
+            preservedWorkers: Map<
+              string,
+              { containerId: string; taskId: string; preservedAt: string }
+            >;
+          }
+        ).preservedWorkers.get('preserved-task') as { preservedAt: string }
+      ).preservedAt = new Date(Date.now() - 3 * 60 * 60 * 1000 - 1000).toISOString();
 
-      mocks.mockDocker.listContainers.mockResolvedValueOnce([orphanContainer]);
+      vi.clearAllMocks();
 
-      await provider.cleanupOrphanedContainers();
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'test-container-id',
+          Names: ['/claude-worker-preserved-task'],
+          State: 'running',
+          Created: Math.floor((Date.now() - 1000) / 1000),
+        },
+      ]);
 
-      expect(mocks.mockDocker.listContainers).toHaveBeenCalledWith({
-        all: true,
-        filters: { name: ['claude-worker-'] },
-      });
+      await provider.runCleanupCycle();
+
+      expect(mocks.mockContainer.stop).toHaveBeenCalledWith({ t: 5 });
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+      expect(await provider.listPreservedWorkers()).toEqual([]);
+    });
+
+    it('keeps preserved containers available for reuse before 3 hours', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'preserved-task' }));
+      await provider.preserveWorker('preserved-task');
+
+      vi.clearAllMocks();
+
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'test-container-id',
+          Names: ['/claude-worker-preserved-task'],
+          State: 'running',
+          Created: Math.floor(Date.now() / 1000),
+        },
+      ]);
+
+      await provider.runCleanupCycle();
+
+      expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
+      expect(await provider.listPreservedWorkers()).toHaveLength(1);
+    });
+
+    it('removes unrelated running containers older than 3 hours', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'orphan-container-id',
+          Names: ['/claude-worker-orphan-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
+
+      await provider.runCleanupCycle();
+
       expect(mocks.mockDocker.getContainer).toHaveBeenCalledWith('orphan-container-id');
       expect(mocks.mockContainer.stop).toHaveBeenCalledWith({ t: 5 });
       expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
     });
 
-    it('handles stopped old containers', async () => {
-      const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
-      const orphanContainer = {
-        Id: 'orphan-container-id',
-        Names: ['/claude-worker-orphan-task'],
-        State: 'exited',
-        Created: twoDaysAgo,
-      };
+    it('removes unrelated exited containers older than 3 hours', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'exited-container-id',
+          Names: ['/claude-worker-exited-task'],
+          State: 'exited',
+          Created: fourHoursAgo,
+        },
+      ]);
 
-      mocks.mockDocker.listContainers.mockResolvedValueOnce([orphanContainer]);
-
-      await provider.cleanupOrphanedContainers();
+      await provider.runCleanupCycle();
 
       expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
       expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
     });
 
-    it('skips containers younger than 24 hours', async () => {
-      const oneHourAgo = Math.floor(Date.now() / 1000) - 60 * 60;
-      const recentContainer = {
-        Id: 'recent-container-id',
-        Names: ['/claude-worker-recent-task'],
-        State: 'exited',
-        Created: oneHourAgo,
-      };
+    it('skips active workers even if their containers are older than 3 hours', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'active-task' }));
 
-      mocks.mockDocker.listContainers.mockResolvedValueOnce([recentContainer]);
+      vi.clearAllMocks();
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'test-container-id',
+          Names: ['/claude-worker-active-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
 
-      await provider.cleanupOrphanedContainers();
+      await provider.runCleanupCycle();
 
-      expect(mocks.mockDocker.getContainer).not.toHaveBeenCalled();
       expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
       expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
     });
@@ -1368,14 +1430,152 @@ describe('DockerProvider', () => {
     it('handles empty container list gracefully', async () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
 
-      await expect(provider.cleanupOrphanedContainers()).resolves.not.toThrow();
+      await expect(provider.runCleanupCycle()).resolves.not.toThrow();
     });
 
     it('handles list error gracefully', async () => {
       mocks.mockDocker.listContainers.mockRejectedValueOnce(new Error('Docker not available'));
 
-      await expect(provider.cleanupOrphanedContainers()).resolves.not.toThrow();
+      await expect(provider.runCleanupCycle()).resolves.not.toThrow();
       expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it.each(['No such container', 'container is not running', 'container already stopped'])(
+      'ignores benign stale-container stop error: %s',
+      async (message) => {
+        const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+        mocks.mockDocker.listContainers.mockResolvedValueOnce([
+          {
+            Id: 'orphan-container-id',
+            Names: ['/claude-worker-orphan-task'],
+            State: 'running',
+            Created: fourHoursAgo,
+          },
+        ]);
+        mocks.mockContainer.stop.mockRejectedValueOnce(new Error(message));
+
+        await provider.runCleanupCycle();
+
+        expect(mockLogger.warn).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'orphan-task',
+            containerId: 'orphan-container-id',
+          }),
+          'Failed to stop stale container'
+        );
+        expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+      }
+    );
+
+    it('warns when stopping a stale container fails for another Error', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'orphan-container-id',
+          Names: ['/claude-worker-orphan-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
+      mocks.mockContainer.stop.mockRejectedValueOnce(new Error('Docker daemon crashed'));
+
+      await provider.runCleanupCycle();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'orphan-task',
+          containerId: 'orphan-container-id',
+          error: expect.any(Error),
+        }),
+        'Failed to stop stale container'
+      );
+    });
+
+    it('warns when stopping a stale container fails with a non-Error throw', async () => {
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'orphan-container-id',
+          Names: ['/claude-worker-orphan-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
+      mocks.mockContainer.stop.mockRejectedValueOnce('stop failed');
+
+      await provider.runCleanupCycle();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'orphan-task',
+          containerId: 'orphan-container-id',
+          error: 'stop failed',
+        }),
+        'Failed to stop stale container'
+      );
+    });
+
+    it('does not remove containers when keepContainersAlive is enabled', async () => {
+      const keepProvider = new TestableDockerProvider(
+        { keepContainersAlive: true },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        {
+          Id: 'orphan-container-id',
+          Names: ['/claude-worker-orphan-task'],
+          State: 'running',
+          Created: fourHoursAgo,
+        },
+      ]);
+
+      await keepProvider.runCleanupCycle();
+
+      expect(mocks.mockDocker.listContainers).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('periodic cleanup lifecycle', () => {
+    it('runs cleanup on the 5 minute interval after startup', async () => {
+      vi.useFakeTimers();
+      const cleanupSpy = vi.spyOn(provider, 'runCleanupCycle').mockResolvedValue(undefined);
+
+      provider.startPeriodicCleanup();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+      provider.stopPeriodicCleanup();
+    });
+
+    it('stops the periodic cleanup interval', async () => {
+      vi.useFakeTimers();
+      const cleanupSpy = vi.spyOn(provider, 'runCleanupCycle').mockResolvedValue(undefined);
+
+      provider.startPeriodicCleanup();
+      provider.stopPeriodicCleanup();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(cleanupSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not start cleanup when keepContainersAlive is enabled', async () => {
+      vi.useFakeTimers();
+      const keepProvider = new TestableDockerProvider(
+        { keepContainersAlive: true },
+        mockLogger,
+        mocks.mockDocker
+      );
+      const cleanupSpy = vi.spyOn(keepProvider, 'runCleanupCycle').mockResolvedValue(undefined);
+
+      keepProvider.startPeriodicCleanup();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(cleanupSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -1461,6 +1661,217 @@ describe('DockerProvider', () => {
         { containerId: 'container-bad' },
         expect.stringContaining('no recognizable name')
       );
+    });
+  });
+
+  describe('resolveForensicsSeccompProfilePath', () => {
+    it('returns the first candidate path that exists', async () => {
+      const fs = await import('node:fs');
+      (fs.existsSync as Mock).mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompProfilePath();
+
+      expect(result).toBeTypeOf('string');
+      expect(result).toContain('claude-worker-forensics-seccomp.json');
+    });
+
+    it('returns null when no candidate path exists', async () => {
+      const fs = await import('node:fs');
+      // Use mockReturnValueOnce for each candidate (3 candidates) to avoid polluting other tests
+      (fs.existsSync as Mock)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompProfilePath();
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ candidates: expect.any(Array) }),
+        expect.stringContaining('Forensics seccomp profile not found')
+      );
+    });
+  });
+
+  describe('resolveForensicsSeccompSecurityOpt', () => {
+    it('returns null when profile path is not found', async () => {
+      const fs = await import('node:fs');
+      // Use mockReturnValueOnce for each candidate (3 candidates) to avoid polluting other tests
+      (fs.existsSync as Mock)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompSecurityOpt();
+
+      expect(result).toBeNull();
+    });
+
+    it('returns seccomp security opt string when profile is valid', async () => {
+      const fs = await import('node:fs');
+      (fs.existsSync as Mock).mockReturnValueOnce(true);
+      const profileJson = { defaultAction: 'SCMP_ACT_ERRNO', syscalls: [] };
+      (fs.readFileSync as Mock).mockReturnValueOnce(JSON.stringify(profileJson));
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompSecurityOpt();
+
+      expect(result).toBe(`seccomp=${JSON.stringify(profileJson)}`);
+    });
+
+    it('returns null and logs warning when profile read throws', async () => {
+      const fs = await import('node:fs');
+      (fs.existsSync as Mock).mockReturnValueOnce(true);
+      (fs.readFileSync as Mock).mockImplementationOnce(() => {
+        throw new Error('ENOENT: no such file');
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompSecurityOpt();
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          profilePath: expect.any(String),
+          error: expect.any(Error),
+        }),
+        expect.stringContaining('Forensics seccomp profile is invalid')
+      );
+    });
+
+    it('returns null and logs warning when profile contains invalid JSON', async () => {
+      const fs = await import('node:fs');
+      (fs.existsSync as Mock).mockReturnValueOnce(true);
+      (fs.readFileSync as Mock).mockReturnValueOnce('not-valid-json{{{');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (provider as any).resolveForensicsSeccompSecurityOpt();
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          profilePath: expect.any(String),
+          error: expect.any(SyntaxError),
+        }),
+        expect.stringContaining('Forensics seccomp profile is invalid')
+      );
+    });
+  });
+
+  describe('createWorker continueSession guard', () => {
+    it('throws when worker already exists and continueSession is not true', async () => {
+      const config = createTestConfig({ taskId: 'task-duplicate' });
+      const handle = await provider.createWorker(config);
+      expect(handle.taskId).toBe('task-duplicate');
+
+      await expect(
+        provider.createWorker(createTestConfig({ taskId: 'task-duplicate' }))
+      ).rejects.toThrow('Worker already exists for task task-duplicate');
+    });
+  });
+
+  describe('health monitoring', () => {
+    it('checkHealth returns healthy when docker.ping() succeeds', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      const result = await provider.checkHealth();
+      expect(result).toEqual({ docker: true, disk: true });
+    });
+
+    it('checkHealth returns unhealthy when docker.ping() times out', async () => {
+      vi.useFakeTimers();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentionally never resolves to simulate Docker hang
+      mocks.mockDocker.ping.mockReturnValue(new Promise(() => {}));
+      const healthPromise = provider.checkHealth();
+      await vi.advanceTimersByTimeAsync(5000);
+      const result = await healthPromise;
+      expect(result.docker).toBe(false);
+      expect(provider.isHealthy()).toBe(false);
+    });
+
+    it('checkHealth returns unhealthy when docker.ping() rejects', async () => {
+      mocks.mockDocker.ping.mockRejectedValue(new Error('connection refused'));
+      const result = await provider.checkHealth();
+      expect(result.docker).toBe(false);
+      expect(provider.isHealthy()).toBe(false);
+    });
+
+    it('isHealthy returns false when disk space is low', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      vi.mocked(fs.promises.statfs).mockResolvedValue({
+        bavail: 100_000,
+        bsize: 4096,
+      } as unknown as fs.StatsFs);
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(false);
+    });
+
+    it('isHealthy returns true when both docker and disk are healthy', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      vi.mocked(fs.promises.statfs).mockResolvedValue({
+        bavail: 2_000_000,
+        bsize: 4096,
+      } as unknown as fs.StatsFs);
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(true);
+    });
+
+    it('startHealthMonitor runs periodic checks', async () => {
+      vi.useFakeTimers();
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      provider.startHealthMonitor();
+      expect(mocks.mockDocker.ping).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(mocks.mockDocker.ping).toHaveBeenCalled();
+      provider.stopHealthMonitor();
+    });
+
+    it('stopHealthMonitor clears interval', () => {
+      vi.useFakeTimers();
+      provider.startHealthMonitor();
+      provider.stopHealthMonitor();
+      mocks.mockDocker.ping.mockClear();
+      vi.advanceTimersByTime(60_000);
+      expect(mocks.mockDocker.ping).not.toHaveBeenCalled();
+    });
+
+    it('logs transition from healthy to unhealthy', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(true);
+
+      mocks.mockDocker.ping.mockRejectedValue(new Error('connection refused'));
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(false);
+      expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it('logs transition from unhealthy to healthy', async () => {
+      mocks.mockDocker.ping.mockRejectedValue(new Error('connection refused'));
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(false);
+
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ component: 'health-monitor' }),
+        expect.stringContaining('healthy')
+      );
+    });
+
+    it('getHealthDetails returns current state', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      await provider.checkHealth();
+      expect(provider.getHealthDetails()).toEqual({ docker: true, disk: true });
+    });
+
+    it('getHealthDetails reflects unhealthy docker', async () => {
+      mocks.mockDocker.ping.mockRejectedValue(new Error('connection refused'));
+      await provider.checkHealth();
+      expect(provider.getHealthDetails()).toEqual({ docker: false, disk: true });
     });
   });
 });

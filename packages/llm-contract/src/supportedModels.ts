@@ -3,7 +3,7 @@
  *
  * Single source of truth for model names via TypeScript union types.
  * Models are categorized by their primary use case.
- * All 16 models from migrations 012+ are defined here.
+ * All 14 models from migrations 012+ are defined here.
  */
 
 // =============================================================================
@@ -14,10 +14,9 @@ export type Google = 'google';
 export type OpenAI = 'openai';
 export type Anthropic = 'anthropic';
 export type Perplexity = 'perplexity';
-export type Zai = 'zai';
 
 /** Union of all LLM providers */
-export type LlmProvider = Google | OpenAI | Anthropic | Perplexity | Zai;
+export type LlmProvider = Google | OpenAI | Anthropic | Perplexity;
 
 // =============================================================================
 // Individual Model Types - Google
@@ -54,13 +53,6 @@ export type SonarPro = 'sonar-pro';
 export type SonarDeepResearch = 'sonar-deep-research';
 
 // =============================================================================
-// Individual Model Types - Zai
-// =============================================================================
-
-export type Glm47 = 'glm-4.7';
-export type Glm47Flash = 'glm-4.7-flash';
-
-// =============================================================================
 // Model Category Types (composed from individual types)
 // =============================================================================
 
@@ -81,19 +73,17 @@ export type ResearchModel =
   | GPT52
   | Sonar
   | SonarPro
-  | SonarDeepResearch
-  | Glm47
-  | Glm47Flash;
+  | SonarDeepResearch;
 
 /**
  * Models for API key validation (cheap, fast).
  */
-export type ValidationModel = ClaudeHaiku35 | Gemini20Flash | GPT4oMini | Sonar | Glm47Flash;
+export type ValidationModel = ClaudeHaiku35 | Gemini20Flash | GPT4oMini | Sonar;
 
 /**
  * Fast models for quick tasks (classification, title generation).
  */
-export type FastModel = Gemini25Flash | Gemini20Flash | Glm47Flash | ClaudeHaiku35 | GPT4oMini;
+export type FastModel = Gemini25Flash | Gemini20Flash | ClaudeHaiku35 | GPT4oMini;
 
 /**
  * General-purpose models.
@@ -122,10 +112,7 @@ export type LLMModel =
   // Perplexity (3 models)
   | Sonar
   | SonarPro
-  | SonarDeepResearch
-  // Zai (2 models)
-  | Glm47
-  | Glm47Flash;
+  | SonarDeepResearch;
 
 // =============================================================================
 // Provider Constants Object
@@ -140,7 +127,6 @@ export const LlmProviders = {
   OpenAI: 'openai' as OpenAI,
   Anthropic: 'anthropic' as Anthropic,
   Perplexity: 'perplexity' as Perplexity,
-  Zai: 'zai' as Zai,
 } as const;
 
 // =============================================================================
@@ -170,9 +156,6 @@ export const LlmModels = {
   Sonar: 'sonar' as Sonar,
   SonarPro: 'sonar-pro' as SonarPro,
   SonarDeepResearch: 'sonar-deep-research' as SonarDeepResearch,
-  // Zai
-  Glm47: 'glm-4.7' as Glm47,
-  Glm47Flash: 'glm-4.7-flash' as Glm47Flash,
 } as const;
 
 // =============================================================================
@@ -202,9 +185,6 @@ export const ALL_LLM_MODELS: LLMModel[] = [
   LlmModels.Sonar,
   LlmModels.SonarPro,
   LlmModels.SonarDeepResearch,
-  // Zai
-  LlmModels.Glm47,
-  LlmModels.Glm47Flash,
 ] as const;
 
 /**
@@ -213,7 +193,6 @@ export const ALL_LLM_MODELS: LLMModel[] = [
 export const ALL_FAST_MODELS: FastModel[] = [
   LlmModels.Gemini25Flash,
   LlmModels.Gemini20Flash,
-  LlmModels.Glm47Flash,
   LlmModels.ClaudeHaiku35,
   LlmModels.GPT4oMini,
 ] as const;
@@ -244,9 +223,6 @@ export const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider> = {
   [LlmModels.Sonar]: LlmProviders.Perplexity,
   [LlmModels.SonarPro]: LlmProviders.Perplexity,
   [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,
-  // Zai
-  [LlmModels.Glm47]: LlmProviders.Zai,
-  [LlmModels.Glm47Flash]: LlmProviders.Zai,
 } as const;
 
 /**
@@ -255,7 +231,6 @@ export const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider> = {
 export const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string> = {
   [LlmModels.Gemini25Flash]: 'Gemini 2.5 Flash',
   [LlmModels.Gemini20Flash]: 'Gemini 2.0 Flash',
-  [LlmModels.Glm47Flash]: 'GLM-4.7 Flash',
   [LlmModels.ClaudeHaiku35]: 'Claude 3.5 Haiku',
   [LlmModels.GPT4oMini]: 'GPT-4o Mini',
 };
@@ -279,4 +254,26 @@ export function isValidModel(model: string): model is LLMModel {
  */
 export function isFastModel(model: string): model is FastModel {
   return ALL_FAST_MODELS.includes(model as FastModel);
+}
+
+// =============================================================================
+// Tool Calling Models
+// =============================================================================
+
+/**
+ * Narrowed subset of LLMModel for tool calling agent loops.
+ *
+ * Every ToolCallingModel is also a valid LLMModel, so
+ * getProviderForModel() works out of the box.
+ */
+export type ToolCallingModel = Gemini25Flash;
+
+/** All models that support tool calling */
+export const ALL_TOOL_CALLING_MODELS: ToolCallingModel[] = ['gemini-2.5-flash'];
+
+/**
+ * Check if a string is a valid tool calling model.
+ */
+export function isToolCallingModel(model: string): model is ToolCallingModel {
+  return ALL_TOOL_CALLING_MODELS.includes(model as ToolCallingModel);
 }

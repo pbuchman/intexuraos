@@ -293,10 +293,50 @@ describe('Commands Agent Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
 
-      // Verify command was saved
+      // Verify command was saved without summary (absent summary branch)
       const commands = await fakeCommandRepo.listByUserId('user-123');
       expect(commands).toHaveLength(1);
       expect(commands[0]?.text).toBe('Buy groceries tomorrow');
+      expect(commands[0]?.summary).toBeUndefined();
+    });
+
+    it('processes command with optional summary field', async () => {
+      app = await buildServer();
+
+      const event = {
+        type: 'command.ingest',
+        userId: 'user-123',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.with-summary',
+        text: 'Buy groceries tomorrow',
+        summary: 'Grocery shopping reminder',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/commands',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          message: {
+            data: messageData,
+            messageId: 'pubsub-summary-1',
+          },
+          subscription: 'projects/test/subscriptions/commands-ingest',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      // Verify command was saved with the summary field (exercises the spread conditional)
+      const commands = await fakeCommandRepo.listByUserId('user-123');
+      expect(commands).toHaveLength(1);
+      expect(commands[0]?.summary).toBe('Grocery shopping reminder');
     });
 
     it('handles idempotency - skips duplicate commands', async () => {
@@ -768,6 +808,67 @@ describe('Commands Agent Routes', () => {
       };
       expect(body.data.command.status).toBe('classified');
       expect(body.data.command.classification?.type).toBe('research');
+    });
+
+    it('auto-generates externalId when not provided', async () => {
+      app = await buildServer();
+      const userId = 'user-pwa-autoid';
+      const token = await createAccessToken(userId);
+      fakeUserServiceClient.setApiKeys(userId, { google: 'test-key' });
+
+      fakeClassifier.setResult({
+        type: 'note',
+        confidence: 0.85,
+        title: 'Auto ID Note',
+        reasoning: 'Test',
+        promptVersion: '1.0.0',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/commands',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { text: 'Auto-generated ID test', source: 'pwa-shared' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { command: { externalId: string; sourceType: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.command.externalId).toBeDefined();
+      expect(body.data.command.sourceType).toBe('pwa-shared');
+    });
+
+    it('uses client-provided externalId when given', async () => {
+      app = await buildServer();
+      const userId = 'user-pwa-customid';
+      const token = await createAccessToken(userId);
+      fakeUserServiceClient.setApiKeys(userId, { google: 'test-key' });
+
+      fakeClassifier.setResult({
+        type: 'note',
+        confidence: 0.85,
+        title: 'Custom ID Note',
+        reasoning: 'Test',
+        promptVersion: '1.0.0',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/commands',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { text: 'Custom ID test', source: 'pwa-shared', externalId: 'custom-ext-123' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { command: { externalId: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.command.externalId).toBe('custom-ext-123');
     });
   });
 
@@ -1341,6 +1442,61 @@ describe('Commands Agent Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.message).toContain('Cannot delete classified command');
     });
+
+    it('returns 404 when trying to delete another user\'s command', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-other');
+
+      fakeCommandRepo.addCommand({
+        id: 'cmd-cross-user-del',
+        userId: 'user-owner',
+        sourceType: 'whatsapp_text',
+        externalId: 'ext-cross-user',
+        text: 'Cross user test',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'received',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/commands/cmd-cross-user-del',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const command = await fakeCommandRepo.getById('cmd-cross-user-del');
+      expect(command).not.toBeNull();
+    });
+
+    it('returns 400 when trying to delete archived command', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-archive-del');
+
+      fakeCommandRepo.addCommand({
+        id: 'cmd-archived',
+        userId: 'user-archive-del',
+        sourceType: 'whatsapp_text',
+        externalId: 'ext-archived',
+        text: 'Archived command',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'archived',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/commands/cmd-archived',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Cannot delete classified command');
+    });
   });
 
   describe('PATCH /commands/:commandId (authenticated)', () => {
@@ -1439,6 +1595,41 @@ describe('Commands Agent Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
       expect(body.success).toBe(false);
       expect(body.error.message).toContain('Can only archive classified commands');
+    });
+
+    it('returns 404 when trying to archive another user\'s command', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-patch-other');
+
+      fakeCommandRepo.addCommand({
+        id: 'cmd-cross-user-patch',
+        userId: 'user-patch-owner',
+        sourceType: 'whatsapp_text',
+        externalId: 'ext-cross-user-patch',
+        text: 'Cross user patch test',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'classified',
+        classification: {
+          type: 'todo',
+          confidence: 0.9,
+          reasoning: 'Task detected',
+          promptVersion: '1.0.0',
+          classifiedAt: '2025-01-01T12:00:01.000Z',
+        },
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:01.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/commands/cmd-cross-user-patch',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'archived' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const command = await fakeCommandRepo.getById('cmd-cross-user-patch');
+      expect(command?.status).toBe('classified');
     });
   });
 

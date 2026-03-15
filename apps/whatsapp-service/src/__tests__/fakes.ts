@@ -654,6 +654,7 @@ export class FakeEventPublisher implements EventPublisherPort {
   private extractLinkPreviewsFailureMessage: string | null = null;
   private commandIngestFailureMessage: string | null = null;
   private audioStoredFailureMessage: string | null = null;
+  private webhookProcessFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
@@ -675,8 +676,17 @@ export class FakeEventPublisher implements EventPublisherPort {
   }
 
   publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.webhookProcessFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.webhookProcessFailureMessage })
+      );
+    }
     this.webhookProcessEvents.push(event);
     return Promise.resolve(ok(undefined));
+  }
+
+  setWebhookProcessFailure(message: string): void {
+    this.webhookProcessFailureMessage = message;
   }
 
   publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
@@ -758,6 +768,7 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.extractLinkPreviewsFailureMessage = null;
     this.commandIngestFailureMessage = null;
     this.audioStoredFailureMessage = null;
+    this.webhookProcessFailureMessage = null;
   }
 }
 

@@ -290,5 +290,357 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
         expect(result.value.text).toBe('');
       }
     });
+
+    it('falls back to metadata language_pack_info for Polish', async () => {
+      mockGetJobResult.mockResolvedValue({
+        results: [{ alternatives: [{ content: 'Cześć' }] }],
+        metadata: {
+          language_pack_info: {
+            language_description: 'Polish',
+          },
+        },
+      });
+
+      const result = await adapter.getTranscript('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.detectedLanguage).toBe('pl');
+      }
+    });
+
+    it('falls back to metadata language_pack_info for English', async () => {
+      mockGetJobResult.mockResolvedValue({
+        results: [{ alternatives: [{ content: 'Hello' }] }],
+        metadata: {
+          language_pack_info: {
+            language_description: 'English',
+          },
+        },
+      });
+
+      const result = await adapter.getTranscript('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.detectedLanguage).toBe('en');
+      }
+    });
+
+    it('does not set detectedLanguage when metadata has unrecognized language', async () => {
+      mockGetJobResult.mockResolvedValue({
+        results: [{ alternatives: [{ content: 'Bonjour' }] }],
+        metadata: {
+          language_pack_info: {
+            language_description: 'French',
+          },
+        },
+      });
+
+      const result = await adapter.getTranscript('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.detectedLanguage).toBeUndefined();
+      }
+    });
+
+    it('prefers language from first result alternative over metadata fallback', async () => {
+      mockGetJobResult.mockResolvedValue({
+        results: [{ alternatives: [{ content: 'Hello', language: 'en' }] }],
+        metadata: {
+          language_pack_info: {
+            language_description: 'Polish',
+          },
+        },
+      });
+
+      const result = await adapter.getTranscript('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.detectedLanguage).toBe('en');
+      }
+    });
+
+    it('falls back to metadata language when results array is empty', async () => {
+      mockGetJobResult.mockResolvedValue({
+        results: [],
+        metadata: {
+          language_pack_info: {
+            language_description: 'Polish',
+          },
+        },
+      });
+
+      const result = await adapter.getTranscript('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.detectedLanguage).toBe('pl');
+        expect(result.value.text).toBe('');
+      }
+    });
+
+    it('handles non-array results gracefully', async () => {
+      mockGetJobResult.mockResolvedValue({
+        results: 'not-an-array',
+      });
+
+      const result = await adapter.getTranscript('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.text).toBe('');
+        expect(result.value.detectedLanguage).toBeUndefined();
+      }
+    });
+  });
+
+  describe('extractErrorMessage (via pollJob rejected errors)', () => {
+    it('extracts message from string error in rejected job', async () => {
+      mockGetJob.mockResolvedValue({
+        job: { status: 'rejected', errors: 'string error message' },
+      });
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.error?.message).toBe('string error message');
+      }
+    });
+
+    it('extracts message from object with error property in rejected job', async () => {
+      mockGetJob.mockResolvedValue({
+        job: { status: 'rejected', errors: { error: 'error-prop value' } },
+      });
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.error?.message).toBe('error-prop value');
+      }
+    });
+
+    it('extracts message from object with reason property in rejected job', async () => {
+      mockGetJob.mockResolvedValue({
+        job: { status: 'rejected', errors: { reason: 'reason-prop value' } },
+      });
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.error?.message).toBe('reason-prop value');
+      }
+    });
+
+    it('falls back to JSON.stringify for unrecognized error shape', async () => {
+      mockGetJob.mockResolvedValue({
+        job: { status: 'rejected', errors: { unknown: 42 } },
+      });
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.error?.message).toBe('{"unknown":42}');
+      }
+    });
+
+    it('falls back to JSON.stringify for numeric error', async () => {
+      mockGetJob.mockResolvedValue({
+        job: { status: 'rejected', errors: 42 },
+      });
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.error?.message).toBe('42');
+      }
+    });
+
+    it('falls back to JSON.stringify for null error', async () => {
+      mockGetJob.mockResolvedValue({
+        job: { status: 'rejected', errors: null },
+      });
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.error?.message).toBe('null');
+      }
+    });
+
+    it('joins array of string errors with extractErrorMessage', async () => {
+      mockGetJob.mockResolvedValue({
+        job: { status: 'rejected', errors: ['first error', 'second error'] },
+      });
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.error?.message).toBe('first error; second error');
+      }
+    });
+  });
+
+  describe('extractErrorContext (via error catch blocks)', () => {
+    it('captures error with status and statusCode', async () => {
+      const richError = Object.assign(new Error('HTTP error'), {
+        status: 401,
+        statusCode: 401,
+        statusText: 'Unauthorized',
+      });
+      mockCreateTranscriptionJob.mockRejectedValue(richError);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const response = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = response['errorContext'] as Record<string, unknown>;
+        expect(errorContext['httpStatus']).toBe(401);
+        expect(errorContext['httpStatusCode']).toBe(401);
+        expect(errorContext['httpStatusText']).toBe('Unauthorized');
+      }
+    });
+
+    it('captures error with nested response object', async () => {
+      const richError = Object.assign(new Error('API error'), {
+        response: { status: 500, statusText: 'Internal Server Error', data: { detail: 'oops' } },
+      });
+      mockGetJob.mockRejectedValue(richError);
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const response = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = response['errorContext'] as Record<string, unknown>;
+        expect(errorContext['responseStatus']).toBe(500);
+        expect(errorContext['responseStatusText']).toBe('Internal Server Error');
+        expect(errorContext['responseData']).toEqual({ detail: 'oops' });
+      }
+    });
+
+    it('captures error with code, reason, detail, errors, and body', async () => {
+      const richError = Object.assign(new Error('Complex error'), {
+        code: 'ECONNREFUSED',
+        reason: 'connection refused',
+        detail: 'could not connect to host',
+        errors: [{ field: 'url', message: 'invalid' }],
+        body: { raw: 'data' },
+      });
+      mockGetJobResult.mockRejectedValue(richError);
+
+      const result = await adapter.getTranscript('job-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const response = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = response['errorContext'] as Record<string, unknown>;
+        expect(errorContext['errorCode']).toBe('ECONNREFUSED');
+        expect(errorContext['reason']).toBe('connection refused');
+        expect(errorContext['detail']).toBe('could not connect to host');
+        expect(errorContext['errors']).toEqual([{ field: 'url', message: 'invalid' }]);
+        expect(errorContext['body']).toEqual({ raw: 'data' });
+      }
+    });
+
+    it('captures error with nested request object', async () => {
+      const richError = Object.assign(new Error('Request error'), {
+        request: { url: 'https://api.example.com/v2/jobs', method: 'POST' },
+      });
+      mockCreateTranscriptionJob.mockRejectedValue(richError);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const response = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = response['errorContext'] as Record<string, unknown>;
+        expect(errorContext['requestUrl']).toBe('https://api.example.com/v2/jobs');
+        expect(errorContext['requestMethod']).toBe('POST');
+      }
+    });
+
+    it('captures error with cause property', async () => {
+      const richError = Object.assign(new Error('Wrapper'), {
+        cause: new Error('Root cause'),
+      });
+      mockCreateTranscriptionJob.mockRejectedValue(richError);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const response = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = response['errorContext'] as Record<string, unknown>;
+        expect(errorContext['cause']).toBe('Root cause');
+      }
+    });
+
+    it('captures error name and stack for Error instances', async () => {
+      mockGetJob.mockRejectedValue(new TypeError('type mismatch'));
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const response = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = response['errorContext'] as Record<string, unknown>;
+        expect(errorContext['errorType']).toBe('object');
+        expect(errorContext['errorName']).toBe('TypeError');
+        expect(typeof errorContext['errorStack']).toBe('string');
+      }
+    });
+
+    it('handles non-Error thrown values', async () => {
+      mockGetJob.mockRejectedValue('plain string error');
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const response = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = response['errorContext'] as Record<string, unknown>;
+        expect(errorContext['errorType']).toBe('string');
+        expect(errorContext['errorName']).toBeUndefined();
+        expect(errorContext['errorStack']).toBeUndefined();
+      }
+    });
+
+    it('includes availableKeys for object errors', async () => {
+      const richError = Object.assign(new Error('test'), { customField: 'value' });
+      mockCreateTranscriptionJob.mockRejectedValue(richError);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const response = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = response['errorContext'] as Record<string, unknown>;
+        const keys = errorContext['availableKeys'] as string[];
+        expect(keys).toContain('customField');
+      }
+    });
   });
 });

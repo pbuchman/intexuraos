@@ -31,7 +31,6 @@ export interface HandleApprovalReplyDeps {
   executeLinearAction?: ExecuteLinearActionUseCase;
   executeCodeAction?: ExecuteCodeActionUseCase;
   codeAgentClient?: CodeAgentClient;
-  webAppUrl: string;
 }
 
 export interface ApprovalReplyInput {
@@ -71,7 +70,6 @@ export function createHandleApprovalReplyUseCase(
     executeLinearAction,
     executeCodeAction,
     codeAgentClient,
-    webAppUrl,
   } = deps;
 
   return async (input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {
@@ -95,11 +93,9 @@ export function createHandleApprovalReplyUseCase(
       const intent = parts[0];
 
       if (intent === 'cancel-task') {
-        /* v8 ignore start -- ts-type: button ID format guarantees taskId exists @preserve */
         const [, taskId, nonce] = parts;
-        /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: nullish coalescing after destructure @preserve */
         return await handleCancelTaskButton(
+          /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; button ID format cancel-task:{taskId}:{nonce} guarantees taskId exists @preserve */
           taskId ?? '',
           /* v8 ignore stop @preserve */
           nonce,
@@ -110,27 +106,18 @@ export function createHandleApprovalReplyUseCase(
         );
       }
 
-      if (intent === 'view-task') {
-        /* v8 ignore start -- ts-type: button ID format guarantees taskId exists @preserve */
-        const [, taskId] = parts;
-        return await handleViewTaskButton(taskId ?? '', userId, whatsappPublisher, webAppUrl, logger);
-        /* v8 ignore stop @preserve */
-      }
-
       // INT-628: Handle proceed-implementation button
-      /* v8 ignore start -- test-infra: proceed-implementation button tested via integration tests @preserve */
       if (intent === 'proceed-implementation') {
-        /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: button ID format guarantees taskId exists @preserve */
         const [, taskId] = parts;
         return await handleProceedToImplementationButton(
+          /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; button ID format proceed-implementation:{taskId} guarantees taskId exists @preserve */
           taskId ?? '',
+          /* v8 ignore stop @preserve */
           userId,
           whatsappPublisher,
           codeAgentClient,
           logger
         );
-        /* v8 ignore stop @preserve */
       }
     }
 
@@ -299,7 +286,7 @@ async function handleButtonResponse(
 
   const [intent, idFromButton] = parts;
 
-  /* v8 ignore start -- test-infra: test button handlers always have valid actions @preserve */
+  /* v8 ignore start -- ts-type: caller narrows action to non-null at line 162 before invoking handleButtonResponse; this guard is defensive for the Action | null parameter type @preserve */
   if (action === null) {
     logger.warn({ buttonId, intent }, 'Action-related button received but no action found');
     return err(new Error('Action not found for button'));
@@ -748,30 +735,6 @@ async function handleCancelTaskButton(
 }
 
 /**
- * Handle view-task button (INT-379).
- * Button ID format: "view-task:{taskId}"
- */
-async function handleViewTaskButton(
-  taskId: string,
-  userId: string,
-  whatsappPublisher: HandleApprovalReplyDeps['whatsappPublisher'],
-  webAppUrl: string,
-  logger: Logger
-): Promise<Result<ApprovalReplyResult>> {
-  logger.info({ taskId, userId }, 'Handling view-task button');
-
-  await whatsappPublisher.publishSendMessage({
-    userId,
-    message: `View task details at: ${webAppUrl}/#/code-tasks/${taskId}`,
-    correlationId: `view-task-${taskId}`,
-  });
-
-  return ok({
-    matched: true,
-  });
-}
-
-/**
  * Handle proceed-implementation button (INT-628).
  * Button ID format: "proceed-implementation:{taskId}"
  */
@@ -811,7 +774,7 @@ async function handleProceedToImplementationButton(
       'NETWORK_ERROR': 'Unable to start implementation: network error. Please try again.',
       'UNKNOWN': 'Unable to start implementation. Please try again later.',
     };
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; all SubmitToPhase2Error code values are mapped @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; all SubmitToPhase2Error code values are mapped in errorMessages @preserve */
     const message = errorMessages[result.error.code] ?? 'Unable to start implementation.';
     /* v8 ignore stop @preserve */
 

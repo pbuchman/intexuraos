@@ -1,15 +1,61 @@
 /**
  * HTTP implementation of GitHubPRClient.
  *
- * Uses the GitHub REST API to update pull requests.
- * Token is passed per-call to support per-user OAuth tokens.
+ * Uses the GitHub REST API to interact with pull requests.
+ * All methods use per-call tokens (user OAuth tokens resolved by the caller).
  */
 
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
-import type { GitHubPRClient, GitHubPRClientError } from '../../domain/ports/gitHubPRClient.js';
+import type {
+  GitHubPRClient,
+  GitHubPRClientError,
+  GitHubPullRequestDetails,
+  GitHubPullRequestListItem,
+  PullRequestFile,
+  PullRequestCommit,
+  PullRequestStatus,
+} from '../../domain/ports/gitHubPRClient.js';
 
 export interface GitHubPRHttpClientConfig {
   timeoutMs: number;
+}
+
+const GITHUB_API = 'https://api.github.com';
+
+function githubHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+}
+
+function mapErrorStatus(status: number, context: string): GitHubPRClientError {
+  if (status === 401 || status === 403) {
+    return { code: 'UNAUTHORIZED', message: `GitHub API returned ${String(status)}: unauthorized or forbidden` };
+  }
+  if (status === 404) {
+    return { code: 'NOT_FOUND', message: context };
+  }
+  if (status === 429) {
+    return { code: 'RATE_LIMITED', message: 'GitHub API rate limit exceeded' };
+  }
+  return { code: 'API_ERROR', message: `GitHub API returned ${String(status)}` };
+}
+
+function parseNextPageUrl(linkHeader: string | null): string | null {
+  if (linkHeader === null) return null;
+  const match = /<([^>]+)>;\s*rel="next"/.exec(linkHeader);
+  return match?.[1] ?? null;
+}
+
+function ensureString(value: unknown, field: string): Result<string, GitHubPRClientError> {
+  if (typeof value !== 'string') {
+    return err({ code: 'API_ERROR', message: `GitHub API response missing ${field}` });
+  }
+
+  return ok(value);
 }
 
 export function createGitHubPRHttpClient(
@@ -25,15 +71,10 @@ export function createGitHubPRHttpClient(
     ): Promise<Result<void, GitHubPRClientError>> {
       try {
         const response = await fetch(
-          `https://api.github.com/repos/${owner}/${repo}/pulls/${String(prNumber)}`,
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}`,
           {
             method: 'PATCH',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github.v3+json',
-              'Content-Type': 'application/json',
-              'X-GitHub-Api-Version': '2022-11-28',
-            },
+            headers: githubHeaders(token),
             body: JSON.stringify({ title: newTitle }),
             signal: AbortSignal.timeout(config.timeoutMs),
           }
@@ -43,36 +84,387 @@ export function createGitHubPRHttpClient(
           return ok(undefined);
         }
 
-        if (response.status === 401 || response.status === 403) {
+        return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async getPullRequestFiles(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number
+    ): Promise<Result<PullRequestFile[], GitHubPRClientError>> {
+      try {
+        const allFiles: PullRequestFile[] = [];
+        let url: string | null = `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}/files?per_page=100`;
+        const MAX_PAGES = 10;
+
+        for (let page = 0; page < MAX_PAGES && url !== null; page++) {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          });
+
+          if (!response.ok) {
+            return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+          }
+
+          const data = (await response.json()) as {
+            filename: string;
+            status: string;
+            additions: number;
+            deletions: number;
+          }[];
+          allFiles.push(
+            ...data.map((f) => ({
+              filename: f.filename,
+              status: f.status as PullRequestFile['status'],
+              additions: f.additions,
+              deletions: f.deletions,
+            }))
+          );
+          url = parseNextPageUrl(response.headers.get('link'));
+        }
+
+        return ok(allFiles);
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async getPullRequestCommits(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number
+    ): Promise<Result<PullRequestCommit[], GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}/commits?per_page=100`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (response.ok) {
+          const data = (await response.json()) as {
+            sha: string;
+            commit: { message: string };
+            author: { login: string } | null;
+          }[];
+          return ok(
+            data.map((c) => ({
+              sha: c.sha,
+              message: c.commit.message,
+              author: c.author?.login ?? 'unknown',
+            }))
+          );
+        }
+
+        return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async getPullRequestBaseBranch(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number
+    ): Promise<Result<string, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+        }
+
+        const data = (await response.json()) as { base?: { ref?: string } };
+        const baseRef = data.base?.ref;
+        if (typeof baseRef !== 'string') {
+          return err({ code: 'API_ERROR', message: 'PR response missing base.ref' });
+        }
+        return ok(baseRef);
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async getPullRequestStatus(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number
+    ): Promise<Result<PullRequestStatus, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(
+            mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`)
+          );
+        }
+
+        const data = (await response.json()) as {
+          state?: string;
+          merged_at?: string | null;
+          head?: { ref?: string };
+        };
+
+        const state = data.state;
+        const headRef = data.head?.ref;
+        if ((state !== 'open' && state !== 'closed') || typeof headRef !== 'string') {
           return err({
-            code: 'UNAUTHORIZED',
-            message: `GitHub API returned ${String(response.status)}: unauthorized or forbidden`,
+            code: 'API_ERROR',
+            message: 'PR response missing state or head.ref',
           });
         }
 
-        if (response.status === 404) {
-          return err({
-            code: 'NOT_FOUND',
-            message: `PR #${String(prNumber)} not found in ${owner}/${repo}`,
-          });
-        }
-
-        if (response.status === 429) {
-          return err({
-            code: 'RATE_LIMITED',
-            message: 'GitHub API rate limit exceeded',
-          });
-        }
-
-        return err({
-          code: 'API_ERROR',
-          message: `GitHub API returned ${String(response.status)}`,
+        return ok({
+          state,
+          mergedAt: data.merged_at !== null && data.merged_at !== undefined
+            ? new Date(data.merged_at)
+            : null,
+          headRef,
         });
       } catch (error) {
-        return err({
-          code: 'NETWORK_ERROR',
-          message: getErrorMessage(error),
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async postPRComment(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number,
+      body: string
+    ): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/issues/${String(prNumber)}/comments`,
+          {
+            method: 'POST',
+            headers: githubHeaders(token),
+            body: JSON.stringify({ body }),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (response.ok) {
+          const data = (await response.json()) as { id: number };
+          return ok({ commentId: data.id });
+        }
+
+        return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async listOpenPullRequestsByBaseBranch(
+      token: string,
+      owner: string,
+      repo: string,
+      baseBranch: string
+    ): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+      try {
+        const items: GitHubPullRequestListItem[] = [];
+        let url: string | null =
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls?state=open&base=${encodeURIComponent(baseBranch)}&per_page=100`;
+        const MAX_PAGES = 10;
+
+        for (let page = 0; page < MAX_PAGES && url !== null; page++) {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          });
+
+          if (!response.ok) {
+            return err(mapErrorStatus(response.status, `Failed to list open PRs for base branch ${baseBranch}`));
+          }
+
+          const data = (await response.json()) as {
+            number?: number;
+            title?: string;
+            user?: { login?: string };
+            base?: { ref?: string };
+            head?: { ref?: string };
+          }[];
+          for (const pr of data) {
+            if (typeof pr.number !== 'number') {
+              return err({ code: 'API_ERROR', message: 'GitHub API response missing number' });
+            }
+
+            const titleResult = ensureString(pr.title, 'title');
+            if (!titleResult.ok) return titleResult;
+
+            const authorResult = ensureString(pr.user?.login, 'user.login');
+            if (!authorResult.ok) return authorResult;
+
+            const baseResult = ensureString(pr.base?.ref, 'base.ref');
+            if (!baseResult.ok) return baseResult;
+
+            const headResult = ensureString(pr.head?.ref, 'head.ref');
+            if (!headResult.ok) return headResult;
+
+            items.push({
+              number: pr.number,
+              title: titleResult.value,
+              authorLogin: authorResult.value,
+              baseBranch: baseResult.value,
+              headBranch: headResult.value,
+            });
+          }
+
+          url = parseNextPageUrl(response.headers.get('link'));
+        }
+
+        return ok(items);
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async getPullRequestDetails(
+      token: string,
+      owner: string,
+      repo: string,
+      prNumber: number
+    ): Promise<Result<GitHubPullRequestDetails, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/pulls/${String(prNumber)}`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(mapErrorStatus(response.status, `PR #${String(prNumber)} not found in ${owner}/${repo}`));
+        }
+
+        const data = (await response.json()) as {
+          number?: number;
+          title?: string;
+          body?: string | null;
+          mergeable?: boolean | null;
+          mergeable_state?: string | null;
+          user?: { login?: string };
+          base?: { ref?: string };
+          head?: { ref?: string };
+        };
+
+        if (typeof data.number !== 'number') {
+          return err({ code: 'API_ERROR', message: 'GitHub API response missing number' });
+        }
+
+        const titleResult = ensureString(data.title, 'title');
+        if (!titleResult.ok) return titleResult;
+
+        const authorResult = ensureString(data.user?.login, 'user.login');
+        if (!authorResult.ok) return authorResult;
+
+        const baseResult = ensureString(data.base?.ref, 'base.ref');
+        if (!baseResult.ok) return baseResult;
+
+        const headResult = ensureString(data.head?.ref, 'head.ref');
+        if (!headResult.ok) return headResult;
+
+        return ok({
+          number: data.number,
+          title: titleResult.value,
+          body: data.body ?? null,
+          authorLogin: authorResult.value,
+          baseBranch: baseResult.value,
+          headBranch: headResult.value,
+          mergeable: data.mergeable ?? null,
+          mergeableState: data.mergeable_state ?? null,
         });
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async getIssueComment(
+      token: string,
+      owner: string,
+      repo: string,
+      commentId: number,
+    ): Promise<Result<{ body: string }, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/issues/comments/${String(commentId)}`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(mapErrorStatus(response.status, `Comment #${String(commentId)} not found in ${owner}/${repo}`));
+        }
+
+        const data = (await response.json()) as { body?: string };
+        return ok({ body: data.body ?? '' });
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
+    async updateIssueComment(
+      token: string,
+      owner: string,
+      repo: string,
+      commentId: number,
+      body: string
+    ): Promise<Result<{ commentId: number }, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/issues/comments/${String(commentId)}`,
+          {
+            method: 'PATCH',
+            headers: githubHeaders(token),
+            body: JSON.stringify({ body }),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(mapErrorStatus(response.status, `Comment #${String(commentId)} not found in ${owner}/${repo}`));
+        }
+
+        const data = (await response.json()) as { id?: number };
+        if (typeof data.id !== 'number') {
+          return err({ code: 'API_ERROR', message: 'GitHub API response missing comment id' });
+        }
+
+        return ok({ commentId: data.id });
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
       }
     },
   };

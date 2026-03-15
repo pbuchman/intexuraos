@@ -61,6 +61,16 @@ const getStatusDisplay = (worker: WorkerStatus): {
   };
 };
 
+/**
+ * Get the Tailwind dot-color class for the aggregate worker health indicator.
+ */
+const getWorkersDotColor = (workers: WorkerStatus[]): string =>
+  workers.length === 0
+    ? 'bg-gray-400'
+    : workers.some((w) => w.healthy)
+      ? 'bg-green-500'
+      : 'bg-red-500';
+
 export function Header(): React.JSX.Element {
   const { user, logout, isAuthenticated } = useAuth();
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
@@ -104,6 +114,7 @@ export function Header(): React.JSX.Element {
     function handleClickOutside(event: MouseEvent): void {
       if (menuRef.current !== null && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
+        setIsWorkersOpen(false); // Also close workers submenu when menu closes
       }
       if (workersRef.current !== null && !workersRef.current.contains(event.target as Node)) {
         setIsWorkersOpen(false);
@@ -154,9 +165,9 @@ export function Header(): React.JSX.Element {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
-        {/* Worker Status Indicator */}
-        {isAuthenticated && workersStatus !== null && (
-          <div className="relative" ref={workersRef}>
+        {/* Worker Status Indicator - desktop only, non-PWA mode */}
+        {isAuthenticated && workersStatus !== null && !isInstalled && (
+          <div className="relative hidden md:block" data-testid="workers-status-header" ref={workersRef}>
             <button
               onClick={(): void => {
                 setIsWorkersOpen(!isWorkersOpen);
@@ -166,13 +177,7 @@ export function Header(): React.JSX.Element {
             >
               <Server className="h-4 w-4 text-slate-500" />
               <span
-                className={`h-2 w-2 rounded-full ${
-                  workersStatus.workers.length === 0
-                    ? 'bg-gray-400'
-                    : workersStatus.workers.some((w) => w.healthy)
-                      ? 'bg-green-500'
-                      : 'bg-red-500'
-                }`}
+                className={`h-2 w-2 rounded-full ${getWorkersDotColor(workersStatus.workers)}`}
               />
             </button>
 
@@ -184,6 +189,10 @@ export function Header(): React.JSX.Element {
                   </div>
                   {workersStatus.workers.length > 0 && (
                     <button
+                      // Prevent mousedown from reaching the document-level outside-click handler
+                      onMouseDown={(e): void => {
+                        e.stopPropagation();
+                      }}
                       onClick={(): void => {
                         void refreshWorkersStatus();
                       }}
@@ -300,11 +309,18 @@ export function Header(): React.JSX.Element {
             }}
             className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700 md:px-3"
           >
-            {userPicture !== undefined && userPicture !== '' ? (
-              <img src={userPicture} alt="" className="h-6 w-6 rounded-full" />
-            ) : (
-              <User className="h-5 w-5 text-slate-400" />
-            )}
+            <span className="relative">
+              {userPicture !== undefined && userPicture !== '' ? (
+                <img src={userPicture} alt="" className="h-6 w-6 rounded-full" />
+              ) : (
+                <User className="h-5 w-5 text-slate-400" />
+              )}
+              {workersStatus !== null && !isInstalled && (
+                <span
+                  className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white md:hidden dark:border-slate-800 ${getWorkersDotColor(workersStatus.workers)}`}
+                />
+              )}
+            </span>
             <span className="hidden max-w-32 truncate sm:inline md:max-w-48">{userName}</span>
             <ChevronDown
               className={`h-4 w-4 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}
@@ -312,10 +328,110 @@ export function Header(): React.JSX.Element {
           </button>
 
           {isMenuOpen ? (
-            <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+            <div className={`absolute right-0 top-full mt-1 ${workersStatus !== null ? (isInstalled ? 'w-72' : 'w-72 md:w-48') : 'w-48'} rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800`}>
               <div className="border-b border-slate-100 px-4 py-2 sm:hidden dark:border-slate-700">
                 <span className="text-sm text-slate-600 dark:text-slate-300">{userName}</span>
               </div>
+
+              {/* Workers status menu item - shown in PWA mode or on mobile */}
+              {isAuthenticated && workersStatus !== null && (
+                <div data-testid="workers-status-menu" className={isInstalled ? '' : 'md:hidden'}>
+                  <button
+                    onClick={(): void => {
+                      setIsWorkersOpen(!isWorkersOpen);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    <Server className="h-4 w-4 text-slate-500" />
+                    <span>Workers</span>
+                    <span
+                      className={`ml-auto h-2 w-2 rounded-full ${getWorkersDotColor(workersStatus.workers)}`}
+                    />
+                  </button>
+
+                  {isWorkersOpen && (
+                    <div className="border-t border-slate-100 dark:border-slate-700">
+                      <div className="flex items-center justify-between px-4 py-1">
+                        <div className="text-xs font-medium uppercase text-slate-400">
+                          Code Workers
+                        </div>
+                        {workersStatus.workers.length > 0 && (
+                          <button
+                            // Prevent mousedown from reaching the document-level outside-click handler
+                            onMouseDown={(e): void => {
+                              e.stopPropagation();
+                            }}
+                            onClick={(): void => {
+                              void refreshWorkersStatus();
+                            }}
+                            disabled={isWorkersRefreshing}
+                            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed dark:text-blue-400 dark:hover:text-blue-300"
+                            title="Refresh status"
+                          >
+                            <RefreshCw className={`h-3 w-3 ${isWorkersRefreshing ? 'animate-spin' : ''}`} />
+                            {isWorkersRefreshing ? 'Refreshing...' : 'Refresh'}
+                          </button>
+                        )}
+                      </div>
+
+                      {workersStatus.workers.length === 0 ? (
+                        <div className="px-4 py-2">
+                          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                            <span className="text-base">⚪</span>
+                            <span>No workers configured</span>
+                          </div>
+                          <Link
+                            to="/settings/workers"
+                            onClick={(): void => {
+                              setIsMenuOpen(false);
+                              setIsWorkersOpen(false);
+                            }}
+                            className="mt-1 block text-sm text-blue-600 hover:underline dark:text-blue-400"
+                          >
+                            Configure in Settings →
+                          </Link>
+                        </div>
+                      ) : (
+                        <>
+                          {workersStatus.workers.map((worker) => {
+                            const display = getStatusDisplay(worker);
+                            return (
+                              <div
+                                key={worker.name}
+                                className="flex items-center justify-between px-4 py-1.5 text-sm"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-base">{display.icon}</span>
+                                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                                    {worker.name}
+                                  </span>
+                                </div>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  {display.text}
+                                </span>
+                              </div>
+                            );
+                          })}
+
+                          <div className="border-t border-slate-100 px-4 py-1.5 dark:border-slate-700">
+                            <Link
+                              to="/code-tasks"
+                              onClick={(): void => {
+                                setIsMenuOpen(false);
+                                setIsWorkersOpen(false);
+                              }}
+                              className="block text-sm text-blue-600 hover:underline dark:text-blue-400"
+                            >
+                              View Code Tasks →
+                            </Link>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {isInstalled && (
                 <button
                   onClick={handleForceRefresh}

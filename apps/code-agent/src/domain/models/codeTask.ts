@@ -1,16 +1,11 @@
+import type { CodeTaskWorkerType } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 
 /**
  * Worker type determines which model Claude uses.
- * Design reference: Lines 1207-1212
- * - opus: Force Opus model
- * - auto: Automatic model selection (default)
- * - sonnet: Force Sonnet model
- * - minimax: Use MiniMax M2.5 model
- * - glm: Use Z.ai GLM model
- * - qwen3.5-plus: Use Qwen 3.5 Plus model
+ * Uses shared worker types from common-core.
  */
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type WorkerType = CodeTaskWorkerType;
 
 /**
  * Worker location for routing.
@@ -19,13 +14,13 @@ export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3
  */
 export type WorkerLocation = string;
 
-export type AgentType = 'planning' | 'execution' | 'pull_request';
+export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 
 /**
  * Task status lifecycle.
  * Design reference: Lines 316, 1422
  *
- * Flow: queued → dispatched → running → planned|implemented|failed|cancelled
+ * Flow: queued → dispatched → running → planned|implemented|reviewed|failed|cancelled
  *       dispatched → interrupted (if worker dies)
  *       queued → failed (if TTL expires or queue full)
  *       failed|cancelled|interrupted → archived (when task is retried, INT-711)
@@ -39,6 +34,7 @@ export type TaskStatus =
   | 'queued'       // Waiting for worker capacity (INT-619)
   | 'planned'      // Planning Agent task finished
   | 'implemented'  // Execution Agent task finished
+  | 'reviewed'     // Review Agent task finished
   | 'failed'       // Error occurred
   | 'interrupted'  // Worker died unexpectedly
   | 'cancelled'    // User cancelled
@@ -76,10 +72,12 @@ export interface TaskResult {
   planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
-  execution_outcome_label?: 'implemented';
+  execution_outcome_label?: 'implemented' | 'already_completed';
   execution_superpowers_executing_plans_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
   execution_linear_issue_url?: string;
+  review_comments_posted?: string;
+  review_types?: string;
 }
 
 /**

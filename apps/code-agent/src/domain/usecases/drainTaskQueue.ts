@@ -17,6 +17,8 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 import { loadConfig } from '../../config.js';
 import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
+import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
+import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
 
 // In-memory guard for single-instance environments
 let isDraining = false;
@@ -154,6 +156,8 @@ export async function drainTaskQueue(
         logger.warn({ linearIssueId: task.linearIssueId }, 'Failed to refresh Linear labels during drain');
       }
     }
+    const agentType = resolveTaskAgentType(task, linearIssueLabels);
+    const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
 
     // Step 5: Attempt dispatch
     const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
@@ -169,9 +173,13 @@ export async function drainTaskQueue(
       webhookSecret: task.webhookSecret ?? '',
       traceId: task.traceId,
       workerCredentials,
-      linearIssueLabels,
+      linearIssueLabels: dispatchLabels,
       hasChildren,
-      agentType: task.agentType ?? 'planning',
+      agentType,
+      ...(task.prNumber !== undefined && task.prBranch !== undefined && {
+        continuationPrNumber: task.prNumber,
+        continuationPrBranch: task.prBranch,
+      }),
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
     });
 
@@ -215,6 +223,13 @@ export async function drainTaskQueue(
     });
 
     if (updateResult.ok) {
+      await archiveRetriedTaskAfterDispatch({
+        logger,
+        codeTaskRepo,
+        retryTaskId: task.id,
+        warningMessage: 'Failed to archive original task after queued retry dispatch',
+        ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
+      });
       await whatsappNotifier.notifyTaskStarted(task.userId, updateResult.value);
     }
 

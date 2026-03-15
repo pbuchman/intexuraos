@@ -331,10 +331,10 @@ interface ServiceFeedback {
 | user-service                    | OAuth tokens, LLM API keys        | Reject request             |
 | Google Calendar                 | Event CRUD, free/busy             | Map error to CalendarError |
 | Gemini 2.5 Flash (primary LLM)  | Event extraction from text        | Attempt fallback LLM       |
-| GLM-4.7 via Zai (fallback LLM)  | Event extraction when Gemini down | Save to failed events      |
+| Gemini 2.5 Pro (fallback LLM)   | Event extraction when Flash down  | Save to failed events      |
 | Firestore                       | Previews, processed actions       | Return INTERNAL_ERROR      |
 | app-settings-service            | LLM pricing context at startup    | Crash on startup           |
 
 ---
 
-**Last updated:** 2026-03-07 (post v3.1.0 - INT-535 synchronous preview, INT-621 full prompt text, 502 error codes)
+**Last updated:** 2026-03-15 (v3.3.0 - removed ZAI provider, GLM-4.7 models; Chinese LLMs now via Alibaba Cloud Model Studio)

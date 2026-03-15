@@ -29,9 +29,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   openai: { $ref: 'ProviderPricing#' },
                   anthropic: { $ref: 'ProviderPricing#' },
                   perplexity: { $ref: 'ProviderPricing#' },
-                  zai: { $ref: 'ProviderPricing#' },
                 },
-                required: ['google', 'openai', 'anthropic', 'perplexity', 'zai'],
+                required: ['google', 'openai', 'anthropic', 'perplexity'],
               },
             },
             required: ['success', 'data'],
@@ -69,13 +68,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { pricingRepository } = getServices();
 
-      // Fetch all providers in parallel
-      const [google, openai, anthropic, perplexity, zai] = await Promise.all([
+      // Fetch all providers in parallel (no ZAI)
+      const [google, openai, anthropic, perplexity] = await Promise.all([
         pricingRepository.getByProvider(LlmProviders.Google),
         pricingRepository.getByProvider(LlmProviders.OpenAI),
         pricingRepository.getByProvider(LlmProviders.Anthropic),
         pricingRepository.getByProvider(LlmProviders.Perplexity),
-        pricingRepository.getByProvider(LlmProviders.Zai),
       ]);
 
       // Check if any provider is missing - need individual null checks for TypeScript narrowing
@@ -95,18 +93,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         request.log.error({ missingProviders: ['perplexity'] }, 'Missing pricing for providers');
         return await reply.fail('INTERNAL_ERROR', 'Missing pricing for providers: perplexity');
       }
-      if (zai === null) {
-        request.log.error({ missingProviders: ['zai'] }, 'Missing pricing for providers');
-        return await reply.fail('INTERNAL_ERROR', 'Missing pricing for providers: zai');
-      }
 
       // At this point all providers are non-null (TypeScript can narrow from the early returns above)
       const totalModels =
         Object.keys(google.models).length +
         Object.keys(openai.models).length +
         Object.keys(anthropic.models).length +
-        Object.keys(perplexity.models).length +
-        Object.keys(zai.models).length;
+        Object.keys(perplexity.models).length;
 
       request.log.info({ totalModels }, 'Returning pricing for all providers');
 
@@ -115,7 +108,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         openai,
         anthropic,
         perplexity,
-        zai,
       });
     }
   );

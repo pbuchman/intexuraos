@@ -60,12 +60,10 @@ export async function syncSingleIssue(
     case 'update': {
       const syncedIssue = mapWebhookToSyncedIssue(data, userId);
       const saveResult = await issueRepo.save(syncedIssue);
-      /* v8 ignore start -- test-infra: error return path tested @preserve */
       if (!saveResult.ok) {
         logger.error({ error: saveResult.error }, 'Failed to save issue');
         return saveResult;
       }
-      /* v8 ignore stop @preserve */
       logger.info({ issueId: data.id, action: 'updated' }, 'Issue synced');
       return ok({ action: 'updated', issueId: data.id });
     }

@@ -26,7 +26,7 @@
       "category": "ai-research",
       "summary": "Multi-LLM research orchestration with Notion export, distributed tracing, platform API key fallbacks, and natural language model selection (v3.1.0)",
       "features": [
-        "5 LLM providers (Claude, OpenAI, Google, Perplexity, Zai)",
+        "4 LLM providers (Claude, OpenAI, Google, Perplexity)",
         "Natural language model selection (v2.0.0)",
         "Zod schema validation for LLM responses (v2.0.0)",
         "Parallel query execution via Pub/Sub",
@@ -34,7 +34,7 @@
         "Input validation with Zod schemas (v2.1.0)",
         "User service client via @intexuraos/internal-clients (v2.1.0)",
         "Notion export with per-model report pages (v2.2.0)",
-        "Platform API key fallbacks for Gemini and Zai when user has no key (v2.3.0)",
+        "Platform API key fallbacks for Gemini when user has no key (v2.3.0)",
         "Distributed tracing via Dash0 OpenTelemetry (v2.4.0)",
         "Adversarial prompt audit with safer fallbacks (v3.1.0)"
       ],
@@ -225,7 +225,7 @@
       "category": "infrastructure",
       "summary": "LLM pricing and usage analytics",
       "features": [
-        "5 provider pricing (Google, OpenAI, Anthropic, Perplexity, Zai)",
+        "4 provider pricing (Google, OpenAI, Anthropic, Perplexity)",
         "Usage cost tracking",
         "Monthly breakdown",
         "Per-model statistics"
@@ -291,7 +291,7 @@
       "features": [
         "Documentation Q&A with source citations via Firestore vector search",
         "Command creation through natural conversation",
-        "Guest access without sign-up (GLM-4.7-Flash, rate-limited)",
+        "Guest access without sign-up (Gemini 2.5 Flash, rate-limited)",
         "Conversation context across follow-up questions",
         "Multilingual confirmation (English and Polish)",
         "OpenAI text-embedding-3-small for semantic search"
@@ -303,21 +303,28 @@
       "id": "code-agent",
       "name": "Code Agent",
       "category": "ai-research",
-      "summary": "Autonomous code execution with worker dispatch, prompt sanitization, agent-based execution, and GitHub PR lifecycle (v3.1.0)",
+      "summary": "Autonomous code execution with GitHub Agent PR triage, unified automation log, worker dispatch, prompt sanitization, agent-based execution, and GitHub PR lifecycle (v3.3.0)",
       "features": [
+        "GitHub Agent with Gemini tool-calling for PR triage: hard rules then LLM evaluation (v3.3.0)",
+        "Unified PR automation log: all decisions and actions in a single append-only GitHub comment (v3.3.0)",
+        "Structured output validation with Zod schemas and automatic repair prompts for triage (v3.3.0)",
+        "Dispatch retry queue with bounded attempts and TTL for failed webhook dispatches (v3.3.0)",
+        "Merge conflict detection for bot-authored PRs with owner remapping (v3.3.0)",
+        "Automated code review tasks with PR-scoped dedup and queue support (v3.3.0)",
         "Submit-and-forget code tasks from web UI or WhatsApp",
-        "Prompt sanitization stripping 9 secret categories before dispatch (v3.1.0)",
+        "Prompt sanitization stripping 9 secret categories before dispatch",
         "Four-layer deduplication (approval event, action ID, sha256 dedup key, Linear active check)",
-        "Agent-based execution: planning then implementation (v3.0.0)",
-        "GitHub PR comment auto-response with sender whitelist (v3.1.0)",
+        "Agent-based execution: planning then implementation with review agent",
+        "GitHub PR comment auto-response with sender whitelist",
         "Per-user worker infrastructure with AES-256-GCM encrypted credentials",
-        "Retry, feedback, and mid-task messaging with task resume",
-        "Turn-level metrics: CPU, memory, tokens, API wait times per worker turn (v3.1.0)",
+        "Retry, feedback, and mid-task messaging with task resume and PR branch inheritance",
+        "Turn-level metrics: CPU, memory, tokens, API wait times per worker turn",
         "Rate limiting (3 concurrent, 10/hour, $200/month)",
         "Real-time log streaming via chunked HMAC-signed uploads",
-        "Zombie task detection (30-minute heartbeat threshold)"
+        "Zombie task detection (30-minute heartbeat threshold)",
+        "Multi-model support: auto, opus, sonnet, minimax, glm, qwen, kimi"
       ],
-      "endpoints": 28,
+      "endpoints": 32,
       "docs": "services/code-agent"
     },
     {
@@ -326,7 +333,7 @@
       "category": "workers",
       "summary": "Local worker orchestration engine dispatching code tasks to Docker containers running Claude Code with multi-model support and container adoption (v3.1.0)",
       "features": [
-        "Multi-model support: 6 worker types across Anthropic, ZAI, MiniMax, and Alibaba Cloud",
+        "Multi-model support: 5 worker types across Anthropic, MiniMax, and Alibaba Cloud",
         "Docker container isolation with dropped capabilities and memory limits",
         "Git worktree parallelism for concurrent tasks",
         "Container adoption on restart -- re-attaches to running containers instead of interrupting",
@@ -493,20 +500,6 @@
       "docs": "packages/infra-gemini"
     },
     {
-      "id": "infra-glm",
-      "name": "Infra GLM",
-      "category": "packages",
-      "summary": "Zai GLM API wrapper using OpenAI-compatible SDK with web search support",
-      "features": [
-        "LLMClient interface implementation for Zai GLM",
-        "Web search research via GLM built-in search tool",
-        "Prompt caching with configurable cache read multiplier",
-        "Automatic audit trail and usage logging"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-glm"
-    },
-    {
       "id": "infra-gpt",
       "name": "Infra GPT",
       "category": "packages",
@@ -613,7 +606,7 @@
       "summary": "Unified factory mapping model identifiers to provider-specific LLM client implementations",
       "features": [
         "createLlmClient() mapping model to correct provider client",
-        "Google (Gemini) and Zai (GLM) provider support",
+        "Google (Gemini) and Alibaba Cloud (GLM-5, Qwen) provider support",
         "isSupportedProvider() type guard",
         "Provider selection logic centralized in one place"
       ],

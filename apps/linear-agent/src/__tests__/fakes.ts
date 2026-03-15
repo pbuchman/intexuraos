@@ -2,7 +2,7 @@
  * Test fakes for linear-agent.
  */
 
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result, type CodeTaskWorkerType } from '@intexuraos/common-core';
 import type {
   LinearConnectionRepository,
   LinearConnection,
@@ -24,6 +24,7 @@ import type {
   SyncedLinearIssue,
   LinearCommentRepository,
   LinearComment,
+  CommentSummary,
 } from '../domain/index.js';
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../domain/index.js';
@@ -61,6 +62,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   private connections = new Map<string, LinearConnection>();
   private shouldFailGetFullConnection = false;
   private shouldFailGetConnection = false;
+  private shouldFailFindWebhookSecret = false;
   private shouldFailSave = false;
   private shouldFailDisconnect = false;
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
@@ -113,10 +115,18 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     });
   }
 
+  private shouldFailGetApiKey = false;
+
   async getApiKey(userId: string): Promise<Result<string | null, LinearError>> {
+    if (this.shouldFailGetApiKey) return err(this.failError);
     const conn = this.connections.get(userId);
     if (!conn || !conn.connected) return ok(null);
     return ok(conn.apiKey);
+  }
+
+  setApiKeyFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailGetApiKey = fail;
+    if (error) this.failError = error;
   }
 
   async getFullConnection(userId: string): Promise<Result<LinearConnection | null, LinearError>> {
@@ -133,6 +143,11 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
 
   setGetConnectionFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailGetConnection = fail;
+    if (error) this.failError = error;
+  }
+
+  setFindWebhookSecretFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailFindWebhookSecret = fail;
     if (error) this.failError = error;
   }
 
@@ -194,6 +209,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   async findWebhookSecretByTeamId(
     teamId: string
   ): Promise<Result<{ userId: string; webhookSecret: string } | null, LinearError>> {
+    if (this.shouldFailFindWebhookSecret) return err(this.failError);
     if (this.shouldFailGetConnection) return err(this.failError);
 
     for (const [userId, conn] of this.connections.entries()) {
@@ -235,6 +251,8 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     this.connections.clear();
     this.shouldFailGetFullConnection = false;
     this.shouldFailGetConnection = false;
+    this.shouldFailFindWebhookSecret = false;
+    this.shouldFailGetApiKey = false;
     this.shouldFailSave = false;
     this.shouldFailDisconnect = false;
     this.shouldFailIsConnected = false;
@@ -260,6 +278,7 @@ export class FakeLinearApiClient implements LinearApiClient {
     { id: 'state-progress', name: 'In Progress', type: 'started' },
     { id: 'state-review', name: 'In Review', type: 'started' },
     { id: 'state-qa', name: 'QA', type: 'started' },
+    { id: 'state-done', name: 'Done', type: 'completed' },
   ];
 
   async validateAndGetTeams(apiKey: string): Promise<Result<LinearTeam[], LinearError>> {
@@ -639,6 +658,25 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(null);
   }
 
+  private shouldFailFindByIdentifiers = false;
+
+  async findByIdentifiers(identifiers: string[], userId: string): Promise<Result<SyncedLinearIssue[], LinearError>> {
+    if (this.shouldFail || this.shouldFailFindByIdentifiers) return err(this.failError);
+    const identifierSet = new Set(identifiers);
+    const matched: SyncedLinearIssue[] = [];
+    for (const issue of this.issues.values()) {
+      if (issue.userId === userId && identifierSet.has(issue.identifier)) {
+        matched.push(issue);
+      }
+    }
+    return ok(matched);
+  }
+
+  setFindByIdentifiersFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailFindByIdentifiers = fail;
+    if (error) this.failError = error;
+  }
+
   async listByUserId(userId: string): Promise<Result<SyncedLinearIssue[], LinearError>> {
     if (this.shouldFail || this.shouldFailListByUserId) return err(this.failError);
     const userIssues = Array.from(this.issues.values()).filter((i) => i.userId === userId);
@@ -651,8 +689,11 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     return ok(undefined);
   }
 
+  private findUserIdsByIssueIdOverride: Result<string[], LinearError> | null = null;
+
   async findUserIdsByIssueId(issueId: string): Promise<Result<string[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
+    if (this.findUserIdsByIssueIdOverride !== null) return this.findUserIdsByIssueIdOverride;
     const userIds: string[] = [];
     for (const issue of this.issues.values()) {
       if (issue.id === issueId) {
@@ -660,6 +701,10 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
       }
     }
     return ok(userIds);
+  }
+
+  setFindUserIdsByIssueIdOverride(result: Result<string[], LinearError> | null): void {
+    this.findUserIdsByIssueIdOverride = result;
   }
 
   setFailure(fail: boolean, error?: LinearError): void {
@@ -695,7 +740,9 @@ export class FakeLinearIssueRepository implements LinearIssueRepository {
     this.shouldFailSave = false;
     this.shouldFailListByUserId = false;
     this.shouldFailDeleteById = false;
+    this.shouldFailFindByIdentifiers = false;
     this.saveFailUserIds.clear();
+    this.findUserIdsByIssueIdOverride = null;
   }
 
   seedIssue(issue: SyncedLinearIssue): void {
@@ -834,6 +881,40 @@ export class FakeLinearCommentRepository implements LinearCommentRepository {
     return ok(undefined);
   }
 
+  private shouldFailGetCommentSummaries = false;
+
+  async getCommentSummaries(issueIds: string[]): Promise<Result<CommentSummary[], LinearError>> {
+    if (this.shouldFail || this.shouldFailGetCommentSummaries) return err(this.failError);
+    const issueIdSet = new Set(issueIds);
+    const summaryMap = new Map<string, { count: number; lastCommentAt: string | null }>();
+    for (const comment of this.comments.values()) {
+      if (!issueIdSet.has(comment.issueId)) continue;
+      const existing = summaryMap.get(comment.issueId);
+      if (existing === undefined) {
+        summaryMap.set(comment.issueId, { count: 1, lastCommentAt: comment.createdAt });
+      } else {
+        existing.count++;
+        if (existing.lastCommentAt === null || comment.createdAt > existing.lastCommentAt) {
+          existing.lastCommentAt = comment.createdAt;
+        }
+      }
+    }
+    const summaries: CommentSummary[] = issueIds.map((issueId) => {
+      const entry = summaryMap.get(issueId);
+      return {
+        issueId,
+        commentCount: entry?.count ?? 0,
+        lastCommentAt: entry?.lastCommentAt ?? null,
+      };
+    });
+    return ok(summaries);
+  }
+
+  setGetCommentSummariesFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailGetCommentSummaries = fail;
+    if (error) this.failError = error;
+  }
+
   setFailure(fail: boolean, error?: LinearError): void {
     this.shouldFail = fail;
     if (error) this.failError = error;
@@ -866,6 +947,7 @@ export class FakeLinearCommentRepository implements LinearCommentRepository {
     this.shouldFailListByIssueId = false;
     this.shouldFailCountByIssueId = false;
     this.shouldFailDeleteById = false;
+    this.shouldFailGetCommentSummaries = false;
   }
 }
 
@@ -879,7 +961,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     userId: string;
     linearIssueId: string;
     prompt: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+    workerType: CodeTaskWorkerType;
     actionId: string;
     approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>> {

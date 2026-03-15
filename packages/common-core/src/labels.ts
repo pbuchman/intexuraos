@@ -15,3 +15,7 @@ export function normalizeLabel(label: string): string {
 export function hasCodeTaskLabel(labels: string[]): boolean {
   return labels.some((label) => normalizeLabel(label) === 'code-task');
 }
+
+export function hasPlanningTaskLabel(labels: string[]): boolean {
+  return labels.some((label) => normalizeLabel(label) === 'planning-task');
+}

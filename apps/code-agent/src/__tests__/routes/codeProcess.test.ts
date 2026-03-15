@@ -94,6 +94,7 @@ describe('POST /internal/code/process', () => {
 
     taskDispatcher = createTaskDispatcherService({
       logger,
+      workerHealthProbe: mockWorkerHealthProbe,
     });
 
     _logChunkRepo = createFirestoreLogChunkRepository({
@@ -187,6 +188,11 @@ describe('POST /internal/code/process', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
+      toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
+      unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -213,6 +219,11 @@ describe('POST /internal/code/process', () => {
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
+      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
+      unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     // Set up worker settings for the test user

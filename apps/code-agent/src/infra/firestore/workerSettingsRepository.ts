@@ -9,7 +9,7 @@
 
 import type { Firestore } from '@intexuraos/infra-firestore';
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
-import type { Logger } from '@intexuraos/common-core';
+import type { Logger, CodeTaskWorkerType } from '@intexuraos/common-core';
 import type {
   WorkerSettingsRepository,
   WorkerSettingsError,
@@ -43,6 +43,7 @@ interface WorkerSettingsDoc {
   workers: EncryptedWorkerConfig[];
   createdAt: string;
   updatedAt: string;
+  defaultReviewWorkerType?: string;
   workerHealthStatuses?: Record<string, {
     state: unknown;
     checkedAt: string;
@@ -129,13 +130,15 @@ export function createWorkerSettingsRepository(
           workers,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
+          ...(data.defaultReviewWorkerType !== undefined && {
+            defaultReviewWorkerType: data.defaultReviewWorkerType as CodeTaskWorkerType,
+          }),
         };
 
         return ok(settings);
       } catch (error) {
         const message = getErrorMessage(error);
 
-        /* v8 ignore start -- test-infra: decryption error path requires corrupted data @preserve */
         if (message.includes('decrypt') || message.includes('Invalid encrypted')) {
           logger.error({ error, userId }, 'Failed to decrypt worker settings');
           return err({
@@ -143,7 +146,6 @@ export function createWorkerSettingsRepository(
             message: `Failed to decrypt worker settings: ${message}`,
           });
         }
-        /* v8 ignore stop @preserve */
 
         logger.error({ error, userId }, 'Failed to get worker settings');
         return err({
@@ -159,11 +161,9 @@ export function createWorkerSettingsRepository(
     ): Promise<Result<WorkerConfig | null, WorkerSettingsError>> {
       const settingsResult = await this.getSettings(userId);
 
-      /* v8 ignore start -- ts-type: Result type error propagation @preserve */
       if (!settingsResult.ok) {
         return settingsResult;
       }
-      /* v8 ignore stop @preserve */
 
       const settings = settingsResult.value;
       if (settings === null) {
@@ -232,7 +232,6 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
 
-        /* v8 ignore start -- test-infra: encryption error path requires crypto failure @preserve */
         if (message.includes('encrypt')) {
           logger.error({ error, userId }, 'Failed to encrypt worker config');
           return err({
@@ -240,7 +239,6 @@ export function createWorkerSettingsRepository(
             message: `Failed to encrypt worker config: ${message}`,
           });
         }
-        /* v8 ignore stop @preserve */
 
         logger.error({ error, userId }, 'Failed to add worker');
         return err({
@@ -296,11 +294,9 @@ export function createWorkerSettingsRepository(
               ? encryptToken(config.dispatchSigningSecret)
               : existingWorker.dispatchSigningSecret,
           enabled: config.enabled ?? existingWorker.enabled,
-          /* v8 ignore start -- ts-type: spread conditionals for optional field propagation @preserve */
           ...(existingWorker.lastTestedAt !== undefined && { lastTestedAt: existingWorker.lastTestedAt }),
           ...(existingWorker.testStatus !== undefined && { testStatus: existingWorker.testStatus }),
           ...(existingWorker.testMessage !== undefined && { testMessage: existingWorker.testMessage }),
-          /* v8 ignore stop @preserve */
         };
 
         const updatedWorkers = [...existingData.workers];
@@ -442,14 +438,12 @@ export function createWorkerSettingsRepository(
         const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
 
         const existingWorker = existingData.workers[workerIndex];
-        /* v8 ignore start -- test-infra: NOT_FOUND error path requires missing config fixture @preserve */
         if (workerIndex === -1 || existingWorker === undefined) {
           return err({
             code: 'not_found',
             message: `Worker '${workerName}' not found`,
           });
         }
-        /* v8 ignore stop @preserve */
 
         const now = new Date().toISOString();
 
@@ -482,7 +476,6 @@ export function createWorkerSettingsRepository(
     ): Promise<Result<Record<string, WorkerHealthStatus> | null, WorkerSettingsError>> {
       try {
         const doc = await collection.doc(userId).get();
-        /* v8 ignore start -- test-infra: requires testing document existence edge case @preserve */
         if (!doc.exists) {
           return ok(null);
         }
@@ -490,7 +483,6 @@ export function createWorkerSettingsRepository(
         if (!data.workerHealthStatuses) {
           return ok(null);
         }
-        /* v8 ignore stop @preserve */
         return ok(data.workerHealthStatuses as Record<string, WorkerHealthStatus>);
       } catch (error) {
         const message = getErrorMessage(error);
@@ -517,6 +509,38 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, workerName }, 'Failed to update health status');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async updateDefaultReviewWorkerType(
+      userId: string,
+      workerType: CodeTaskWorkerType
+    ): Promise<Result<void, WorkerSettingsError>> {
+      try {
+        const docRef = collection.doc(userId);
+        const doc = await docRef.get();
+        const now = new Date().toISOString();
+
+        if (doc.exists) {
+          await docRef.update({ defaultReviewWorkerType: workerType, updatedAt: now });
+        } else {
+          await docRef.set({
+            userId,
+            workers: [],
+            defaultReviewWorkerType: workerType,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        return ok(undefined);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId }, 'Failed to update default review worker type');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,

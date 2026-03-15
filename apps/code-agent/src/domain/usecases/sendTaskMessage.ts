@@ -4,7 +4,7 @@
  * Running tasks: message is queued on the worker and delivered when the current attempt completes.
  * Terminal tasks (completed/failed/interrupted/cancelled): task resumes with the message via --continue.
  * Dispatched tasks: message is queued locally in Firestore (pendingUserMessages) until orchestrator picks up.
- * Queued tasks: rejected.
+ * Queued tasks: message is appended locally until worker capacity is available.
  */
 
 import { Timestamp } from '@google-cloud/firestore';
@@ -66,17 +66,8 @@ export async function sendTaskMessage(
 
   const task = taskResult.value;
 
-  // Step 2: Validate task status
-  if (task.status === 'queued') {
-    logger.warn({ taskId, status: task.status }, 'Cannot send message to task with this status');
-    return err({
-      code: 'invalid_status',
-      message: `Cannot send message to task with status "${task.status}"`,
-    });
-  }
-
-  // Step 2b: For dispatched tasks, queue message locally without contacting the worker
-  if (task.status === 'dispatched') {
+  // Step 2: For queued/dispatched tasks, queue message locally without contacting the worker
+  if (task.status === 'queued' || task.status === 'dispatched') {
     const sequence = Date.now() * 1000;
     const storeResult = await logLineRepo.storeBatch(taskId, [
       { sequence, text: `[user] ${message}`, timestamp: Timestamp.now() },
@@ -98,7 +89,7 @@ export async function sendTaskMessage(
       logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
     }
 
-    logger.info({ taskId, action: 'queued', status: 'dispatched' }, 'Message queued for dispatched task');
+    logger.info({ taskId, action: 'queued', status: task.status }, 'Message queued for non-running task');
     return ok({ action: 'queued' });
   }
 
@@ -120,17 +111,13 @@ export async function sendTaskMessage(
   // Step 4: Look up worker credentials
   const settingsResult = await workerSettingsRepo.getSettings(userId);
 
-  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!settingsResult.ok) {
     logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings for message');
     return err({ code: 'internal_error', message: 'Failed to fetch worker settings' });
   }
-  /* v8 ignore stop @preserve */
 
   const settings = settingsResult.value;
-  /* v8 ignore start -- ts-type: optional chaining for database result @preserve */
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
-  /* v8 ignore stop @preserve */
 
   if (enabledWorkers.length === 0) {
     logger.warn({ userId }, 'User has no workers configured for messaging');
@@ -158,9 +145,7 @@ export async function sendTaskMessage(
   });
 
   if (!forwardResult.ok) {
-    /* v8 ignore start -- test-infra: requires worker to return specific error codes for each branch @preserve */
     const errorCode = forwardResult.error.code === 'worker_unavailable' ? 'worker_unavailable' : 'worker_error';
-    /* v8 ignore stop @preserve */
     logger.error({ taskId, error: forwardResult.error }, 'Failed to forward message to worker');
     return err({
       code: errorCode,

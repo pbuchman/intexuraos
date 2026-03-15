@@ -30,6 +30,7 @@ function createEventInput(
 ): CreateGitHubPREventInput {
   return {
     githubEventId: 12345678,
+    deliveryId: null,
     repository: 'intexuraos/test-repo',
     repositoryId: 987654321,
     pullRequestNumber: 42,
@@ -39,9 +40,11 @@ function createEventInput(
     senderLogin: 'testuser',
     senderId: 12345,
     senderType: 'User',
+    prAuthorLogin: null,
     title: 'Test PR',
     body: 'Test body',
     state: 'open',
+    baseBranch: null,
     mergedAt: null,
     createdAt: new Date('2024-01-01T00:00:00Z'),
     payload: { action: 'opened' },
@@ -103,14 +106,14 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         expect(result.value.eventType).toBe('pull_request');
         expect(result.value.id).toMatch(/^[0-9a-f-]{36}$/); // UUID format
         expect(mockDocRef.set).toHaveBeenCalled();
-        expect(mockQuery.limit).toHaveBeenCalledWith(1); // deduplication check uses limit 1
         expect(mockQuery.doc).toHaveBeenCalled();
       }
     });
 
-    it('should return existing event for duplicate githubEventId (deduplication)', async () => {
+    it('should return DUPLICATE_EVENT error for duplicate deliveryId (deduplication)', async () => {
       const existingData: Omit<GitHubPREvent, 'id'> = {
         githubEventId: 12345678,
+        deliveryId: 'abc-123',
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -120,9 +123,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'existinguser',
         senderId: 99999,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Existing PR',
         body: 'Existing body',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-01T00:00:00Z'),
         processedAt: new Date('2024-01-01T01:00:00Z'),
@@ -145,26 +150,58 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         logger: mockLogger,
       });
 
-      const input = createEventInput();
+      const input = createEventInput({ deliveryId: 'abc-123' });
+      const result = await repository.save(input);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('DUPLICATE_EVENT');
+        expect(result.error.message).toContain('abc-123');
+      }
+    });
+
+    it('should skip deduplication when deliveryId is null', async () => {
+      const mockDocRef = {
+        id: 'new-event-id',
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([])),
+        doc: vi.fn(() => mockDocRef),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const input = createEventInput({ deliveryId: null });
       const result = await repository.save(input);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.id).toBe('existing-id');
-        expect(result.value.githubEventId).toBe(12345678);
-        expect(result.value.senderLogin).toBe('existinguser');
-        expect(mockLogger.debug).toHaveBeenCalledWith(
-          { githubEventId: 12345678 },
-          'Duplicate GitHub event, skipping'
-        );
+        expect(result.value.deliveryId).toBeNull();
+        expect(mockDocRef.set).toHaveBeenCalled();
       }
     });
 
     it('should handle Firestore errors gracefully', async () => {
+      const mockDocRef = {
+        id: 'new-event-id',
+        set: vi.fn().mockRejectedValue(new Error('Firestore connection failed')),
+      };
+
       const mockQuery = {
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockReturnThis(),
         get: vi.fn().mockRejectedValue(new Error('Firestore connection failed')),
+        doc: vi.fn(() => mockDocRef),
       };
 
       mockGetFirestore.mockReturnValue({
@@ -191,6 +228,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
     it('should return events for a specific pull request', async () => {
       const eventData1: Omit<GitHubPREvent, 'id'> = {
         githubEventId: 111,
+        deliveryId: null,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -200,9 +238,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'user1',
         senderId: 111,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'First PR',
         body: 'First body',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
         processedAt: new Date('2024-01-02T00:05:00Z'),
@@ -299,6 +339,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
 
       const eventDataWithTimestamps = {
         githubEventId: 111,
+        deliveryId: null,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -308,9 +349,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'user1',
         senderId: 111,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'PR with Timestamps',
         body: 'Body',
         state: 'closed',
+        baseBranch: null,
         mergedAt: { toDate: (): Date => mergedAtDate },
         createdAt: { toDate: (): Date => createdAtDate },
         processedAt: { toDate: (): Date => processedAtDate },
@@ -350,6 +393,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
     it('should return events for a repository ordered by createdAt desc', async () => {
       const eventData1: Omit<GitHubPREvent, 'id'> = {
         githubEventId: 111,
+        deliveryId: null,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -359,9 +403,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'user1',
         senderId: 111,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'PR 1',
         body: 'Body 1',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
         processedAt: new Date('2024-01-02T00:05:00Z'),
@@ -470,6 +516,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
     it('should handle events with mergedAt date', async () => {
       const eventData: Omit<GitHubPREvent, 'id'> = {
         githubEventId: 111,
+        deliveryId: null,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -479,9 +526,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'user1',
         senderId: 111,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Merged PR',
         body: 'Body',
         state: 'closed',
+        baseBranch: null,
         mergedAt: new Date('2024-01-02T00:00:00Z'),
         createdAt: new Date('2024-01-01T00:00:00Z'),
         processedAt: new Date('2024-01-02T00:05:00Z'),
@@ -517,6 +566,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
     it('should handle events with null mergedAt', async () => {
       const eventData: Omit<GitHubPREvent, 'id'> = {
         githubEventId: 111,
+        deliveryId: null,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -526,9 +576,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'user1',
         senderId: 111,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Open PR',
         body: 'Body',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-01T00:00:00Z'),
         processedAt: new Date('2024-01-01T00:05:00Z'),
@@ -568,6 +620,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
 
       const eventDataWithTimestamps = {
         githubEventId: 98765,
+        deliveryId: null,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -580,6 +633,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'Test PR',
         body: 'Test body',
         state: 'closed',
+        baseBranch: null,
         mergedAt: { toDate: (): Date => mergedAtDate },
         createdAt: { toDate: (): Date => createdAtDate },
         processedAt: { toDate: (): Date => processedAtDate },
@@ -619,6 +673,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
     it('should return all events ordered by createdAt desc', async () => {
       const eventData1: Omit<GitHubPREvent, 'id'> = {
         githubEventId: 111,
+        deliveryId: null,
         repository: 'intexuraos/repo-a',
         repositoryId: 111111,
         pullRequestNumber: 1,
@@ -628,9 +683,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'user1',
         senderId: 111,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'PR 1',
         body: 'Body 1',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
         processedAt: new Date('2024-01-02T00:05:00Z'),
@@ -639,6 +696,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
 
       const eventData2: Omit<GitHubPREvent, 'id'> = {
         githubEventId: 222,
+        deliveryId: null,
         repository: 'intexuraos/repo-b',
         repositoryId: 222222,
         pullRequestNumber: 2,
@@ -648,9 +706,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'user2',
         senderId: 222,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'PR 2',
         body: 'Body 2',
         state: 'closed',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-01T00:00:00Z'),
         processedAt: new Date('2024-01-01T00:05:00Z'),
@@ -760,6 +820,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
 
       const eventDataWithTimestamps = {
         githubEventId: 111,
+        deliveryId: null,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -769,9 +830,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'user1',
         senderId: 111,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'PR with Timestamps',
         body: 'Body',
         state: 'closed',
+        baseBranch: null,
         mergedAt: { toDate: (): Date => mergedAtDate },
         createdAt: { toDate: (): Date => createdAtDate },
         processedAt: { toDate: (): Date => processedAtDate },
@@ -810,6 +873,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
     it('should return comments matching the review ID', async () => {
       const matchingEvent = {
         githubEventId: 555,
+        deliveryId: null,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -819,9 +883,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'reviewer',
         senderId: 333,
         senderType: 'User',
+        prAuthorLogin: null,
         title: null,
         body: 'Fix this line',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
         processedAt: new Date('2024-01-02T00:05:00Z'),
@@ -869,6 +935,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
     it('should filter out comments from different reviews', async () => {
       const matchingEvent = {
         githubEventId: 555,
+        deliveryId: null,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
         pullRequestNumber: 42,
@@ -878,9 +945,11 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'reviewer',
         senderId: 333,
         senderType: 'User',
+        prAuthorLogin: null,
         title: null,
         body: 'Matching comment',
         state: 'open',
+        baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
         processedAt: new Date('2024-01-02T00:05:00Z'),

@@ -83,6 +83,7 @@ describe('POST /code/submit', () => {
 
     taskDispatcher = createTaskDispatcherService({
       logger,
+      workerHealthProbe: mockWorkerHealthProbe,
     });
 
     const whatsappNotifier = createWhatsAppNotifier({
@@ -176,6 +177,11 @@ describe('POST /code/submit', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
+      toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
+      unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -202,6 +208,11 @@ describe('POST /code/submit', () => {
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
+      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
+      unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     // Set up worker settings for the test user
@@ -870,7 +881,7 @@ describe('POST /code/submit', () => {
     });
 
     it('accepts valid worker types', async () => {
-      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] as const;
+      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi'] as const;
 
       // Mock successful dispatch for all iterations
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({

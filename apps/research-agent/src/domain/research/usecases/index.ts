@@ -47,6 +47,8 @@ export {
 } from './toggleResearchFavourite.js';
 export {
   extractModelPreferences,
+  validateSelectedModels,
+  validateSynthesisModel,
   type ExtractModelPreferencesResult,
   type ExtractModelPreferencesDeps,
 } from './extractModelPreferences.js';

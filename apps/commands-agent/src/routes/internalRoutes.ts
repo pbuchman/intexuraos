@@ -18,9 +18,7 @@ interface CommandEvent {
   sourceType: CommandSourceType;
   externalId: string;
   text: string;
-/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
   summary?: string;
-  /* v8 ignore stop @preserve */
   timestamp: string;
 }
 
@@ -171,9 +169,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         sourceType: eventData.sourceType,
         externalId: eventData.externalId,
         text: eventData.text,
-        /* v8 ignore start -- test-infra: spread conditional for optional summary field @preserve */
         ...(eventData.summary !== undefined && { summary: eventData.summary }),
-        /* v8 ignore stop @preserve */
         timestamp: eventData.timestamp,
       });
 
