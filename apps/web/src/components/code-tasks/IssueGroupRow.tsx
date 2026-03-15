@@ -74,6 +74,10 @@ function PipelineConnector(): React.JSX.Element {
   return <span className="mx-1 h-px w-4 flex-shrink-0 bg-slate-500/40" />;
 }
 
+function PipelineConnectorVertical(): React.JSX.Element {
+  return <span className="ml-2.5 h-2 w-px bg-slate-500/40" />;
+}
+
 interface PipelineStepProps {
   name: string;
   state: StepState;
@@ -92,44 +96,49 @@ function PipelineStep({ name, state }: PipelineStepProps): React.JSX.Element {
 
 function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Element {
   const { pipeline } = group;
-  const steps: React.JSX.Element[] = [];
+  const totalCount = pipeline.steps.length + (pipeline.pr !== null ? 1 : 0);
 
-  // Planning step
-  if (pipeline.planning !== null) {
-    steps.push(<PipelineStep key="planning" name="Planning" state={pipeline.planning} />);
+  if (totalCount === 0) {
+    return <span className="text-xs text-slate-500">--</span>;
   }
 
-  // Execution step
-  if (pipeline.execution !== null) {
-    if (steps.length > 0) {
-      steps.push(<PipelineConnector key="conn-exec" />);
+  const isVertical = totalCount > 4;
+
+  const elements: React.JSX.Element[] = [];
+
+  for (let i = 0; i < pipeline.steps.length; i++) {
+    const step = pipeline.steps[i];
+    if (step === undefined) continue;
+
+    if (i > 0) {
+      elements.push(
+        isVertical
+          ? <PipelineConnectorVertical key={`conn-${String(i)}`} />
+          : <PipelineConnector key={`conn-${String(i)}`} />,
+      );
     }
-    const execLabel = pipeline.execution === 'failed' && pipeline.failedAttempts > 0
-      ? `Execution (${String(pipeline.failedAttempts)})`
-      : 'Execution';
-    steps.push(
+
+    const displayLabel = step.state === 'failed' && step.agentType === 'execution' && pipeline.failedAttempts > 0
+      ? `${step.label} (${String(pipeline.failedAttempts)})`
+      : step.label;
+
+    elements.push(
       <PipelineStep
-        key="execution"
-        name={execLabel}
-        state={pipeline.execution}
+        key={step.agentType}
+        name={displayLabel}
+        state={step.state}
       />,
     );
   }
 
-  // Review step
-  if (pipeline.review !== null) {
-    if (steps.length > 0) {
-      steps.push(<PipelineConnector key="conn-review" />);
-    }
-    steps.push(<PipelineStep key="review" name="Review" state={pipeline.review} />);
-  }
-
-  // PR step
+  // PR step (always last)
   if (pipeline.pr !== null) {
-    if (steps.length > 0) {
-      steps.push(<PipelineConnector key="conn-pr" />);
-    }
-    steps.push(
+    elements.push(
+      isVertical
+        ? <PipelineConnectorVertical key="conn-pr" />
+        : <PipelineConnector key="conn-pr" />,
+    );
+    elements.push(
       <span key="pr" className="flex items-center gap-1">
         <StepDot state="completed" />
         <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
@@ -139,11 +148,11 @@ function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Elem
     );
   }
 
-  if (steps.length === 0) {
-    return <span className="text-xs text-slate-500">--</span>;
-  }
-
-  return <span className="flex items-center">{steps}</span>;
+  return (
+    <span className={isVertical ? 'flex flex-col' : 'flex items-center'}>
+      {elements}
+    </span>
+  );
 }
 
 // --- Text helpers ---
@@ -166,6 +175,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { latestTask, pipeline, aggregateStatus } = group;
+  const hasActionable = pipeline.steps.some((s) => s.state === 'actionable');
 
   const handleRowClick = (): void => {
     setExpanded((prev) => !prev);
@@ -233,7 +243,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
 
           {/* Output column */}
           <div className="flex items-center justify-end gap-2">
-            {pipeline.execution === 'actionable' ? (
+            {hasActionable ? (
               <button
                 onClick={(e): void => {
                   e.stopPropagation();
@@ -340,7 +350,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
               >
                 <ScrollText className="h-3.5 w-3.5" />
               </button>
-              {pipeline.execution === 'actionable' ? (
+              {hasActionable ? (
                 <button
                   onClick={(e): void => {
                     e.stopPropagation();
@@ -437,9 +447,11 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.group.aggregateStatus === next.group.aggregateStatus &&
   prev.group.latestTask.updatedAt === next.group.latestTask.updatedAt &&
   prev.group.tasks.length === next.group.tasks.length &&
-  prev.group.pipeline.planning === next.group.pipeline.planning &&
-  prev.group.pipeline.execution === next.group.pipeline.execution &&
-  prev.group.pipeline.review === next.group.pipeline.review &&
+  prev.group.pipeline.steps.length === next.group.pipeline.steps.length &&
+  prev.group.pipeline.steps.every((s, i) => {
+    const n = next.group.pipeline.steps[i];
+    return s.state === n?.state && s.agentType === n.agentType;
+  }) &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
   prev.onAction === next.onAction &&
