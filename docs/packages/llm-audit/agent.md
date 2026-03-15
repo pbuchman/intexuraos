@@ -1,66 +1,47 @@
-# @intexuraos/llm-audit - Agent Reference
+# @intexuraos/llm-audit — Agent Reference
 
-Machine-readable export map and interface definitions for automated tooling.
+> Machine-readable interface for automated tooling and AI agents.
 
-## Package Metadata
+## Identity
 
-```
-name: @intexuraos/llm-audit
-version: 2.1.0
-type: module
-leaf: false
-dependencies: @intexuraos/common-core, @intexuraos/infra-firestore, @intexuraos/llm-contract
-entry_points:
-  - ".": ./src/index.ts
-firestore_collections:
-  - llm_api_logs (owned)
-env_vars:
-  - INTEXURAOS_AUDIT_LLMS (optional, default: true)
-```
+| Attribute | Value                                                         |
+| --------- | ------------------------------------------------------------- |
+| Package   | `@intexuraos/llm-audit`                                       |
+| Role      | Audit sink for LLM request/response pairs                     |
+| Goal      | Persist a complete, timestamped record of every LLM call      |
+| Firestore | `llm_api_logs` (owner: this package via `FirestoreAuditSink`) |
 
-## Exported Types
+## Exports
+
+### Functions
+
+| Export               | Signature                                                                       | Purpose                         |
+| -------------------- | ------------------------------------------------------------------------------- | ------------------------------- |
+| `isAuditEnabled`     | `() => boolean`                                                                 | Check `INTEXURAOS_AUDIT_LLMS`   |
+| `createAuditContext` | `(params: CreateAuditLogParams, options?: AuditContextOptions) => AuditContext` | Create an audit context         |
+
+### Classes
+
+| Export                   | Purpose                                    |
+| ------------------------ | ------------------------------------------ |
+| `AuditContext`           | Tracks one LLM request/response cycle      |
+| `FirestoreAuditSink`     | Default sink — writes to `llm_api_logs`    |
+| `StructuredLogAuditSink` | Sink that emits to a Pino logger           |
+| `NoopAuditSink`          | Sink that discards all events (tests only) |
+
+### Key Types
 
 ```typescript
-// Re-exported from llm-contract
-type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
+interface AuditSink {
+  save(log: LlmAuditLog): Promise<Result<void>>;
+}
 
-type LlmAuditStatus = 'success' | 'error';
-
-interface LlmAuditLog {
-  id: string;
-  provider: LlmProvider;
-  model: string;
-  method: string;
-  prompt: string;
-  promptLength: number;
-  status: LlmAuditStatus;
-  response?: string;
-  responseLength?: number;
-  error?: string;
-  inputTokens?: number;
-  outputTokens?: number;
-  cacheCreationTokens?: number;
-  cacheReadTokens?: number;
-  cachedTokens?: number;
-  reasoningTokens?: number;
-  webSearchCalls?: number;
-  groundingEnabled?: boolean;
-  providerCost?: number;
-  costUsd?: number;
-  imageCount?: number;
-  imageModel?: string;
-  imageSize?: string;
-  imageCostUsd?: number;
-  startedAt: string;
-  completedAt: string;
-  durationMs: number;
-  userId?: string;
-  researchId?: string;
-  createdAt: string;
+interface AuditContextOptions {
+  sink?: AuditSink;
 }
 
 interface CreateAuditLogParams {
-  provider: LlmProvider;
+  provider: LlmProvider; // 'google' | 'openai' | 'anthropic' | 'perplexity'
   model: string;
   method: string;
   prompt: string;
@@ -92,83 +73,42 @@ interface CompleteAuditLogErrorParams {
 }
 ```
 
-## Exported Functions
+## Usage Pattern
 
 ```typescript
-function isAuditEnabled(): boolean;
-function createAuditContext(params: CreateAuditLogParams): AuditContext;
+// 1. Create context at request start (captures timestamp)
+const audit = createAuditContext({ provider, model, method, prompt, startedAt, userId });
+
+// 2a. Complete on success
+await audit.success({ response, inputTokens, outputTokens, costUsd });
+
+// 2b. Complete on error
+await audit.error({ error: 'Rate limit exceeded' });
+
+// Subsequent calls to success/error are silently ignored.
 ```
 
-## Exported Classes
+## Constraints
 
-```typescript
-class AuditContext {
-  constructor(params: CreateAuditLogParams);
-  async success(result: CompleteAuditLogSuccessParams): Promise<void>;
-  async error(result: CompleteAuditLogErrorParams): Promise<void>;
-}
-```
+**Do NOT:**
+- Call `audit.success()` or `audit.error()` more than once (silently ignored after first call)
+- Await the result of sink writes when auditing is non-critical — sink errors are swallowed
+- Use `FirestoreAuditSink` in tests — use `NoopAuditSink` instead
 
-## Dependency Graph
+**Requires:**
+- `INTEXURAOS_AUDIT_LLMS` defaults to `true`; no config needed to enable
+- Firestore must be initialized before `FirestoreAuditSink.save()` is called
 
-```
-common-core, llm-contract, infra-firestore
-  <- llm-audit
-       <- infra-claude, infra-gemini, infra-glm, infra-gpt, infra-perplexity
-       <- llm-factory (AuditSink type import)
-       <- image-service
-       <- workers/orchestrator (AuditSink type import)
-```
+## Environment Variables
 
-## Usage Patterns
+| Variable                | Default | Values                     |
+| ----------------------- | ------- | -------------------------- |
+| `INTEXURAOS_AUDIT_LLMS` | `true`  | `true`, `false`, `0`, `no` |
 
-```typescript
-// Standard audit flow
-import { createAuditContext } from '@intexuraos/llm-audit';
+## Dependencies
 
-const audit = createAuditContext({
-  provider: 'anthropic',
-  model: 'claude-sonnet-4-5-20250929',
-  method: 'research',
-  prompt: userQuery,
-  startedAt: new Date(),
-  userId: currentUserId,
-});
-
-try {
-  const result = await llmClient.research(userQuery);
-  if (result.ok) {
-    await audit.success({
-      response: result.value.content,
-      inputTokens: result.value.usage.inputTokens,
-      outputTokens: result.value.usage.outputTokens,
-      costUsd: result.value.usage.costUsd,
-      webSearchCalls: result.value.usage.webSearchCalls,
-    });
-  } else {
-    await audit.error({ error: `${result.error.code}: ${result.error.message}` });
-  }
-} catch (error) {
-  await audit.error({ error: getErrorMessage(error) });
-}
-
-// Check if auditing is active
-import { isAuditEnabled } from '@intexuraos/llm-audit';
-if (!isAuditEnabled()) {
-  logger.info({}, 'LLM auditing is disabled');
-}
-```
-
-## Test Mock Pattern
-
-```typescript
-// Mock the entire module
-vi.mock('@intexuraos/llm-audit', () => ({
-  isAuditEnabled: vi.fn().mockReturnValue(false),
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-  AuditContext: vi.fn(),
-}));
-```
+| Package                       | Why Needed                            |
+| ----------------------------- | ------------------------------------- |
+| `@intexuraos/common-core`     | `Result` type, `getErrorMessage`      |
+| `@intexuraos/infra-firestore` | Firestore client for default sink     |
+| `@intexuraos/llm-contract`    | `LlmProvider` type re-export          |

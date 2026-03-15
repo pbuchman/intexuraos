@@ -1,8 +1,8 @@
 # @intexuraos/internal-clients
 
-Shared HTTP client library for calling IntexuraOS internal service APIs. Created in INT-269 to eliminate ~4200 lines of duplicate user-service client code across 8 services.
+Shared HTTP client library for calling IntexuraOS internal service APIs. Created to eliminate duplicate user-service client code that had spread across multiple services.
 
-**Package:** `@intexuraos/internal-clients` | **Version:** 2.1.0 | **Type:** ESM
+**Package:** `@intexuraos/internal-clients` | **Type:** ESM
 
 ---
 
@@ -10,8 +10,8 @@ Shared HTTP client library for calling IntexuraOS internal service APIs. Created
 
 This package provides two main capabilities:
 
-1. **User Service Client** -- a typed client for the user-service internal API (API keys, LLM client creation, OAuth tokens)
-2. **Generic HTTP utility** -- `fetchWithAuth()` for authenticated calls to any internal service with `X-Internal-Auth` and optional `X-Trace-Id` headers
+1. **User Service Client** — a typed client for the user-service internal API (API keys, LLM client creation, OAuth tokens, GitHub username resolution)
+2. **Generic HTTP utility** — `fetchWithAuth()` for authenticated calls to any internal service with `X-Internal-Auth` and optional `X-Trace-Id` headers
 
 All operations return `Result<T, E>` types from `@intexuraos/common-core`, ensuring callers handle both success and failure paths explicitly.
 
@@ -21,7 +21,7 @@ All operations return `Result<T, E>` types from `@intexuraos/common-core`, ensur
 
 ### `createUserServiceClient(config: UserServiceConfig): UserServiceClient`
 
-Create a client for the user-service internal API. The returned client provides four methods for interacting with user data.
+Create a client for the user-service internal API. The returned client provides five methods for interacting with user data.
 
 ```typescript
 import { createUserServiceClient } from '@intexuraos/internal-clients';
@@ -42,8 +42,7 @@ interface UserServiceConfig {
   internalAuthToken: string;
   pricingContext: IPricingContext;
   logger: Logger;
-  platformGeminiApiKey?: string; // platform-level fallback: Gemini 2.5 Flash
-  platformZaiApiKey?: string; // platform-level fallback: Glm47Flash (Zai)
+  platformGeminiApiKey?: string | undefined; // platform-level fallback: Gemini 2.5 Flash
 }
 ```
 
@@ -58,6 +57,9 @@ interface UserServiceClient {
     userId: string,
     provider: OAuthProvider
   ): Promise<Result<OAuthTokenResult, UserServiceError>>;
+  resolveGitHubUsername(
+    gitHubUsername: string
+  ): Promise<Result<{ userId: string } | null, UserServiceError>>;
 }
 ```
 
@@ -73,7 +75,6 @@ interface DecryptedApiKeys {
   openai?: string;
   anthropic?: string;
   perplexity?: string;
-  zai?: string;
 }
 ```
 
@@ -84,10 +85,10 @@ Null values from the JSON response are converted to `undefined`.
 Build a fully configured LLM client for a user in a single call. Performs three internal steps:
 
 1. Fetch user settings (`GET /internal/users/:userId/settings`) to determine the default model
-2. Fetch the user's API keys for the required provider
+2. Fetch the user's API keys for the required provider (`GET /internal/users/:userId/llm-keys`)
 3. Create an `LlmGenerateClient` via `@intexuraos/llm-factory`
 
-Falls back to `Gemini25Flash` when the user has no model preference. If the user has no API key for the required provider and `platformGeminiApiKey` is configured, silently falls back to Gemini 2.5 Flash using the platform key. If `platformZaiApiKey` is configured instead, falls back to Glm47Flash (Zai).
+Falls back to `Gemini25Flash` when the user has no model preference. If the user has no API key for the required provider and `platformGeminiApiKey` is configured, silently falls back to Gemini 2.5 Flash using the platform key.
 
 Returns `Result<LlmGenerateClient, UserServiceError>` with error codes:
 
@@ -100,21 +101,19 @@ Returns `Result<LlmGenerateClient, UserServiceError>` with error codes:
 
 #### `reportLlmSuccess(userId: string, provider: LlmProvider)`
 
-Report a successful LLM call. Calls `POST /internal/users/:userId/llm-keys/:provider/last-used`. Best-effort -- silently ignores all errors.
+Report a successful LLM call. Calls `POST /internal/users/:userId/llm-keys/:provider/last-used`. Best-effort — silently ignores all errors.
 
 #### `getOAuthToken(userId: string, provider: OAuthProvider)`
 
 Fetch a valid OAuth access token for a user. Calls `GET /internal/users/:userId/oauth/:provider/token`.
 
-Returns `Result<OAuthTokenResult, UserServiceError>` where:
-
 ```typescript
+type OAuthProvider = 'google' | 'github';
+
 interface OAuthTokenResult {
   accessToken: string;
   email: string;
 }
-
-type OAuthProvider = 'google';
 ```
 
 Error codes specific to OAuth:
@@ -124,6 +123,12 @@ Error codes specific to OAuth:
 | `CONNECTION_NOT_FOUND` | User has not connected OAuth     |
 | `TOKEN_REFRESH_FAILED` | Token refresh failed server-side |
 | `OAUTH_NOT_CONFIGURED` | OAuth not configured on server   |
+
+#### `resolveGitHubUsername(gitHubUsername: string)`
+
+Resolve a GitHub username to an IntexuraOS `userId`. Calls `GET /internal/users/by-github-username/:gitHubUsername`.
+
+Returns `Result<{ userId: string } | null, UserServiceError>` — returns `null` (not an error) when no user is found.
 
 ---
 
@@ -137,7 +142,7 @@ import { fetchWithAuth } from '@intexuraos/internal-clients';
 const result = await fetchWithAuth<{ items: Item[] }>(
   { baseUrl, internalAuthToken, logger },
   '/internal/items',
-  { traceId: request.traceId }
+  { traceId: request.headers['x-trace-id'] }
 );
 ```
 
@@ -182,13 +187,11 @@ interface ServiceClientError {
 | `@intexuraos/llm-factory`  | `createLlmClient`, `LlmGenerateClient`       |
 | `@intexuraos/llm-pricing`  | `IPricingContext` for model pricing          |
 
-Dev dependencies: `nock` (HTTP mocking), `vitest`, `typescript`.
-
 ---
 
 ## Used By
 
-11 apps import this package:
+12 apps import this package:
 
 | App                 | Primary Use                           |
 | ------------------- | ------------------------------------- |
@@ -208,15 +211,12 @@ Dev dependencies: `nock` (HTTP mocking), `vitest`, `typescript`.
 
 ## Recent Changes
 
-| Commit     | Description                                                   | When   |
-| ---------- | ------------------------------------------------------------- | ------ |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback  | recent |
-| `0f69a74b` | Add default model selector with platform Zai fallback         | recent |
-| `44017d5c` | Fix ESLint OOM with batched parallel lint runner              | recent |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)             | recent |
-| `1c054cba` | Fix internal-clients to unwrap user-service response contract | recent |
-| `7a90db67` | Fix vitest v4 migration and improve branch coverage           | recent |
-| `e9f2ada4` | Improve internal-clients branch coverage to 98%               | recent |
+| Commit      | Description                                                    |
+| ----------- | -------------------------------------------------------------- |
+| `93aeac4a3` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5         |
+| `b86e8af4d` | Rename `username` to `gitHubUsername` in resolveGitHubUsername |
+| `25c2ab2db` | Add resolveGitHubUsername method and github OAuth provider     |
+| `c72b7c532` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback   |
 
 ---
 
@@ -236,6 +236,4 @@ packages/internal-clients/
       types.ts                         # All TypeScript interfaces
       client.ts                        # createUserServiceClient() implementation
       __tests__/client.test.ts         # Tests for UserServiceClient
-  package.json
-  tsconfig.json
 ```

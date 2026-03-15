@@ -1,4 +1,4 @@
-# mobile-notifications-service -- Agent Interface
+# mobile-notifications-service — Agent Interface
 
 > Machine-readable specification for AI agent integration
 
@@ -6,13 +6,12 @@
 
 ## Identity
 
-| Attribute | Value                                                             |
-| --------- | ----------------------------------------------------------------- |
-| Name      | mobile-notifications-service                                      |
-| Role      | Mobile notification capture and storage service                   |
-| Goal      | Capture, store, and query mobile device notifications             |
-| Version   | 3.1.0                                                             |
-| Port      | 8114                                                              |
+| Attribute | Value                                                 |
+| --------- | ----------------------------------------------------- |
+| Name      | mobile-notifications-service                          |
+| Role      | Mobile notification capture and storage service       |
+| Goal      | Capture, store, and query mobile device notifications |
+| Port      | 8114                                                  |
 
 ---
 
@@ -32,11 +31,11 @@
 interface QueryNotificationsInput {
   userId: string;
   filter?: {
-    app?: string[];    // OR logic across apps
-    source?: string;   // Single value match
-    title?: string;    // Case-insensitive substring match
+    app?: string[];   // OR logic across apps
+    source?: string;  // Single value match
+    title?: string;   // Case-insensitive substring match
   };
-  limit?: number;      // 1-1000, default 50
+  limit?: number;     // 1–1000, default 50
 }
 ```
 
@@ -51,8 +50,8 @@ interface InternalNotification {
   id: string;
   app: string;
   title: string;
-  body: string;       // Mapped from notification.text
-  timestamp: string;   // Mapped from notification.receivedAt (ISO 8601)
+  body: string;      // Mapped from notification.text
+  timestamp: string; // Mapped from notification.receivedAt (ISO 8601)
   source: string;
 }
 ```
@@ -97,11 +96,11 @@ interface InternalNotification {
 
 ```typescript
 interface ListNotificationsParams {
-  limit?: number;    // 1-100, default 50
-  cursor?: string;   // Pagination cursor from previous response
-  source?: string;   // Comma-separated source filter
-  app?: string;      // Comma-separated app filter
-  title?: string;    // Case-insensitive partial match
+  limit?: number;   // 1–100, default 50
+  cursor?: string;  // Pagination cursor from previous response
+  source?: string;  // Comma-separated source filter
+  app?: string;     // Comma-separated app filter
+  title?: string;   // Case-insensitive partial match
 }
 ```
 
@@ -115,16 +114,14 @@ interface ListNotificationsOutput {
 
 interface MobileNotification {
   id: string;
-  userId: string;
   source: string;
   device: string;
   app: string;
   title: string;
   text: string;
-  timestamp: number;    // Unix milliseconds from device
+  timestamp: number;   // Unix milliseconds from device
   postTime: string;
-  receivedAt: string;   // ISO 8601 server-side receipt time
-  notificationId: string;
+  receivedAt: string;  // ISO 8601 server-side receipt time
 }
 ```
 
@@ -149,7 +146,7 @@ interface ConnectInput {
 ```typescript
 interface ConnectOutput {
   connectionId: string;
-  signature: string;   // Plaintext, shown only once
+  signature: string;  // Plaintext, shown only once — store securely
 }
 ```
 
@@ -176,7 +173,7 @@ interface StatusOutput {
 
 **When to use:** Called by mobile automation apps (Tasker/Automate) to forward device notifications.
 
-**Auth:** `X-Mobile-Notifications-Signature` header
+**Auth:** `X-Mobile-Notifications-Signature` header (plaintext — hashed server-side)
 
 **Input Schema:**
 
@@ -198,8 +195,8 @@ interface WebhookPayload {
 ```typescript
 interface WebhookOutput {
   status: 'accepted' | 'ignored';
-  id?: string;       // Present when accepted
-  reason?: string;   // Present when ignored ('duplicate' or 'invalid_signature')
+  id?: string;     // Present when accepted
+  reason?: string; // Present when ignored: 'duplicate'
 }
 ```
 
@@ -207,7 +204,7 @@ interface WebhookOutput {
 
 **Endpoint:** `GET /notifications/filters`
 
-**Auth:** Bearer JWT
+**Auth:** Bearer JWT. Returns empty options arrays (never 404) when no notifications received yet.
 
 **Output Schema:**
 
@@ -239,13 +236,13 @@ interface SavedFilter {
 
 **Endpoint:** `POST /notifications/filters/saved`
 
-**Auth:** Bearer JWT
+**Auth:** Bearer JWT. Returns 201 Created.
 
 **Input Schema:**
 
 ```typescript
 interface CreateSavedFilterInput {
-  name: string;        // 1-100 characters
+  name: string;     // 1–100 characters, required
   app?: string[];
   device?: string[];
   source?: string;
@@ -257,27 +254,30 @@ interface CreateSavedFilterInput {
 
 **Endpoint:** `DELETE /notifications/filters/saved/:id`
 
-**Auth:** Bearer JWT. Returns 204 No Content.
+**Auth:** Bearer JWT. Returns 204 No Content on success, 404 if not found.
 
 ### Delete Notification
 
 **Endpoint:** `DELETE /mobile-notifications/:notification_id`
 
-**Auth:** Bearer JWT. Returns 200 with `{ success: true, data: {} }`. Returns 403 if not owner, 404 if not found.
+**Auth:** Bearer JWT. Returns 200 `{ success: true, data: {} }` on success, 403 if not owner, 404 if not found.
 
 ---
 
 ## Constraints
 
-| Rule               | Description                                                |
-| ------------------ | ---------------------------------------------------------- |
-| **Ownership**      | Users can only access/delete their own notifications       |
-| **Pagination**     | Public list maximum 100, internal maximum 1000 per request |
-| **Single Sig**     | Only one active signature per user; reconnect replaces it  |
-| **Android Only**   | Requires Tasker/Automate on Android device                 |
-| **Idempotency**    | Duplicate `notification_id` per user is silently ignored   |
-| **Filter Options** | Populated dynamically from received notifications          |
-| **No Push-back**   | Captures and stores only; does not push to devices         |
+**Do NOT:**
+
+- Call the internal query endpoint without `X-Internal-Auth` header — returns 401
+- Expect the plaintext signature after the initial `POST /connect` response — it is never re-shown
+- Send notifications without the `X-Mobile-Notifications-Signature` header — returns 400
+- Call `GET /notifications/filters` expecting 404 for new users — returns empty arrays instead
+
+**Requires:**
+
+- User must be authenticated (Bearer JWT) for all public endpoints
+- Device must have a valid active signature for webhook ingestion
+- Internal auth token for `POST /internal/mobile-notifications/query`
 
 ---
 
@@ -295,8 +295,8 @@ interface CreateSavedFilterInput {
 
 ```
 1. Call GET /mobile-notifications/status
-2. If configured === false, prompt user to connect device
-3. If configured === true, show notification feed
+2. If configured === false, prompt user to connect device via POST /mobile-notifications/connect
+3. If configured === true, proceed to show notification feed
 ```
 
 ### Pattern 3: Filtered Browsing
@@ -304,7 +304,7 @@ interface CreateSavedFilterInput {
 ```
 1. Call GET /notifications/filters to get available options
 2. Let user select filters
-3. Call GET /mobile-notifications with selected filters
+3. Call GET /mobile-notifications with selected filters as query params
 4. Optionally save filter as preset via POST /notifications/filters/saved
 ```
 
@@ -312,24 +312,24 @@ interface CreateSavedFilterInput {
 
 ## Error Handling
 
-| Error Code | Meaning                  | Recovery Action                              |
-| ---------- | ------------------------ | -------------------------------------------- |
-| 400        | Missing signature header | Add X-Mobile-Notifications-Signature header  |
-| 401        | Invalid signature/token  | Reconnect device or refresh JWT              |
-| 403        | Not owner                | Verify you own the resource                  |
-| 404        | Not found                | Verify resource ID exists                    |
-| 500        | Internal error           | Retry with backoff                           |
+| Error Code | Meaning                  | Recovery Action                             |
+| ---------- | ------------------------ | ------------------------------------------- |
+| 400        | Missing signature header | Add X-Mobile-Notifications-Signature header |
+| 401        | Invalid signature/token  | Reconnect device or refresh JWT             |
+| 403        | Not owner                | Verify you own the resource                 |
+| 404        | Not found                | Verify resource ID exists                   |
+| 500        | Internal error           | Retry with backoff                          |
 
 ---
 
 ## Dependencies
 
-| Service              | Why Needed           | Failure Behavior      |
-| -------------------- | -------------------- | --------------------- |
-| Firestore            | Persistent storage   | Endpoint returns 500  |
-| Auth0 (JWKS)         | JWT validation       | Public endpoints fail |
-| Internal Auth        | Service-to-service   | Internal endpoint 401 |
+| Service       | Why Needed         | Failure Behavior      |
+| ------------- | ------------------ | --------------------- |
+| Firestore     | Persistent storage | Endpoint returns 500  |
+| Auth0 (JWKS)  | JWT validation     | Public endpoints fail |
+| Internal Auth | Service-to-service | Internal endpoint 401 |
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-15

@@ -1,4 +1,4 @@
-# Notion Service -- Tutorial
+# Notion Service — Tutorial
 
 > **Time:** 15-20 minutes
 > **Prerequisites:** Node.js 22+, Auth0 access token, Notion integration token
@@ -183,7 +183,7 @@ curl -X GET http://localhost:8112/notion/status
 
 ---
 
-## Part 4: Real-World Scenario -- Research Export Validation (5 minutes)
+## Part 4: Real-World Scenario — Research Export Validation (5 minutes)
 
 This scenario demonstrates how research-agent uses the internal endpoints to validate page access before exporting research results to Notion.
 

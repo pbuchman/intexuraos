@@ -1,4 +1,4 @@
-# @intexuraos/common-core - Agent Reference
+# @intexuraos/common-core — Agent Reference
 
 Machine-readable export map and interface definitions for automated tooling.
 
@@ -6,7 +6,6 @@ Machine-readable export map and interface definitions for automated tooling.
 
 ```
 name: @intexuraos/common-core
-version: 2.1.0
 type: module
 leaf: true
 dependencies: none
@@ -90,6 +89,9 @@ type ServiceErrorCode =
   | 'NOT_FOUND'
   | 'EXTRACTION_FAILED'
   | 'EXTERNAL_API_ERROR';
+
+// codeTaskWorkerTypes.ts
+type CodeTaskWorkerType = 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
 ```
 
 ## Exported Functions
@@ -127,6 +129,14 @@ function isFailureFeedback(
 function successFeedback(message: string, resourceUrl?: string): ServiceFeedback;
 function failureFeedback(message: string, errorCode: string): ServiceFeedback;
 
+// labels.ts
+function normalizeLabel(label: string): string;
+function hasCodeTaskLabel(labels: string[]): boolean;
+function hasPlanningTaskLabel(labels: string[]): boolean;
+
+// codeTaskWorkerTypes.ts
+function isCodeTaskWorkerType(value: string): value is CodeTaskWorkerType;
+
 // tracing/traceId.ts
 function extractOrGenerateTraceId(headers: Record<string, string | string[] | undefined>): string;
 function traceIdHeaders(traceId: string): Record<string, string>;
@@ -149,6 +159,7 @@ const ServiceErrorCodes: {
   EXTERNAL_API_ERROR: 'EXTERNAL_API_ERROR';
 };
 const TRACE_ID_HEADER: 'X-Trace-Id';
+const CODE_TASK_WORKER_TYPES: readonly ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi'];
 ```
 
 ## Exported Classes
@@ -170,7 +181,7 @@ common-core (leaf)
   <- http-server
   <- infra-pubsub
   <- infra-firestore
-  <- infra-claude, infra-gemini, infra-gpt, infra-glm
+  <- infra-claude, infra-gemini, infra-gpt
   <- infra-notion, infra-perplexity, infra-sentry, infra-whatsapp
   <- llm-utils, llm-prompts, llm-pricing, llm-factory, llm-audit, llm-contract
   <- internal-clients

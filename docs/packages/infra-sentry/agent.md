@@ -8,7 +8,7 @@ Machine-readable export and interface reference for `@intexuraos/infra-sentry`.
 
 ```yaml
 name: '@intexuraos/infra-sentry'
-version: '2.1.0'
+version: '3.3.0'
 entry: './src/index.ts'
 type: 'module'
 private: true

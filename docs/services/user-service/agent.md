@@ -374,8 +374,8 @@ Keys are validated using cheap, fast models to minimize cost:
 | app-settings-service | LLM pricing at startup     | Service fails to start                  |
 | Firebase Admin SDK   | Custom token generation    | Firebase token endpoint returns 500     |
 | Firestore            | All persistent state       | Endpoints return 500                    |
-| LLM APIs (5)         | Key validation and testing | Validation/test returns formatted error |
+| LLM APIs (4)         | Key validation and testing | Validation/test returns formatted error |
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-15

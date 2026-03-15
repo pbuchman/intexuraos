@@ -1,6 +1,6 @@
-# Web Agent -- Tutorial
+# Web Agent — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** Internal auth token, user with configured LLM API key
 > **You'll learn:** How to fetch link previews and generate AI summaries
 
@@ -26,7 +26,7 @@ Before starting, ensure you have:
 
 ---
 
-## Part 1: Hello World -- Link Preview (5 minutes)
+## Part 1: Hello World — Link Preview (5 minutes)
 
 Fetch OpenGraph metadata for a single URL.
 
@@ -109,8 +109,8 @@ curl -X POST http://localhost:8127/internal/link-previews \
   "success": true,
   "data": {
     "results": [
-      { "url": "https://www.anthropic.com", "status": "success", "preview": {"..."} },
-      { "url": "https://example.com", "status": "success", "preview": {"..."} },
+      { "url": "https://www.anthropic.com", "status": "success", "preview": { "..." : "..." } },
+      { "url": "https://example.com", "status": "success", "preview": { "..." : "..." } },
       {
         "url": "https://blocked-site-example.com",
         "status": "failed",
@@ -133,7 +133,7 @@ curl -X POST http://localhost:8127/internal/link-previews \
 ### Step 2.2: Handle Partial Success
 
 ```typescript
-const response = await fetch('/internal/link-previews', { ... });
+const response = await fetch('/internal/link-previews', { /* ... */ });
 const { data } = await response.json();
 
 for (const result of data.results) {
@@ -386,27 +386,25 @@ export async function summarizePage(
 
 ## Troubleshooting
 
-| Problem                      | Symptom                      | Solution                                     |
-| ---------------------------- | ---------------------------- | -------------------------------------------- |
-| "401 Unauthorized"           | Missing auth header          | Add `X-Internal-Auth` header                 |
-| "ACCESS_DENIED"              | 403 from target site         | Site blocks scrapers; try different URL      |
-| "No API key configured"      | Platform fallback also unset | Configure platform keys or user adds API key |
-| "Summary is JSON"            | Repair mechanism kicked in   | Normal behavior -- should auto-repair        |
-| "Summary in wrong language"  | Old version                  | Update to v2.0.0+ with language preservation |
-| "Timeout"                    | Slow site or Crawl4AI        | Increase `timeoutMs` parameter               |
-| "RATE_LIMITED"               | HTTP 429 from Crawl4AI       | Wait and retry with exponential backoff      |
-| "Summary describes platform" | Content focus missing        | Update to latest with content focus prompt   |
+| Problem                 | Symptom                      | Solution                                     |
+| ----------------------- | ---------------------------- | -------------------------------------------- |
+| "401 Unauthorized"      | Missing auth header          | Add `X-Internal-Auth` header                 |
+| "ACCESS_DENIED"         | 403 from target site         | Site blocks scrapers; try different URL      |
+| "No API key configured" | Platform fallback also unset | Configure platform keys or user adds API key |
+| "Summary is JSON"       | Repair mechanism kicked in   | Normal behavior — should auto-repair         |
+| "Timeout"               | Slow site or Crawl4AI        | Increase `timeoutMs` parameter               |
+| "RATE_LIMITED"          | HTTP 429 from Crawl4AI       | Wait and retry with exponential backoff      |
 
 ---
 
 ## Best Practices
 
-1. **Validate URLs client-side** -- Check for http/https before calling
-2. **Handle partial success** -- Check `status` field per result
-3. **Log error codes** -- Track `ACCESS_DENIED` vs `FETCH_FAILED` separately
-4. **Set appropriate timeouts** -- 5s for link previews, 60s for summaries
-5. **Cache link previews** -- Same URL rarely changes; caller should cache
-6. **Provide userId** -- Required for summarization to get user's LLM keys
+1. **Validate URLs client-side** — Check for http/https before calling
+2. **Handle partial success** — Check `status` field per result
+3. **Log error codes** — Track `ACCESS_DENIED` vs `FETCH_FAILED` separately
+4. **Set appropriate timeouts** — 5s for link previews, 60s for summaries
+5. **Cache link previews** — Same URL rarely changes; caller should cache
+6. **Provide userId** — Required for summarization to get user's LLM keys
 
 ---
 

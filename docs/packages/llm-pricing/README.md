@@ -2,7 +2,7 @@
 
 Fetches LLM pricing from app-settings-service and provides runtime pricing lookups. Also tracks LLM usage to Firestore for cost analytics, aggregating by model, call type, time period, and user.
 
-**Version:** 2.1.0
+**Version:** 3.3.0
 **Node:** >=22.0.0
 **Type:** ESM
 **Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-firestore`, `@intexuraos/llm-contract`
@@ -17,32 +17,31 @@ Every LLM call in IntexuraOS needs pricing data to calculate costs. Pricing chan
 
 #### `fetchAllPricing(baseUrl: string, authToken: string): Promise<Result<AllPricingResponse, PricingClientError>>`
 
-Fetches pricing for all providers from `app-settings-service`.
+Fetches pricing for all providers from `app-settings-service`. Calls `GET {baseUrl}/internal/settings/pricing` with `X-Internal-Auth` header.
 
 ```typescript
 import { fetchAllPricing } from '@intexuraos/llm-pricing';
 
 const result = await fetchAllPricing(
   'http://app-settings-service',
-  process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN']!
+  process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN']
 );
 
 if (result.ok) {
-  console.log(Object.keys(result.value.anthropic.models));
-  // ['claude-opus-4-5-20251101', 'claude-sonnet-4-5-20250929', ...]
+  const context = createPricingContext(result.data);
 }
 ```
 
-Calls `GET {baseUrl}/internal/settings/pricing` with `X-Internal-Auth` header.
+Error codes: `'NETWORK_ERROR'` | `'API_ERROR'` | `'VALIDATION_ERROR'`
 
 #### `createPricingContext(allPricing: AllPricingResponse, requiredModels?: LLMModel[]): PricingContext`
 
-Creates a validated pricing context. Throws if any required model is missing pricing.
+Creates a validated pricing context. Throws if any required model is missing pricing. Defaults to validating all 14 known models.
 
 ```typescript
 import { createPricingContext } from '@intexuraos/llm-pricing';
 
-// Validate all 16 models have pricing (for app-settings-service)
+// Validate all 14 models (for app-settings-service startup)
 const context = createPricingContext(allPricing);
 
 // Validate only models this service uses
@@ -54,23 +53,23 @@ const context = createPricingContext(allPricing, [
 
 #### `PricingContext` class
 
-Runtime pricing lookup with O(1) access via internal `Map<LLMModel, ModelPricing>`.
+Runtime pricing lookup backed by `Map<LLMModel, ModelPricing>` for O(1) access.
 
 ```typescript
 interface IPricingContext {
-  getPricing(model: LLMModel): ModelPricing; // throws if not found
+  getPricing(model: LLMModel): ModelPricing;   // throws if not found
   hasPricing(model: LLMModel): boolean;
-  validateModels(models: LLMModel[]): void; // throws listing missing
-  validateAllModels(): void; // validates all 16 models
+  validateModels(models: LLMModel[]): void;    // throws listing missing models
+  validateAllModels(): void;                   // validates all 14 models
   getModelsWithPricing(): LLMModel[];
 }
 ```
 
 ### Usage Logger (`usageLogger.ts`)
 
-#### `UsageLogger` class
+#### `UsageLogger` class / `createUsageLogger(deps)`
 
-Logs LLM usage to Firestore for cost tracking. Fire-and-forget -- errors are logged but do not propagate.
+Logs LLM usage to Firestore for cost tracking and analytics. Writes to three time-period aggregation levels: `total`, `YYYY-MM`, and `YYYY-MM-DD`. Also writes per-user stats under `by_user/{userId}` subcollection. Errors are caught and logged — they never propagate to disrupt LLM operations.
 
 ```typescript
 import { createUsageLogger } from '@intexuraos/llm-pricing';
@@ -87,124 +86,105 @@ await usageLogger.log({
     outputTokens: 500,
     totalTokens: 1500,
     costUsd: 0.0105,
+    webSearchCalls: 3,
   },
   success: true,
 });
 ```
 
-**Firestore structure:**
+#### `CallType`
+
+```typescript
+type CallType =
+  | 'research'              // Web search enhanced generation
+  | 'generate'             // Simple text generation
+  | 'image_generation'     // Image creation
+  | 'visualization_insights' // Chart data analysis
+  | 'visualization_vegalite' // Vega-Lite chart generation
+  | 'tool_calling';         // Function calling agent loops
+```
+
+#### Usage Sinks
+
+| Sink                     | Destination                   | Use Case                            |
+| ------------------------ | ----------------------------- | ----------------------------------- |
+| `FirestoreUsageSink`     | Firestore `llm_usage_stats`   | Default for all production services |
+| `StructuredLogUsageSink` | Pino logger (structured JSON) | Services without Firestore access   |
+| `NoopUsageSink`          | /dev/null                     | Tests, disabled logging             |
+
+All sinks implement `UsageSink`:
+
+```typescript
+interface UsageSink {
+  log(params: UsageLogParams): Promise<void>;
+}
+```
+
+#### `isUsageLoggingEnabled(): boolean`
+
+Checks `INTEXURAOS_LOG_LLM_USAGE`. Defaults to `true`.
+
+### Firestore Structure
 
 ```
 llm_usage_stats/{model}/
   by_call_type/{callType}/
     by_period/
-      total/                  (all-time aggregate)
+      total/              (all-time aggregate)
         by_user/{userId}
-      YYYY-MM/                (monthly aggregate)
+      YYYY-MM/            (monthly aggregate)
         by_user/{userId}
-      YYYY-MM-DD/             (daily aggregate)
+      YYYY-MM-DD/         (daily aggregate)
         by_user/{userId}
 ```
 
-Each period document tracks: `totalCalls`, `successfulCalls`, `failedCalls`, `inputTokens`, `outputTokens`, `totalTokens`, `costUsd`.
+Each period document accumulates `totalCalls`, `successfulCalls`, `failedCalls`, `inputTokens`, `outputTokens`, `totalTokens`, `costUsd` via Firestore `FieldValue.increment`.
 
-#### `isUsageLoggingEnabled(): boolean`
+### Test Fixtures
 
-Checks `INTEXURAOS_LOG_LLM_USAGE` env var. Defaults to `true`. Set to `false`, `0`, or `no` to disable.
-
-#### `logUsage(params: UsageLogParams): Promise<void>` (deprecated)
-
-Legacy standalone function. Uses a silent logger internally. Migrate to `createUsageLogger()`.
-
-### Types
+The package ships test fixtures for use in consumer test suites:
 
 ```typescript
-type CallType =
-  | 'research'
-  | 'generate'
-  | 'image_generation'
-  | 'visualization_insights'
-  | 'visualization_vegalite';
+import { createFakePricingContext, TEST_PRICING, TEST_IMAGE_PRICING } from '@intexuraos/llm-pricing';
 
-interface UsageLogParams {
-  userId: string;
-  provider: LlmProvider;
-  model: string;
-  callType: CallType;
-  usage: NormalizedUsage;
-  success: boolean;
-  errorMessage?: string;
-  logger?: Logger;
-}
-
-interface AllPricingResponse {
-  google: ProviderPricing;
-  openai: ProviderPricing;
-  anthropic: ProviderPricing;
-  perplexity: ProviderPricing;
-  zai: ProviderPricing;
-}
-
-interface PricingClientError {
-  code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR';
-  message: string;
-}
-
-interface LlmPricing {
-  provider: LlmProvider;
-  model: string;
-  inputPricePerMillion: number;
-  outputPricePerMillion: number;
-  webSearchCostPerCall?: number;
-  groundingCostPerRequest?: number;
-  cacheWriteMultiplier?: number;
-  cacheReadMultiplier?: number;
-  imageCostPerGeneration?: number;
-  updatedAt: string;
-}
+const pricingContext = createFakePricingContext();
+// Returns TEST_PRICING for all text models, TEST_IMAGE_PRICING for image models
 ```
 
-### Test Fixtures (`testFixtures.ts`)
+`FakePricingContext` implements `IPricingContext` — substitute it directly wherever `PricingContext` is used.
 
-```typescript
-import {
-  TEST_PRICING,
-  TEST_IMAGE_PRICING,
-  createFakePricingContext,
-} from '@intexuraos/llm-pricing';
+## Configuration
 
-const fakePricing = createFakePricingContext();
-fakePricing.getPricing('gemini-2.5-flash');
-// { inputPricePerMillion: 1.0, outputPricePerMillion: 2.0 }
-```
+| Env Var                    | Default | Description                                             |
+| -------------------------- | ------- | ------------------------------------------------------- |
+| `INTEXURAOS_LOG_LLM_USAGE` | `true`  | Set to `false`, `0`, or `no` to disable usage logging   |
 
-`FakePricingContext` implements `IPricingContext` and returns fixed test pricing for all models.
+## Deprecated API
+
+`logUsage(params)` — standalone function exported for backward compatibility. Uses a silent logger. Migrate to `UsageLogger` class or `createUsageLogger()`.
 
 ## Used By
 
-**Packages (7):** `llm-factory`, `internal-clients`, `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity`
+**Packages (2):** `llm-factory`, `infra-gemini`
 
-**Apps (12):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `user-service`, `web-agent`
+**Apps (1):** `app-settings-service` (pricing storage and `validateAllModels` at startup)
 
-**Workers (1):** `orchestrator`
+**Workers (1):** `orchestrator` (via `llm-factory`)
 
 ## Recent Changes
 
-| Commit   | Description                                                           | Age     |
-| -------- | --------------------------------------------------------------------- | ------- |
-| 1c9d7ec9 | Orchestrator verification hardening and unified secrets sync workflow | 10 days |
-| 641eee12 | Fix duplicate Content-Type header in predev gateway proxy             | 12 days |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner                      | 17 days |
-| 21c1528a | Fix release skill to bump all package versions                        | 3 weeks |
-| 6acb3fc0 | Add tests for 95% branch coverage                                     | 3 weeks |
-| 4fa0fed3 | Release v2.0.0                                                        | 3 weeks |
+| Commit    | Description                                             | Age     |
+| --------- | ------------------------------------------------------- | ------- |
+| c4e3a13cb | Release v3.3.0                                          | 2 hours |
+| e4d231053 | Remove ZAI provider and GLM-4.7 models                  | 3 days  |
+| 44ae683ae | Release v3.2.0                                          | 8 days  |
 
 ## Source Files
 
-| File                   | Purpose                                               |
-| ---------------------- | ----------------------------------------------------- |
-| `src/index.ts`         | Re-exports all public APIs                            |
-| `src/types.ts`         | LlmPricing and LlmProvider types                      |
-| `src/pricingClient.ts` | fetchAllPricing, PricingContext, createPricingContext |
-| `src/usageLogger.ts`   | UsageLogger class, logUsage, isUsageLoggingEnabled    |
-| `src/testFixtures.ts`  | TEST_PRICING, FakePricingContext for tests            |
+| File                   | Purpose                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `src/index.ts`         | Re-exports all public APIs                                                             |
+| `src/types.ts`         | `LlmPricing`, `LlmProvider` re-export                                                  |
+| `src/pricingClient.ts` | `fetchAllPricing`, `PricingContext`, `createPricingContext`, `IPricingContext`         |
+| `src/usageLogger.ts`   | `UsageLogger`, `CallType`, `UsageSink` implementations, `isUsageLoggingEnabled`        |
+| `src/testFixtures.ts`  | `FakePricingContext`, `TEST_PRICING`, `TEST_IMAGE_PRICING`, `createFakePricingContext` |

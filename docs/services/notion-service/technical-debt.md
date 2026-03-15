@@ -1,7 +1,7 @@
-# Notion Service -- Technical Debt
+# Notion Service — Technical Debt
 
 **Last Updated:** 2026-03-15
-**Analysis Run:** [2026-02-22 entry](../../documentation-runs.md)
+**Analysis Run:** [2026-03-15 entry](../../documentation-runs.md)
 
 ---
 
@@ -10,21 +10,21 @@
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
 | Code Smells         | 1     | Low      |
-| Test Coverage Gaps  | 0     | -        |
-| TypeScript Issues   | 0     | -        |
-| TODO/FIXME Comments | 0     | -        |
-| SRP Violations      | 0     | -        |
-| Code Duplicates     | 0     | -        |
+| Test Coverage Gaps  | 0     | —        |
+| TypeScript Issues   | 0     | —        |
+| TODO/FIXME Comments | 0     | —        |
+| SRP Violations      | 0     | —        |
+| Code Duplicates     | 0     | —        |
 | **Total**           | **1** | Low      |
 
 ---
 
 ## Future Plans
 
-1. **Multiple workspaces** -- Support connecting multiple Notion workspaces per user (currently limited to one; reconnecting replaces the existing connection)
-2. **Webhook event processing** -- Replace the stub at `POST /notion-webhooks` with real event handling for sync triggers, cache invalidation, or page change notifications
-3. **Scoped page access** -- Granular database/page permissions beyond the current all-or-nothing integration token approach
-4. **Sync status tracking** -- Detailed progress reporting for operations that read from or write to Notion (e.g., research export progress)
+1. **Multiple workspaces** — Support connecting multiple Notion workspaces per user (currently limited to one; reconnecting replaces the existing connection)
+2. **Webhook event processing** — Replace the stub at `POST /notion-webhooks` with real event handling for sync triggers, cache invalidation, or page change notifications
+3. **Scoped page access** — Granular database/page permissions beyond the current all-or-nothing integration token approach
+4. **Sync status tracking** — Detailed progress reporting for operations that read from or write to Notion (e.g., research export progress)
 
 ---
 
@@ -42,14 +42,15 @@
 
 ## Test Coverage Gaps
 
-None. The service achieves 100% branch coverage with appropriate v8 ignore annotations for:
+None. The service achieves 100% branch coverage. As of v3.3.0, v8 ignore annotation coverage has been reduced further via INT-794, which replaced annotation-guarded branches with real tests.
 
-- TypeScript type guards on Firestore document types (3 annotations in `notionConnectionRepository.ts`)
-- Integration route error mapping switch cases (6 annotations in `integrationRoutes.ts`)
-- Internal route Firestore error paths (4 annotations in `internalRoutes.ts`)
-- Test infrastructure import boundaries (2 annotations in `integrationRoutes.ts`)
+Remaining v8 ignore annotations cover:
 
-All annotations use valid categories (`test-infra`, `ts-type`) per project standards.
+- TypeScript type guards on Firestore document types (`notionConnectionRepository.ts`)
+- ESM module-init boundaries (`integrationRoutes.ts`)
+- Schema string literals in Fastify route definitions (`internalRoutes.ts`)
+
+All annotations use valid categories (`schema`, `module-init`, `ts-type`) per project standards.
 
 ---
 
@@ -67,7 +68,7 @@ None found in `apps/notion-service/src/`.
 
 ## SRP Violations
 
-No files exceed the 300-line SRP guideline in a concerning way. The largest file is `server.ts` at 374 lines, which is acceptable because it handles OpenAPI schema definitions, Fastify configuration, and health check setup -- all standard server bootstrap responsibilities.
+No files exceed the 300-line SRP guideline in a concerning way. `server.ts` is the largest file, handling OpenAPI schema definitions, Fastify configuration, and health check setup — all standard server bootstrap responsibilities.
 
 ---
 
@@ -78,6 +79,14 @@ No significant duplication patterns detected. The service is small and focused.
 ---
 
 ## Recent Improvements
+
+### v3.3.0 Release (2026-03-15)
+
+INT-794: Replaced v8-ignore annotation-guarded branches with real tests across `notion-service`. Reduces reliance on exemptions and improves actual test coverage quality.
+
+### v3.2.0 Release (2026-03-07)
+
+Package version bump to v3.2.0.
 
 ### v3.1.0 Release (2026-02-22)
 
@@ -125,6 +134,7 @@ Achieved strict 100% branch coverage with proper v8 ignore annotations for TypeS
 
 | Date       | Issue                              | Resolution                            |
 | ---------- | ---------------------------------- | ------------------------------------- |
+| 2026-03-13 | v8 ignore blocks without tests     | INT-794: replaced with real tests     |
 | 2026-02-16 | No distributed tracing             | Added Dash0 OTel integration          |
 | 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests     |
 | 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger           |
@@ -136,6 +146,6 @@ Achieved strict 100% branch coverage with proper v8 ignore annotations for TypeS
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

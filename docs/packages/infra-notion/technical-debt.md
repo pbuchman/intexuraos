@@ -1,7 +1,6 @@
 # Technical Debt: @intexuraos/infra-notion
 
-**Last Updated:** 2026-02-19
-**Analysis Run:** [2026-02-19 documentation run](../../documentation-runs.md)
+**Last Updated:** 2026-03-15
 
 ---
 
@@ -13,13 +12,13 @@
 | Test Gaps   | 0     | —        |
 | Type Issues | 1     | Low      |
 | TODOs       | 0     | —        |
-| **Total**   | **5** | —        |
+| **Total**   | **5** | Low      |
 
 ---
 
 ## Future Plans
 
-- Add database query support (`notion.databases.query`)
+- Add database query support (`notion.databases.query`) as a higher-level utility
 - Add block content creation/update operations
 - Support pagination for pages with more than 10 blocks
 - Extract more block types in `getPageWithPreview` (code, image, embed, toggle, callout)
@@ -42,9 +41,9 @@
 
 ## TypeScript Issues
 
-| File            | Issue                                                                    | Count      |
-| --------------- | ------------------------------------------------------------------------ | ---------- |
-| `src/notion.ts` | Block data cast: `block[type as keyof typeof block] as ... \             | undefined` | 1 |
+| File            | Issue                                                                                                   | Count      |
+| --------------- | ------------------------------------------------------------------------------------------------------- | ---------- |
+| `src/notion.ts` | Block data cast: `block[type as keyof typeof block] as { rich_text?: ... } \                            | undefined` | 1 |
 
 The Notion SDK block type is a complex discriminated union; the cast is pragmatic. Non-`rich_text` blocks (images, embeds, code) yield empty content in the preview.
 
@@ -60,7 +59,7 @@ None found in source code.
 
 | Date       | Issue                                          | Resolution                                           |
 | ---------- | ---------------------------------------------- | ---------------------------------------------------- |
-| 2026-01-29 | Logger was optional, allowing silent API calls | Logger made mandatory in `createNotionClient` (v2.x) |
+| 2026-01-29 | Logger was optional, allowing silent API calls | Logger made mandatory in `createNotionClient`        |
 | 2026-01-29 | Coverage below 95% threshold                   | Improved to 100% via comprehensive test suite        |
 
 ---

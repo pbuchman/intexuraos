@@ -1,19 +1,19 @@
-# Web App -- Technical Debt
+# Web App — Technical Debt
 
-**Last Updated:** 2026-02-22
-**Analysis Run:** Autonomous documentation generation (service-scribe agent)
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 autonomous documentation refresh](../../documentation-runs.md)
 
 ---
 
 ## Summary
 
-| Category    | Count | Severity      |
-| ----------- | ----- | ------------- |
-| Code Smells | 6     | Medium/Low    |
-| Test Gaps   | N/A   | N/A (planned) |
-| Type Issues | 1     | Low           |
-| TODOs       | 0     | --            |
-| **Total**   | **7** | --            |
+| Category    | Count  | Severity      |
+| ----------- | ------ | ------------- |
+| Code Smells | 7      | Medium/Low    |
+| Test Gaps   | N/A    | N/A (exempt)  |
+| Type Issues | 0      | —             |
+| TODOs       | 0      | —             |
+| **Total**   | **7**  | —             |
 
 ---
 
@@ -21,11 +21,12 @@
 
 Based on code analysis and recent commits:
 
-- **Refactoring for improved coverage:** The web app is exempt from the 95% coverage threshold due to planned refactoring (see CLAUDE.md)
-- **PWA enhancements:** Enhanced offline capabilities and background sync
-- **Mobile optimization:** Continued improvements to mobile responsiveness across all pages
-- **Code task UX refinement:** Ongoing iteration on collapsible tool output, multi-status filtering, and agent-based flow
-- **Component extraction:** Large page files (InboxPage, CodeTaskViewPage, LinearIssuesPage) are candidates for decomposition into smaller, focused components
+- **Migrate remaining code tasks to v2 view:** `CodeTaskViewPage` (v1, route `/code-tasks/:id`) still exists alongside `CodeTaskViewPageV2` (route `/code-tasks/:id/view`). The intent is to retire v1 once v2 reaches full parity.
+- **Component extraction:** Large page files (`ResearchDetailPage.tsx`, `InboxPage.tsx`, `LinearIssuesPage.tsx`) are primary candidates for decomposition into smaller, focused components per the SRP guideline.
+- **PWA enhancements:** Enhanced offline capabilities and background sync for more content types.
+- **Mobile optimization:** Continued improvements to mobile responsiveness across all pages.
+- **Worker settings — per-worker default review type:** The default review worker type is currently a single global preference. Per-worker overrides may follow.
+- **Coverage for utils/ and services/:** The web app is exempt from the 95% coverage threshold, but `utils/` and `services/` files are expected to have coverage — gaps exist in some API service files.
 
 ---
 
@@ -37,159 +38,92 @@ None identified.
 
 ### Medium Priority
 
-| File                     | Issue                                     | Impact                                                                                                                                 |
-| ------------------------ | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `CodeTaskViewPage.tsx`   | 1021 lines with collapsible log viewer    | Task detail, collapsible tool output, agent-type banner, queue messaging, retry, and PR events timeline all in one file.               |
-| `InboxPage.tsx`          | 871 lines (exceeds SRP guideline)         | Handles UI, state management, real-time listeners, filtering, pagination, and deep linking. Consider extracting to smaller components. |
-| `LinearIssuesPage.tsx`   | 810 lines with inline sub-issue rendering | Board columns, Firestore listener, sub-issue tree, assignee badges, label display, and sync management all in one file.                |
-| `WorkerSettingsPage.tsx` | 637 lines with inline form components     | Worker add/edit forms, drag-and-drop reorder, connectivity testing, and autofill prevention all in one file.                           |
+| File                        | Issue                                               | Impact                                                                                                                                      |
+| --------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ResearchDetailPage.tsx`    | Largest file in the app; handles many concerns      | Report detail with markdown rendering, model attribution, cover image, export, retry, and favouriting all in one file. Clear SRP violation. |
+| `InboxPage.tsx`             | Exceeds SRP guideline                               | Handles UI, state management, real-time listeners, filtering, pagination, and deep linking. Candidate for component extraction.             |
+| `CodeTaskViewPage.tsx`      | Legacy v1 task view still maintained in parallel    | Two parallel implementations of the code task detail view; v1 must be kept in sync with v2 changes until retirement.                        |
 
 ### Low Priority
 
-| File                              | Issue                                                   | Impact                                                                                                   |
-| --------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `ResearchDetailPage.tsx`          | 1818 lines -- largest file in the app                   | Report detail with markdown rendering, model attribution, cover image, and export. Major SRP violation.  |
-| `HomePage.tsx`                    | 607 lines, large single component                       | Landing page is less critical, but extraction of sections could improve maintainability.                 |
-| `Sidebar.tsx`                     | 690 lines with filter URL building and matching logic   | Navigation, collapsible sections, notification filters, and scroll preservation all in one component.    |
+| File                               | Issue                                                                       | Impact                                                                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `LinearIssuesPage.tsx`             | Inline sub-issue rendering and board column logic                           | Board columns, Firestore listener, sub-issue tree, assignee badges, label display, and sync all in one file.                |
+| `WorkerSettingsPage.tsx`           | Inline form components for add/edit                                         | Worker add/edit forms, drag-and-drop reorder, connectivity testing, and autofill prevention in one file.                    |
+| `Sidebar.tsx`                      | Filter URL building and matching logic inline                               | Navigation, collapsible sections, notification filters, and scroll preservation all in one component.                       |
+| `WORKER_TYPE_METADATA` duplication | Defined independently in `CodeTaskNewPage.tsx` and `WorkerSettingsPage.tsx` | Same worker type name/description objects duplicated across two files. A comment marks it as premature abstraction for now. |
 
 ---
 
 ## Test Coverage Gaps
 
-**Note:** The web app is exempt from the 95% coverage threshold due to planned refactoring.
+**Note:** The web app is exempt from the 95% coverage threshold. However, `utils/` and `services/` files are expected to have coverage per CLAUDE.md.
 
-Tests are REQUIRED for:
-
-- `utils/` -- Utility functions
-- `services/` -- API client functions
-- `hooks/` -- Custom React hooks
-- Calculations and business logic
-
-Tests are OPTIONAL for:
-
-- UI components (`components/`)
-- Page components (`pages/`)
-
-### Current Test Files
-
-| File                                                       | Coverage | Notes                                              |
-| ---------------------------------------------------------- | -------- | -------------------------------------------------- |
-| `services/__tests__/conditionEvaluator.test.ts`            | Present  | Tests condition evaluation logic for action config |
-| `services/__tests__/variableInterpolator.test.ts`          | Present  | Tests variable interpolation in action config      |
-| `services/__tests__/apiClient.test.ts`                     | Present  | Tests API client error handling and request logic  |
-| `services/__tests__/chatService.test.ts`                   | Present  | Tests chat send, guest send, session persistence   |
-| `services/__tests__/codeAgentApi.test.ts`                  | Present  | Tests code agent API functions                     |
-| `services/__tests__/researchAgentApi.notionExport.test.ts` | Present  | Tests research Notion export API                   |
-| `hooks/__tests__/useActionConfig.test.ts`                  | Present  | Tests action config loading hook                   |
-| `hooks/__tests__/useFailedLinearIssues.test.ts`            | Present  | Tests Linear issues hook                           |
-| `hooks/__tests__/useCodeTasks.test.ts`                     | Present  | Tests code tasks hook (CRUD, polling, workers)     |
-| `hooks/__tests__/useVisualizations.test.ts`                | Present  | Tests visualization management hook                |
-| `components/__tests__/Chat/Chat.test.tsx`                  | Present  | Tests Chat component (send, guest, errors)         |
-| `components/__tests__/TaskConflictModal.test.tsx`          | Present  | Tests conflict modal rendering and actions         |
-| `utils/__tests__/markdownUtils.test.ts`                    | Present  | Tests markdown/HTML stripping utilities            |
-| `utils/__tests__/todoItemSort.test.ts`                     | Present  | Tests todo sorting logic                           |
-| `utils/__tests__/dateUtils.test.ts`                        | Present  | Tests calendar date utilities                      |
-
-### Missing Tests
-
-| Module                          | Missing                            | Priority       |
-| ------------------------------- | ---------------------------------- | -------------- |
-| `services/actionExecutor.ts`    | Execution flow tests               | Medium         |
-| `hooks/useGitHubPRSummaries.ts` | PR summary hook tests              | Medium         |
-| `hooks/useTaskView.ts`          | Task view state tests              | Medium         |
-| `hooks/useActionChanges.ts`     | Listener behavior tests            | Low            |
-| `hooks/useCommandChanges.ts`    | Listener behavior tests            | Low            |
-| `hooks/useWorkerSettings.ts`    | Worker settings hook tests         | Low            |
-| Most `pages/` components        | Integration tests                  | Low (optional) |
+| File/Module                              | Notes                                                            |
+| ---------------------------------------- | ---------------------------------------------------------------- |
+| `services/codeAgentApi.ts`               | Core API functions have tests; newer endpoints may lack coverage |
+| `services/workerSettingsApi.ts`          | Connectivity test flow not fully covered                         |
+| `utils/issueGroups.ts`                   | Active status grouping logic partially covered                   |
 
 ---
 
 ## TypeScript Issues
 
-| File                                            | Issue            | Count |
-| ----------------------------------------------- | ---------------- | ----- |
-| `components/__tests__/Chat/Chat.test.tsx`       | @ts-expect-error | 1     |
-
-The single `@ts-expect-error` is for assigning to `import.meta.env` in test setup, which is a valid test infrastructure need.
+None identified. No `any` types, `@ts-ignore`, or `@ts-expect-error` usages found in production source files.
 
 ---
 
 ## TODOs / FIXMEs
 
-None identified. The codebase is clean of TODO/FIXME/HACK comments.
+None found in production source files.
 
 ---
 
 ## SRP Violations
 
-| File                     | Lines | Issue                                                                         | Suggestion                                                                                                         |
-| ------------------------ | ----- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `ResearchDetailPage.tsx` | 1818  | Report detail, markdown, model attribution, cover image, export, share        | Extract `ResearchReport`, `ModelAttribution`, `CoverImageViewer`, and `ExportPanel` components                     |
-| `CodeTaskViewPage.tsx`   | 1021  | Task detail, collapsible tool log, agent-type banner, queue messaging, retry  | Extract `CollapsibleLogViewer`, `DesignTaskBanner`, `TaskActions`, and `TaskMessaging` into separate components    |
-| `TodosListPage.tsx`      | 1149  | Todo list, inline editing, item management, drag-and-drop, filtering          | Extract `TodoCard`, `TodoItemList`, and `TodoFilters` components                                                   |
-| `BookmarksListPage.tsx`  | 1134  | Bookmark list, search, OG preview, AI summary, archive, filtering             | Extract `BookmarkCard`, `BookmarkSearch`, and `BookmarkFilters` components                                         |
-| `InboxPage.tsx`          | 871   | Routing, state, listeners, filtering, pagination, modals                      | Extract filtering to `useInboxFilters` hook, pagination to `useInfiniteScroll` hook, modals to separate components |
-| `LinearIssuesPage.tsx`   | 810   | Board columns, Firestore listener, sub-issue tree, assignees, labels, sync    | Extract `IssueCard`, `IssueTree`, and `LinearBoardColumn` components                                               |
-| `Sidebar.tsx`            | 690   | Navigation, collapsible sections, filter URL logic, scroll preservation       | Extract `SidebarSection`, `NotificationFilterList`, and filter URL utils                                           |
-| `WorkerSettingsPage.tsx` | 637   | Add/edit forms, drag-drop reorder, connectivity testing, autofill prevention  | Extract `WorkerForm`, `WorkerCard`, and `WorkerList` components                                                    |
+| File                       | Issue                                                    | Suggestion                                                         |
+| -------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ResearchDetailPage.tsx`   | Handles full report lifecycle in a single file           | Extract `ResearchReport`, `LlmResultList`, `SharePanel` components |
+| `InboxPage.tsx`            | Commands + actions + real-time + filtering + deep link   | Extract `CommandList`, `ActionList`, `InboxFilters` components     |
+| `LinearIssuesPage.tsx`     | Board rendering + Firestore + sub-issue tree + sync      | Extract `LinearBoard`, `LinearIssueCard` components                |
 
 ---
 
 ## Code Duplicates
 
-| Pattern                     | Locations                                                        | Suggestion                                     |
-| --------------------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
-| API error handling          | All `pages/` components                                          | Create `useApiCall` hook for try/catch pattern |
-| Filter dropdown UI          | `InboxPage.tsx`, `CodeTasksPage.tsx`, `LinearIssuesPage.tsx`     | Extract to `FilterDropdown.tsx` component      |
-| Delete confirmation dialogs | `CodeTasksPage`, `DataSourcesListPage`, `TodosListPage`, etc.    | Extract to shared `ConfirmDeleteDialog`        |
-| Modal close handlers        | All modal components                                             | Create `useModal` hook for close logic         |
-| Loading spinner             | Repeated in most page components                                 | Extract `PageLoader` component                 |
-| Dark mode classes           | `dark:bg-*` / `dark:text-*` repeated across all pages/components | Consider shared theme utility classes          |
-| Status badge styling        | `CodeTasksPage.tsx`, `CodeTaskViewPage.tsx`                      | Extract `StatusBadge` component                |
+| Pattern                        | Locations                                              | Suggestion                                                                      |
+| ------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `WORKER_TYPE_METADATA` record  | `CodeTaskNewPage.tsx`, `WorkerSettingsPage.tsx`        | Extract to a shared util or `common-core` once abstraction is clearly warranted |
+| Spinner loading pattern        | Multiple pages use identical `animate-spin` markup     | Partially consolidated in `ui/` components; extend to remaining pages           |
 
 ---
 
 ## Deprecations
 
-None identified.
+| Item                    | Location                          | Replacement          | Deadline                          |
+| ----------------------- | --------------------------------- | -------------------- | --------------------------------- |
+| `CodeTaskViewPage` (v1) | `src/pages/CodeTaskViewPage.tsx`  | `CodeTaskViewPageV2` | TBD — after v2 parity confirmed   |
 
 ---
 
 ## Resolved Issues
 
-| Date       | Issue                                                     | Resolution                                                      |
-| ---------- | --------------------------------------------------------- | --------------------------------------------------------------- |
-| 2026-02-22 | Tool output lines not collapsing correctly in log viewer  | Fixed isBodyLine single-space timestamp detection (`1ee7e8c6`)  |
-| 2026-02-22 | Worker reorder buttons not working in settings UI         | Fixed button handlers in WorkerSettingsPage (`fbe7c944`)        |
-| 2026-02-21 | Delete confirmations inconsistent across pages            | Standardized all delete actions with confirmation (`c9acdce3`)  |
-| 2026-02-21 | Filter state and sidebar collapse lost on page refresh    | Persisted both to localStorage (`2e3ae30c`)                     |
-| 2026-02-21 | Browser autofill on worker secret fields                  | Added autoComplete="new-password" to secret inputs (`3b081686`) |
-| 2026-02-20 | Null assignee crashes LinearIssuesPage                    | Added null guards for assignee in board display (`19442f43`)    |
-| 2026-02-20 | Assignee not displayed on Linear board cards              | Added assignee name with emerald badge (`6df58b52`)             |
-| 2026-02-19 | PR event comment bodies showed raw HTML                   | Added rehype-raw rendering (`2a187f90`)                         |
-| 2026-02-19 | PR event page loaded all events at once (expensive)       | Split into lazy-loaded summaries + details (`e8bbacd7`)         |
-| 2026-02-18 | No way to navigate from design task to impl task          | Added DesignTaskBanner with link (`0e07e938`)                   |
-| 2026-02-17 | Code task detail had dead code from migration             | Cleaned up CodeTaskViewPage migration (`5fa51f75`)              |
-| 2026-02-17 | Log duplication on Firestore listener resume              | Added cancellation guard to async effects (`a59e194b`)          |
-| 2026-02-16 | Messages interrupted running tasks                        | Added queue-based messaging without interrupt (`935d3210`)      |
-| 2026-02-14 | Linear sub-issues not visible in board                    | Added parent-child indented rendering (`08dbaf84`)              |
-| 2026-02-17 | xterm.js terminal removed; replaced with custom LogStream | Deleted TerminalLogViewer.tsx and xterm.js deps (`5fa51f75`)    |
-| 2026-02-08 | Text log viewer lacked ANSI color support                 | Replaced with xterm.js terminal (`340971a8`)                    |
-| 2026-02-07 | RefreshIndicator caused layout shifts                     | Removed; replaced with inline RefreshCw (`1bc3c44f`)            |
-| 2026-02-07 | UI inconsistencies in Linear issues and code tasks        | Fixed in commit `c6ed05c3`                                      |
-| 2026-02-06 | Missing redirect when dev environment is ready            | Fixed in INT-511 (`65c26987`)                                   |
-| 2026-02-05 | Firestore Timestamp bug in PR events                      | Fixed in commit `a31578d7`                                      |
-| 2026-02-04 | Invalid Date display in log viewer                        | Fixed in commit `c2dd8db2`                                      |
-| 2026-02-04 | Code task 409 conflict not handled in UI                  | Added conflict modal in INT-498 (`a29e301b`)                    |
-| 2026-02-02 | LinearIssueCombobox crash when filtering issues           | Moved selector to modal (`LinearIssueSelectorModal`)            |
-| 2025-01-14 | System health page in UI                                  | Removed in INT-270 (commit `31ab6d2f`)                          |
-| 2024-12-20 | Inbox showing old actions after initial load              | Fixed in commit `089fbe51`                                      |
-| 2024-12-XX | Calendar action failures not displayed                    | Fixed in INT-144                                                |
+| Date       | Issue                                                                             | Resolution                                                  |
+| ---------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 2026-03-13 | `startedAt` could be absent, causing incorrect sort order in code tasks list      | Added `createdAt` fallback for started-time sort            |
+| 2026-03-13 | Worker Settings UI had inconsistent spacing and no loading state on test button   | Improved spacing and added in-button spinner                |
+| 2026-03-12 | PR Events page used processed event type names instead of raw GitHub names        | Switched to raw GitHub event names in compact inline layout |
+| 2026-02-22 | Collapsible tool output: `isBodyLine` stripped single-space timestamp incorrectly | Fixed timestamp stripping logic                             |
+| 2026-02-22 | Worker reorder buttons in settings were non-functional                            | Fixed reorder button click handling                         |
+| 2026-02-21 | Filter and sidebar collapse state lost on page refresh                            | Persisted to localStorage                                   |
+| 2026-02-21 | Browser autofill on worker secret fields (INT-501)                                | Added `autoComplete="new-password"` to secret inputs        |
+| 2026-02-20 | Null assignee in `LinearIssuesPage` caused runtime errors                         | Added null guards on assignee access                        |
+| 2026-02-20 | `any` type in `types/index.ts`                                                    | Replaced with correct typed definition                      |
 
 ---
 
 ## Related
 
-- [Features](features.md) -- User-facing documentation
-- [Technical](technical.md) -- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

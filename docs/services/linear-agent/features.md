@@ -46,7 +46,7 @@ The Linear Agent keeps a local copy of your entire board, updated in real time. 
 
 The dashboard groups your issues into columns that mirror how work actually flows: Backlog, Todo, In Progress, In Review, To Test, and Done — with recently completed items visible for seven days before they archive. Within each column, issues sort by most recently updated, so the work getting attention right now floats to the top. Parent issues carry their children in a nested list, keeping related work grouped together.
 
-**Example:** Your team moves five issues into "In Review" during a morning code review session. You open the dashboard ten minutes later and every one of those issues already sits in the Work column. You did not refresh. You did not wait. The board was current before you arrived.
+**Example:** Your team moves five issues into "In Review" during a morning code review session. You open the dashboard ten minutes later and every one of those issues already sits in the In Review column. You did not refresh. You did not wait. The board was current before you arrived.
 
 ### See Issue Details Without Leaving
 
@@ -108,6 +108,7 @@ Connect your Linear account through the settings page — you will need your API
 - **Title generation may miss nuance** — auto-generated titles capture the gist but may not reflect the exact framing you would choose. The agent retries once on failure and reports errors rather than degrading silently.
 - **Seven-day closed window** — completed and cancelled issues appear in the Closed column for seven days, then drop off the dashboard. They still exist in Linear.
 - **One team per connection** — each connected account syncs with a single Linear team. Multi-team setups require separate connections.
+- **Label passthrough gap** — the `POST /internal/issues` endpoint accepts a `labels` field but does not forward label IDs to Linear on creation. Labels must be set via the separate metadata endpoint.
 
 ---
 
