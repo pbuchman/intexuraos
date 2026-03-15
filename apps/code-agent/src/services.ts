@@ -66,7 +66,6 @@ import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
 import { createReviewTask } from './domain/usecases/createReviewTask.js';
 import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
 import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
-import { parseOwnerRepo } from './domain/utils/parseOwnerRepo.js';
 import { fetchGitHubToken } from './domain/utils/gitHubTokenResolver.js';
 import type { GitHubWebhookAuditEventRepository } from './domain/repositories/gitHubWebhookAuditEventRepository.js';
 import { createFirestoreGitHubWebhookAuditEventRepository } from './infra/firestore/gitHubWebhookAuditEventRepository.js';
@@ -446,35 +445,6 @@ export function initServices(config: ServiceConfig): void {
       },
       request,
     ),
-    postTriageComment: async (senderLogin, repository, prNumber, body) => {
-      const userResult = await userServiceClient.resolveGitHubUsername(senderLogin);
-      if (!userResult.ok) {
-        return { ok: false, error: { code: 'USER_NOT_FOUND', message: `Failed to resolve user: ${senderLogin}` } };
-      }
-      const resolvedUser = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
-      if (resolvedUser === null) {
-        return { ok: false, error: { code: 'USER_NOT_FOUND', message: `No linked account for: ${senderLogin}` } };
-      }
-      const tokenResult = await userServiceClient.getOAuthToken(resolvedUser.userId, 'github');
-      if (!tokenResult.ok) {
-        return { ok: false, error: { code: 'TOKEN_NOT_AVAILABLE', message: `OAuth token unavailable for: ${resolvedUser.userId}` } };
-      }
-      const parsedRepository = parseOwnerRepo(repository);
-      if (parsedRepository === null) {
-        return { ok: false, error: { code: 'INVALID_REPO', message: `Invalid repository: ${repository}` } };
-      }
-      const commentResult = await gitHubPRClient.postPRComment(
-        tokenResult.value.accessToken,
-        parsedRepository.owner,
-        parsedRepository.repo,
-        prNumber,
-        body
-      ); // @allow-result-access -- narrowed by !tokenResult.ok
-      if (!commentResult.ok) {
-        return { ok: false, error: { code: commentResult.error.code, message: commentResult.error.message } };
-      }
-      return { ok: true, value: { commentId: commentResult.value.commentId } }; // @allow-result-access -- narrowed by !commentResult.ok
-    },
     automationLog,
     resolveTokenUserId: async (senderLogin) => {
       const userResult = await userServiceClient.resolveGitHubUsername(senderLogin);
