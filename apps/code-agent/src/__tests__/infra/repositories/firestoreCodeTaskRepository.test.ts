@@ -248,6 +248,92 @@ describe('firestoreCodeTaskRepository', () => {
       expect(second.ok).toBe(true);
     });
 
+    it('Layer 2: allows same prompt when previous task was cancelled', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Cancel the first task (simulates review_replaced flow)
+      await repo.update(first.value.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Replaced by fresh review' },
+      });
+
+      // Same prompt within 5 minutes — should succeed because first is cancelled
+      const second = await repo.create(input);
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: allows same prompt when previous task failed', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Fail the first task
+      await repo.update(first.value.id, {
+        status: 'failed',
+        completedAt: new Date(),
+        error: { code: 'worker_error', message: 'Container crashed' },
+      });
+
+      // Same prompt within 5 minutes — should succeed because first failed
+      const second = await repo.create(input);
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: allows same prompt when previous task was interrupted', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      await repo.update(first.value.id, {
+        status: 'interrupted',
+        completedAt: new Date(),
+      });
+
+      const second = await repo.create(input);
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: still blocks same prompt when previous task is active (dispatched)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Task is dispatched (active) — should still block
+      await repo.update(first.value.id, { status: 'dispatched' });
+
+      const second = await repo.create(input);
+      expect(second.ok).toBe(false);
+      if (second.ok) return;
+      expect(second.error.code).toBe('DUPLICATE_PROMPT');
+    });
+
     it('Layer 3: rejects when active task exists for Linear issue with ACTIVE_TASK_EXISTS', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
