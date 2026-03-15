@@ -1,7 +1,7 @@
-# Orchestrator - Technical Debt
+# Orchestrator — Technical Debt
 
-**Last Updated:** 2026-03-07
-**Analysis Run:** v3.1.0 documentation update (multi-model support, container adoption, forensics mode)
+**Last Updated:** 2026-03-15
+**Analysis Run:** v3.3.0 documentation update (review agent, deep validation, kimi worker, reliability improvements)
 
 ---
 
@@ -21,7 +21,7 @@
 
 ### 1. Default repository hardcoded
 
-**File:** `workers/orchestrator/src/services/task-dispatcher.ts:593`
+**File:** `workers/orchestrator/src/services/task-dispatcher.ts`
 
 ```typescript
 private getDefaultRepository(_request: CreateTaskRequest): string {
@@ -38,7 +38,7 @@ private getDefaultRepository(_request: CreateTaskRequest): string {
 
 ### 2. Graceful shutdown not implemented
 
-**File:** `workers/orchestrator/src/routes.ts:305`
+**File:** `workers/orchestrator/src/routes.ts`
 
 ```typescript
 app.post('/admin/shutdown', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
@@ -127,9 +127,9 @@ The `retriedFrom` field exists on tasks, but retry logic lives entirely in code-
 
 **Severity:** Medium
 
-The `cleanupStaleWorktrees()` function exists but is not wired into the main loop. Worktrees accumulate until manually cleaned or the stale threshold (24h) is exceeded. Completed tasks leave worktrees behind until the next manual cleanup or restart.
+Worktrees accumulate until manually cleaned or the stale threshold is exceeded. Completed tasks leave worktrees behind until the next periodic cleanup or restart.
 
-**Recommended fix:** Call `cleanupStaleWorktrees()` in `handleTaskCompletion()` or schedule it as a periodic background job.
+**Recommended fix:** Call worktree cleanup in `handleTaskCompletion()` or tighten the periodic cleanup interval for completed task worktrees.
 
 ---
 
@@ -187,6 +187,22 @@ Expose operational metrics (extends `TurnMetricsCollector` post-task data):
 2. Real-time container resource usage trends during execution
 3. Token refresh failure rates
 4. Webhook delivery success rates
+
+---
+
+## Recent Improvements (v3.3.0)
+
+The following items improved reliability and observability since v3.2.0:
+
+- **Docker health gate** — Task submission now checks Docker daemon availability before accepting work, preventing tasks from failing during container creation when Docker is unresponsive
+- **Container creation timeout** — 2-minute timeout prevents hung dispatches from occupying capacity indefinitely
+- **Fatal exit code handling** — Exit codes 137 (OOM kill) and 139 (segfault) skip Gemini verification and trigger immediate retries
+- **Worktree mutex** — All git worktree operations serialized via `async-mutex` to prevent concurrent index corruption
+- **Resilient repo startup** — Repository manager sanitizes credentials from remote URLs and gracefully degrades when fetch fails
+- **Periodic stale cleanup** — Orphaned containers are automatically removed instead of requiring manual cleanup
+- **Docker exec stream leak fixed** — Resolved a stream leak that caused container exits to go undetected until the 2-hour timeout
+- **Resume result preservation** — `lastSuccessResult` field ensures resumed tasks do not lose their previous successful result
+- **Pending resume recovery** — Startup recovery can now detect and restart accepted resumes that were interrupted by a crash
 
 ---
 

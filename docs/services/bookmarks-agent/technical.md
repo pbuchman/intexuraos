@@ -2,7 +2,7 @@
 
 ## Overview
 
-Bookmarks-agent provides CRUD operations for user bookmarks with automatic OpenGraph metadata fetching via web-agent and AI summarization with WhatsApp delivery. Runs on Cloud Run with Fastify. Uses a decoupled event-driven architecture where bookmark enrichment and summarization are processed asynchronously via Pub/Sub. Current version: 3.1.0.
+Bookmarks-agent provides CRUD operations for user bookmarks with automatic OpenGraph metadata fetching via web-agent and AI summarization with WhatsApp delivery. Runs on Cloud Run with Fastify. Uses a decoupled event-driven architecture where bookmark enrichment and summarization are processed asynchronously via Pub/Sub.
 
 ## Architecture
 
@@ -104,6 +104,7 @@ sequenceDiagram
 
 | Commit     | Description                                            | Date       |
 | ---------- | ------------------------------------------------------ | ---------- |
+| `b6524aaa` | Write tests for v8-ignore blocks (INT-786)             | 2026-03-13 |
 | `b3f34d85` | Release v3.1.0                                         | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                         | 2026-02-19 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability        | 2026-02-16 |

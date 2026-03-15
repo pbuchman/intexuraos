@@ -176,9 +176,9 @@ interface SummarizePageResponse {
 
 - `X-Internal-Auth` header with valid internal token
 - HTTP/HTTPS URLs only (no ftp://, file://, etc.)
-- For summaries: `userId` is required; LLM resolution: user's own key, then platform Gemini 2.5 Flash, then platform ZAI
+- For summaries: `userId` is required; LLM resolution: user's own key, then platform Gemini 2.5 Flash
 
-**Note on `API_ERROR` for summaries:** This error only surfaces if the user has no API key AND neither `INTEXURAOS_GEMINI_APP_API_KEY` nor `INTEXURAOS_ZAI_APP_API_KEY` are configured on the platform.
+**Note on `API_ERROR` for summaries:** This error only surfaces if the user has no API key AND `INTEXURAOS_GEMINI_APP_API_KEY` is not configured on the platform.
 
 ## Usage Patterns
 
@@ -240,9 +240,8 @@ interface SummarizePageResponse {
 | app-settings-service | LLM pricing context at startup        | Service fails start |
 | Crawl4AI             | Fetch page content                    | Return FETCH_FAILED |
 | User's LLM           | Generate summary (primary)            | Fall back to Gemini |
-| Platform Gemini      | Summary fallback (no user key)        | Fall back to ZAI    |
-| Platform ZAI         | Summary secondary fallback            | Return API_ERROR    |
+| Platform Gemini      | Summary fallback (no user key)        | Return API_ERROR    |
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-15 (v3.3.0 - removed ZAI provider; Chinese LLMs now via Alibaba Cloud Model Studio)

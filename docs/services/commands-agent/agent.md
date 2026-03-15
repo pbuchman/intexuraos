@@ -176,7 +176,7 @@ interface Command {
 | **Delete Restriction**  | Can only delete commands with status: received, pending_classification, or failed |
 | **Archive Restriction** | Can only archive commands with status: classified                                 |
 | **Source Types**        | Create endpoint only supports 'pwa-shared' source; WhatsApp uses Pub/Sub          |
-| **Classification**      | Automatic via Gemini 2.5 Flash (default), GLM-4.7, or GLM-4.7-Flash               |
+| **Classification**      | Automatic via Gemini 2.5 Flash                                                    |
 | **Idempotency**         | Commands keyed by {sourceType}:{externalId}; duplicates return existing command   |
 | **Title Limit**         | Classification titles are capped at 200 characters by Zod schema validation       |
 

@@ -278,7 +278,7 @@ sequenceDiagram
 
 | Service                                     | Purpose                |
 | ------------------------------------------- | ---------------------- |
-| Gemini 2.5 Flash / GLM-4.7 / GLM-4.7-Flash  | Command classification |
+| Gemini 2.5 Flash                            | Command classification |
 
 ## Configuration
 
@@ -293,8 +293,7 @@ sequenceDiagram
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL (pricing data fetched at startup)   |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                                   |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                          |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform-level Zai fallback API key for classification            |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key (primary fallback)         |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key for classification         |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                     |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name for Sentry (defaults to "development")           |
 
@@ -308,7 +307,7 @@ sequenceDiagram
 
 **Idempotency key format** — `{sourceType}:{externalId}` must be unique. WhatsApp message IDs can be reused across different phone numbers.
 
-**Default classification model** — Gemini 2.5 Flash is the default (switched from GLM-4.7-Flash due to latency). GLM-4.7 and GLM-4.7-Flash remain as supported alternatives.
+**Default classification model** — Gemini 2.5 Flash is the sole classification model (GLM-4.7 models removed in v3.3.0).
 
 **Pub/Sub push authentication** — Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls.
 
@@ -369,20 +368,24 @@ packages/llm-prompts/src/
 
 ## Recent Changes
 
-| Commit     | Description                                                     | Date       |
-| ---------- | --------------------------------------------------------------- | ---------- |
-| `cc52e50d` | Increase classification title limit to 200 chars                | 2026-03-07 |
-| `99febe66` | Wire GitHub OAuth integration and update cross-service mocks    | 2026-03-02 |
-| `35abc346` | Persist prompt version with command classification              | 2026-02-19 |
-| `6063175b` | Dev-mode log formatting via createLogStream()                   | 2026-02-16 |
-| `a52a6bbc` | Dash0 OpenTelemetry integration                                 | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention            | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback    | 2026-02-15 |
-| `d5fbb354` | Fix start:local to use tsx instead of node experimental types   | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform Zai fallback           | 2026-02-08 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement                         | 2026-02-01 |
-| `9723dc24` | Standardize DELETE endpoints to consistent response contract    | 2026-02-01 |
-| `02728b75` | Add 'code' type to classification schema                        | 2026-01-25 |
-| `1faa1d3b` | Consolidate user service client architecture                    | 2026-01-25 |
+| Commit     | Description                                                       | Date       |
+| ---------- | ----------------------------------------------------------------- | ---------- |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)  | 2026-03-12 |
+| `e348b66e` | Fix silent dispatch failures and nested transaction (INT-810/811) | 2026-03-10 |
+| `bc4138e7` | Replace v8-ignore blocks with real tests (INT-790)                | 2026-03-13 |
+| `34fde5ee` | Add tests for commandsRoutes.ts owner auth + status (INT-867)     | 2026-03-15 |
+| `cc52e50d` | Increase classification title limit to 200 chars                  | 2026-03-07 |
+| `99febe66` | Wire GitHub OAuth integration and update cross-service mocks      | 2026-03-02 |
+| `35abc346` | Persist prompt version with command classification                | 2026-02-19 |
+| `6063175b` | Dev-mode log formatting via createLogStream()                     | 2026-02-16 |
+| `a52a6bbc` | Dash0 OpenTelemetry integration                                   | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention              | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback      | 2026-02-15 |
+| `d5fbb354` | Fix start:local to use tsx instead of node experimental types     | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform fallback                 | 2026-02-08 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement                           | 2026-02-01 |
+| `9723dc24` | Standardize DELETE endpoints to consistent response contract      | 2026-02-01 |
+| `02728b75` | Add 'code' type to classification schema                          | 2026-01-25 |
+| `1faa1d3b` | Consolidate user service client architecture                      | 2026-01-25 |
 
 **Last updated:** 2026-03-07

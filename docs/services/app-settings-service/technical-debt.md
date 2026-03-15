@@ -1,6 +1,6 @@
 # App Settings Service -- Technical Debt
 
-**Last Updated:** 2026-02-22
+**Last Updated:** 2026-03-15
 **Analysis Run:** [2026-02-22 entry](#)
 
 ---
@@ -35,9 +35,9 @@
 | -------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------- |
 | `publicRoutes.ts`, `internalRoutes.ts`, `index.ts` | Duplicated parallel-provider-fetch logic    | Adding a new provider requires changes in 3 locations |
 
-**Details:** The pattern of fetching all 5 providers in parallel (`Promise.all([getByProvider(Google), getByProvider(OpenAI), ...])`) and checking each for null is repeated verbatim in three places: the public pricing route (lines 77-135), the internal pricing route (lines 73-110), and the startup validator (lines 38-89).
+**Details:** The pattern of fetching all 4 providers in parallel (`Promise.all([getByProvider(Google), getByProvider(OpenAI), ...])`) and checking each for null is repeated verbatim in three places: the public pricing route, the internal pricing route, and the startup validator.
 
-**Resolution path:** Extract a `fetchAllProviderPricing(repo: PricingRepository)` utility function that returns `{ google, openai, anthropic, perplexity, zai }` or throws with a list of missing providers.
+**Resolution path:** Extract a `fetchAllProviderPricing(repo: PricingRepository)` utility function that returns `{ google, openai, anthropic, perplexity }` or throws with a list of missing providers.
 
 ---
 

@@ -285,7 +285,7 @@ Todos created via `/internal/todos` with a `description` trigger automatic AI ex
 3. LLM extracts items (Zod-validated via `TodoExtractionResponseSchema`)
 4. Items added to todo -> status = `pending`
 
-**Model chain:** Gemini 2.5 Flash (primary), GLM-4.7 (fallback), GLM-4.7-Flash (fallback)
+**Model chain:** Gemini 2.5 Flash (with platform Gemini fallback)
 
 **Fallback behaviors:**
 

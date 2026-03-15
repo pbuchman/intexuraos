@@ -2,7 +2,7 @@
 
 ## Overview
 
-Web-agent extracts web content and generates AI summaries. It uses Crawl4AI for headless browser crawling, Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash, then ZAI fallback) for summarization with automatic response repair.
+Web-agent extracts web content and generates AI summaries. It uses Crawl4AI for headless browser crawling, Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash fallback) for summarization with automatic response repair.
 
 Runs on Cloud Run with auto-scaling (0-1 instances). Port 8127 on local/dev. Distributed tracing via Dash0 OpenTelemetry (transparent preload).
 
@@ -27,7 +27,7 @@ graph TB
     subgraph "External"
         C4AI[Crawl4AI API]
         UserLLM[User's LLM Provider]
-        PlatformLLM[Platform Gemini/ZAI]
+        PlatformLLM[Platform Gemini]
         Target[Target URLs]
     end
 
@@ -82,7 +82,7 @@ sequenceDiagram
     WebAgent->>Crawl4AI: Crawl URL (browser strategy)
     Crawl4AI-->>WebAgent: markdown content
     WebAgent->>UserService: getLlmClient(userId)
-    UserService-->>WebAgent: LLM client (user key -> Gemini fallback -> ZAI fallback)
+    UserService-->>WebAgent: LLM client (user key -> Gemini fallback)
     WebAgent->>LLM: Generate summary
     LLM-->>WebAgent: "Here is the summary: {...}"
     WebAgent->>WebAgent: parseSummaryResponse()
@@ -97,6 +97,8 @@ sequenceDiagram
 
 | Commit     | Description                                                  | Date       |
 | ---------- | ------------------------------------------------------------ | ---------- |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)             | 2026-03-12 |
+| `a6afbb28` | Write tests for v8-ignore blocks (INT-798)                   | 2026-03-09 |
 | `b3f34d85` | Release v3.1.0                                               | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                               | 2026-02-19 |
 | `884bc168` | Add semver `version` field to PromptBuilder (1.0.0)          | 2026-02-19 |
@@ -104,7 +106,7 @@ sequenceDiagram
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration (transparent preload)    | 2026-02-16 |
 | `e60eafc1` | Rename `CRAWL4AI_API_KEY` to `CRAWL4AI_APP_API_KEY`          | 2026-02-15 |
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback | 2026-02-15 |
-| `0f69a74b` | Add platform ZAI fallback for users without API keys         | 2026-02-09 |
+| `0f69a74b` | Add platform fallback for users without API keys             | 2026-02-09 |
 | `3a5d9380` | INT-533 Add content focus instructions to summary prompt     | 2026-02-07 |
 | `d105688f` | Add RATE_LIMITED error code for Crawl4AI 429 responses       | 2026-01-30 |
 | `c3198407` | Fix response contract violations (reply.ok/reply.fail)       | 2026-01-30 |
@@ -314,7 +316,7 @@ Fetches and parses OpenGraph metadata.
 - `createUserServiceClient()` -- Factory for configured client
 - `UserServiceClient` interface with `getLlmClient()` method
 - Automatic error handling and result types
-- Platform Gemini 2.5 Flash, then ZAI fallback when user has no API key
+- Platform Gemini 2.5 Flash fallback when user has no API key
 
 ## Configuration
 
@@ -326,7 +328,6 @@ Fetches and parses OpenGraph metadata.
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup                     | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Error tracking                     | Yes      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback | Optional |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | Platform ZAI secondary fallback    | Optional |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | Dash0 OpenTelemetry endpoint       | Optional |
 
 All five required vars are validated at startup via `validateRequiredEnv()`. Note that `INTEXURAOS_SENTRY_DSN` is validated separately with a direct check. Optional fallback keys are passed to `createUserServiceClient()` and are no-ops when unset.
@@ -335,7 +336,7 @@ All five required vars are validated at startup via `validateRequiredEnv()`. Not
 
 **Crawl vs Summary separation** -- PageContentFetcher only crawls; LlmSummarizer handles AI. This allows using user's LLM keys rather than shared infrastructure.
 
-**Platform fallback chain** -- When a user has no API key for their chosen provider, `getLlmClient()` falls back to Gemini 2.5 Flash (platform key), then to ZAI (platform key). `API_ERROR` with "No API key" only surfaces if both platform keys are also unset.
+**Platform fallback chain** -- When a user has no API key for their chosen provider, `getLlmClient()` falls back to Gemini 2.5 Flash (platform key). `API_ERROR` with "No API key" only surfaces if the platform key is also unset.
 
 **Repair mechanism** -- If LLM returns JSON, parser detects it and triggers repair prompt automatically. Only retries once.
 

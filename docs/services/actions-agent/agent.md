@@ -278,7 +278,7 @@ type ResourceStatus =
 
 interface CodeActionPayload {
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+  workerType: 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
   linearIssueId?: string;
   linearIssueTitle?: string;
   approvalEventId?: string;

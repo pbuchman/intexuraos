@@ -4,7 +4,7 @@ The cost transparency layer for IntexuraOS — know exactly what every AI intera
 
 ## The Problem
 
-AI services bill by the token, and every provider prices differently. Google charges one rate, OpenAI another, Anthropic a third. Some models charge for cache reads, others for web searches, others for image generation. Multiply that by five providers and dozens of models, and the true cost of any given interaction becomes nearly impossible to calculate on your own.
+AI services bill by the token, and every provider prices differently. Google charges one rate, OpenAI another, Anthropic a third. Some models charge for cache reads, others for web searches, others for image generation. Multiply that by four providers and dozens of models, and the true cost of any given interaction becomes nearly impossible to calculate on your own.
 
 Without visibility, usage creeps upward unnoticed. A month passes and the bill arrives with no explanation of which models drove the cost, which workflows consumed the most tokens, or how spending shifted week over week. You are left guessing.
 
@@ -12,7 +12,7 @@ Without visibility, usage creeps upward unnoticed. A month passes and the bill a
 
 Built for anyone managing AI costs across multiple providers and workflows.
 
-You open the dashboard before kicking off a batch of research tasks. The pricing page shows current rates for all five providers — Google, OpenAI, Anthropic, Perplexity, and Zai — broken down by model, with input and output token costs displayed per million tokens. Specialty costs are listed too: cache read multipliers, web search fees, grounding charges, image pricing. You compare two models side by side and pick the one that fits your budget.
+You open the dashboard before kicking off a batch of research tasks. The pricing page shows current rates for all four providers — Google, OpenAI, Anthropic, and Perplexity — broken down by model, with input and output token costs displayed per million tokens. Specialty costs are listed too: cache read multipliers, web search fees, grounding charges, image pricing. You compare two models side by side and pick the one that fits your budget.
 
 A week later, you check your usage. The system shows your total spend, total calls, and total tokens consumed — input and output counted separately. The breakdown splits by month, by model, and by call type. Each segment includes its dollar cost, call count, and percentage of your total. You adjust the time window from the default ninety days down to thirty to focus on recent activity.
 

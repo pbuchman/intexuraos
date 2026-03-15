@@ -10,7 +10,7 @@
 
 A working integration that:
 
-- Fetches current LLM pricing for all 5 providers
+- Fetches current LLM pricing for all 4 providers
 - Queries your personal usage costs with time-range filtering
 - Calculates estimated costs before making an LLM call
 
@@ -89,8 +89,7 @@ curl -s http://localhost:8122/settings/pricing \
     },
     "openai": { "...": "..." },
     "anthropic": { "...": "..." },
-    "perplexity": { "...": "..." },
-    "zai": { "...": "..." }
+    "perplexity": { "...": "..." }
   }
 }
 ```
@@ -108,7 +107,7 @@ curl -s http://localhost:8122/internal/settings/pricing \
 
 Returns the same pricing structure as the public endpoint.
 
-**Checkpoint:** You should see pricing data for all 5 providers with at least one model each.
+**Checkpoint:** You should see pricing data for all 4 providers with at least one model each.
 
 ---
 
