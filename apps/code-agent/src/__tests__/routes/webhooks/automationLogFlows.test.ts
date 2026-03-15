@@ -431,9 +431,10 @@ describe('Automation log integration flows', () => {
 
   describe('LLM fail on pull_request event (flow 6)', () => {
     it('records webhook_received then triage_failed with fallback skip', async () => {
-      mockEvaluateEvent.mockResolvedValueOnce(
-        err({ code: 'LLM_FAILED' as const, message: 'Model unavailable' }),
-      );
+      // pull_request events retry once on LLM failure, so mock both attempts
+      mockEvaluateEvent
+        .mockResolvedValueOnce(err({ code: 'LLM_FAILED' as const, message: 'Model unavailable' }))
+        .mockResolvedValueOnce(err({ code: 'LLM_FAILED' as const, message: 'Model unavailable' }));
 
       const { statusCode } = await sendWebhook('pull_request', createPullRequestPayload());
       expect(statusCode).toBe(200);
