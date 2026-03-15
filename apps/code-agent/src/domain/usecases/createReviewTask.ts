@@ -278,7 +278,6 @@ export async function createReviewTask(
       if (linearResult.ok) {
         linearIssueId = linearResult.value; // @allow-result-access -- narrowed by linearResult.ok
       } else {
-        /* v8 ignore start -- async-timing: fire-and-forget .catch() callback only runs on rejected promise timing @preserve */
         deps.automationLog.record(
           { repository, prNumber },
           { type: 'linear_issue_failed', error: linearResult.error },
@@ -286,11 +285,9 @@ export async function createReviewTask(
         ).catch((logError: unknown) => {
           logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
         });
-        /* v8 ignore stop @preserve */
       }
     } catch (error: unknown) {
       logger.warn({ error, prNumber }, 'Unexpected error resolving Linear issue for review task');
-      /* v8 ignore start -- async-timing: fire-and-forget .catch() callback only runs on rejected promise timing @preserve */
       deps.automationLog.record(
         { repository, prNumber },
         { type: 'linear_issue_failed', error: getErrorMessage(error, 'Unknown error') },
@@ -298,7 +295,6 @@ export async function createReviewTask(
       ).catch((logError: unknown) => {
         logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
       });
-      /* v8 ignore stop @preserve */
     }
   }
 

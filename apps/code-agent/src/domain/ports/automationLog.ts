@@ -67,7 +67,9 @@ export type AutomationEvent =
 
   // Phase 4b: Linear issue linking failure (best-effort, non-blocking)
   | {
+      /** Recorded when Linear issue creation or linking fails; non-blocking fallback */
       type: 'linear_issue_failed';
+      /** Human-readable error describing why Linear issue creation failed */
       error: string;
     }
 
