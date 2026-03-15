@@ -16,27 +16,6 @@ function extractId(payload: unknown, key: string): string {
   return typeof id === 'string' || typeof id === 'number' ? String(id) : 'unknown';
 }
 
-function renderTriageAndEnforcementInstructions(repository: string): string {
-  return `Read the full review body and extract EVERY finding/issue/suggestion
-   For EACH finding, decide: FIX or SKIP
-      - FIX: Clear actionable feedback, code change with clear intent, specific bug or gap
-      - SKIP: Discussion/question, intentional design disagreement, out of PR scope, pure status report
-   Post a response comment with a triage table:
-      - One row per finding
-      - Columns: # | Finding | Verdict (FIX/SKIP) | Reasoning | Action
-      - For SKIP items: explain why in the Reasoning column
-      - For FIX items: write "Will fix" in the Action column
-
-   ⚠ MANDATORY — DO NOT STOP AFTER POSTING THE TABLE ⚠
-   IMMEDIATELY after posting the triage comment, implement ALL fixes
-      marked as FIX in the table. This is not optional. Do not end your turn
-      until every FIX item has been implemented, committed, and pushed.
-      Skipping implementation after posting the table is a contract violation.
-   After all fixes: commit, push, verify CI passes
-   Update your triage comment (gh api PATCH /repos/${repository}/issues/comments/{your-comment-id})
-      to replace "Will fix" with the actual commit SHA for each implemented fix`;
-}
-
 function extractReviewState(payload: unknown): string {
   if (typeof payload !== 'object' || payload === null || !('review' in payload)) return 'unknown';
   const review = (payload as Record<string, unknown>)['review'];
@@ -97,7 +76,24 @@ Instructions:
 
 2. IF REVIEW IS FINALIZED — process it as a code review:
    a. React with rocket: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=rocket
-   b. ${renderTriageAndEnforcementInstructions(repository)}`;
+   b. Read the full review body and extract EVERY finding/issue/suggestion
+   For EACH finding, decide: FIX or SKIP
+      - FIX: Clear actionable feedback, code change with clear intent, specific bug or gap
+      - SKIP: Discussion/question, intentional design disagreement, out of PR scope, pure status report
+   Post a response comment with a triage table:
+      - One row per finding
+      - Columns: # | Finding | Verdict (FIX/SKIP) | Reasoning | Action
+      - For SKIP items: explain why in the Reasoning column
+      - For FIX items: write "Will fix" in the Action column
+
+   ⚠ MANDATORY — DO NOT STOP AFTER POSTING THE TABLE ⚠
+   IMMEDIATELY after posting the triage comment, implement ALL fixes
+      marked as FIX in the table. This is not optional. Do not end your turn
+      until every FIX item has been implemented, committed, and pushed.
+      Skipping implementation after posting the table is a contract violation.
+   After all fixes: commit, push, verify CI passes
+   Update your triage comment (gh api PATCH /repos/${repository}/issues/comments/{your-comment-id})
+      to replace "Will fix" with the actual commit SHA for each implemented fix`;
   }
 }
 
@@ -123,23 +119,16 @@ Instructions:
   }
 }
 
-export class CodeWorkerReviewEnforcementTemplate implements MessageTemplate {
+export class CodeWorkerNitpickNukerTemplate implements MessageTemplate {
   render(event: GitHubPREvent): string {
-    const { repository, pullRequestNumber, senderLogin, body, payload } = event;
-    const prNumber = String(pullRequestNumber);
-    const reviewId = extractId(payload, 'review');
+    const prNumber = String(event.pullRequestNumber);
+    return `[Code Worker Review] A code-worker review was submitted on PR #${prNumber}.
 
-    return `[PR Review — Code Quality Enforcement] Review on PR #${prNumber} in ${repository}
-From: @${senderLogin}
-Review ID: ${reviewId}
-Type: pull_request_review (code-worker quality review)
+Run /nitpick-nuker ${prNumber}
 
-Full review body:
-${body ?? '(empty)'}
-
-Instructions:
-1. React to the review: gh api /repos/${repository}/pulls/${prNumber}/reviews/${reviewId} -X PUT -f event=COMMENT
-2. ${renderTriageAndEnforcementInstructions(repository)}`;
+This skill will fetch all unprocessed review comments, triage each one (FIX/SKIP),
+implement fixes, verify CI, and post a summary. If there are no unprocessed comments,
+it will exit cleanly.`;
   }
 }
 
@@ -147,7 +136,7 @@ export function createWebhookMessageBuilder(allowedBots: Set<string>, codeWorker
   const reviewTemplate = new PullRequestReviewTemplate();
   const commentTemplate = new IssueCommentTemplate();
   const editedBotTemplate = new EditedBotReviewTemplate();
-  const codeWorkerEnforcementTemplate = new CodeWorkerReviewEnforcementTemplate();
+  const codeWorkerNitpickNukerTemplate = new CodeWorkerNitpickNukerTemplate();
 
   return {
     build(event: GitHubPREvent): string {
@@ -155,7 +144,7 @@ export function createWebhookMessageBuilder(allowedBots: Set<string>, codeWorker
         return editedBotTemplate.render(event);
       }
       if (event.eventType === 'pull_request_review' && codeWorkerBots.has(event.senderLogin)) {
-        return codeWorkerEnforcementTemplate.render(event);
+        return codeWorkerNitpickNukerTemplate.render(event);
       }
       if (event.eventType === 'pull_request_review') {
         return reviewTemplate.render(event);
