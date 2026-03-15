@@ -744,6 +744,75 @@ describe('GitHubPRHttpClient', () => {
     });
   });
 
+  describe('getIssueComment', () => {
+    it('returns comment body on success', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/issues/comments/12345')
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, { id: 12345, body: 'Existing comment body' });
+
+      const result = await client.getIssueComment('test-token', 'owner', 'repo', 12345);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.body).toBe('Existing comment body');
+      }
+    });
+
+    it('returns NOT_FOUND on 404', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/issues/comments/99999')
+        .reply(404, { message: 'Not Found' });
+
+      const result = await client.getIssueComment('test-token', 'owner', 'repo', 99999);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('returns UNAUTHORIZED on 401', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/issues/comments/12345')
+        .reply(401, { message: 'Bad credentials' });
+
+      const result = await client.getIssueComment('bad-token', 'owner', 'repo', 12345);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAUTHORIZED');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/issues/comments/12345')
+        .replyWithError('connection refused');
+
+      const result = await client.getIssueComment('test-token', 'owner', 'repo', 12345);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+
+    it('returns empty string when API response has no body field', async () => {
+      nock('https://api.github.com')
+        .get('/repos/owner/repo/issues/comments/12345')
+        .matchHeader('Authorization', 'Bearer test-token')
+        .reply(200, { id: 12345 });
+
+      const result = await client.getIssueComment('test-token', 'owner', 'repo', 12345);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.body).toBe('');
+      }
+    });
+  });
+
   describe('updateIssueComment', () => {
     it('updates an existing issue comment', async () => {
       nock('https://api.github.com')

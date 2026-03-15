@@ -97,6 +97,7 @@ function createFakeDeps(overrides: Partial<UnifiedEvaluatorDeps> = {}): UnifiedE
     evaluateEvent: vi.fn(),
     createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-1' })),
     allowedBots: new Set(['claude[bot]']),
+    automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     ...overrides,
   };
 }
@@ -698,6 +699,70 @@ describe('UnifiedEvaluator', () => {
 
       expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
       expect(deps.createReviewTask).not.toHaveBeenCalled();
+    });
+
+    it('passes resolved userId to automation log when resolveTokenUserId is provided', async () => {
+      const automationLog = { record: vi.fn().mockResolvedValue(undefined) };
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'dispatch', template: 'pr_comment' },
+          usage: { costUsd: 0.001, toolCalls: [] },
+          reasoning: 'LLM reasoning.',
+        })),
+        automationLog,
+        resolveTokenUserId: vi.fn().mockResolvedValue('user-resolved-1'),
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(automationLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ repository: 'intexuraos/intexuraos', prNumber: 42 }),
+        expect.objectContaining({ type: 'triage_dispatch' }),
+        'user-resolved-1',
+      );
+    });
+
+    it('deduplicates identical tool calls in automation log for LLM dispatch', async () => {
+      const automationLog = { record: vi.fn().mockResolvedValue(undefined) };
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+        } as unknown as WebhookRulesService,
+        evaluateEvent: vi.fn().mockResolvedValue(ok({
+          triage: { action: 'dispatch', template: 'pr_comment' },
+          usage: {
+            costUsd: 0.003,
+            toolCalls: [
+              { tool: 'get_file', args: { path: 'README.md' } },
+              { tool: 'get_file', args: { path: 'README.md' } },
+              { tool: 'list_files', args: { dir: 'src' } },
+            ],
+          },
+          reasoning: 'LLM reasoning.',
+        })),
+        automationLog,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent();
+
+      await evaluator.evaluate(event, logger);
+
+      expect(automationLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ repository: 'intexuraos/intexuraos', prNumber: 42 }),
+        expect.objectContaining({
+          type: 'triage_dispatch',
+          toolCalls: [
+            'get_file({"path":"README.md"})',
+            'list_files({"dir":"src"})',
+          ],
+        }),
+        undefined,
+      );
     });
   });
 
@@ -1795,6 +1860,107 @@ describe('fail-closed @review triage', () => {
 
     // Should fallback dispatch when body is null (not a @review command)
     expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+  });
+});
+
+describe('LLM triage retry for pull_request events', () => {
+  it('retries evaluateEvent once on failure for pull_request event and succeeds', async () => {
+    const prEvent = createFakeEvent({
+      eventType: 'pull_request',
+      action: 'opened',
+      id: 'evt-pr-retry',
+      auditEventId: 'audit-pr-retry',
+    });
+
+    const evaluateEvent = vi.fn()
+      .mockResolvedValueOnce(err({ code: 'LLM_FAILED', message: 'LLM failed: Empty response from model' }))
+      .mockResolvedValueOnce(ok({
+        triage: { action: 'skip', reason: 'Trivial config change' },
+        usage: { costUsd: 0.001, toolCalls: [{ tool: 'skip', args: { reason: 'Trivial config change' } }] },
+        reasoning: 'Config-only PR, no review needed.',
+      }));
+
+    const logger = createFakeLogger();
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent,
+    });
+
+    const evaluator = createUnifiedEvaluator(deps);
+    await evaluator.evaluate(prEvent, logger);
+
+    expect(evaluateEvent).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: prEvent.id }),
+      'LLM triage failed — retrying for pull_request event'
+    );
+    // Should record a skip decision (from the successful second attempt)
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ decision: 'skip', reason: expect.stringContaining('Trivial') })
+    );
+  });
+
+  it('does NOT retry for issue_comment events — falls back immediately', async () => {
+    const commentEvent = createFakeEvent({
+      eventType: 'issue_comment',
+      action: 'created',
+    });
+
+    const evaluateEvent = vi.fn()
+      .mockResolvedValue(err({ code: 'LLM_FAILED', message: 'LLM failed: Empty response from model' }));
+
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent,
+    });
+
+    const evaluator = createUnifiedEvaluator(deps);
+    await evaluator.evaluate(commentEvent, createFakeLogger());
+
+    // Only called once — no retry for non-PR events
+    expect(evaluateEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to skip if retry also fails for pull_request event', async () => {
+    const prEvent = createFakeEvent({
+      eventType: 'pull_request',
+      action: 'opened',
+      id: 'evt-pr-double-fail',
+      auditEventId: 'audit-pr-double-fail',
+    });
+
+    const evaluateEvent = vi.fn()
+      .mockResolvedValue(err({ code: 'LLM_FAILED', message: 'LLM failed: Empty response from model' }));
+
+    const deps = createFakeDeps({
+      webhookRules: {
+        evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
+      } as unknown as WebhookRulesService,
+      evaluateEvent,
+    });
+
+    const logger = createFakeLogger();
+    const evaluator = createUnifiedEvaluator(deps);
+    await evaluator.evaluate(prEvent, logger);
+
+    expect(evaluateEvent).toHaveBeenCalledTimes(2);
+    // Falls back to skip
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ decision: 'skip', reason: expect.stringContaining('fallback_skip') })
+    );
+    // Both warns fire: retry warn first, then the existing 'LLM triage failed' warn
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: prEvent.id }),
+      'LLM triage failed — retrying for pull_request event'
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: prEvent.id }),
+      'LLM triage failed'
+    );
   });
 });
 

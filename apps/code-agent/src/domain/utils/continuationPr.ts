@@ -3,7 +3,8 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../models/codeTask.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
-import { fetchGitHubToken } from './prTaskNotification.js';
+import { fetchGitHubToken } from './gitHubTokenResolver.js';
+import type { AutomationLog } from '../ports/automationLog.js';
 
 const SAME_ISSUE_SEARCH_LIMIT = 20;
 
@@ -38,6 +39,7 @@ export interface PostContinuationCommentDeps {
   logger: Logger;
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
+  automationLog: AutomationLog;
 }
 
 export interface PostContinuationCommentInput {
@@ -335,6 +337,20 @@ export async function postContinuationPrComment(
       message: commentResult.error.message,
     });
   }
+
+  deps.automationLog.record(
+    { repository: input.repository, prNumber: input.prNumber },
+    {
+      type: 'task_dispatched',
+      taskId: input.taskId,
+      workerType: 'auto',
+      agentType: 'execution',
+      ...(input.linearIssueId !== undefined && { linearIssueId: input.linearIssueId }),
+    },
+    input.userId,
+  ).catch((error: unknown) => {
+    deps.logger.warn({ error, taskId: input.taskId }, 'Failed to record automation log for continuation PR comment');
+  });
 
   return ok(undefined);
 }

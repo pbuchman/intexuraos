@@ -19,8 +19,10 @@ import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
-import { notifyPROfTaskDispatch, notifyReviewReplaced } from '../utils/prTaskNotification.js';
+
 import { createHmac } from 'node:crypto';
+import type { AutomationLog } from '../ports/automationLog.js';
+import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
 
 export interface CreateReviewTaskRequest {
   repository: string;
@@ -54,6 +56,7 @@ export interface CreateReviewTaskDeps {
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
   serviceUrl: string;
+  automationLog: AutomationLog;
 }
 
 async function resolveLinearIssueId(
@@ -190,22 +193,17 @@ export async function createReviewTask(
       'Active review task exists for PR, replacing with fresh review'
     );
 
-    // Post replacement comment first for user visibility.
-    // If local cancel fails after this, users will see a cancel message
-    // but the original task continues. This is acceptable because:
-    // 1. The new task creation will fail too (atomic operation)
-    // 2. Users can retry the review request
-    await notifyReviewReplaced(
-      { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+    deps.automationLog.record(
+      { repository, prNumber },
       {
-        taskId: `task_for_pr_${String(prNumber)}`,
-        repository,
-        prNumber,
-        userId: existingTask.userId,
+        type: 'review_replaced',
         replacedTaskId: existingTask.id,
         replacedWorkerType: existingTask.workerType,
       },
-    );
+      existingTask.userId,
+    ).catch((error: unknown) => {
+      logger.warn({ error, taskId: existingTask.id }, 'Failed to record automation log for review replacement');
+    });
 
     // Cancel the old task locally (authoritative)
     const cancelResult = await codeTaskRepo.update(existingTask.id, {
@@ -347,32 +345,36 @@ export async function createReviewTask(
     return err({ code: 'dispatch_failed', message: dispatchResult.error.message, taskId: task.id });
   }
 
-  await codeTaskRepo.update(task.id, { status: 'dispatched' });
+  await codeTaskRepo.update(task.id, { status: 'dispatched', dispatchedAt: new Date() });
 
   logger.info(
     { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner },
     'Review task created and dispatched'
   );
 
-  // Best-effort: post dispatch comment and update PR title
+  // Best-effort: update PR title with Linear issue tag
   const titleAlreadyTagged = request.prTitle !== undefined && /\bINT-\d+\b/i.test(request.prTitle);
-  await notifyPROfTaskDispatch(
-    { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+  await updatePRTitleWithLinearTag(deps, {
+    repository, prNumber, userId,
+    ...(linearIssueId !== undefined && { linearIssueId }),
+    ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+    titleAlreadyTagged,
+  });
+
+  deps.automationLog.record(
+    { repository, prNumber },
     {
+      type: 'task_dispatched',
       taskId: task.id,
-      repository,
-      prNumber,
-      userId,
-      dispatchOutcome: 'review_task_dispatched',
-      updateTitle: true,
-      skipComment: true,
-      ...(linearIssueId !== undefined && { linearIssueId }),
-      ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
-      titleAlreadyTagged,
-      reviewTypes: request.reviewTypes,
       workerType: effectiveWorkerType,
+      agentType: 'review',
+      ...(linearIssueId !== undefined && { linearIssueId }),
     },
-  );
+    userId,
+  ).catch((error: unknown) => {
+    logger.warn({ error, taskId: task.id }, 'Failed to record automation log for review task dispatch');
+  });
 
   return ok({ status: 'created', taskId: task.id, workerType: effectiveWorkerType });
 }
+

@@ -102,7 +102,7 @@ interface TaskCompleteWebhook {
     planning_linear_url?: string;
     planning_subtask_urls?: string;
     planning_pr_url?: string;
-    execution_outcome_label?: 'implemented';
+    execution_outcome_label?: 'implemented' | 'already_completed';
     execution_linear_issue_url?: string;
   };
   error?: {

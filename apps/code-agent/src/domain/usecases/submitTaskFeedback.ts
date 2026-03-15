@@ -27,6 +27,7 @@ import {
   bootstrapContinuationPrTaskComment,
   resolveExecutionContinuationPr,
 } from '../../domain/utils/continuationPr.js';
+import type { AutomationLog } from '../../domain/ports/automationLog.js';
 
 /**
  * Request to submit feedback on a task.
@@ -79,6 +80,7 @@ export interface SubmitTaskFeedbackDeps {
   userServiceClient: UserServiceClient;
   orchestratorSecret: string;
   serviceUrl: string;
+  automationLog: AutomationLog;
 }
 
 /**
@@ -293,6 +295,7 @@ ${feedback.trim()}
       codeTaskRepo,
       gitHubPRClient: deps.gitHubPRClient,
       userServiceClient: deps.userServiceClient,
+      automationLog: deps.automationLog,
     },
     {
       continuationPr,
@@ -439,6 +442,7 @@ ${feedback.trim()}
 
   const updateResult = await codeTaskRepo.update(followUpTask.id, {
     status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
