@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from '@intexuraos/common-core';
+import { withTimeout } from '../../with-timeout.js';
 import type {
   DiscoveredContainer,
   IsolationProvider,
@@ -65,6 +66,10 @@ interface PreservedWorkerEntry {
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
 const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
 const PERIODIC_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+const HEALTH_CHECK_INTERVAL_MS = 30_000;
+const DOCKER_PING_TIMEOUT_MS = 5_000;
+const MIN_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024;
+const MIN_DISK_SPACE_GB = MIN_DISK_SPACE_BYTES / (1024 * 1024 * 1024);
 const PRESERVED_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 
 // Container must run as the host user so bind-mounted files (worktrees, secrets,
@@ -96,6 +101,9 @@ export class DockerProvider implements IsolationProvider {
   private readonly preservedWorkers = new Map<string, PreservedWorkerEntry>();
   private cleanupIntervalId: NodeJS.Timeout | null = null;
   private lastResolvedDigest: string | null = null;
+  private dockerHealthy = true;
+  private diskHealthy = true;
+  private healthMonitorIntervalId: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<DockerProviderConfig>, logger: Logger) {
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
@@ -1144,6 +1152,77 @@ export class DockerProvider implements IsolationProvider {
     clearInterval(this.cleanupIntervalId);
     this.cleanupIntervalId = null;
     this.logger.info({ message: 'Stopped periodic container cleanup' });
+  }
+
+  async checkHealth(): Promise<{ docker: boolean; disk: boolean }> {
+    const prevDockerHealthy = this.dockerHealthy;
+    const prevDiskHealthy = this.diskHealthy;
+
+    try {
+      await withTimeout(this.docker.ping(), DOCKER_PING_TIMEOUT_MS, 'Docker ping timeout');
+      this.dockerHealthy = true;
+    } catch {
+      this.dockerHealthy = false;
+    }
+
+    try {
+      const stats = await fs.promises.statfs('/');
+      const availableBytes = stats.bavail * stats.bsize;
+      this.diskHealthy = availableBytes >= MIN_DISK_SPACE_BYTES;
+    } catch {
+      this.diskHealthy = false;
+    }
+
+    if (prevDockerHealthy && !this.dockerHealthy) {
+      this.logger.warn(
+        { component: 'health-monitor' },
+        'Docker daemon became unhealthy — ping failed or timed out'
+      );
+    }
+    if (!prevDockerHealthy && this.dockerHealthy) {
+      this.logger.info({ component: 'health-monitor' }, 'Docker daemon is healthy again');
+    }
+    if (prevDiskHealthy && !this.diskHealthy) {
+      this.logger.warn(
+        { component: 'health-monitor' },
+        `Disk space critically low — below ${String(MIN_DISK_SPACE_GB)}GB available`
+      );
+    }
+    if (!prevDiskHealthy && this.diskHealthy) {
+      this.logger.info({ component: 'health-monitor' }, 'Disk space is healthy again');
+    }
+
+    return {
+      docker: this.dockerHealthy,
+      disk: this.diskHealthy,
+    };
+  }
+
+  startHealthMonitor(): void {
+    if (this.healthMonitorIntervalId !== null) {
+      return;
+    }
+
+    this.healthMonitorIntervalId = setInterval(() => {
+      void this.checkHealth();
+    }, HEALTH_CHECK_INTERVAL_MS);
+  }
+
+  stopHealthMonitor(): void {
+    if (this.healthMonitorIntervalId === null) {
+      return;
+    }
+
+    clearInterval(this.healthMonitorIntervalId);
+    this.healthMonitorIntervalId = null;
+  }
+
+  isHealthy(): boolean {
+    return this.dockerHealthy && this.diskHealthy;
+  }
+
+  getHealthDetails(): { docker: boolean; disk: boolean } {
+    return { docker: this.dockerHealthy, disk: this.diskHealthy };
   }
 
   getImageInfo(): {

@@ -184,7 +184,7 @@ export function registerRoutes(
 
     if (!result.ok) {
       const { error } = result;
-      if (error.type === 'at_capacity') {
+      if (error.type === 'at_capacity' || error.type === 'docker_unavailable') {
         const errorResponse = { error: error.message };
         logger.warn(
           { taskId: body.taskId, errorType: error.type, status: 503, response: errorResponse },
@@ -289,6 +289,8 @@ export function registerRoutes(
       message: 'Credential monitor not initialized',
     };
 
+    const healthDetails = isolationProvider?.getHealthDetails?.() ?? { docker: true, disk: true };
+
     reply.send({
       status: getStatus?.() ?? 'ready',
       capacity,
@@ -296,6 +298,8 @@ export function registerRoutes(
       available: capacity - running,
       githubTokenExpiresAt: tokenExpiry?.toISOString() ?? null,
       anthropicOAuth: oauthState,
+      dockerHealthy: healthDetails.docker,
+      diskHealthy: healthDetails.disk,
     });
   });
 

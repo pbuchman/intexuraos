@@ -8,6 +8,7 @@ import {
   hasCodeTaskLabel,
 } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
+import { withTimeout } from '../with-timeout.js';
 import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { SendMessageResult, SendMessageError } from '../types/schemas.js';
@@ -50,9 +51,15 @@ const TASK_TIMEOUT_WARNING_MS = 115 * 60 * 1000; // 1h 55m
 const TASK_TIMEOUT_KILL_MS = 120 * 60 * 1000; // 2h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
+const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
 
 export interface DispatchError {
-  type: 'at_capacity' | 'invalid_request' | 'invalid_status' | 'service_error';
+  type:
+    | 'at_capacity'
+    | 'docker_unavailable'
+    | 'invalid_request'
+    | 'invalid_status'
+    | 'service_error';
   message: string;
   originalError?: unknown;
 }
@@ -117,7 +124,20 @@ export class TaskDispatcher {
     this.preserveFailedContainers = completionControl.preserveFailedContainers ?? false;
   }
 
+  private checkDockerAvailability(): Result<void, DispatchError> | null {
+    if (this.isolation.provider.isHealthy?.() === false) {
+      return {
+        ok: false,
+        error: { type: 'docker_unavailable', message: 'Docker daemon is not responding' },
+      };
+    }
+    return null;
+  }
+
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
+    const healthErr = this.checkDockerAvailability();
+    if (healthErr !== null) return healthErr;
+
     // Atomic capacity check
     const capacityCheck = await this.capacityMutex.runExclusive(() => {
       if (this.runningCount >= this.config.capacity) {
@@ -142,6 +162,9 @@ export class TaskDispatcher {
   }
 
   async adoptTask(task: Task): Promise<Result<void, DispatchError>> {
+    const healthErr = this.checkDockerAvailability();
+    if (healthErr !== null) return healthErr;
+
     // Check if task is already at maxAttempts
     if ((task.attemptCount ?? 0) >= (task.maxAttempts ?? this.completionMaxAttempts)) {
       return {
@@ -1624,7 +1647,13 @@ export class TaskDispatcher {
 
     try {
       await this.isolation.tokenRefresher.registerTask(task.taskId);
-      const handle = await this.isolation.provider.createWorker(workerConfig);
+
+      const handle = await withTimeout(
+        this.isolation.provider.createWorker(workerConfig),
+        CONTAINER_CREATE_TIMEOUT_MS,
+        `Container creation timed out after ${String(CONTAINER_CREATE_TIMEOUT_MS / 1000)}s — Docker may be unresponsive`
+      );
+
       this.appendOrchestratorTaskLog(
         task.taskId,
         `Worker container ready: containerId=${handle.containerId}`

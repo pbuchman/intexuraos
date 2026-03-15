@@ -3,6 +3,7 @@ import type { Mock } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { DockerProvider, type DockerProviderConfig } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
+import * as fs from 'node:fs';
 
 function createMockExecStream(): NodeJS.ReadableStream & { resume: () => void } {
   const stream = new EventEmitter() as unknown as NodeJS.ReadableStream & { resume: () => void };
@@ -14,6 +15,7 @@ interface MockDocker {
   createContainer: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
   listContainers: ReturnType<typeof vi.fn>;
+  ping: ReturnType<typeof vi.fn>;
   pull: ReturnType<typeof vi.fn>;
   getImage: ReturnType<typeof vi.fn>;
   modem: { followProgress: ReturnType<typeof vi.fn> };
@@ -86,6 +88,7 @@ function createMockDocker(): MockDockerResult {
     createContainer: vi.fn().mockResolvedValue(mockContainer),
     getContainer: vi.fn().mockReturnValue(mockContainer),
     listContainers: vi.fn().mockResolvedValue([]),
+    ping: vi.fn().mockResolvedValue('OK'),
     pull: vi.fn().mockResolvedValue({}),
     getImage: vi.fn().mockReturnValue({
       inspect: vi.fn().mockResolvedValue({
@@ -134,6 +137,7 @@ vi.mock('node:fs', async (importOriginal) => {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
     statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
+    statfsSync: vi.fn().mockReturnValue({ bavail: 2_000_000, bsize: 4096 }),
     readFileSync: vi.fn().mockImplementation((filePath: unknown) => {
       if (
         typeof filePath === 'string' &&
@@ -152,6 +156,7 @@ vi.mock('node:fs', async (importOriginal) => {
       rm: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue(['system-prompt.txt', 'user-prompt.txt', 'github-token']),
       writeFile: vi.fn().mockResolvedValue(undefined),
+      statfs: vi.fn().mockResolvedValue({ bavail: 2_000_000, bsize: 4096 }),
     },
   };
 });
@@ -1765,6 +1770,108 @@ describe('DockerProvider', () => {
       await expect(
         provider.createWorker(createTestConfig({ taskId: 'task-duplicate' }))
       ).rejects.toThrow('Worker already exists for task task-duplicate');
+    });
+  });
+
+  describe('health monitoring', () => {
+    it('checkHealth returns healthy when docker.ping() succeeds', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      const result = await provider.checkHealth();
+      expect(result).toEqual({ docker: true, disk: true });
+    });
+
+    it('checkHealth returns unhealthy when docker.ping() times out', async () => {
+      vi.useFakeTimers();
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentionally never resolves to simulate Docker hang
+      mocks.mockDocker.ping.mockReturnValue(new Promise(() => {}));
+      const healthPromise = provider.checkHealth();
+      await vi.advanceTimersByTimeAsync(5000);
+      const result = await healthPromise;
+      expect(result.docker).toBe(false);
+      expect(provider.isHealthy()).toBe(false);
+    });
+
+    it('checkHealth returns unhealthy when docker.ping() rejects', async () => {
+      mocks.mockDocker.ping.mockRejectedValue(new Error('connection refused'));
+      const result = await provider.checkHealth();
+      expect(result.docker).toBe(false);
+      expect(provider.isHealthy()).toBe(false);
+    });
+
+    it('isHealthy returns false when disk space is low', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      vi.mocked(fs.promises.statfs).mockResolvedValue({
+        bavail: 100_000,
+        bsize: 4096,
+      } as unknown as fs.StatsFs);
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(false);
+    });
+
+    it('isHealthy returns true when both docker and disk are healthy', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      vi.mocked(fs.promises.statfs).mockResolvedValue({
+        bavail: 2_000_000,
+        bsize: 4096,
+      } as unknown as fs.StatsFs);
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(true);
+    });
+
+    it('startHealthMonitor runs periodic checks', async () => {
+      vi.useFakeTimers();
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      provider.startHealthMonitor();
+      expect(mocks.mockDocker.ping).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(mocks.mockDocker.ping).toHaveBeenCalled();
+      provider.stopHealthMonitor();
+    });
+
+    it('stopHealthMonitor clears interval', () => {
+      vi.useFakeTimers();
+      provider.startHealthMonitor();
+      provider.stopHealthMonitor();
+      mocks.mockDocker.ping.mockClear();
+      vi.advanceTimersByTime(60_000);
+      expect(mocks.mockDocker.ping).not.toHaveBeenCalled();
+    });
+
+    it('logs transition from healthy to unhealthy', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(true);
+
+      mocks.mockDocker.ping.mockRejectedValue(new Error('connection refused'));
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(false);
+      expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it('logs transition from unhealthy to healthy', async () => {
+      mocks.mockDocker.ping.mockRejectedValue(new Error('connection refused'));
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(false);
+
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      await provider.checkHealth();
+      expect(provider.isHealthy()).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ component: 'health-monitor' }),
+        expect.stringContaining('healthy')
+      );
+    });
+
+    it('getHealthDetails returns current state', async () => {
+      mocks.mockDocker.ping.mockResolvedValue('OK');
+      await provider.checkHealth();
+      expect(provider.getHealthDetails()).toEqual({ docker: true, disk: true });
+    });
+
+    it('getHealthDetails reflects unhealthy docker', async () => {
+      mocks.mockDocker.ping.mockRejectedValue(new Error('connection refused'));
+      await provider.checkHealth();
+      expect(provider.getHealthDetails()).toEqual({ docker: false, disk: true });
     });
   });
 });

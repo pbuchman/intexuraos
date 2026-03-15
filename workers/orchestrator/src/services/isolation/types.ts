@@ -179,4 +179,12 @@ export interface IsolationProvider {
     pullPolicy: string;
     managedAttemptsMode: boolean;
   };
+
+  isHealthy?(): boolean;
+
+  getHealthDetails?(): { docker: boolean; disk: boolean };
+
+  startHealthMonitor?(): void;
+
+  stopHealthMonitor?(): void;
 }
