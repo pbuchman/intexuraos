@@ -591,6 +591,40 @@ describe('processLinearAction', () => {
       }
     });
 
+    it('includes Key Points section even without functional/technical sections', async () => {
+      fakeExtractionService.setResponse({
+        title: 'Summary only issue',
+        priority: 1,
+        functionalRequirements: null,
+        technicalDetails: null,
+        valid: true,
+        error: null,
+        reasoning: 'Valid',
+      });
+
+      const requestWithSummary: ProcessLinearActionRequest = {
+        ...defaultRequest,
+        summary: '- Key point A',
+      };
+
+      await processLinearAction(requestWithSummary, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
+      if (issuesResult.ok && issuesResult.value[0]?.description) {
+        const desc = issuesResult.value[0].description;
+        expect(desc).toContain('## Key Points');
+        expect(desc).toContain('- Key point A');
+        expect(desc).not.toContain('## Functional Requirements');
+        expect(desc).not.toContain('## Technical Details');
+      }
+    });
+
     it('places Key Points after Original User Instruction but before Functional Requirements', async () => {
       fakeExtractionService.setResponse({
         title: 'Feature with summary',
@@ -627,6 +661,109 @@ describe('processLinearAction', () => {
         expect(originalInstructionIndex).toBeLessThan(keyPointsIndex);
         expect(keyPointsIndex).toBeLessThan(functionalIndex);
       }
+    });
+  });
+
+  describe('failed issue save failures', () => {
+    it('still returns failed status when failedIssueRepository.create fails during extraction failure', async () => {
+      setupConnectedUser();
+      fakeExtractionService.setFailure(true, {
+        code: 'EXTRACTION_FAILED',
+        message: 'LLM service unavailable',
+      });
+      fakeFailedIssueRepo.setCreateFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'DB write failed',
+      });
+
+      const result = await processLinearAction(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('LLM service unavailable');
+      }
+
+      // Verify the create failure was triggered (no failed issue persisted)
+      expect(fakeFailedIssueRepo.count).toBe(0);
+    });
+
+    it('still returns failed status when failedIssueRepository.create fails during invalid extraction', async () => {
+      setupConnectedUser();
+      fakeExtractionService.setResponse({
+        title: 'Unclear request',
+        priority: 0,
+        functionalRequirements: null,
+        technicalDetails: null,
+        valid: false,
+        error: 'Too vague',
+        reasoning: 'No context',
+      });
+      fakeFailedIssueRepo.setCreateFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'DB write failed',
+      });
+
+      const result = await processLinearAction(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Too vague');
+      }
+
+      // Verify the create failure was triggered (no failed issue persisted)
+      expect(fakeFailedIssueRepo.count).toBe(0);
+    });
+
+    it('still returns failed status when failedIssueRepository.create fails during Linear API failure', async () => {
+      setupConnectedUser();
+      fakeExtractionService.setResponse({
+        title: 'API Test Issue',
+        priority: 1,
+        functionalRequirements: null,
+        technicalDetails: null,
+        valid: true,
+        error: null,
+        reasoning: 'Valid issue',
+      });
+      fakeLinearClient.setFailure(true, {
+        code: 'API_ERROR',
+        message: 'API down',
+      });
+      fakeFailedIssueRepo.setCreateFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'DB write failed',
+      });
+
+      const result = await processLinearAction(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('API down');
+      }
+
+      // Verify the create failure was triggered (no failed issue persisted)
+      expect(fakeFailedIssueRepo.count).toBe(0);
     });
   });
 
