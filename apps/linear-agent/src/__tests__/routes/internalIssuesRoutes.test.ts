@@ -1240,6 +1240,79 @@ describe('internalIssuesRoutes', () => {
       expect(body.data.id).toBe('issue-meta-update');
       expect(body.data.assignee).toBeNull();
     });
+
+    it('applies addLabels and removeLabels correctly', async () => {
+      // Seed issue with initial labels: bug, feature
+      fakeIssueRepo.seedIssue({
+        id: 'issue-label-mutation',
+        identifier: 'ENG-450',
+        title: 'Label Mutation Test',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [
+          { id: 'label-bug', name: 'bug', color: '#ff0000' },
+          { id: 'label-feature', name: 'feature', color: '#00ff00' },
+        ],
+        url: 'https://linear.app/test/ENG-450',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      });
+
+      // Seed the same issue in Linear API client so updateIssue succeeds
+      fakeLinearClient.seedIssue({
+        id: 'issue-label-mutation',
+        identifier: 'ENG-450',
+        title: 'Label Mutation Test',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'In Progress', type: 'started' },
+        url: 'https://linear.app/test/ENG-450',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [
+          { id: 'label-bug', name: 'bug', color: '#ff0000' },
+          { id: 'label-feature', name: 'feature', color: '#00ff00' },
+        ],
+      });
+
+      // Seed available team labels: bug, feature, docs
+      fakeLinearClient.setLabels([
+        { id: 'label-bug', name: 'bug', color: '#ff0000' },
+        { id: 'label-feature', name: 'feature', color: '#00ff00' },
+        { id: 'label-docs', name: 'docs', color: '#0000ff' },
+      ]);
+
+      // PATCH: add 'docs', remove 'bug'
+      // Expected: start with ['bug', 'feature'], add 'docs' -> ['bug', 'feature', 'docs'], remove 'bug' -> ['feature', 'docs']
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/linear/issues/issue-label-mutation/metadata',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+        payload: { addLabels: ['docs'], removeLabels: ['bug'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { id: string; labels: { id: string; name: string; color: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe('issue-label-mutation');
+      // Verify final labels are ['feature', 'docs'] (by ID)
+      const labelIds = body.data.labels.map((l) => l.id).sort();
+      expect(labelIds).toEqual(['label-docs', 'label-feature']);
+    });
   });
 
   describe('PATCH /internal/issues/:issueId/state - additional error paths', () => {
@@ -1604,6 +1677,78 @@ describe('internalIssuesRoutes', () => {
       const descendantIds = body.data.descendants.map((d) => d.id);
       expect(descendantIds).toContain('child-deep');
       expect(descendantIds).toContain('grandchild-deep');
+    });
+
+    it('tree response includes labels and assigneeId on root and descendants', async () => {
+      // Root with labels and assigneeId
+      const root: SyncedLinearIssue = {
+        id: 'root-labels',
+        identifier: 'ENG-600',
+        title: 'Root With Labels',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: 'user-A',
+        assigneeName: 'Alice',
+        labels: [{ id: 'l1', name: 'backend', color: '#000' }],
+        url: 'https://linear.app/test/ENG-600',
+        userId: testUserId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        syncedAt: '2024-01-01T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: null,
+      };
+      // Child with different labels and assigneeId
+      const child: SyncedLinearIssue = {
+        id: 'child-labels',
+        identifier: 'ENG-601',
+        title: 'Child With Labels',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: 'user-B',
+        assigneeName: 'Bob',
+        labels: [{ id: 'l2', name: 'frontend', color: '#fff' }],
+        url: 'https://linear.app/test/ENG-601',
+        userId: testUserId,
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        syncedAt: '2024-01-02T00:00:00.000Z',
+        teamId: 'team-1',
+        parentId: 'root-labels',
+      };
+      fakeIssueRepo.seedIssue(root);
+      fakeIssueRepo.seedIssue(child);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/issues/root-labels/tree',
+        headers: { ...internalAuthHeader, 'x-user-id': testUserId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          root: { id: string; labels: string[]; assigneeId: string | null; state: string };
+          descendants: { id: string; labels: string[]; assigneeId: string | null; state: string }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      // Verify root has labels and assigneeId
+      expect(body.data.root.id).toBe('root-labels');
+      expect(body.data.root.labels).toEqual(['backend']);
+      expect(body.data.root.assigneeId).toBe('user-A');
+      expect(body.data.root.state).toBe('In Progress');
+      // Verify child has labels and assigneeId
+      expect(body.data.descendants).toHaveLength(1);
+      expect(body.data.descendants[0]?.id).toBe('child-labels');
+      expect(body.data.descendants[0]?.labels).toEqual(['frontend']);
+      expect(body.data.descendants[0]?.assigneeId).toBe('user-B');
+      expect(body.data.descendants[0]?.state).toBe('Backlog');
     });
   });
 });

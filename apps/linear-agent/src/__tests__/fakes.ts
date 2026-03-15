@@ -280,6 +280,7 @@ export class FakeLinearApiClient implements LinearApiClient {
     { id: 'state-qa', name: 'QA', type: 'started' },
     { id: 'state-done', name: 'Done', type: 'completed' },
   ];
+  private labels: { id: string; name: string; color: string }[] = [];
 
   async validateAndGetTeams(apiKey: string): Promise<Result<LinearTeam[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
@@ -376,6 +377,18 @@ export class FakeLinearApiClient implements LinearApiClient {
     if (!issue) {
       return err({ code: 'API_ERROR', message: 'Issue not found' });
     }
+    // Apply labelIds from input to issue.labels (this is needed for label mutation tests)
+    if (_input.labelIds !== undefined) {
+      issue.labels = _input.labelIds
+        .map((id) => {
+          const label = this.labels.find((l) => l.id === id);
+          return label ? { id: label.id, name: label.name, color: label.color } : null;
+        })
+        .filter((l): l is { id: string; name: string; color: string } => l !== null);
+    }
+    // Note: We intentionally do NOT set assignee or parentId here.
+    // The real Linear API updateIssue doesn't necessarily return the full issue object,
+    // and tests verify the ?? null fallback for assignee handling.
     issue.updatedAt = new Date().toISOString();
     return ok(issue);
   }
@@ -394,7 +407,7 @@ export class FakeLinearApiClient implements LinearApiClient {
     _teamId: string
   ): Promise<Result<{ id: string; name: string; color: string }[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
-    return ok([]);
+    return ok(this.labels);
   }
 
   async getWorkflowStates(
@@ -410,10 +423,15 @@ export class FakeLinearApiClient implements LinearApiClient {
     this.issuesWithTeam = [];
     this.shouldFail = false;
     this.issueCounter = 1;
+    this.labels = [];
   }
 
   setTeams(teams: LinearTeam[]): void {
     this.teams = teams;
+  }
+
+  setLabels(labels: { id: string; name: string; color: string }[]): void {
+    this.labels = labels;
   }
 
   seedIssue(issue: LinearIssue): void {
