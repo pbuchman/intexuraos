@@ -1,7 +1,7 @@
 # WhatsApp Service — Technical Debt
 
 **Last Updated:** 2026-03-15
-**Analysis Run:** v3.3.0 documentation refresh (v8 ignore test replacement INT-799, silent dispatch fix INT-810/811)
+**Analysis Run:** v3.3.0 full documentation refresh
 
 ---
 
@@ -168,6 +168,7 @@ No deprecated APIs or dependencies in use. Speechmatics direct dependency was re
 
 | Date       | Issue                                                             | Resolution                                                                  |
 | ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 2026-03-15 | v8 ignore blocks in sender and pubsub/webhook routes              | Replaced with real tests (INT-858, INT-860)                                 |
 | 2026-03-10 | v8 ignore blocks in sender, repository, routes                    | Replaced with real tests across 5 files (INT-799)                           |
 | 2026-03-10 | Silent dispatch failures swallowed by Pub/Sub publish             | Fixed dispatch error surfacing and nested transaction issue (INT-810/811)   |
 | 2026-03-06 | Speechmatics direct dependency creates tight coupling             | INT-684: Migrated to event-driven transcription via srt-service             |

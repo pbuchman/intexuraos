@@ -71,12 +71,12 @@ Converts raw OpenAI usage data into `NormalizedUsage`. Optionally includes `cach
 
 ```ts
 interface GptConfig {
-  apiKey: string; // OpenAI API key from platform.openai.com
-  model: string; // e.g., 'gpt-4.1', 'gpt-4o-mini', 'o4-mini-deep-research'
-  userId: string; // User ID for usage tracking
-  pricing: ModelPricing; // Cost configuration for text operations
+  apiKey: string;            // OpenAI API key from platform.openai.com
+  model: string;             // e.g., 'gpt-4.1', 'gpt-4o-mini', 'o4-mini-deep-research'
+  userId: string;            // User ID for usage tracking
+  pricing: ModelPricing;     // Cost configuration for text operations
   imagePricing?: ModelPricing; // Separate pricing for image generation
-  logger: Logger; // Pino logger for structured logging
+  logger: Logger;            // Pino logger for structured logging
 }
 ```
 
@@ -114,10 +114,10 @@ All methods return `Result<T, GptError>`. Error mapping:
 
 - **Research** uses the OpenAI Responses API (`client.responses.create`) with `web_search_preview` tool at `medium` search context size.
 - **Generate** uses the Chat Completions API (`client.chat.completions.create`) with `max_completion_tokens: 8192`.
-- **Image generation** uses `client.images.generate` with `gpt-image-1` model. Supports both `b64_json` (primary) and URL (fallback) response formats — URL responses are fetched via `fetch()`.
+- **Image generation** uses `client.images.generate` with `gpt-image-1` model. Supports both `b64_json` (primary) and URL (fallback) response formats — URL responses are fetched via `fetch()` with no timeout.
 - **Reasoning tokens:** Extracted from `output_tokens_details.reasoning_tokens` for o-series models. Included in `NormalizedUsage.reasoningTokens` when present.
 - **Dual usage shapes:** The Responses API and Chat Completions API return different usage structures (`ResponseUsage` vs `CompletionUsage`). `extractUsageDetails` handles both shapes.
-- **Audit sink:** Unlike `infra-gemini` and `infra-glm`, this client does not accept injectable `auditSink`/`usageSink`.
+- **Audit sink:** This client does not accept injectable `auditSink`/`usageSink` — it uses the default Firestore sinks.
 
 ## Cross-Cutting Concerns
 
@@ -148,6 +148,7 @@ All methods return `Result<T, GptError>`. Error mapping:
 
 | Commit     | Description                                       | When        |
 | ---------- | ------------------------------------------------- | ----------- |
+| `c4e3a13c` | Release v3.3.0                                    | 2 hours ago |
 | `51b4a325` | Migrate LLM clients to UsageLogger class          | 4 weeks ago |
 | `8aad9098` | Migrate imports and delete llm-common             | 4 weeks ago |
 | `816afa55` | Add ESLint rule to ban optional logger parameters | 5 weeks ago |

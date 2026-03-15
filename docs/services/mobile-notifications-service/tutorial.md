@@ -1,6 +1,6 @@
-# Mobile Notifications Service -- Tutorial
+# Mobile Notifications Service — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** Auth0 access token, Android device with Tasker or Automate
 > **You will learn:** How to pair a device, capture notifications, browse and filter them, and manage saved filters
 
@@ -27,7 +27,6 @@ Before starting, ensure you have:
 - [ ] Access to the IntexuraOS environment (local or Cloud Run)
 
 **Base URL (local):** `http://localhost:8114`
-**Base URL (Cloud Run):** `https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app`
 
 ---
 
@@ -83,7 +82,7 @@ curl http://localhost:8114/mobile-notifications/status \
 
 ### What Just Happened?
 
-The service generated a 256-bit random token (64 hex characters), computed its SHA-256 hash, stored the hash in Firestore, and returned the plaintext to you. Any existing signature for your user was deleted first -- only one active signature per user.
+The service generated a 256-bit random token (64 hex characters), computed its SHA-256 hash, stored the hash in Firestore, and returned the plaintext to you. Any existing signature for your user was deleted first — only one active signature per user at a time.
 
 ---
 
@@ -207,7 +206,7 @@ curl "http://localhost:8114/mobile-notifications?title=alice" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-Title search is case-insensitive partial match.
+Title search is case-insensitive partial match performed in memory after the Firestore query.
 
 ### Step 3.4: Paginate Results
 
@@ -253,7 +252,7 @@ curl "http://localhost:8114/notifications/filters" \
 }
 ```
 
-The `options` arrays are auto-populated from received notifications.
+The `options` arrays auto-populate from received notifications as they arrive.
 
 ### Step 4.2: Create a Saved Filter
 
@@ -319,7 +318,7 @@ Returns 404 if not found, 403 if the notification belongs to another user.
 ```bash
 curl -X POST http://localhost:8114/mobile-notifications/webhooks \
   -H "Content-Type: application/json" \
-  -d '{ "source": "tasker", ... }'
+  -d '{ "source": "tasker", "device": "Test", "app": "com.test", "notification_id": "1", "title": "t", "text": "b", "timestamp": 0, "post_time": "now" }'
 ```
 
 **Response (400):**
@@ -335,13 +334,6 @@ curl -X POST http://localhost:8114/mobile-notifications/webhooks \
 ```
 
 ### Invalid Signature
-
-```bash
-curl -X POST http://localhost:8114/mobile-notifications/webhooks \
-  -H "X-Mobile-Notifications-Signature: wrong-token" \
-  -H "Content-Type: application/json" \
-  -d '{ "source": "tasker", ... }'
-```
 
 **Response (401):**
 
@@ -399,9 +391,7 @@ curl -X POST http://localhost:8114/mobile-notifications/connect \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"deviceLabel": "Test Device"}'
 
-# Save the signature from the response
-
-# Send 3 notifications from different apps
+# Save the signature from the response, then send 3 notifications from different apps
 for APP in com.whatsapp com.telegram com.slack; do
   curl -X POST http://localhost:8114/mobile-notifications/webhooks \
     -H "X-Mobile-Notifications-Signature: $SIGNATURE" \
@@ -419,7 +409,7 @@ curl "http://localhost:8114/mobile-notifications?app=com.whatsapp" \
 ```bash
 # List with limit=2
 curl "http://localhost:8114/mobile-notifications?limit=2" -H "Authorization: Bearer $TOKEN"
-# Copy nextCursor from response
+# Copy nextCursor from response, then get next page
 curl "http://localhost:8114/mobile-notifications?limit=2&cursor=CURSOR" -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -447,6 +437,6 @@ curl -X DELETE "http://localhost:8114/notifications/filters/saved/FILTER_ID" \
 
 Now that you understand the basics:
 
-1. Configure Tasker/Automate on your Android device to forward all notifications to the webhook
+1. Configure Tasker or Automate on your Android device to forward notifications to the webhook endpoint
 2. Read the [Technical Reference](technical.md) for full API details and domain model documentation
-3. Explore the internal query endpoint for building data aggregation pipelines
+3. Explore the internal query endpoint for building data aggregation pipelines with the data-insights-agent

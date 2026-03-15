@@ -1,8 +1,8 @@
-# Mobile Notifications Service -- Technical Reference
+# Mobile Notifications Service — Technical Reference
 
 ## Overview
 
-Mobile-notifications-service receives push notification data from Android devices via Tasker/Automate webhooks, validates device signatures, deduplicates notifications, and stores them in Firestore. It runs on Cloud Run with Fastify and exposes public, internal, and webhook endpoints. Service version: 3.1.0. Local port: 8114.
+Mobile-notifications-service receives push notification data from Android devices via webhook, validates device signatures using SHA-256 hash comparison, deduplicates notifications, and stores them in Firestore. It runs on Cloud Run with Fastify and exposes public, internal, and webhook endpoints. Local port: 8114.
 
 ## Architecture
 
@@ -71,6 +71,22 @@ sequenceDiagram
     Service-->>-Tasker: { status: "accepted", id: "..." }
 ```
 
+## Recent Changes
+
+| Commit     | Change                                                       | Date       |
+| ---------- | ------------------------------------------------------------ | ---------- |
+| `6ca6e5a`  | Address review comments on v8-ignore tests                   | 2026-03-11 |
+| `34d0200`  | Add v8-ignore exemptions for ts-type branches                | 2026-03-11 |
+| `b271a4a`  | Write tests for v8-ignore blocks and remove exemptions       | 2026-03-10 |
+| `6063175`  | Add dev-mode log formatting for PM2 readability              | 2026-02-16 |
+| `a52a6bb`  | Add Dash0 OpenTelemetry integration (distributed tracing)    | 2026-02-16 |
+| `5aa3e1b`  | Enable strict 100% coverage enforcement (Phase 3)            | 2026-01-31 |
+| `4468d72`  | Add @allow-raw-send annotations for 204 No Content responses | 2026-01-30 |
+
+### v3.3.0 — v8 Ignore Test Replacement
+
+v8 ignore blocks in `firestoreNotificationRepository.ts` and `firestoreSignatureConnectionRepository.ts` were replaced with real tests covering Firestore error paths and edge cases. Remaining v8 ignore directives use the documented `ts-type` category for `noUncheckedIndexedAccess` safety branches that TypeScript requires but cannot be triggered at runtime.
+
 ## API Endpoints
 
 ### Connection
@@ -89,11 +105,11 @@ sequenceDiagram
 
 ### Filters
 
-| Method | Path                               | Purpose                        | Auth         | Response       |
-| ------ | ---------------------------------- | ------------------------------ | ------------ | -------------- |
-| GET    | `/notifications/filters`           | Get filter options + saved     | Bearer token | 200 OK         |
-| POST   | `/notifications/filters/saved`     | Create saved filter            | Bearer token | 201 Created    |
-| DELETE | `/notifications/filters/saved/:id` | Delete saved filter            | Bearer token | 204 No Content |
+| Method | Path                               | Purpose                    | Auth         | Response       |
+| ------ | ---------------------------------- | -------------------------- | ------------ | -------------- |
+| GET    | `/notifications/filters`           | Get filter options + saved | Bearer token | 200 OK         |
+| POST   | `/notifications/filters/saved`     | Create saved filter        | Bearer token | 201 Created    |
+| DELETE | `/notifications/filters/saved/:id` | Delete saved filter        | Bearer token | 204 No Content |
 
 ### Internal
 
@@ -109,11 +125,11 @@ sequenceDiagram
 
 ### System
 
-| Method | Path            | Purpose          | Auth |
-| ------ | --------------- | ---------------- | ---- |
-| GET    | `/health`       | Health check     | None |
-| GET    | `/openapi.json` | OpenAPI spec     | None |
-| GET    | `/docs`         | Swagger UI       | None |
+| Method | Path            | Purpose      | Auth |
+| ------ | --------------- | ------------ | ---- |
+| GET    | `/health`       | Health check | None |
+| GET    | `/openapi.json` | OpenAPI spec | None |
+| GET    | `/docs`         | Swagger UI   | None |
 
 ## Webhook Payload
 
@@ -130,13 +146,13 @@ interface WebhookPayload {
 }
 ```
 
-Authentication: `X-Mobile-Notifications-Signature` header (SHA-256 hash lookup).
+Authentication: `X-Mobile-Notifications-Signature` header. The header value is SHA-256 hashed and looked up against stored connection hashes.
 
 ## List Notifications Query Parameters
 
 | Parameter | Type    | Description                                               |
 | --------- | ------- | --------------------------------------------------------- |
-| `limit`   | integer | 1-100, default 50                                         |
+| `limit`   | integer | 1–100, default 50                                         |
 | `cursor`  | string  | Pagination cursor from previous response                  |
 | `source`  | string  | Filter by source (comma-separated for multiple)           |
 | `app`     | string  | Filter by app package name (comma-separated for multiple) |
@@ -148,15 +164,15 @@ Authentication: `X-Mobile-Notifications-Signature` header (SHA-256 hash lookup).
 interface QueryNotificationsBody {
   userId: string;
   filter?: {
-    app?: string[];    // OR logic across apps
-    source?: string;   // Single value
-    title?: string;    // Case-insensitive contains
+    app?: string[];   // OR logic across apps
+    source?: string;  // Single value
+    title?: string;   // Case-insensitive contains
   };
-  limit?: number;      // 1-1000, default 50
+  limit?: number;     // 1–1000, default 50
 }
 ```
 
-Internal response maps `text` to `body` and `receivedAt` to `timestamp` for compatibility with consumers.
+Internal response maps `text` → `body` and `receivedAt` → `timestamp` for compatibility with consumers.
 
 ## Domain Models
 
@@ -201,7 +217,7 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 | Field       | Type                | Description                             |
 | ----------- | ------------------- | --------------------------------------- |
 | `id`        | string              | Filter ID (UUID)                        |
-| `name`      | string              | User-provided filter name (1-100 chars) |
+| `name`      | string              | User-provided filter name (1–100 chars) |
 | `app`       | string[] (optional) | App package names to filter             |
 | `device`    | string[] (optional) | Device names to filter                  |
 | `source`    | string (optional)   | Source to filter                        |
@@ -210,49 +226,48 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 
 ## Firestore Collections
 
-| Collection                       | Document Key | Description                                  |
-| -------------------------------- | ------------ | -------------------------------------------- |
-| `mobile_notifications`           | Auto-ID      | Notification documents                       |
-| `mobile_notification_signatures` | Auto-ID      | Signature-to-user binding documents          |
-| `mobile_notifications_filters`   | userId       | Filter options and saved filters per user    |
+| Collection                       | Document Key | Description                               |
+| -------------------------------- | ------------ | ----------------------------------------- |
+| `mobile_notifications`           | Auto-ID      | Notification documents                    |
+| `mobile_notification_signatures` | Auto-ID      | Signature-to-user binding documents       |
+| `mobile_notifications_filters`   | userId       | Filter options and saved filters per user |
 
 ## Configuration
 
-| Environment Variable             | Required | Description                             |
-| -------------------------------- | -------- | --------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | GCP project for Firestore               |
-| `INTEXURAOS_AUTH_JWKS_URL`       | Yes      | JWT JWKS endpoint URL                   |
-| `INTEXURAOS_AUTH_ISSUER`         | Yes      | JWT issuer                              |
-| `INTEXURAOS_AUTH_AUDIENCE`       | Yes      | JWT audience                            |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth         |
-| `INTEXURAOS_SENTRY_DSN`          | No       | Sentry DSN for error reporting          |
-| `INTEXURAOS_ENVIRONMENT`         | No       | Environment name (default: development) |
+| Environment Variable        | Required | Description                             |
+| --------------------------- | -------- | --------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID` | Yes      | GCP project for Firestore               |
+| `INTEXURAOS_AUTH_JWKS_URL`  | Yes      | JWT JWKS endpoint URL                   |
+| `INTEXURAOS_AUTH_ISSUER`    | Yes      | JWT issuer                              |
+| `INTEXURAOS_AUTH_AUDIENCE`  | Yes      | JWT audience                            |
+| `INTEXURAOS_SENTRY_DSN`     | No       | Sentry DSN for error reporting          |
+| `INTEXURAOS_ENVIRONMENT`    | No       | Environment name (default: development) |
+| `PORT`                      | No       | Server port (default: 8080)             |
+| `HOST`                      | No       | Server host (default: 0.0.0.0)          |
 
 ## Gotchas
 
-- **Signature security** -- Plaintext signature returned only on creation. Store it securely. The service stores only the SHA-256 hash. Lost tokens require creating a new connection.
+- **Signature security** — Plaintext signature returned only on creation. Store it securely. The service stores only the SHA-256 hash. Lost tokens require creating a new connection.
 
-- **Single signature per user** -- Creating a new connection (`POST /mobile-notifications/connect`) deletes all existing signatures for the user first. Only one active signature per user at a time.
+- **Single signature per user** — Creating a new connection (`POST /mobile-notifications/connect`) deletes all existing signatures for the user first. Only one active signature per user at a time.
 
-- **Hash comparison** -- Webhook signatures compared as SHA-256 hashes; plaintext is never stored or logged.
+- **Hash comparison** — Webhook signatures are compared as SHA-256 hashes; plaintext is never stored or logged.
 
-- **Idempotency** -- Duplicate webhooks with the same `notification_id` per user are silently ignored (status: `ignored`, reason: `duplicate`).
+- **Idempotency** — Duplicate webhooks with the same `notification_id` per user are silently ignored (`status: "ignored"`, `reason: "duplicate"`).
 
-- **Title filter is in-memory** -- The `title` filter for notifications uses case-insensitive substring matching performed in application code after Firestore query. This limits batch iterations to 5 rounds to prevent excessive reads.
+- **Title filter is in-memory** — The `title` filter uses case-insensitive substring matching performed in application code after the Firestore query. Batch iteration is capped at 5 rounds to prevent excessive reads.
 
-- **Filter defaults** -- `GET /notifications/filters` returns an empty options document if no notifications received yet; never 404.
+- **Filter defaults** — `GET /notifications/filters` returns an empty options document if no notifications have been received yet; it never returns 404.
 
-- **Response contract** -- All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. DELETE saved filter uses raw `reply.send()` with 204 (`@allow-raw-send`).
+- **Response contract** — All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. `DELETE /notifications/filters/saved/:id` uses raw `reply.send()` with 204 (`@allow-raw-send`).
 
-- **DELETE notification returns 200** -- `DELETE /mobile-notifications/:notification_id` returns `{ success: true, data: {} }` (not 204).
+- **DELETE notification returns 200** — `DELETE /mobile-notifications/:notification_id` returns `{ success: true, data: {} }` (not 204).
 
-- **Webhook raw body capture** -- A `preParsing` hook captures the raw body specifically for the `/mobile-notifications/webhooks` endpoint to aid debugging JSON parse errors.
+- **Filter options best-effort** — When a notification is saved, filter options (app, device, source) are updated via Firestore `arrayUnion`. If this update fails, the notification is still accepted; the failure is logged as non-critical.
 
-- **Filter options best-effort** -- When a notification is saved, filter options (app, device, source) are updated using Firestore `arrayUnion`. If this update fails, the notification is still accepted; the failure is logged as non-critical.
+- **Cursor encoding** — Pagination cursors are base64-encoded JSON containing `receivedAt` and `id`. Invalid cursors are silently ignored (treated as no cursor).
 
-- **Cursor encoding** -- Pagination cursors are base64-encoded JSON containing `receivedAt` and `id`. Invalid cursors are silently ignored (treated as no cursor).
-
-- **Sentry logging** -- Uses `createAppLogger()` from `@intexuraos/infra-sentry`, not direct `pino()`.
+- **Sentry logging** — Uses `createAppLogger()` from `@intexuraos/infra-sentry`, not direct `pino()`.
 
 ## File Structure
 
@@ -261,7 +276,7 @@ apps/mobile-notifications-service/src/
   domain/
     notifications/         # Notification + SignatureConnection models and use cases
       models/              # Notification, SignatureConnection entities
-      ports/               # Repository interfaces (NotificationRepository, SignatureConnectionRepository)
+      ports/               # Repository interfaces
       usecases/            # createConnection, processNotification, listNotifications, deleteNotification
     filters/               # Filter models and repository interface
       models/              # NotificationFiltersData, SavedNotificationFilter, FilterOptionField
@@ -274,30 +289,13 @@ apps/mobile-notifications-service/src/
   routes/
     connectRoutes.ts       # POST /mobile-notifications/connect
     statusRoutes.ts        # GET /mobile-notifications/status
-    notificationRoutes.ts  # GET /mobile-notifications, DELETE /mobile-notifications/:notification_id
-    filterRoutes.ts        # GET/POST /notifications/filters/..., DELETE /notifications/filters/saved/:id
+    notificationRoutes.ts  # GET /mobile-notifications, DELETE /mobile-notifications/:id
+    filterRoutes.ts        # GET/POST/DELETE /notifications/filters/...
     webhookRoutes.ts       # POST /mobile-notifications/webhooks
     internalRoutes.ts      # POST /internal/mobile-notifications/query
     schemas.ts             # OpenAPI schema definitions
   services.ts              # DI container (3 repositories)
-  server.ts                # Fastify server setup (auth, CORS, Swagger, health check)
+  server.ts                # Fastify server setup
   config.ts                # Zod-validated configuration
   index.ts                 # Entry point with Sentry init
 ```
-
-## Recent Changes
-
-| Commit      | Change                                                              | Date       |
-| ----------- | ------------------------------------------------------------------- | ---------- |
-| `b271a4a5`  | Write tests for v8-ignore blocks and remove exemptions              | 2026-03-11 |
-| `b3f34d85`  | Release v3.1.0 (version bump)                                       | 2026-02-22 |
-| `c8a42105`  | Release v3.0.0 (version bump)                                       | 2026-02-19 |
-| `6063175b`  | Add dev-mode log formatting for PM2 readability                     | 2026-02-16 |
-| `a52a6bbc`  | Add Dash0 OpenTelemetry integration (distributed tracing)           | 2026-02-16 |
-| `5aa3e1bd`  | Enable strict 100% coverage enforcement (Phase 3)                   | 2026-01-31 |
-| `c3198407`  | Fix all response contract violations (reply.ok / reply.fail)        | 2026-01-30 |
-| `dfd702f1`  | Migrate to createAppLogger() (Sentry-enabled logging)               | 2026-01-30 |
-
-### v8 Ignore Test Replacement
-
-Replaced v8 ignore blocks with real tests in `firestoreNotificationRepository.ts` and `firestoreSignatureConnectionRepository.ts`. Added test suites covering Firestore error paths and edge cases. Remaining 10 v8 ignore directives across 4 files use documented categories: `ts-type` (for `noUncheckedIndexedAccess` patterns).

@@ -36,6 +36,12 @@ Once you approve, the execution phase begins. The web app links the two phases t
 
 **Example:** You ask the system to refactor your authentication module. The design phase comes back with a plan that proposes changing three files and adding a new utility. You read it, notice it missed an edge case in token refresh, and type that feedback as a follow-up. The agent revises the plan. You approve the updated version, and execution begins. Twenty minutes later, the PR events show up — you expand them, read the review comments and activity, and click through to GitHub to merge.
 
+### Track GitHub Activity with an Event Decision Log
+
+Every GitHub event that passes through the system — pull request reviews, webhook decisions, CI results — appears in the PR Events page. The GitHub event decision log shows which events triggered agent decisions, what the decision was, and whether it is still pending. You filter by decision status, search by repository or PR number, and see a live connection indicator so you know whether the event stream is healthy.
+
+**Example:** A pull request you opened yesterday had three review events. You open the PR Events page, filter to pending decisions, and see one event that the system has not acted on yet. You expand it to read the event details and decide whether to nudge the agent or wait.
+
 ### Act on Everything From One Inbox
 
 Commands and actions flow into a single inbox. Commands are things the system received — messages, requests, inputs from various channels. Actions are things the system wants to do about them. Some actions just need your awareness. Others need your explicit approval before the system proceeds.
@@ -54,7 +60,13 @@ The Linear integration presents your issues in grouped columns — Planning, In 
 
 Research tasks return structured reports with sources, summaries, and findings. The web app shows them in a list view, and you can drill into any report to read the full analysis. Data insights sit alongside — combined views that pull together information from multiple sources into a single feed, saved visualizations you have configured, and static data sources you have uploaded for reference.
 
-**Example:** You asked the system to research pricing models for a competitor. The report comes back with four sources, a summary table, and a recommendation section. You read it in the web app, decide you want deeper analysis on one point, and send a follow-up research request. The new report lands in the same list, and you compare the two side by side.
+**Example:** You asked the system to research pricing models for a competitor. The report comes back with four sources, a summary table, and a recommendation section. You read it, decide you want deeper analysis on one point, and send a follow-up research request. The new report lands in the same list, and you compare the two side by side.
+
+### Configure Your AI Workers
+
+The Worker Configuration page lets you register, test, and manage the code execution workers that run agent tasks. Each worker requires Cloudflare Access credentials and an orchestrator secret. You can reorder workers to set priority, test connectivity with a live check, and set a default review worker type per your preferences — choosing which AI model handles review tasks by default. Up to two workers can be registered at a time.
+
+**Example:** You have two workers registered — one running Opus for complex tasks and one running Sonnet for speed. You set Sonnet as your default review worker type so that quick review passes happen faster without consuming Opus capacity for your main implementation tasks.
 
 ### Everything Else in One Place
 
@@ -81,6 +93,7 @@ Install the web app from your browser — on mobile, use "Add to Home Screen." S
 - **Real-time visibility into code generation** — color-coded log streams show exactly what the agent is doing, not a summary after the fact
 - **Phone-native experience** — install it to your home screen, share content from any app, and the shell loads even offline — the system is always one tap away
 - **Control without friction** — follow-up messages, approval buttons, and phase gates give you authority over the system's next move without slowing it down
+- **GitHub event transparency** — the decision log shows every webhook event and its outcome, so nothing disappears silently into the system
 
 ## Limitations
 
@@ -89,6 +102,7 @@ Install the web app from your browser — on mobile, use "Add to Home Screen." S
 - **Guest access is limited to the chat assistant** — inbox, code tasks, and other views require a full account
 - **Share target requires installation** — sending content from other apps only works when the PWA is installed to your home screen
 - **Some settings assume familiarity** — pages like webhook configuration and worker setup have no guided wizard yet
+- **Maximum two workers** — the worker configuration page supports up to two registered workers at a time
 
 ---
 

@@ -19,7 +19,7 @@ A startup CTO has a workstation sitting idle after an office move — a machine 
 3. The orchestrator creates a dedicated copy of the repository on its own branch and spins up a Docker container scoped to that workspace — its own credentials, its own resource limits, its own log stream.
 4. The worker enters the Planning Agent flow: it analyzes the issue, enriches it with context, designs an approach, and adds labels to Linear. No code is committed yet.
 5. The CTO reviews the design from her dashboard, watching logs stream in real time. She sends a mid-task message clarifying a requirement.
-6. The worker moves to the Execution Agent flow: it writes tests, implements the endpoint, runs the automated test suite, performs a mandatory simplification pass, executes an internal code review loop, and opens a pull request on GitHub.
+6. The worker moves to the Execution Agent flow: it writes tests, implements the endpoint, runs the automated test suite, performs a mandatory simplification pass, executes an internal code review loop, and opens a pull request on GitHub — including the model name used in the PR description.
 7. Two independent verifiers confirm the result. The Completion Verifier checks that the agent's final output block satisfies its contract (structured metadata extraction via Gemini). The Execution Deep Validator then analyzes the full session transcript — verifying claims against evidence, checking contract compliance, comparing the plan to the actual implementation, and surfacing anomalies — posting a structured report directly on the PR.
 8. A separate Review Agent performs an automated code review of the PR, posting inline comments on code quality, security, and architecture concerns.
 9. The CTO reviews a clean pull request with an independent quality assessment. Her source code never left the building.
@@ -36,7 +36,7 @@ You can run one orchestrator or several, each on different hardware, each in a d
 
 ### Choose Your Model Provider
 
-Each task specifies a worker type that determines which AI model provider handles the inference. The orchestrator supports Anthropic (opus, auto, sonnet), MiniMax (MiniMax-M2.5), and Alibaba Cloud (GLM-5, Qwen 3.5 Plus, Kimi K2.5). OAuth credentials for Anthropic models are managed automatically — the orchestrator reads Claude CLI credentials, refreshes tokens before they expire, and propagates fresh credentials to every running container. Third-party API keys are validated at startup so you know immediately if a provider is misconfigured.
+Each task specifies a worker type that determines which AI model provider handles the inference. The orchestrator supports Anthropic (opus, auto, sonnet), MiniMax (MiniMax-M2.5), and Alibaba Cloud via DashScope (GLM-5, Qwen 3.5 Plus, Kimi K2.5). OAuth credentials for Anthropic models are managed automatically — the orchestrator reads Claude CLI credentials, refreshes tokens before they expire, and propagates fresh credentials to every running container. Third-party API keys are validated at startup so you know immediately if a provider is misconfigured.
 
 **Example:** A team routes complex architecture tasks to opus for maximum reasoning depth, routine bug fixes to sonnet for speed and cost efficiency, and batch documentation tasks to Qwen 3.5 Plus. The orchestrator dispatches each to the right provider without manual intervention.
 
@@ -56,13 +56,13 @@ Autonomous agents have a persistent habit: declaring the work done when it is no
 
 **Stage 2 — Deep Validation.** For execution tasks that produce a PR, the orchestrator reads the full Claude session transcript, fetches the Linear issue requirements and any referenced plan document, and sends the entire context to Gemini for a structured post-completion audit. The resulting Deep Validation Report — covering claim verification, contract compliance, plan-vs-reality comparison, and anomaly detection — is posted directly on the PR as a GitHub comment with visual severity indicators. This gives reviewers an independent, evidence-backed assessment of whether the agent actually did what it claimed.
 
-**Example:** A worker completes an API endpoint but forgets to update the test suite. The Completion Verifier catches the missing test coverage and triggers a second attempt. On the second attempt, the worker adds the tests, CI passes, and the Completion Verifier confirms completion. Then the Deep Validator analyzes the full transcript, confirms that both mandatory skills were invoked in the correct order, that all Linear issue requirements are addressed, and posts a clean report on the PR.
+**Example:** A worker completes an API endpoint but forgets to update the test suite. The Completion Verifier catches the missing coverage and triggers a second attempt. On the second attempt, the worker adds the tests, CI passes, and the Completion Verifier confirms completion. Then the Deep Validator analyzes the full transcript, confirms that both mandatory skills were invoked in the correct order, that all Linear issue requirements are addressed, and posts a clean report on the PR.
 
 ### Follow the Work in Real Time
 
 Logs stream back to the platform as they happen, flushed every three seconds, so you can watch a worker's progress from the dashboard as if you were looking over a colleague's shoulder. Docker stream headers and ANSI escape codes are stripped automatically, and every line is timestamped for readability. Per-task metrics — processing time, peak memory usage, AI token consumption, time spent waiting on API calls versus executing tools — flow back alongside the logs. You know exactly what each task costs and where the time went.
 
-A heartbeat pings the platform every ten minutes. If the orchestrator goes silent, the platform knows immediately rather than waiting for a timeout. No stalled task occupies capacity without someone noticing.
+A heartbeat pings the platform every ten minutes. If the orchestrator goes silent, the platform knows immediately rather than waiting for a timeout. A unified PR automation log records each step of the planning and execution pipeline — planning PR creation, execution task start, review requests, PR readiness — giving maintainers an auditable record of what happened and when.
 
 **Example:** A team lead watches the orchestrator work through a complex refactoring task. Forty minutes in, she notices the worker is heading down the wrong path. She sends a mid-task message with a clarification, which the orchestrator queues and delivers when the current attempt finishes — triggering a follow-up with her feedback incorporated. Without real-time visibility, she would have discovered the problem only after reviewing a flawed pull request.
 
@@ -70,7 +70,7 @@ A heartbeat pings the platform every ten minutes. If the orchestrator goes silen
 
 Tasks follow a deliberate agent-based workflow with four specialized agent types. In the **Planning Agent** flow, the worker analyzes the issue, reads all Linear comments (including clarifications from previous runs), makes an explicit complexity judgment, and either enriches the issue description in place (simple tasks) or creates subtasks with parallel work breakdowns and opens a planning PR (complex tasks). In the **Execution Agent** flow, the worker writes tests, implements the solution, runs the automated test suite, performs a mandatory `/simplify` pass on all changed files, executes a zero-tolerance code review loop, and creates a pull request. The **Pull Request Agent** handles comment-driven follow-up work on existing PRs, gathering feedback from all three GitHub comment sources and updating a single tracking comment. The **Review Agent** performs automated read-only code reviews, posting structured inline review comments on code quality, security, and architecture.
 
-The planning and execution flows can run as separate tasks, giving you a natural review checkpoint. Approve the plan, then let the worker execute. For execution tasks that follow a planning phase, the orchestrator automatically merges the planning PR branch into the execution worktree so the worker starts with the approved design context. When tasks are retried, existing PR branches are inherited so the continuation builds on previous work instead of starting fresh.
+The planning and execution flows can run as separate tasks, giving you a natural review checkpoint. Approve the plan, then let the worker execute. For execution tasks that follow a planning phase, the orchestrator automatically merges the planning PR branch into the execution worktree so the worker starts with the approved design context. When tasks are retried, existing PR branches are inherited so the continuation builds on previous work instead of starting fresh. Execution tasks report an `already_completed` outcome label when the agent determines the work was previously done and merged.
 
 **Example:** A developer files an issue to add OAuth support to an existing API. The Planning Agent produces an enriched issue with the proposed approach. The developer reviews the plan, spots a missing edge case, and adds a comment. The Execution Agent begins with the edge case already accounted for. After the PR is created, the Review Agent automatically reviews it for code quality and security issues. When the developer requests changes, the Pull Request Agent addresses the feedback and pushes updates to the existing branch.
 
@@ -89,7 +89,7 @@ Install the orchestrator on any Unix machine with Docker, set up a Cloudflare tu
 ## Key Benefits
 
 - **Infrastructure sovereignty** — Your source code never leaves your network; outbound data is limited to task status, logs, and performance metrics
-- **Model flexibility** — Route tasks to Anthropic, MiniMax, or Alibaba Cloud models (including Kimi K2.5) based on complexity and cost requirements
+- **Model flexibility** — Route tasks to Anthropic, MiniMax, or Alibaba Cloud DashScope models (including Kimi K2.5) based on complexity and cost requirements
 - **Location independence** — Any Unix machine with Docker becomes a worker station, connected through a single outbound tunnel
 - **Concurrent isolation** — Each task gets its own branch, container, credentials, and resource limits with no cross-task visibility
 - **Two-stage verification** — Completion is confirmed by Gemini semantic analysis with agent-specific schema validation, then Deep Validation audits the full transcript against the plan and posts a structured report on the PR
@@ -104,7 +104,7 @@ Install the orchestrator on any Unix machine with Docker, set up a Cloudflare tu
 - **Docker required** — The host machine must have Docker installed and running; containers are the isolation boundary
 - **Cloudflare tunnel required** — Connectivity to the platform depends on a Cloudflare tunnel (free tier available) for the outbound-only connection
 - **Two-hour attempt ceiling** — Each individual attempt has a maximum runtime of two hours; long-running tasks must be broken into smaller issues
-- **Log volume cap** — Log output is capped at 4MB per task; extremely verbose builds may see truncated output
+- **Log volume cap** — Log output is capped at 4 MB per task; extremely verbose builds may see truncated output
 - **Verification dependency** — Completion verification requires an available Gemini API; if the verifier is unreachable, the task fails rather than allowing unverified results through
 
 ---

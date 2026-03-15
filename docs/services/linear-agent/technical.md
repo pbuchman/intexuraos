@@ -183,17 +183,17 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit      | Description                                                                    | Date       |
-| ----------- | ------------------------------------------------------------------------------ | ---------- |
-| `42444307`  | Add `already_completed` execution outcome label (INT-773)                      | 2026-03-14 |
-| `b8bba98f`  | Replace sequential 2N Firestore queries with batched reads in display-batch    | 2026-03-13 |
-| `e690e9d9`  | Replace v8-ignore blocks with real tests in linear-agent (INT-792)             | 2026-03-13 |
-| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                         | 2026-03-12 |
-| `948fbab9`  | Gate shouldTriggerCodeTask on planning-task or code-task label                 | 2026-03-09 |
-| `84005b20`  | Hydrate code task Linear data live                                             | 2026-03-05 |
-| `d81fc1a3`  | Add mandatory Linear issue comments reading to all agent prompts (INT-715)     | 2026-03-04 |
-| `cccafc85`  | Multi-user webhook fan-out, comment routing, internal route scoping            | 2026-03-03 |
-| `7f19646f`  | Prevent cross-user data overwrite during Linear sync                           | 2026-03-02 |
+| Commit     | Description                                                                 | Date       |
+| ---------- | --------------------------------------------------------------------------- | ---------- |
+| `42444307` | Add `already_completed` execution outcome label (INT-773)                   | 2026-03-14 |
+| `b8bba98f` | Replace sequential 2N Firestore queries with batched reads in display-batch | 2026-03-13 |
+| `e690e9d9` | Replace v8-ignore blocks with real tests in linear-agent (INT-792)          | 2026-03-13 |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                      | 2026-03-12 |
+| `948fbab9` | Gate shouldTriggerCodeTask on planning-task or code-task label              | 2026-03-09 |
+| `84005b20` | Hydrate code task Linear data live                                          | 2026-03-05 |
+| `d81fc1a3` | Add mandatory Linear issue comments reading to all agent prompts (INT-715)  | 2026-03-04 |
+| `cccafc85` | Multi-user webhook fan-out, comment routing, internal route scoping         | 2026-03-03 |
+| `7f19646f` | Prevent cross-user data overwrite during Linear sync                        | 2026-03-02 |
 
 ### Unified Integration for Chinese LLMs via Alibaba Cloud Model Studio (93aeac4a)
 
@@ -264,13 +264,13 @@ Added `done` to the `UpdateStateBody` state union and `Done` to the state name m
 ```typescript
 interface ListIssuesResponse {
   issues: {
-    todo: LinearIssue[]; // Issues in "Todo" state
-    backlog: LinearIssue[]; // Issues in "Backlog" state
+    todo: LinearIssue[];        // Issues in "Todo" state
+    backlog: LinearIssue[];     // Issues in "Backlog" state
     in_progress: LinearIssue[]; // Issues being worked on
-    in_review: LinearIssue[]; // Issues in code review
-    to_test: LinearIssue[]; // Issues awaiting QA
-    done: LinearIssue[]; // Completed in last 7 days
-    archive: LinearIssue[]; // Older completed issues
+    in_review: LinearIssue[];   // Issues in code review
+    to_test: LinearIssue[];     // Issues awaiting QA
+    done: LinearIssue[];        // Completed in last 7 days
+    archive: LinearIssue[];     // Older completed issues
   };
   teamName: string;
 }
@@ -323,7 +323,7 @@ interface IssueTreeResponse {
     identifier: string;
     url: string;
     parentId: string | null;
-    labels: string[];       // Label names
+    labels: string[];        // Label names
     assigneeId: string | null;
     state: string;
   };
@@ -339,7 +339,7 @@ interface IssueTreeResponse {
 }
 ```
 
-Builds a recursive tree from the user's synced issues using BFS traversal.
+Builds a recursive tree from the user's synced issues using BFS traversal. Does not call the Linear API.
 
 ## Domain Models
 
@@ -373,7 +373,7 @@ interface LinearIssue {
 
 ```typescript
 interface SyncedLinearIssue {
-  id: string;       // Linear UUID (document ID)
+  id: string;         // Linear UUID (document ID)
   identifier: string;
   title: string;
   description: string | null;
@@ -384,12 +384,12 @@ interface SyncedLinearIssue {
   assigneeName: string | null;
   labels: LinearLabel[];
   url: string;
-  userId: string;   // Owner user ID (for multi-tenant)
+  userId: string;     // Owner user ID (for multi-tenant)
   parentId: string | null;
   createdAt: string;
   updatedAt: string;
   syncedAt: string;
-  teamId: string;   // Linear team ID (for webhook secret lookup)
+  teamId: string;     // Linear team ID (for webhook secret lookup)
 }
 ```
 
@@ -430,7 +430,7 @@ type DashboardColumn = 'todo' | 'backlog' | 'in_progress' | 'in_review' | 'to_te
 
 ### processLinearAction
 
-Extracts structured issue data from natural language via LLM, creates the issue in Linear, and tracks the action for idempotency. Saves failed extractions for manual review.
+Extracts structured issue data from natural language via LLM, creates the issue in Linear, and tracks the action for idempotency. Saves failed extractions for manual review. Checks `processedActionRepository` first — duplicate submissions return the existing result.
 
 ### listIssues
 
@@ -438,15 +438,15 @@ Reads all synced issues from Firestore, builds parent-child relationships in mem
 
 ### generateIssueTitle
 
-Generates a concise issue title (max 80 chars) from a task description using LLM. Returns `err()` if all attempts (2) fail — no regex fallback.
+Generates a concise issue title (max 80 chars) from a task description using LLM. Retries once on failure. Returns `err()` if all attempts fail — no silent degradation or regex fallback.
 
 ### validateIssue
 
-Validates a Linear issue identifier (format: `XXX-123`) against the user's connected workspace. Confirms identifier format, issue existence, and team ownership.
+Validates a Linear issue identifier (format: `XXX-123`) against the user's connected workspace. Confirms identifier format, issue existence, and team ownership. Returns `labels` as `string[]` at the HTTP boundary (names only, not full objects).
 
 ### syncSingleIssue
 
-Processes a single webhook event. Maps payload to `SyncedLinearIssue` via `issueMapper`, then saves or deletes in the local repository. Now called per-user via fan-out.
+Processes a single webhook event. Maps payload to `SyncedLinearIssue` via `issueMapper`, then saves or deletes in the local repository. Called per-user via fan-out for multi-tenant scenarios.
 
 ### syncCommentFromWebhook
 
@@ -458,7 +458,7 @@ Triggered by webhook events when an issue is assigned for the first time. Uses `
 
 ### fullSync / fullSyncAllUsers
 
-`fullSync` performs a complete reconciliation for one user: fetches all issues from Linear API, upserts to local storage with composite key `userId_issueId`, and deletes stale issues scoped to the user. `fullSyncAllUsers` iterates all connected users.
+`fullSync` performs a complete reconciliation for one user: fetches all issues from Linear API, upserts to local storage with composite key `userId_issueId`, and deletes stale issues scoped to the user. `fullSyncAllUsers` iterates all connected users sequentially — used by Cloud Scheduler.
 
 ## Firestore Collections
 
@@ -486,7 +486,7 @@ Uses the user's configured LLM provider (typically Gemini 2.5 Flash) to parse na
 
 ### LLM Title Generation
 
-Uses `linearIssueTitlePrompt` from `@intexuraos/llm-prompts`. Retries once on failure. Returns `err()` if 2 attempts fail.
+Uses `linearIssueTitlePrompt` from `@intexuraos/llm-prompts`. Retries once on failure. Returns `err()` if 2 attempts fail. Empty input returns `{ title: 'Code task', issueType: 'feature' }` immediately without LLM call.
 
 ### Priority Inference
 
@@ -518,7 +518,7 @@ Linear webhooks are verified using HMAC-SHA256 signatures. The raw request body 
 - `mapWebhookToSyncedIssue` — Maps webhook payload with assignee, labels, team data, and parent ID
 - `mapApiIssueToSyncedIssue` — Maps API response with full label and assignee data
 
-Both include safe parsing of state types (defaults to 'unstarted') and priority values (defaults to 0).
+Both include safe parsing of state types (defaults to `'unstarted'`) and priority values (defaults to `0`).
 
 ## Linear API Client Optimizations
 
@@ -548,7 +548,7 @@ Both include safe parsing of state types (defaults to 'unstarted') and priority 
 | `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                        |
 | `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                 |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key               |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint (no-op if unset)  |
+| `INTEXURAOS_ENVIRONMENT`              | No       | Sentry environment tag                |
 
 ## Dependencies
 
@@ -560,15 +560,15 @@ Both include safe parsing of state types (defaults to 'unstarted') and priority 
 | app-settings-service | `/internal/pricing`         | LLM pricing data                            |
 | code-agent           | `/internal/code/process`    | Auto-trigger code tasks on issue assignment |
 | actions-agent        | (caller)                    | Upstream orchestrator                       |
-| code-agent           | (caller)                    | Programmatic issue mgmt                     |
+| code-agent           | (caller)                    | Programmatic issue management               |
 
 ### External Services
 
-| Service         | Purpose                         | Failure Mode            |
-| --------------- | ------------------------------- | ----------------------- |
-| Linear API      | Issue CRUD, team/state queries  | Return error to client  |
-| Linear Webhooks | Real-time issue change events   | Retry by Linear         |
-| Gemini API      | Issue data extraction / titles  | Return extraction error |
+| Service         | Purpose                        | Failure Mode            |
+| --------------- | ------------------------------ | ----------------------- |
+| Linear API      | Issue CRUD, team/state queries | Return error to client  |
+| Linear Webhooks | Real-time issue change events  | Retry by Linear         |
+| Gemini API      | Issue data extraction / titles | Return extraction error |
 
 ## Error Handling
 
@@ -596,66 +596,67 @@ Both include safe parsing of state types (defaults to 'unstarted') and priority 
 - Idempotency check uses `actionId`, not message content hash
 - Webhook signature validation requires raw body capture via custom Fastify content type parser
 - `linear_issues` documents use composite key `userId_issueId` — queries by issueId alone require a field query
-- Unknown webhook state types default to `unstarted`; out-of-range priority values default to 0
+- Unknown webhook state types default to `unstarted`; out-of-range priority values default to `0`
 - `generateIssueTitle` returns `err()` on LLM failure — no silent degradation
 - Dashboard (`GET /linear/issues`) reads from Firestore; run a full sync if data seems stale
-- `/internal/linear/sync-all` accepts both OIDC Bearer tokens (Cloud Scheduler) and X-Internal-Auth
+- `/internal/linear/sync-all` accepts both OIDC Bearer tokens (Cloud Scheduler) and `X-Internal-Auth`
 - Labels are full objects `{ id, name, color }` internally; `validateIssue` HTTP response maps them to `string[]` (names only)
-- Auto-trigger code task fires on first assignment (null -> non-null assignee) while state is `backlog` or `unstarted` AND issue has a `planning-task` or `code-task` label
+- Auto-trigger code task fires on first assignment (null → non-null assignee) while state is `backlog` or `unstarted` AND issue has a `planning-task` or `code-task` label
 - Auto-trigger selects prompt based on label: execution prompt (code-task) or enrichment prompt (planning-task)
 - Webhook fan-out syncs ALL connected users per team — `Promise.allSettled` ensures one user's failure does not block others
 - Comment webhooks determine teamId from the synced issue; issues without a teamId (synced before teamId was added) skip signature validation
-- `findLinearIssueById` uses a field query without userId scoping — in multi-user scenarios where two users have the same issue synced, it returns whichever document Firestore returns first (known limitation, tracked separately from INT-623)
+- `findLinearIssueById` uses a field query without userId scoping — in multi-user scenarios where two users have the same issue synced, it returns whichever document Firestore returns first
 - Internal issue endpoints (`/internal/issues/*` and `/internal/linear/issues/*`) require both `X-Internal-Auth` and `X-User-Id` headers
 - The `/internal/linear/issues/:issueId/metadata` endpoint resolves label names to IDs using `listIssueLabels` — unknown label names are silently dropped
 - Both `ASSIGNMENT_PROMPT` and `EXECUTION_PROMPT` in `triggerCodeTaskFromAssignment` instruct the code agent to read all Linear issue comments newest-first before starting work (INT-715)
+- `POST /internal/issues` accepts a `labels` field for future use but does not forward it to Linear on creation
 
 ## File Structure
 
 ```
 apps/linear-agent/
-+-- src/
-|   +-- domain/
-|   |   +-- models.ts             # LinearIssue, SyncedLinearIssue, LinearComment, etc.
-|   |   +-- errors.ts             # LinearError definitions
-|   |   +-- ports.ts              # Repository/client interfaces
-|   |   +-- webhookTypes.ts       # LinearWebhookEvent, LinearCommentWebhookEvent
-|   |   +-- issueMapper.ts        # mapWebhookToSyncedIssue, mapApiIssueToSyncedIssue
-|   |   +-- index.ts              # Domain barrel exports
-|   |   +-- useCases/
-|   |       +-- processLinearAction.ts        # AI extraction + issue creation
-|   |       +-- listIssues.ts                 # Firestore-based dashboard grouping
-|   |       +-- generateIssueTitle.ts         # LLM title generation
-|   |       +-- validateIssue.ts              # Issue identifier validation
-|   |       +-- syncSingleIssueUseCase.ts     # Webhook event processing
-|   |       +-- syncCommentFromWebhook.ts     # Comment webhook processing
-|   |       +-- triggerCodeTaskFromAssignment.ts  # Auto-trigger on assignment
-|   |       +-- fullSyncUseCase.ts            # Full issue reconciliation
-|   +-- infra/
-|   |   +-- firestore/
-|   |   |   +-- linearConnectionRepository.ts
-|   |   |   +-- failedIssueRepository.ts
-|   |   |   +-- processedActionRepository.ts
-|   |   |   +-- linearIssueRepository.ts      # Composite key: userId_issueId
-|   |   |   +-- linearCommentRepository.ts
-|   |   +-- linear/
-|   |   |   +-- linearApiClient.ts            # SDK client with caching + dedup
-|   |   +-- http/
-|   |   |   +-- codeAgentHttpClient.ts        # Code agent HTTP client
-|   |   +-- linearWebhookValidation.ts        # HMAC-SHA256 validation
-|   |   +-- llm/
-|   |       +-- linearActionExtractionService.ts
-|   +-- routes/
-|   |   +-- linearRoutes.ts          # Public API (14 endpoints)
-|   |   +-- internalRoutes.ts        # Internal: process-action, validate, title, sync
-|   |   +-- internalIssuesRoutes.ts  # Internal: issue CRUD, comments, metadata, tree, batch
-|   |   +-- linearWebhookRoutes.ts   # Webhook receiver with fan-out
-|   +-- services.ts                  # DI container (9 services)
-|   +-- server.ts                    # Fastify setup with raw body parser
-|   +-- config.ts                    # Configuration loader
-|   +-- index.ts                     # Entry point
-+-- __tests__/                       # Comprehensive test suite
-+-- package.json
+├── src/
+│   ├── domain/
+│   │   ├── models.ts             # LinearIssue, SyncedLinearIssue, LinearComment, etc.
+│   │   ├── errors.ts             # LinearError definitions
+│   │   ├── ports.ts              # Repository/client interfaces
+│   │   ├── webhookTypes.ts       # LinearWebhookEvent, LinearCommentWebhookEvent
+│   │   ├── issueMapper.ts        # mapWebhookToSyncedIssue, mapApiIssueToSyncedIssue
+│   │   ├── index.ts              # Domain barrel exports
+│   │   └── useCases/
+│   │       ├── processLinearAction.ts           # AI extraction + issue creation
+│   │       ├── listIssues.ts                    # Firestore-based dashboard grouping
+│   │       ├── generateIssueTitle.ts            # LLM title generation
+│   │       ├── validateIssue.ts                 # Issue identifier validation
+│   │       ├── syncSingleIssueUseCase.ts        # Webhook event processing
+│   │       ├── syncCommentFromWebhook.ts        # Comment webhook processing
+│   │       ├── triggerCodeTaskFromAssignment.ts # Auto-trigger on assignment
+│   │       └── fullSyncUseCase.ts               # Full issue reconciliation
+│   ├── infra/
+│   │   ├── firestore/
+│   │   │   ├── linearConnectionRepository.ts
+│   │   │   ├── failedIssueRepository.ts
+│   │   │   ├── processedActionRepository.ts
+│   │   │   ├── linearIssueRepository.ts   # Composite key: userId_issueId
+│   │   │   └── linearCommentRepository.ts
+│   │   ├── linear/
+│   │   │   └── linearApiClient.ts         # SDK client with caching + dedup
+│   │   ├── http/
+│   │   │   └── codeAgentHttpClient.ts     # Code agent HTTP client (30s timeout)
+│   │   ├── linearWebhookValidation.ts     # HMAC-SHA256 validation
+│   │   └── llm/
+│   │       └── linearActionExtractionService.ts
+│   ├── routes/
+│   │   ├── linearRoutes.ts          # Public API (14 endpoints)
+│   │   ├── internalRoutes.ts        # Internal: process-action, validate, title, sync
+│   │   ├── internalIssuesRoutes.ts  # Internal: issue CRUD, comments, metadata, tree, batch
+│   │   └── linearWebhookRoutes.ts   # Webhook receiver with fan-out
+│   ├── services.ts                  # DI container (9 services)
+│   ├── server.ts                    # Fastify setup with raw body parser
+│   ├── config.ts                    # Configuration loader
+│   └── index.ts                     # Entry point
+├── __tests__/                       # Comprehensive test suite
+└── package.json
 ```
 
 ---

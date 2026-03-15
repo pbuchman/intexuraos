@@ -3,7 +3,7 @@
 ## Identity
 
 - **Package:** `@intexuraos/infra-whatsapp`
-- **Version:** 2.1.0
+- **Version:** 3.3.0
 - **Purpose:** WhatsApp Business Cloud API wrapper for messaging and media
 - **External SDK:** None (raw `fetch`)
 - **API Version:** v22.0

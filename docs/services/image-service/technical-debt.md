@@ -118,6 +118,15 @@ No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
 
+### 2026-03-12: v3.3.0 ZAI Provider Removal
+
+**Issue:** ZAI provider and GLM-4.7 models were present in the LLM contract and referenced in services across the codebase.
+
+**Resolution:**
+- ZAI pricing fetch removed from `services.ts` (`REQUIRED_MODELS` reduced from 5 to 4 entries)
+- Platform fallback is now exclusively Gemini via `INTEXURAOS_GEMINI_APP_API_KEY`
+- No functional change to image generation flows — ZAI was never an image generation provider
+
 ### 2026-02-27: INT-605 Thumbnail Output Contract Alignment
 
 **Issue:** `ThumbnailPromptParameters` included `aspectRatio`, `textOnImage`, and `logosTrademarks` fields that were produced by the LLM but never consumed by the parser or downstream code.

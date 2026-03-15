@@ -1,7 +1,7 @@
 # Code Agent — Technical Debt
 
 **Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-15 autonomous run]
+**Analysis Run:** [2026-03-15 autonomous run — v3.3.0 force refresh]
 
 ---
 
@@ -10,13 +10,13 @@
 | Category       | Count  | Severity |
 | -------------- | ------ | -------- |
 | TODO comments  | 2      | Medium   |
-| Code smells    | 4      | Low-Med  |
+| Code smells    | 4      | Low–Med  |
 | Future plans   | 3      | Medium   |
 | TS strictness  | 2      | Low      |
 | SRP violations | 1      | High     |
-| **Total**      | **12** | ---      |
+| **Total**      | **12** | —        |
 
-> Note: codeRoutes.ts remains at ~3900 lines. Routing split is an ongoing priority.
+> Note: codeRoutes.ts remains a large file. Routing split is an ongoing priority. New routes are correctly added to `routes/code/` as separate files.
 
 ---
 
@@ -54,9 +54,9 @@ systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system p
 systemPromptHash: 'default', // TODO: Use actual system prompt hash
 ```
 
-The `systemPromptHash` field is designed for audit tracking --- recording which version of the system prompt was active when the task ran. Currently it stores a hardcoded string, making it impossible to audit prompt version changes.
+The `systemPromptHash` field is designed for audit tracking — recording which version of the system prompt was active when the task ran. Currently it stores a hardcoded string, making it impossible to audit prompt version changes.
 
-**Impact:** Audit trail gap --- no way to correlate task results with the system prompt version that generated them.
+**Impact:** Audit trail gap — no way to correlate task results with the system prompt version that generated them.
 
 **Remediation:** Compute SHA-256 of the actual system prompt template at startup and inject it via config.
 
@@ -64,11 +64,11 @@ The `systemPromptHash` field is designed for audit tracking --- recording which 
 
 ## Code Smells
 
-### 1. codeRoutes.ts is ~3900 lines (SRP violation)
+### 1. codeRoutes.ts is a large file (SRP violation)
 
 **File:** `apps/code-agent/src/routes/codeRoutes.ts`
 
-This single file contains all internal code task routes AND all public code task routes. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, queue draining, and worker status. Each route includes inline Fastify schema definitions that consume significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`, `github-event-log.ts`) but the original routes remain consolidated.
+This single file contains all internal code task routes AND all public code task routes. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, execution agent submission, and queue draining. Each route includes inline Fastify schema definitions that contribute significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`, `github-event-log.ts`) but the original routes remain consolidated.
 
 **Impact:** Difficult to navigate, review, and test. Changes to one route risk unintended effects on others.
 
@@ -136,7 +136,7 @@ const tasks = resultDocs.map((doc: any) => ...
 const tasks = snapshot.docs.map((doc: any) => ...
 ```
 
-**Impact:** Low --- these are infrastructure-layer Firestore SDK type coercions, not domain logic.
+**Impact:** Low — these are infrastructure-layer Firestore SDK type coercions, not domain logic.
 
 **Remediation:** Use typed Firestore converters to eliminate the `any` casts.
 
@@ -144,7 +144,7 @@ const tasks = snapshot.docs.map((doc: any) => ...
 
 ## Test Coverage Notes
 
-The service has 50+ test files covering domain models, use cases, infra adapters, and routes. Coverage exemptions use the `/* v8 ignore <CATEGORY> --- reason @preserve */` pattern with valid categories.
+The service has 50+ test files covering domain models, use cases, infra adapters, and routes. Coverage exemptions use the `/* v8 ignore <CATEGORY> — reason @preserve */` pattern with valid categories.
 
 Common exemption categories in this service:
 
@@ -174,6 +174,7 @@ Common exemption categories in this service:
 | INT-743 | GitHub Agent for PR evaluation                    | Gemini tool-calling agent with unified evaluator pipeline                      |
 | INT-744 | Unified webhook evaluator                         | Two-tier evaluation: hard rules then LLM triage with audit trail               |
 | INT-773 | Already-completed execution outcome               | `already_completed` execution outcome label added                              |
+| INT-780 | v8 coverage gaps in codeRoutes.ts                 | Refactored and added tests for uncovered branches                              |
 | INT-807 | Tasks created as dispatched before confirmed      | Tasks created as `queued`, transitioned to `dispatched` on confirmed dispatch  |
 | INT-810 | Silent dispatch failures                          | Fixed nested transaction and propagated dispatch errors                        |
 | INT-823 | Failed webhook dispatch retry                     | Dispatch retry queue with bounded attempts and TTL                             |
@@ -188,6 +189,9 @@ Common exemption categories in this service:
 | INT-847 | Merge conflicts on bot PRs undetected             | Merge conflict detection for bot-authored PRs with owner remapping             |
 | INT-852 | PR automation scattered across comments           | Unified PR automation log as single append-only GitHub comment                 |
 | INT-854 | Gemini triage failures                            | Enforced tool-call mode, retry with corrective context on LLM failure          |
+| INT-860 | Flaky automationLogFlows test                     | Mock both LLM retry attempts to stabilize test                                 |
+| INT-916 | Fixed-delay test waits cause flakiness            | Replaced fixed delays with poll-based test helpers                             |
+| INT-918 | PR event log too noisy                            | Filtered redundant events, added context fields to remaining entries           |
 | INT-921 | Review tasks not queued when busy                 | Queue support for review tasks when workers at capacity                        |
 | INT-924 | Redundant triage PR comments                      | Removed redundant "Automated Code Review Triage Decision" comments             |
 | ---     | Duplicate PR body in synchronize events           | deduplicatePRBody() pass in GET /code/github-pr-events                         |
@@ -203,11 +207,12 @@ Common exemption categories in this service:
 | ---     | Linear data stale in task list                    | Live hydration of Linear issue data via linearAgentClient                      |
 | ---     | No PR comment task creation without existing task | createTaskForPR use case with lock guard and user lookup                       |
 | ---     | Linear labels not persisted on tasks              | linearIssueLabels field added to CodeTask model                                |
+| ---     | Gemini tool calling loop in PR triage             | Fixed loop exit condition and Firestore automation log path                    |
 
 ---
 
 ## Related
 
-- [Features](features.md) --- User-facing documentation
-- [Technical](technical.md) --- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)
