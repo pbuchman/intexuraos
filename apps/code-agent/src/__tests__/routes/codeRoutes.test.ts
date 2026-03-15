@@ -225,6 +225,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         async update() { return ok(undefined); },
       },
       unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -255,7 +256,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     // Set up worker settings for the test user

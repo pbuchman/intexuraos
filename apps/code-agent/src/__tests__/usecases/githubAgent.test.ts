@@ -73,6 +73,7 @@ function createFakeGitHubPRClient(): GitHubPRClient {
       mergeable: true,
       mergeableState: 'clean',
     })),
+    getIssueComment: vi.fn().mockResolvedValue(ok({ body: '' })),
     updateIssueComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
   };
 }

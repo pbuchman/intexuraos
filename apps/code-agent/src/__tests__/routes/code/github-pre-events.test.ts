@@ -207,6 +207,7 @@ describe('GET /code/github-pr-events', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -237,7 +238,7 @@ describe('GET /code/github-pr-events', () => {
       eventDecisionRepo: import('../../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../../domain/ports/automationLog.js').AutomationLog;
     });
 
     server = await buildServer();
@@ -988,6 +989,30 @@ describe('GET /code/github-pr-events', () => {
     const response = await server.inject({
       method: 'GET',
       url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('should return 500 when findAll (all-repos) fetch fails', async () => {
+    // Mock findAll to return an error (simulating database failure when fetching all repos)
+    setServices({
+      ...getServices(),
+      gitHubPREventRepo: {
+        ...getServices().gitHubPREventRepo,
+        findAll: async () =>
+          err({ code: 'FIRESTORE_ERROR' as const, message: 'Database unavailable' }),
+      },
+    });
+
+    // Request without repository filter triggers findAll()
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events',
       headers: { authorization: 'Bearer fake-token' },
     });
 

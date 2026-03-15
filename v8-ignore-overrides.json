@@ -5,13 +5,8 @@
       "files": ["apps/bookmarks-agent/src/infra/firestore/firestoreBookmarkRepository.ts"],
       "description": "Firestore findByUserIdAndUrl ts-type guard fails pattern validation despite valid undefined check"
     },
-    "PENDING-apps-chat-agent": {
-      "files": [],
-      "description": "Write tests for tightened v8 ignore blocks in apps/chat-agent"
-    },
     "PENDING-apps-code-agent": {
       "files": [
-        "apps/code-agent/src/domain/formatters/metricsLogFormatter.ts",
         "apps/code-agent/src/domain/services/logFormatter.ts",
         "apps/code-agent/src/domain/usecases/processCodeAction.ts",
         "apps/code-agent/src/domain/usecases/retryTask.ts",
@@ -35,14 +30,6 @@
         "apps/code-agent/src/routes/workerSettingsRoutes.ts"
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/code-agent"
-    },
-    "PENDING-apps-data-insights-agent": {
-      "files": [
-        "apps/data-insights-agent/src/infra/firestore/visualizationRepository.ts",
-        "apps/data-insights-agent/src/routes/compositeFeedRoutes.ts",
-        "apps/data-insights-agent/src/routes/visualizationRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/data-insights-agent"
     },
     "PENDING-apps-todos-agent": {
       "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
@@ -93,10 +80,6 @@
         "workers/orchestrator/src/start.ts"
       ],
       "description": "Write tests for tightened v8 ignore blocks in workers/orchestrator"
-    },
-    "PENDING-workers-transcription": {
-      "files": [],
-      "description": "Write tests for tightened v8 ignore blocks in workers/transcription"
     }
   }
 }

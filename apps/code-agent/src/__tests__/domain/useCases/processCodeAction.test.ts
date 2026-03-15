@@ -311,6 +311,7 @@ describe('processCodeAction', () => {
     // Verify worker location, status, and cancel nonce were set
     expect(codeTaskRepo.update).toHaveBeenCalledWith('new-task-123', {
       status: 'dispatched',
+      dispatchedAt: expect.any(Date),
       workerLocation: 'mac',
       cancelNonce: expect.any(String),
       cancelNonceExpiresAt: expect.any(String),

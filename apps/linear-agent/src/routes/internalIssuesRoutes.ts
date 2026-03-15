@@ -17,7 +17,7 @@ interface CreateIssueBody {
 }
 
 interface UpdateStateBody {
-  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa';
+  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa' | 'done';
 }
 
 interface IssueIdParams {
@@ -41,6 +41,7 @@ const STATE_NAME_MAP: Record<string, string> = {
   in_progress: 'In Progress',
   in_review: 'In Review',
   qa: 'QA',
+  done: 'Done',
 };
 
 // Response shape matching code-agent expectations
@@ -402,7 +403,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
           properties: {
             state: {
               type: 'string',
-              enum: ['backlog', 'todo', 'in_progress', 'in_review', 'qa'],
+              enum: ['backlog', 'todo', 'in_progress', 'in_review', 'qa', 'done'],
               description: 'Target workflow state',
             },
           },
