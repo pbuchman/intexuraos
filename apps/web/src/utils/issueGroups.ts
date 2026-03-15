@@ -313,8 +313,8 @@ export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): Issue
       // Only one has dispatchedAt: the one with dispatchedAt sorts first
       if (aDispatched !== undefined) return -1;
       if (bDispatched !== undefined) return 1;
-      // Neither has dispatchedAt: fall back to updatedAt desc
-      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+      // Neither has dispatchedAt: fall back to createdAt desc
+      return b.latestTask.createdAt.localeCompare(a.latestTask.createdAt);
     });
     return sorted;
   }
