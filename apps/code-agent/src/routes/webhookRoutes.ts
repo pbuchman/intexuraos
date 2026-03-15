@@ -1279,9 +1279,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
       /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: status === 'cancelled' conditional requires specific webhook payload @preserve */
       if (status === 'cancelled') {
-      /* v8 ignore stop @preserve */
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'cancelled',
           completedAt,
