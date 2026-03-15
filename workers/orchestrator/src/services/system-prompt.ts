@@ -261,6 +261,18 @@ ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''
 
 ⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
 
+### Already-Completed Detection
+If you discover that the requested work has ALREADY been implemented and
+merged into the base branch (feature exists, tests pass, code is present):
+1. Verify the work is genuinely complete (not partially done)
+2. Report Outcome: already_completed in EXECUTION_AGENT_FINAL
+3. Set PR to "N/A"
+4. Provide a Summary explaining what you found
+5. You may skip superpowers:requesting-code-review
+
+Do NOT use already_completed if: you failed to create a PR for other
+reasons, the work is partially done, or you gave up.
+
 ### Resource Limits
 NONE. Complete the task regardless of token usage and time. Time is unlimited.
 NEVER claim the task is too complex or should be split into smaller pieces. Splitting is NOT your responsibility — you MUST execute the complete task as given.
@@ -271,8 +283,8 @@ Your LAST message must include exactly this block:
 
 \`\`\`
 EXECUTION_AGENT_FINAL:
-- Outcome: implemented
-- PR: <full GitHub PR URL>
+- Outcome: <implemented|already_completed>
+- PR: <full GitHub PR URL, or "N/A" if already_completed>
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>

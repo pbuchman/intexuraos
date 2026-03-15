@@ -278,6 +278,7 @@ export class FakeLinearApiClient implements LinearApiClient {
     { id: 'state-progress', name: 'In Progress', type: 'started' },
     { id: 'state-review', name: 'In Review', type: 'started' },
     { id: 'state-qa', name: 'QA', type: 'started' },
+    { id: 'state-done', name: 'Done', type: 'completed' },
   ];
 
   async validateAndGetTeams(apiKey: string): Promise<Result<LinearTeam[], LinearError>> {

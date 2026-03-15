@@ -1799,6 +1799,7 @@ describe('TaskDispatcher', () => {
         trace: dummyTrace,
         agentData: {
           agentType: 'execution',
+          outcome: 'implemented',
           superpowers_executing_plans: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/900',
@@ -1843,6 +1844,59 @@ describe('TaskDispatcher', () => {
               execution_superpowers_executing_plans_used: '1',
               execution_superpowers_requesting_code_review_used: '1',
               execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('should pass already_completed outcome from verifier to webhook result', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'execution',
+          outcome: 'already_completed',
+          superpowers_executing_plans: 'used',
+          superpowers_requesting_code_review: 'not used',
+          gh_pr_url: '',
+          summary: 'Work was already merged into development branch',
+        },
+      });
+      const internal = agentDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internal, 'checkForResult').mockResolvedValue(undefined);
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        executionFinalAssistantLog()
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'exec-already-done-task',
+        workerType: 'auto',
+        prompt: 'Execute task',
+        linearIssueId: 'INT-456',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
+            result: expect.objectContaining({
+              execution_outcome_label: 'already_completed',
+              summary: 'Work was already merged into development branch',
             }),
           }),
         })
@@ -3670,6 +3724,7 @@ describe('TaskDispatcher', () => {
       trace: dummyTrace,
       agentData: {
         agentType: 'execution' as const,
+        outcome: 'implemented' as const,
         superpowers_executing_plans: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
