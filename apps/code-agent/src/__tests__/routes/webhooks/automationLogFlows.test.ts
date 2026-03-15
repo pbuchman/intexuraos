@@ -47,11 +47,18 @@ import type { CreateReviewTaskResult, CreateReviewTaskError, CreateReviewTaskReq
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 /**
- * Wait for fire-and-forget async operations (detached evaluate()) to settle.
- * Established pattern from github.test.ts.
+ * Poll until a condition is met, for fire-and-forget async operations
+ * (detached evaluate()) to settle. Replaces fixed-delay waits that are
+ * unreliable in CI where runner speed varies.
  */
-function waitForDetachedAsync(ms = 50): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function waitForDetachedAsync(
+  condition: () => boolean,
+  { timeout = 2000, interval = 10 } = {},
+): Promise<void> {
+  const start = Date.now();
+  while (!condition() && Date.now() - start < timeout) {
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
 }
 
 describe('Automation log integration flows', () => {
@@ -380,7 +387,7 @@ describe('Automation log integration flows', () => {
       const { statusCode } = await sendWebhook('pull_request', prPayload);
       expect(statusCode).toBe(200);
 
-      await waitForDetachedAsync();
+      await waitForDetachedAsync(() => getRecordedEvents().length >= 2);
 
       const events = getRecordedEvents();
       // First call: webhook_received from the route handler
@@ -411,7 +418,7 @@ describe('Automation log integration flows', () => {
       const { statusCode } = await sendWebhook('pull_request', createPullRequestPayload());
       expect(statusCode).toBe(200);
 
-      await waitForDetachedAsync();
+      await waitForDetachedAsync(() => getRecordedEvents().length >= 2);
 
       const events = getRecordedEvents();
       expect(events.length).toBeGreaterThanOrEqual(2);
@@ -431,6 +438,11 @@ describe('Automation log integration flows', () => {
 
   describe('LLM fail on pull_request event (flow 6)', () => {
     it('records webhook_received then triage_failed with fallback skip', async () => {
+      // First call fails, triggering retry for pull_request events
+      mockEvaluateEvent.mockResolvedValueOnce(
+        err({ code: 'LLM_FAILED' as const, message: 'Model unavailable' }),
+      );
+      // Retry also fails → enters handleFallback path
       mockEvaluateEvent.mockResolvedValueOnce(
         err({ code: 'LLM_FAILED' as const, message: 'Model unavailable' }),
       );
@@ -438,7 +450,7 @@ describe('Automation log integration flows', () => {
       const { statusCode } = await sendWebhook('pull_request', createPullRequestPayload());
       expect(statusCode).toBe(200);
 
-      await waitForDetachedAsync();
+      await waitForDetachedAsync(() => getRecordedEvents().length >= 2);
 
       const events = getRecordedEvents();
       expect(events.length).toBeGreaterThanOrEqual(2);
@@ -470,7 +482,7 @@ describe('Automation log integration flows', () => {
       );
       expect(statusCode).toBe(200);
 
-      await waitForDetachedAsync();
+      await waitForDetachedAsync(() => getRecordedEvents().some((e) => e.event.type === 'triage_failed'));
 
       const events = getRecordedEvents();
       expect(events.length).toBeGreaterThanOrEqual(1);
@@ -499,7 +511,7 @@ describe('Automation log integration flows', () => {
       );
       expect(statusCode).toBe(200);
 
-      await waitForDetachedAsync();
+      await waitForDetachedAsync(() => getRecordedEvents().some((e) => e.event.type === 'triage_failed'));
 
       const events = getRecordedEvents();
       expect(events.length).toBeGreaterThanOrEqual(1);
@@ -534,7 +546,7 @@ describe('Automation log integration flows', () => {
       );
       expect(statusCode).toBe(200);
 
-      await waitForDetachedAsync();
+      await waitForDetachedAsync(() => getRecordedEvents().some((e) => e.event.type === 'triage_dispatch'));
 
       const events = getRecordedEvents();
       expect(events.length).toBeGreaterThanOrEqual(1);
@@ -572,7 +584,7 @@ describe('Automation log integration flows', () => {
       );
       expect(statusCode).toBe(200);
 
-      await waitForDetachedAsync();
+      await waitForDetachedAsync(() => getRecordedEvents().some((e) => e.event.type === 'triage_dispatch'));
 
       const events = getRecordedEvents();
       expect(events.length).toBeGreaterThanOrEqual(1);
@@ -614,7 +626,7 @@ describe('Automation log integration flows', () => {
       );
       expect(statusCode).toBe(200);
 
-      await waitForDetachedAsync();
+      await waitForDetachedAsync(() => getRecordedEvents().some((e) => e.event.type === 'triage_dispatch'));
 
       const events = getRecordedEvents();
       expect(events.length).toBeGreaterThanOrEqual(1);
