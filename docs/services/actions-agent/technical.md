@@ -45,23 +45,24 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                                    | Date       |
-| ---------- | ------------------------------------------------------------------------------ | ---------- |
-| `a8592532` | Fix: restore correct WhatsApp notification format for calendar events          | 2026-03-07 |
-| `59872227` | INT-535: Add rich WhatsApp completion message for calendar events              | 2026-03-04 |
-| `99febe66` | Fix: wire GitHub OAuth integration and update cross-service mocks              | 2026-03-02 |
-| `820d9802` | Fix(INT-628): address remaining review findings                                | 2026-02-27 |
-| `4d1ba07b` | Fix(INT-628): address all code review findings for WhatsApp task progression   | 2026-02-27 |
-| `d366d33f` | Feat(INT-628): Enable task progression from WhatsApp                           | 2026-02-25 |
-| `77b3ec79` | Feat(orchestrator): add sonnet and minimax worker types                        | 2026-02-24 |
-| `14a4085d` | Fix(calendar): pass full user prompt to calendar-agent instead of title only   | 2026-02-23 |
-| `9f80098e` | Fix: address all PR review findings for calendar preview [INT-535]             | 2026-02-23 |
-| `aca56231` | Feat: implement synchronous calendar preview in approval messages [INT-535]    | 2026-02-22 |
-| `b3f34d85` | Release v3.1.0                                                                 | 2026-02-22 |
-| `5ee70b37` | Fix(calendar-agent, actions-agent): link calendar approval to Google Cal event | 2026-02-20 |
-| `6f2d8e21` | Fix(actions-agent): add auto-execute support to calendar action handler        | 2026-02-20 |
-| `735f7ef3` | Fix actions-agent missing userId in code-agent requests                        | 2026-02-20 |
-| `c8a42105` | Release v3.0.0                                                                 | 2026-02-19 |
+| Commit      | Description                                                                    | Date       |
+| ----------- | ------------------------------------------------------------------------------ | ---------- |
+| `5269c9b3`  | Add tests for v8-ignore blocks and remove coverage exemptions (INT-785)        | 2026-03-13 |
+| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                         | 2026-03-12 |
+| `0283cd09`  | Update Code Task Status Message Format (INT-813)                               | 2026-03-11 |
+| `a8592532`  | Fix: restore correct WhatsApp notification format for calendar events          | 2026-03-07 |
+| `59872227`  | INT-535: Add rich WhatsApp completion message for calendar events              | 2026-03-04 |
+| `99febe66`  | Fix: wire GitHub OAuth integration and update cross-service mocks              | 2026-03-02 |
+| `d366d33f`  | Feat(INT-628): Enable task progression from WhatsApp                           | 2026-02-25 |
+| `aca56231`  | Feat: implement synchronous calendar preview in approval messages [INT-535]    | 2026-02-22 |
+
+### v8 Ignore Test Replacement (INT-785)
+
+Replaced v8 ignore blocks with real tests across multiple infrastructure and route files. New test suites added for: `approvalMessageRepository`, `calendarServiceHttpClient`, `codeAgentHttpClient`, `notesServiceHttpClient`, `todosServiceHttpClient`, `internalRoutes`, and `publicRoutes`. Coverage exemptions removed from 7 production source files. Remaining v8 ignore directives are in `handleApprovalReply.ts` (8 directives, all `ts-type` category for noUncheckedIndexedAccess patterns).
+
+### Unified Integration for Chinese LLMs via Alibaba Cloud Model Studio (93aeac4a)
+
+Part of the platform-wide migration from ZAI to Alibaba Cloud Model Studio (DashScope). The actions-agent itself does not directly reference LLM providers — it passes `workerType` through to code-agent. The `CodeTaskWorkerType` union now includes `qwen` and `kimi` in addition to the existing `auto`, `opus`, `sonnet`, `minimax`, and `glm` values.
 
 ## Data Flow
 
@@ -257,14 +258,14 @@ sequenceDiagram
 
 ### CodeActionPayload
 
-| Field              | Type              | Description                                                     |
-| ------------------ | ----------------- | --------------------------------------------------------------- |
-| `prompt`           | string            | User's request (what they want Claude to do)                    |
-| `workerType`       | enum              | Which model to use: opus, auto, sonnet, minimax, or glm         |
-| `linearIssueId`    | string (optional) | Existing Linear issue to work on                                |
-| `linearIssueTitle` | string (optional) | Title of the Linear issue                                       |
-| `approvalEventId`  | string (optional) | UUID for idempotency (set on approval)                          |
-| `resource_url`     | string (optional) | URL of created code task (set by code-agent)                    |
+| Field              | Type              | Description                                                         |
+| ------------------ | ----------------- | ------------------------------------------------------------------- |
+| `prompt`           | string            | User's request (what they want Claude to do)                        |
+| `workerType`       | enum              | Which model to use: auto, opus, sonnet, minimax, glm, qwen, or kimi |
+| `linearIssueId`    | string (optional) | Existing Linear issue to work on                                    |
+| `linearIssueTitle` | string (optional) | Title of the Linear issue                                           |
+| `approvalEventId`  | string (optional) | UUID for idempotency (set on approval)                              |
+| `resource_url`     | string (optional) | URL of created code task (set by code-agent)                        |
 
 ### ActionTransition
 
@@ -381,7 +382,7 @@ Executes code actions by dispatching to code-agent.
 1. Retrieve action from repository
 2. Validate action status (must be pending, awaiting_approval, or failed)
 3. Generate `approvalEventId` UUID for idempotency
-4. Call `codeAgentClient.submitTask` with action payload (including `workerType`: opus, auto, sonnet, minimax, or glm)
+4. Call `codeAgentClient.submitTask` with action payload (including `workerType`: auto, opus, sonnet, minimax, glm, qwen, or kimi)
 5. Handle error codes: `WORKER_UNAVAILABLE` (mark failed), `DUPLICATE` (return existing task), network errors
 6. On success: update action to completed with `resource_url` and `approvalEventId`
 7. Send WhatsApp completion notification (best-effort)
@@ -477,7 +478,6 @@ Allows users to correct AI classification. Validates the action is in a mutable 
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`        | Yes      | Unified actions queue topic name                          |
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`  | Yes      | WhatsApp send topic                                       |
 | `INTEXURAOS_WEB_APP_URL`                 | Yes      | Web app URL for notification links                        |
-| `INTEXURAOS_ZAI_APP_API_KEY`             | No       | ZAI platform API key for LLM fallback via user service    |
 | `INTEXURAOS_GEMINI_APP_API_KEY`          | No       | Gemini platform API key for LLM fallback via user service |
 
 ## Gotchas
@@ -514,7 +514,7 @@ Allows users to correct AI classification. Validates the action is in a mutable 
 
 **Proceed-implementation button (INT-628)**: The `proceed-implementation:{taskId}` button submits a task to phase 2 implementation via `codeAgentClient.submitToPhase2`. Error codes include `TASK_NOT_FOUND`, `INVALID_STATUS`, `NO_LINEAR_ISSUE`, `LABEL_NOT_READY`, `ALREADY_IMPLEMENTED`, `ACTIVE_TASK_EXISTS`, `WORKER_NOT_CONFIGURED`, and `NETWORK_ERROR`.
 
-**Worker types**: Code action payload `workerType` supports five values: `opus`, `auto`, `sonnet`, `minimax`, and `glm`.
+**Worker types**: Code action payload `workerType` supports seven values: `auto`, `opus`, `sonnet`, `minimax`, `glm`, `qwen`, and `kimi`.
 
 **Create action endpoint no longer publishes events**: The `POST /internal/actions` endpoint only creates the action record. Event publishing is the caller's responsibility (commands-agent) to prevent duplicate events.
 

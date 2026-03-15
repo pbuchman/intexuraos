@@ -1,7 +1,7 @@
 # Actions Agent - Technical Debt
 
-**Last Updated:** 2026-03-07
-**Analysis Run:** [2026-03-07 documentation-runs.md entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-15
+**Analysis Run:** v3.3.0 documentation refresh (DashScope migration, v8 ignore test replacement INT-785)
 
 ---
 
@@ -160,6 +160,22 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### v8 Ignore Block Test Replacement (INT-785)
+
+**Issue:** Multiple production source files used v8 ignore coverage exemptions for error paths that could be tested with proper fakes and HTTP client mocking.
+
+**Resolution:** Added real test suites for `approvalMessageRepository`, `calendarServiceHttpClient`, `codeAgentHttpClient`, `notesServiceHttpClient`, `todosServiceHttpClient`, `internalRoutes`, and `publicRoutes`. Removed v8 ignore directives from 7 production files. Remaining 8 directives in `handleApprovalReply.ts` are all `ts-type` category for `noUncheckedIndexedAccess` patterns.
+
+**Date Resolved:** 2026-03-13
+
+### ZAI Provider Removal (DashScope Migration)
+
+**Issue:** `INTEXURAOS_ZAI_APP_API_KEY` environment variable referenced the retired ZAI provider.
+
+**Resolution:** Removed as part of the platform-wide migration to Alibaba Cloud Model Studio (DashScope). The actions-agent passes `workerType` through to code-agent without directly referencing LLM providers.
+
+**Date Resolved:** 2026-03-12
 
 ### Rich Calendar Completion Messages (INT-535)
 

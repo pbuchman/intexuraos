@@ -1,7 +1,7 @@
 # Mobile Notifications Service -- Technical Debt
 
-**Last Updated:** 2026-02-22
-**Analysis Run:** [2026-02-22 documentation-runs.md entry](#)
+**Last Updated:** 2026-03-15
+**Analysis Run:** v3.3.0 documentation refresh (v8 ignore test replacement)
 
 ---
 
@@ -82,12 +82,13 @@ _None identified._
 
 ## Resolved Issues
 
-| Date       | Issue                                  | Resolution                                                                            |
-| ---------- | -------------------------------------- | ------------------------------------------------------------------------------------- |
-| 2026-02-01 | Response contract violations           | All routes migrated to standardized `reply.ok()` / `reply.fail()` contract            |
-| 2026-02-01 | Direct pino() usage                    | Replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                     |
-| 2026-02-01 | Inconsistent internal error format     | Internal routes now return `{ success, error: { code, message } }`                    |
-| 2026-02-02 | 100% branch coverage not enforced      | Added v8 ignore exemptions for TypeScript-only safety branches; strict enforcement on |
+| Date       | Issue                                   | Resolution                                                                                  |
+| ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 2026-03-11 | v8 ignore blocks in repositories/routes | Replaced with real tests for Firestore error paths; reduced to 10 directives across 4 files |
+| 2026-02-01 | Response contract violations            | All routes migrated to standardized `reply.ok()` / `reply.fail()` contract                  |
+| 2026-02-01 | Direct pino() usage                     | Replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                           |
+| 2026-02-01 | Inconsistent internal error format      | Internal routes now return `{ success, error: { code, message } }`                          |
+| 2026-02-02 | 100% branch coverage not enforced       | Added v8 ignore exemptions for TypeScript-only safety branches; strict enforcement on       |
 
 ---
 

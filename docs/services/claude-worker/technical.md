@@ -44,18 +44,29 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                 | Date       |
-| ---------- | ----------------------------------------------------------- | ---------- |
-| `57354c70` | Read GitHub token from file instead of stale env var        | 2026-03-06 |
-| `c8c09941` | Move secret sync from orchestrator to container entrypoint  | 2026-03-03 |
-| `2a75b75a` | Fix container.envrc mount failure, add direnv               | 2026-03-02 |
-| `7b8ff20a` | Advance repo to origin/development, mount envrc             | 2026-03-02 |
-| `afc1cb24` | Build multi-arch image for amd64+arm64                      | 2026-02-26 |
-| `36bca370` | Add claude worker crash forensics mode                      | 2026-02-26 |
-| `98caac48` | Pre-install Claude Code plugins in image                    | 2026-02-25 |
-| `33325e6f` | Set git identity at repo level to override inherited config | 2026-02-21 |
-| `be8956e7` | Use mailto link for Intex attribution                       | 2026-02-21 |
-| `f692d7b0` | Pre-install MCP server packages globally                    | 2026-02-21 |
+| Commit      | Description                                                  | Date       |
+| ----------- | ------------------------------------------------------------ | ---------- |
+| `5e1fdda3`  | Docker cache busting for Claude CLI + add Codex CLI          | 2026-03-15 |
+| `191488b4`  | Enable tasks env var in claude-worker settings               | 2026-03-13 |
+| `393fbbde`  | Clean up orphaned child processes after Claude attempt exits | 2026-03-10 |
+| `57354c70`  | Read GitHub token from file instead of stale env var         | 2026-03-06 |
+| `c8c09941`  | Move secret sync from orchestrator to container entrypoint   | 2026-03-03 |
+| `2a75b75a`  | Fix container.envrc mount failure, add direnv                | 2026-03-02 |
+| `afc1cb24`  | Build multi-arch image for amd64+arm64                       | 2026-02-26 |
+| `36bca370`  | Add claude worker crash forensics mode                       | 2026-02-26 |
+| `98caac48`  | Pre-install Claude Code plugins in image                     | 2026-02-25 |
+
+### Docker Cache Busting and Codex CLI (5e1fdda3)
+
+Added a `CACHE_BUST` build arg (set to the commit SHA by the build script) that invalidates Docker layer cache after the gcloud SDK install, ensuring the Claude CLI is always re-downloaded with the latest version rather than served from a stale cached layer. Also installs `@openai/codex` globally for A/B evaluation of alternative AI coding agent backends within the same worker infrastructure.
+
+### Tasks Env Var (191488b4)
+
+Enabled `CLAUDE_CODE_ENABLE_TASKS=1` in the settings.local.json config defaults, activating the Claude Code tasks feature within the worker container.
+
+### Orphaned Child Process Cleanup (393fbbde)
+
+After each Claude attempt exits, the entrypoint now sends SIGTERM to all child processes (MCP servers, background tools), waits 0.5 seconds, then sends SIGKILL to any survivors. This prevents lingering processes from holding Docker exec file descriptors open, which could cause container cleanup issues.
 
 ## Container Configuration
 
@@ -135,14 +146,17 @@ Network: `claude-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquera
 
 ## Worker Types
 
-| Type           | API Base URL                                                | API Key Env Var     | Model Override  |
-| -------------- | ----------------------------------------------------------- | ------------------- | --------------- |
-| `opus`         | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | `opus`          |
-| `auto`         | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | None            |
-| `sonnet`       | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | `sonnet`        |
-| `minimax`      | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`   | `MiniMax-M2.5`  |
-| `glm-5`        | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `glm-5`         |
-| `qwen3.5-plus` | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `qwen3.5-plus`  |
+| Type      | API Base URL                                                | API Key Env Var     | Model Override  |
+| --------- | ----------------------------------------------------------- | ------------------- | --------------- |
+| `auto`    | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | None            |
+| `opus`    | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | `opus`          |
+| `sonnet`  | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | `sonnet`        |
+| `minimax` | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`   | `MiniMax-M2.5`  |
+| `glm`     | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `glm-5`         |
+| `qwen`    | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `qwen3.5-plus`  |
+| `kimi`    | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `kimi-k2.5`     |
+
+GLM-5, Qwen, and Kimi are Chinese LLMs accessed via the unified Alibaba Cloud Model Studio (DashScope) integration. All three share the same API base URL and `DASHSCOPE_API_KEY`, with models differentiated by the model override parameter.
 
 ## Entrypoint Flow
 
@@ -255,10 +269,15 @@ eval "$(direnv hook bash)"
 
 ### settings.local.json (runtime-generated at `/repo/.claude/settings.local.json`)
 
-Written by the entrypoint at startup with a randomized attribution verb:
+Written by the entrypoint at startup with a randomized attribution verb. The dev reference file also configures `CLAUDE_CODE_ENABLE_TASKS=1` via the `env` key:
 
 ```json
 {
+  "preferredNotifChannel": "terminal_bell",
+  "outputStyle": "explanatory",
+  "env": {
+    "CLAUDE_CODE_ENABLE_TASKS": "1"
+  },
   "attribution": {
     "commit": "Crafted with love by ... Intex",
     "pr": "Crafted with love by ... Intex"
@@ -270,27 +289,28 @@ If `/repo/.claude/settings.local.json` already exists, the entrypoint merges the
 
 ## Installed Toolchain
 
-| Tool                  | Install Source         | Purpose                                      |
-| --------------------- | ---------------------- | -------------------------------------------- |
-| git                   | Alpine package         | Version control                              |
-| openssh-client        | Alpine package         | SSH keys for git operations                  |
-| pnpm                  | Corepack               | Package management (CI)                      |
-| ripgrep               | Alpine edge/community  | Fast code search                             |
-| fd                    | Alpine edge/community  | Fast file finder                             |
-| bat                   | Alpine edge/community  | Syntax-highlighted file viewer               |
-| jq                    | Alpine package         | JSON processing                              |
-| gh                    | Alpine edge/community  | GitHub CLI (PR creation)                     |
-| chromium              | Alpine edge/community  | Browser for @playwright/mcp                  |
-| direnv                | Alpine edge/community  | Automatic .envrc loading                     |
-| terraform             | HashiCorp binary 1.7.0 | Infrastructure validation                    |
-| gcloud                | Google Cloud SDK       | GCP authentication and ops                   |
-| python3 / py3-pip     | Alpine package         | gcloud CLI dependency + MCP deps             |
-| curl                  | Alpine package         | HTTP requests                                |
-| strace / gdb          | Alpine package         | Crash forensics debugging                    |
-| file                  | Alpine package         | File type identification                     |
-| @upstash/context7-mcp | npm global             | Context7 MCP server                          |
-| @sentry/mcp-server    | npm global             | Sentry MCP server                            |
-| @playwright/mcp       | npm global             | Playwright MCP server (uses system Chromium) |
+| Tool                  | Install Source         | Purpose                                                    |
+| --------------------- | ---------------------- | ---------------------------------------------------------- |
+| git                   | Alpine package         | Version control                                            |
+| openssh-client        | Alpine package         | SSH keys for git operations                                |
+| pnpm                  | Corepack               | Package management (CI)                                    |
+| ripgrep               | Alpine edge/community  | Fast code search                                           |
+| fd                    | Alpine edge/community  | Fast file finder                                           |
+| bat                   | Alpine edge/community  | Syntax-highlighted file viewer                             |
+| jq                    | Alpine package         | JSON processing                                            |
+| gh                    | Alpine edge/community  | GitHub CLI (PR creation)                                   |
+| chromium              | Alpine edge/community  | Browser for @playwright/mcp                                |
+| direnv                | Alpine edge/community  | Automatic .envrc loading                                   |
+| terraform             | HashiCorp binary 1.7.0 | Infrastructure validation                                  |
+| gcloud                | Google Cloud SDK       | GCP authentication and ops                                 |
+| python3 / py3-pip     | Alpine package         | gcloud CLI dependency + MCP deps                           |
+| curl                  | Alpine package         | HTTP requests                                              |
+| strace / gdb          | Alpine package         | Crash forensics debugging                                  |
+| file                  | Alpine package         | File type identification                                   |
+| @upstash/context7-mcp | npm global             | Context7 MCP server                                        |
+| @sentry/mcp-server    | npm global             | Sentry MCP server                                          |
+| @playwright/mcp       | npm global             | Playwright MCP server (uses system Chromium)               |
+| @openai/codex         | npm global             | Codex CLI (A/B evaluation of alternative AI coding agents) |
 
 ## Build and CI
 

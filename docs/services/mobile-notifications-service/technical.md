@@ -287,14 +287,17 @@ apps/mobile-notifications-service/src/
 
 ## Recent Changes
 
-| Commit     | Change                                                              | Date       |
-| ---------- | ------------------------------------------------------------------- | ---------- |
-| `b3f34d85` | Release v3.1.0 (version bump)                                       | 2026-02-22 |
-| `c8a42105` | Release v3.0.0 (version bump)                                       | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                     | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (distributed tracing)           | 2026-02-16 |
-| `45f001c1` | Switch PM2 ecosystem to `pnpm --filter` with `start:local` scripts  | 2026-02-14 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                   | 2026-01-31 |
-| `9723dc24` | Standardize DELETE endpoints to return consistent response contract | 2026-01-30 |
-| `c3198407` | Fix all response contract violations (reply.ok / reply.fail)        | 2026-01-30 |
-| `dfd702f1` | Migrate to createAppLogger() (Sentry-enabled logging)               | 2026-01-30 |
+| Commit      | Change                                                              | Date       |
+| ----------- | ------------------------------------------------------------------- | ---------- |
+| `b271a4a5`  | Write tests for v8-ignore blocks and remove exemptions              | 2026-03-11 |
+| `b3f34d85`  | Release v3.1.0 (version bump)                                       | 2026-02-22 |
+| `c8a42105`  | Release v3.0.0 (version bump)                                       | 2026-02-19 |
+| `6063175b`  | Add dev-mode log formatting for PM2 readability                     | 2026-02-16 |
+| `a52a6bbc`  | Add Dash0 OpenTelemetry integration (distributed tracing)           | 2026-02-16 |
+| `5aa3e1bd`  | Enable strict 100% coverage enforcement (Phase 3)                   | 2026-01-31 |
+| `c3198407`  | Fix all response contract violations (reply.ok / reply.fail)        | 2026-01-30 |
+| `dfd702f1`  | Migrate to createAppLogger() (Sentry-enabled logging)               | 2026-01-30 |
+
+### v8 Ignore Test Replacement
+
+Replaced v8 ignore blocks with real tests in `firestoreNotificationRepository.ts` and `firestoreSignatureConnectionRepository.ts`. Added test suites covering Firestore error paths and edge cases. Remaining 10 v8 ignore directives across 4 files use documented categories: `ts-type` (for `noUncheckedIndexedAccess` patterns).

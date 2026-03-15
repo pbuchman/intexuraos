@@ -1,6 +1,6 @@
 # Transcription Worker — Technical Debt
 
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-15
 **Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
 
 ---

@@ -2,11 +2,20 @@
 
 Complete documentation for all IntexuraOS services, workers, and packages.
 
-**Version 3.2.0** — March 7, 2026
+**Version 3.3.0** — March 15, 2026
 
 ---
 
-## v3.2.0 Highlights
+## v3.3.0 Highlights
+
+| Component        | Key Changes                                                                                                                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **code-agent**   | GitHub Agent with tool calling, unified PR automation log, structured output triage with auto-repair                                                                                            |
+| **orchestrator** | Review Agent, Execution Deep Validator, Kimi worker type, Docker health gate, fatal exit codes, PR branch inheritance, mandatory /simplify, already-completed outcome, reliability improvements |
+| **web**          | Code Task Detail Page V2 (issue-centric grouped view), workers status in user menu                                                                                                              |
+| **Platform**     | Alibaba Cloud Model Studio integration replacing ZAI (GLM-5, Qwen, Kimi), Gemini tool-call mode                                                                                                 |
+
+## v3.2.0 Highlights (Previous)
 
 | Component            | Key Changes                                                                          |
 | -------------------- | ------------------------------------------------------------------------------------ |
@@ -50,7 +59,7 @@ Complete documentation for all IntexuraOS services, workers, and packages.
 
 ## AI Capabilities Overview
 
-IntexuraOS integrates **7 AI providers** with **19 models** across **20 microservices**:
+IntexuraOS integrates **6 AI providers** with **14 LLM contract models** across **20 microservices**:
 
 ```mermaid
 graph TB
@@ -59,9 +68,8 @@ graph TB
         O[OpenAI<br>GPT-5.2 / DALL-E]
         A[Anthropic<br>Claude Opus 4.5]
         P[Perplexity<br>Sonar Pro]
-        Z[Zai<br>GLM-4.7]
         MM[MiniMax]
-        QW[Alibaba Cloud<br>Qwen]
+        AC[Alibaba Cloud<br>Model Studio<br>GLM-5 / Qwen / Kimi]
     end
 
     subgraph "Primary AI Agents"
@@ -77,8 +85,6 @@ graph TB
     R --> O
     R --> A
     R --> P
-    R --> Z
-
     C --> G
     D --> G
     I --> O
@@ -101,7 +107,7 @@ graph TB
 
 | Service                                      | AI Models                 | Capability                      |
 | -------------------------------------------- | ------------------------- | ------------------------------- |
-| [commands-agent](commands-agent/features.md) | Gemini 2.5 Flash, GLM-4.7 | Natural language to action type |
+| [commands-agent](commands-agent/features.md) | Gemini 2.5 Flash          | Natural language to action type |
 
 ### Data Intelligence
 
@@ -125,15 +131,15 @@ graph TB
 
 ### Conversational AI
 
-| Service                              | AI Models     | Capability                                        |
-| ------------------------------------ | ------------- | ------------------------------------------------- |
-| [chat-agent](chat-agent/features.md) | GLM-4.7-Flash | Documentation Q&A, command creation, guest access |
+| Service                              | AI Models                        | Capability                                        |
+| ------------------------------------ | -------------------------------- | ------------------------------------------------- |
+| [chat-agent](chat-agent/features.md) | Gemini 2.5 Flash                 | Documentation Q&A, command creation, guest access |
 
 ### Autonomous Code Execution
 
-| Service                              | AI Models                                | Capability                                                         |
-| ------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------ |
-| [code-agent](code-agent/features.md) | Claude, MiniMax, GLM, Qwen (via workers) | Agent-based routing, task queueing, PR creation via 6 worker types |
+| Service                              | AI Models                                        | Capability                                                                                    |
+| ------------------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| [code-agent](code-agent/features.md) | Claude, MiniMax, GLM-5, Qwen, Kimi (via workers) | GitHub Agent with tool calling, unified PR log, task queueing, PR creation via 7 worker types |
 
 ### Voice & Transcription
 
@@ -150,16 +156,16 @@ graph TB
 
 Services that directly invoke AI models for their core functionality.
 
-| Service                                                | Purpose                           | AI                                       | Docs                                                                                                                                                                                                                              |
-| ------------------------------------------------------ | --------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [research-agent](research-agent/features.md)           | Multi-LLM research orchestration  | Gemini, Claude, GPT, Sonar, GLM          | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
-| [commands-agent](commands-agent/features.md)           | AI command classification         | Gemini 2.5 Flash                         | [features](commands-agent/features.md) / [technical](commands-agent/technical.md) / [tutorial](commands-agent/tutorial.md) / [debt](commands-agent/technical-debt.md) / [agent](commands-agent/agent.md)                          |
-| [data-insights-agent](data-insights-agent/features.md) | AI-powered data analysis          | Gemini 2.5 Flash                         | [features](data-insights-agent/features.md) / [technical](data-insights-agent/technical.md) / [tutorial](data-insights-agent/tutorial.md) / [debt](data-insights-agent/technical-debt.md) / [agent](data-insights-agent/agent.md) |
-| [image-service](image-service/features.md)             | AI image generation               | GPT Image 1, Gemini Flash Image          | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
-| [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries | Via web-agent                            | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md)                     |
-| [web-agent](web-agent/features.md)                     | Web scraping with AI              | Gemini 2.5 Flash                         | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
-| [chat-agent](chat-agent/features.md)                   | In-app AI assistant with RAG      | GLM-4.7-Flash                            | [features](chat-agent/features.md) / [technical](chat-agent/technical.md) / [tutorial](chat-agent/tutorial.md) / [debt](chat-agent/technical-debt.md) / [agent](chat-agent/agent.md)                                              |
-| [code-agent](code-agent/features.md)                   | Autonomous code execution         | Claude, MiniMax, GLM, Qwen (via workers) | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                                              |
+| Service                                                | Purpose                           | AI                                               | Docs                                                                                                                                                                                                                              |
+| ------------------------------------------------------ | --------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [research-agent](research-agent/features.md)           | Multi-LLM research orchestration  | Gemini, Claude, GPT, Sonar                       | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
+| [commands-agent](commands-agent/features.md)           | AI command classification         | Gemini 2.5 Flash                                 | [features](commands-agent/features.md) / [technical](commands-agent/technical.md) / [tutorial](commands-agent/tutorial.md) / [debt](commands-agent/technical-debt.md) / [agent](commands-agent/agent.md)                          |
+| [data-insights-agent](data-insights-agent/features.md) | AI-powered data analysis          | Gemini 2.5 Flash                                 | [features](data-insights-agent/features.md) / [technical](data-insights-agent/technical.md) / [tutorial](data-insights-agent/tutorial.md) / [debt](data-insights-agent/technical-debt.md) / [agent](data-insights-agent/agent.md) |
+| [image-service](image-service/features.md)             | AI image generation               | GPT Image 1, Gemini Flash Image                  | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
+| [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries | Via web-agent                                    | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md)                     |
+| [web-agent](web-agent/features.md)                     | Web scraping with AI              | Gemini 2.5 Flash                                 | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
+| [chat-agent](chat-agent/features.md)                   | In-app AI assistant with RAG      | Gemini 2.5 Flash                                 | [features](chat-agent/features.md) / [technical](chat-agent/technical.md) / [tutorial](chat-agent/tutorial.md) / [debt](chat-agent/technical-debt.md) / [agent](chat-agent/agent.md)                                              |
+| [code-agent](code-agent/features.md)                   | Autonomous code execution         | Claude, MiniMax, GLM-5, Qwen, Kimi (via workers) | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                                              |
 
 ### Content Management Agents
 
@@ -200,17 +206,18 @@ Progressive Web App providing the unified dashboard for IntexuraOS.
 
 Cloud Functions and local services that run outside Cloud Run.
 
-| Worker                                     | Type            | Purpose                                                        | Trigger                     |
-| ------------------------------------------ | --------------- | -------------------------------------------------------------- | --------------------------- |
-| [orchestrator](orchestrator/features.md)   | Local service   | Spawns Claude Code sessions in Docker containers via worktrees | HTTP (HMAC-signed dispatch) |
-| [claude-worker](claude-worker/features.md) | Docker image    | Isolated Claude Code execution environment with git and tools  | Started by orchestrator     |
-| [log-cleanup](log-cleanup/features.md)     | Cloud Function  | Deletes old task logs via code-agent cleanup API               | Pub/Sub (scheduled)         |
-| [vm-lifecycle](vm-lifecycle/features.md)   | Cloud Functions | Starts and stops GCE VM instances with health polling          | HTTP (internal auth)        |
-| [transcription](transcription/features.md) | Cloud Function  | Converts WhatsApp voice notes to text via Speechmatics         | Pub/Sub (audio-stored)      |
+| Worker                                     | Type            | Purpose                                                          | Trigger                     |
+| ------------------------------------------ | --------------- | ---------------------------------------------------------------- | --------------------------- |
+| [orchestrator](orchestrator/features.md)   | Local service   | Spawns Claude Code sessions in Docker containers via worktrees   | HTTP (HMAC-signed dispatch) |
+| [claude-worker](claude-worker/features.md) | Docker image    | Isolated Claude Code execution environment with git and tools    | Started by orchestrator     |
+| [log-cleanup](log-cleanup/features.md)     | Cloud Function  | Deletes old task logs via code-agent cleanup API                 | Pub/Sub (scheduled)         |
+| [vm-lifecycle](vm-lifecycle/features.md)   | Cloud Functions | Starts and stops GCE VM instances with health polling            | HTTP (internal auth)        |
+| [transcription](transcription/features.md) | Cloud Function  | Converts WhatsApp voice notes to text via Speechmatics           | Pub/Sub (audio-stored)      |
+| predev-lifecycle                           | Cloud Functions | Manages pre-dev VM gateway, idle-check, and ready-state webhooks | HTTP / Pub/Sub (scheduled)  |
 
 ### Worker Details
 
-**orchestrator** -- Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated git worktrees, spawns Claude Code sessions in Docker containers, and reports results via webhooks. Supports 6 worker types across Anthropic (opus, auto, sonnet), ZAI (glm), MiniMax (minimax), and Alibaba Cloud (qwen3.5-plus). Features container adoption on restart, Gemini-based completion verification with agent-specific Zod schemas, versioned system prompts via PromptBuilder, planning PR branch merging, forensics mode, and mid-task messaging.
+**orchestrator** -- Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated git worktrees, spawns Claude Code sessions in Docker containers, and reports results via webhooks. Supports 7 worker types across Anthropic (opus, auto, sonnet), MiniMax (minimax), and Alibaba Cloud Model Studio (glm/glm-5, qwen/qwen3.5-plus, kimi/kimi-k2.5). Features mandatory /simplify step, container adoption on restart, Gemini-based completion verification with agent-specific Zod schemas, versioned system prompts via PromptBuilder, planning PR branch merging, forensics mode, and mid-task messaging.
 
 **claude-worker** -- Docker container (Node.js 22 Alpine) pre-loaded with Claude CLI, git, pnpm, GitHub CLI, ripgrep, terraform, and gcloud. Runs as non-root user with network restrictions. The orchestrator manages its lifecycle.
 
@@ -248,13 +255,12 @@ Shared libraries used across apps and workers.
 
 ### LLM Provider Clients
 
-| Package                                                    | Provider   | Capabilities                                |
-| ---------------------------------------------------------- | ---------- | ------------------------------------------- |
-| [infra-claude](../packages/infra-claude/README.md)         | Anthropic  | Text generation, web search, prompt caching |
-| [infra-gemini](../packages/infra-gemini/README.md)         | Google     | Text generation, web search, image gen      |
-| [infra-gpt](../packages/infra-gpt/README.md)               | OpenAI     | Text generation, web search, DALL-E         |
-| [infra-glm](../packages/infra-glm/README.md)               | Zai        | Text generation, web search, caching        |
-| [infra-perplexity](../packages/infra-perplexity/README.md) | Perplexity | SSE-streamed research with citations        |
+| Package                                                    | Provider                   | Capabilities                                |
+| ---------------------------------------------------------- | -------------------------- | ------------------------------------------- |
+| [infra-claude](../packages/infra-claude/README.md)         | Anthropic                  | Text generation, web search, prompt caching |
+| [infra-gemini](../packages/infra-gemini/README.md)         | Google                     | Text generation, web search, image gen      |
+| [infra-gpt](../packages/infra-gpt/README.md)               | OpenAI                     | Text generation, web search, DALL-E         |
+| [infra-perplexity](../packages/infra-perplexity/README.md) | Perplexity                 | SSE-streamed research with citations        |
 
 ### LLM Stack
 
@@ -277,33 +283,29 @@ Shared libraries used across apps and workers.
 
 ## AI Models Used
 
-### Research Models (11)
+### Research Models (9)
 
 Used for deep research queries with parallel execution. **v2.0.0:** Users can specify models in natural language ("research with Claude and GPT").
 
-| Model                 | Provider   | Specialty                            |
-| --------------------- | ---------- | ------------------------------------ |
-| Gemini 2.5 Pro        | Google     | Reasoning, analysis                  |
-| Gemini 2.5 Flash      | Google     | Fast responses                       |
-| GPT-5.2               | OpenAI     | Creative synthesis                   |
-| o4-mini-deep-research | OpenAI     | Deep research                        |
-| Claude Opus 4.5       | Anthropic  | Nuanced analysis                     |
-| Claude Sonnet 4.5     | Anthropic  | Balanced performance                 |
-| Sonar                 | Perplexity | Real-time web search                 |
-| Sonar Pro             | Perplexity | Enhanced search                      |
-| Sonar Deep Research   | Perplexity | Comprehensive search                 |
-| GLM-4.7               | Zai        | Multilingual                         |
-| GLM-4.7-Flash         | Zai        | Fast, lightweight responses (v2.0.0) |
+| Model                 | Provider   | Specialty            |
+| --------------------- | ---------- | -------------------- |
+| Gemini 2.5 Pro        | Google     | Reasoning, analysis  |
+| Gemini 2.5 Flash      | Google     | Fast responses       |
+| GPT-5.2               | OpenAI     | Creative synthesis   |
+| o4-mini-deep-research | OpenAI     | Deep research        |
+| Claude Opus 4.5       | Anthropic  | Nuanced analysis     |
+| Claude Sonnet 4.5     | Anthropic  | Balanced performance |
+| Sonar                 | Perplexity | Real-time web search |
+| Sonar Pro             | Perplexity | Enhanced search      |
+| Sonar Deep Research   | Perplexity | Comprehensive search |
 
-### Classification Models (3)
+### Classification Models (1)
 
 Used for intent classification and fast tasks. **v2.0.0:** 5-step decision tree with URL isolation and explicit intent detection.
 
-| Model            | Provider | Use Case                                     |
-| ---------------- | -------- | -------------------------------------------- |
-| Gemini 2.5 Flash | Google   | Command classification, title generation     |
-| GLM-4.7          | Zai      | Alternative classifier                       |
-| GLM-4.7-Flash    | Zai      | Fast classification, cost-effective (v2.0.0) |
+| Model            | Provider | Use Case                                 |
+| ---------------- | -------- | ---------------------------------------- |
+| Gemini 2.5 Flash | Google   | Command classification, title generation |
 
 ### Image Models (2)
 
@@ -314,7 +316,7 @@ Used for image generation:
 | GPT-Image-1 (GPT Image 1) | OpenAI   | High-quality images   |
 | Gemini 2.5 Flash Image    | Google   | Fast image generation |
 
-### Validation Models (6)
+### Validation Models (4)
 
 Used for API key validation (cheap, fast):
 
@@ -324,8 +326,6 @@ Used for API key validation (cheap, fast):
 | Gemini 2.0 Flash | Google     |
 | GPT-4o Mini      | OpenAI     |
 | Sonar            | Perplexity |
-| GLM-4.7          | Zai        |
-| GLM-4.7-Flash    | Zai        |
 
 ---
 
@@ -401,7 +401,7 @@ graph TD
 | Metric                 | Count    |
 | ---------------------- | -------- |
 | Total Apps             | 20       |
-| Total Workers          | 5        |
+| Total Workers          | 6        |
 | Total Packages         | 22       |
 | Apps with features.md  | 20       |
 | Apps with technical.md | 20       |
@@ -452,6 +452,6 @@ graph TD
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-15
 
-**Components documented:** 20 apps + 5 workers + 22 packages = 47 total (100%)
+**Components documented:** 20 apps + 6 workers + 22 packages = 48 total (predev-lifecycle has no docs yet)

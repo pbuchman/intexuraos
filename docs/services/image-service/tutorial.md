@@ -144,7 +144,7 @@ HTTP status: 400
 
 **Cause:** The user has not configured an API key for the requested provider, and no platform fallback key is available.
 
-**Solution:** The user must add the provider API key via settings, or configure the platform fallback key (`INTEXURAOS_GEMINI_APP_API_KEY` or `INTEXURAOS_ZAI_APP_API_KEY`).
+**Solution:** The user must add the provider API key via settings, or configure the platform fallback key (`INTEXURAOS_GEMINI_APP_API_KEY`).
 
 ### Common Error: Rate Limited
 
