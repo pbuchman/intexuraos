@@ -1,8 +1,9 @@
-import { PullRequestReviewTemplate, IssueCommentTemplate, EditedBotReviewTemplate, createWebhookMessageBuilder } from '../../../domain/services/gitHubMessageBuilder.js';
+import { PullRequestReviewTemplate, IssueCommentTemplate, EditedBotReviewTemplate, CodeWorkerReviewEnforcementTemplate, createWebhookMessageBuilder } from '../../../domain/services/gitHubMessageBuilder.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { describe, it, expect } from 'vitest';
 
 const ALLOWED_BOTS = new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']);
+const CODE_WORKER_BOTS = new Set(['intexuraos-code-worker[bot]']);
 
 const mockPRReviewEvent: GitHubPREvent = {
   id: 'event-123',
@@ -287,23 +288,110 @@ describe('GitHubMessageBuilder', () => {
     });
   });
 
+  describe('CodeWorkerReviewEnforcementTemplate', () => {
+    const mockCodeWorkerReviewEvent: GitHubPREvent = {
+      id: 'event-126',
+      githubEventId: 126,
+      deliveryId: null,
+      repository: 'intexuraos/code-agent',
+      repositoryId: 54321,
+      pullRequestNumber: 42,
+      pullRequestId: 12345,
+      eventType: 'pull_request_review',
+      action: 'submitted',
+      senderLogin: 'intexuraos-code-worker[bot]',
+      senderId: 777,
+      senderType: 'Bot',
+      prAuthorLogin: null,
+      title: 'Test PR',
+      body: '## Code Quality Review\n\n### Suggestions\n\n1. **Hardcoded timeout** — Extract to constant.',
+      state: 'open',
+      baseBranch: null,
+      mergedAt: null,
+      createdAt: new Date('2026-03-03T10:00:00Z'),
+      processedAt: new Date('2026-03-03T10:00:00Z'),
+      payload: {
+        review: {
+          id: 999,
+          state: 'commented',
+        },
+      },
+    };
+
+    it('renders header with PR number, repo, sender, and review ID', () => {
+      const template = new CodeWorkerReviewEnforcementTemplate();
+      const result = template.render(mockCodeWorkerReviewEvent);
+
+      expect(result).toContain('[PR Review — Code Quality Enforcement] Review on PR #42 in intexuraos/code-agent');
+      expect(result).toContain('From: @intexuraos-code-worker[bot]');
+      expect(result).toContain('Review ID: 999');
+    });
+
+    it('includes review body inline', () => {
+      const template = new CodeWorkerReviewEnforcementTemplate();
+      const result = template.render(mockCodeWorkerReviewEvent);
+
+      expect(result).toContain('Full review body:');
+      expect(result).toContain('### Suggestions');
+      expect(result).toContain('1. **Hardcoded timeout**');
+    });
+
+    it('includes triage table instructions', () => {
+      const template = new CodeWorkerReviewEnforcementTemplate();
+      const result = template.render(mockCodeWorkerReviewEvent);
+
+      expect(result).toContain('Columns: # | Finding | Verdict (FIX/SKIP) | Reasoning | Action');
+    });
+
+    it('includes mandatory fix enforcement', () => {
+      const template = new CodeWorkerReviewEnforcementTemplate();
+      const result = template.render(mockCodeWorkerReviewEvent);
+
+      expect(result).toContain('MANDATORY — DO NOT STOP AFTER POSTING THE TABLE');
+      expect(result).toContain('contract violation');
+    });
+
+    it('includes react-to-review instruction', () => {
+      const template = new CodeWorkerReviewEnforcementTemplate();
+      const result = template.render(mockCodeWorkerReviewEvent);
+
+      expect(result).toContain('gh api /repos/intexuraos/code-agent/pulls/42/reviews/999');
+    });
+
+    it('handles null body with (empty)', () => {
+      const event: GitHubPREvent = { ...mockCodeWorkerReviewEvent, body: null };
+      const template = new CodeWorkerReviewEnforcementTemplate();
+      const result = template.render(event);
+
+      expect(result).toContain('Full review body:\n(empty)');
+    });
+
+    it('handles missing review payload gracefully', () => {
+      const event: GitHubPREvent = { ...mockCodeWorkerReviewEvent, payload: {} };
+      const template = new CodeWorkerReviewEnforcementTemplate();
+      const result = template.render(event);
+
+      expect(result).toContain('Review ID: unknown');
+    });
+  });
+
   describe('createWebhookMessageBuilder', () => {
     it('routes pull_request_review to PullRequestReviewTemplate', () => {
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
       const result = builder.build(mockPRReviewEvent);
 
       expect(result).toContain('[PR Review] New review on PR #42');
     });
 
     it('routes issue_comment to IssueCommentTemplate', () => {
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
       const result = builder.build(mockIssueCommentEvent);
 
       expect(result).toContain('[PR Comment] New comment on PR #42');
     });
 
     it('routes edited bot comment to EditedBotReviewTemplate', () => {
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
       const result = builder.build(mockEditedBotEvent);
 
       expect(result).toContain('[PR Comment — Bot Review Edit]');
@@ -314,7 +402,7 @@ describe('GitHubMessageBuilder', () => {
         ...mockEditedBotEvent,
         senderLogin: 'random-user',
       };
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
       const result = builder.build(nonBotEditedEvent);
 
       expect(result).toContain('[PR Comment] New comment on PR #42');
@@ -327,7 +415,7 @@ describe('GitHubMessageBuilder', () => {
         eventType: 'push',
         action: 'created',
       };
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
       const result = builder.build(unknownEvent);
 
       expect(result).toContain('[PR Comment] New comment on PR #42');
@@ -340,10 +428,32 @@ describe('GitHubMessageBuilder', () => {
         senderLogin: 'claude[bot]',
         payload: { comment: { id: 555 } },
       };
-      const builder = createWebhookMessageBuilder(ALLOWED_BOTS);
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
       const result = builder.build(editedBotReviewEvent);
 
       expect(result).toContain('[PR Comment — Bot Review Edit]');
+    });
+
+    it('routes code-worker pull_request_review to CodeWorkerReviewEnforcementTemplate', () => {
+      const codeWorkerReviewEvent: GitHubPREvent = {
+        ...mockPRReviewEvent,
+        senderLogin: 'intexuraos-code-worker[bot]',
+        body: '## Code Quality Review\n\n### Suggestions\n\n1. **Issue** — Fix it.',
+        payload: { review: { id: 888, state: 'commented' } },
+      };
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
+      const result = builder.build(codeWorkerReviewEvent);
+
+      expect(result).toContain('[PR Review — Code Quality Enforcement]');
+      expect(result).not.toContain('[PR Review] New review');
+    });
+
+    it('does not route non-code-worker pull_request_review to enforcement template', () => {
+      const builder = createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS);
+      const result = builder.build(mockPRReviewEvent);
+
+      expect(result).toContain('[PR Review] New review on PR #42');
+      expect(result).not.toContain('Code Quality Enforcement');
     });
   });
 });

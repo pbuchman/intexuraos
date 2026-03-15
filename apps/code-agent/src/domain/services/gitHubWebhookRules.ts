@@ -1,4 +1,5 @@
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
+import { hasActionableFindings } from '../utils/reviewBodyParser.js';
 
 /**
  * Three-outcome rule result. Replaces the old boolean `RuleResult`.
@@ -77,6 +78,13 @@ export class CodeWorkerOutputRule implements WebhookRule {
 
     if (event.eventType === 'pull_request' && (event.action === 'opened' || event.action === 'synchronize')) {
       return { action: 'dispatch', reason: 'CODE_WORKER_PR_EVENT' };
+    }
+
+    if (event.eventType === 'pull_request_review' && event.action === 'submitted') {
+      if (hasActionableFindings(event.body)) {
+        return { action: 'dispatch', reason: 'CODE_WORKER_ACTIONABLE_REVIEW' };
+      }
+      return { action: 'skip', reason: 'CODE_WORKER_CLEAN_REVIEW' };
     }
 
     return { action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' };

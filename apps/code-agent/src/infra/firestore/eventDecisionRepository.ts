@@ -82,6 +82,31 @@ export function createFirestoreEventDecisionRepository(deps: {
       }
     },
 
+    async existsByPRAndReason(
+      repository: string,
+      prNumber: number,
+      reason: string,
+      since: Date
+    ): Promise<Result<boolean, EventDecisionRepositoryError>> {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('pullRequestNumber', '==', prNumber)
+          .where('reason', '==', reason)
+          .where('createdAt', '>', since)
+          .limit(1)
+          .get();
+
+        return ok(!snapshot.empty);
+      } catch (error) {
+        logger.error({ error, repository, prNumber, reason }, 'Failed to check existing enforcement decision');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
     async findByEventIds(
       eventIds: string[]
     ): Promise<Result<EventDecision[], EventDecisionRepositoryError>> {

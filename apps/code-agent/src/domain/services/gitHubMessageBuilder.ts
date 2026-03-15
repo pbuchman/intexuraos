@@ -119,15 +119,56 @@ Instructions:
   }
 }
 
-export function createWebhookMessageBuilder(allowedBots: Set<string>): WebhookMessageBuilder {
+export class CodeWorkerReviewEnforcementTemplate implements MessageTemplate {
+  render(event: GitHubPREvent): string {
+    const { repository, pullRequestNumber, senderLogin, body, payload } = event;
+    const prNumber = String(pullRequestNumber);
+    const reviewId = extractId(payload, 'review');
+
+    return `[PR Review — Code Quality Enforcement] Review on PR #${prNumber} in ${repository}
+From: @${senderLogin}
+Review ID: ${reviewId}
+Type: pull_request_review (code-worker quality review)
+
+Full review body:
+${body ?? '(empty)'}
+
+Instructions:
+1. React to the review: gh api /repos/${repository}/pulls/${prNumber}/reviews/${reviewId} -X PUT -f event=COMMENT
+2. Read the full review body and extract EVERY finding/issue/suggestion
+3. For EACH finding, decide: FIX or SKIP
+   - FIX: Clear actionable feedback, code change with clear intent, specific bug or gap
+   - SKIP: Discussion/question, intentional design disagreement, out of PR scope, pure status report
+4. Post a triage comment with a table:
+   - One row per finding
+   - Columns: # | Finding | Verdict (FIX/SKIP) | Reasoning | Action
+   - For SKIP items: explain why in the Reasoning column
+   - For FIX items: write "Will fix" in the Action column
+
+   ⚠ MANDATORY — DO NOT STOP AFTER POSTING THE TABLE ⚠
+5. IMMEDIATELY after posting the triage comment, implement ALL fixes
+   marked as FIX in the table. This is not optional. Do not end your turn
+   until every FIX item has been implemented, committed, and pushed.
+   Skipping implementation after posting the table is a contract violation.
+6. After all fixes: commit, push, verify CI passes
+7. Update your triage comment (gh api PATCH /repos/${repository}/issues/comments/{your-comment-id})
+   to replace "Will fix" with the actual commit SHA for each implemented fix`;
+  }
+}
+
+export function createWebhookMessageBuilder(allowedBots: Set<string>, codeWorkerBots: Set<string>): WebhookMessageBuilder {
   const reviewTemplate = new PullRequestReviewTemplate();
   const commentTemplate = new IssueCommentTemplate();
   const editedBotTemplate = new EditedBotReviewTemplate();
+  const codeWorkerEnforcementTemplate = new CodeWorkerReviewEnforcementTemplate();
 
   return {
     build(event: GitHubPREvent): string {
       if (event.action === 'edited' && allowedBots.has(event.senderLogin)) {
         return editedBotTemplate.render(event);
+      }
+      if (event.eventType === 'pull_request_review' && codeWorkerBots.has(event.senderLogin)) {
+        return codeWorkerEnforcementTemplate.render(event);
       }
       if (event.eventType === 'pull_request_review') {
         return reviewTemplate.render(event);

@@ -535,12 +535,30 @@ describe('GitHubWebhookRules', () => {
       expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' });
     });
 
-    it('should skip pull_request_review.submitted by code worker', () => {
-      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]' };
+    it('should dispatch pull_request_review.submitted by code worker with actionable findings', () => {
+      const body = '## Code Quality Review\n\n### Suggestions\n\n1. **Hardcoded value** — Extract timeout to a constant.';
+      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]', body };
       const rule = new CodeWorkerOutputRule(codeWorkerBots);
       const result = rule.evaluate(event);
 
-      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' });
+      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_ACTIONABLE_REVIEW' });
+    });
+
+    it('should skip pull_request_review.submitted by code worker with clean review', () => {
+      const body = '## Code Quality Review\n\nNo issues found. The code looks clean.';
+      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]', body };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_CLEAN_REVIEW' });
+    });
+
+    it('should skip pull_request_review.submitted by code worker with null body', () => {
+      const event = { ...mockEvent, eventType: 'pull_request_review' as const, action: 'submitted' as const, senderLogin: 'intexuraos-code-worker[bot]', body: null };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'skip', reason: 'CODE_WORKER_CLEAN_REVIEW' });
     });
 
     it('should dispatch pull_request.opened by non-bot sender', () => {
