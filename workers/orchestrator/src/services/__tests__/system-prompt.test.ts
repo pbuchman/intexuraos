@@ -161,9 +161,7 @@ describe('system-prompt', () => {
     });
 
     for (const result of [planningResult, executionResult, prResult, reviewResult]) {
-      expect(result).toContain(
-        'Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE'
-      );
+      expect(result).toContain('Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE');
       expect(result).toContain('- Worker Type:');
       expect(result).toContain('- Model:');
     }

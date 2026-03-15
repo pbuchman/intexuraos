@@ -35,7 +35,7 @@ const logger = createAppLogger({ name: 'code-routes' });
  * Track in-flight health probe requests per user for deduplication.
  * Prevents thundering herd when multiple concurrent requests arrive while health status is stale.
  */
-const inFlightRequests = new Map<string, Promise<void>>();
+export const inFlightRequests = new Map<string, Promise<void>>();
 
 export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
@@ -1336,12 +1336,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Fetch user's worker settings
       const settingsResult = await workerSettingsRepo.getSettings(userId);
-      /* v8 ignore start -- test-infra: error path requires Firestore failure @preserve */
       if (!settingsResult.ok) {
         request.log.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch worker settings');
       }
-      /* v8 ignore stop @preserve */
 
       const settings = settingsResult.value;
 
@@ -1351,16 +1349,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const enabledWorkers = settings?.workers.filter((w) => w.enabled) ?? [];
       /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: requires user with no enabled workers fixture @preserve */
       // Fail if no workers configured
       if (enabledWorkers.length === 0) {
         request.log.warn({ userId }, 'User has no workers configured');
         return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: requires fixtures for invalid/unhealthy worker scenarios @preserve */
-      // Validate workerLocation if provided
+      // Validate workerLocation and compute worker ordering if provided
+      let orderedWorkers = enabledWorkers;
       if (body.workerLocation !== undefined) {
         const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
 
@@ -1369,22 +1365,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
         }
 
+        // Move the requested worker to the front of the list
+        orderedWorkers = [
+          requestedWorker,
+          ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
+        ];
+
         // Health is checked live via WorkerHealthProbe at dispatch time (capacity-aware dispatch, INT-741).
         // No cached health check needed here — the dispatcher probes all workers and excludes unhealthy ones.
       }
-
-      // If workerLocation specified, put that worker first in the list
-      let orderedWorkers = enabledWorkers;
-      if (body.workerLocation !== undefined) {
-        const selectedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
-        if (selectedWorker !== undefined) {
-          orderedWorkers = [
-            selectedWorker,
-            ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
-          ];
-        }
-      }
-      /* v8 ignore stop @preserve */
 
       const workerCredentials = {
         workers: orderedWorkers.map((w) => ({
@@ -2242,23 +2231,18 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const settingsResult = await workerSettingsRepo.getSettings(userId);
 
-      /* v8 ignore start -- upstream: Firestore fetch failure or missing settings @preserve */
       if (!settingsResult.ok || settingsResult.value === null) {
         return reply.ok({ workers: [], stale: false });
       }
-      /* v8 ignore stop @preserve */
 
       const settings = settingsResult.value;
       const TTL_MS = 60_000;
       const now = Date.now();
 
       const healthStatusesResult = await workerSettingsRepo.getHealthStatuses(userId);
-      /* v8 ignore start -- test-infra: requires integration test with health status repository @preserve */
       const healthStatuses = healthStatusesResult.ok ? healthStatusesResult.value ?? {} : {};
-      /* v8 ignore stop @preserve */
 
       let stale = false;
-      /* v8 ignore start -- test-infra: requires testing with time-based staleness @preserve */
       for (const [_name, status] of Object.entries(healthStatuses)) {
         const checkedAt = new Date(status.checkedAt).getTime();
         if (now - checkedAt > TTL_MS) {
@@ -2301,7 +2285,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger.error({ error }, 'Failed to refresh worker health statuses');
         });
       }
-      /* v8 ignore stop @preserve */
 
       const workers = settings.workers.map((w, index) => {
         const healthStatus = healthStatuses[w.name];
@@ -2319,7 +2302,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           code?: string;
         } | null = null;
 
-        /* v8 ignore start -- test-infra: requires integration tests with health status data @preserve */
         if (state?._tag === 'healthy') {
           details = {
             capacity: state.capacity,
@@ -2335,7 +2317,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             details.code = state.code;
           }
         }
-        /* v8 ignore stop @preserve */
 
         return {
           name: w.name,
@@ -2445,11 +2426,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const settingsResult = await workerSettingsRepo.getSettings(userId);
 
-      /* v8 ignore start -- upstream: Firestore fetch failure or missing settings @preserve */
       if (!settingsResult.ok || settingsResult.value === null) {
         return reply.ok({ workers: [], stale: false });
       }
-      /* v8 ignore stop @preserve */
 
       const settings = settingsResult.value;
 
@@ -2466,10 +2445,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const workers = settings.workers.map((w, index) => {
         const state = results[w.name];
 
-        /* v8 ignore start -- test-infra: requires integration test with health state data @preserve */
         const isHealthy = state?.healthy ?? false;
         const statusTag = state?._tag ?? 'unknown';
-        /* v8 ignore stop @preserve */
 
         let details: {
           capacity?: number;
@@ -2480,7 +2457,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           code?: string;
         } | null = null;
 
-        /* v8 ignore start -- test-infra: requires integration tests with health status data @preserve */
         if (state?._tag === 'healthy') {
           details = {
             capacity: state.capacity,
@@ -2496,7 +2472,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             details.code = state.code;
           }
         }
-        /* v8 ignore stop @preserve */
 
         return {
           name: w.name,
@@ -2904,12 +2879,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Validate internal auth
       const authResult = validateInternalAuth(request);
-      /* v8 ignore start -- test-infra: internal auth validation branch covered by other tests @preserve */
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for submit-phase2');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
-      /* v8 ignore stop @preserve */
 
       const services = getServices();
       const { taskId, userId } = request.body;
@@ -3695,7 +3668,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Check rate limits before dispatching (prompt length 0 — reuses existing task prompt)
       const limitCheck = await rateLimitService.checkLimits(userId, 0);
-      /* v8 ignore start -- test-infra: rate limit failure covered by rateLimitService unit tests @preserve */
       if (!limitCheck.ok) {
         const { error } = limitCheck;
         request.log.warn({ userId, error }, 'Rate limit exceeded for implement request');
@@ -3704,7 +3676,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
         return reply.fail('RATE_LIMITED', error.message);
       }
-      /* v8 ignore stop @preserve */
 
       request.log.info({ taskId, userId, workerType: requestedWorkerType }, 'Processing Execution Agent implementation request');
 
