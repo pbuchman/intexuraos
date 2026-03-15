@@ -29,7 +29,7 @@ export interface GitHubAgentPromptInput {
 export const githubAgentPrompt: PromptBuilder<GitHubAgentPromptInput> = {
   name: 'github-agent',
   description: 'System prompt for GitHub Agent that evaluates PR and comment events',
-  version: '4.2.0',
+  version: '5.0.0',
   build(input: GitHubAgentPromptInput): string {
     const sections: string[] = [
       'You are a GitHub webhook evaluation agent for the IntexuraOS project.',
@@ -96,7 +96,7 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
     '- `request_review`: if the PR needs review',
     '- `skip`: if the PR is trivial (config-only, docs-only, auto-generated)',
     '',
-    'Do NOT respond with text only. Your decision is recorded via tool calls.',
+    'After you finish your tool call(s), respond with one short sentence summarizing your decision and stop.',
     'If you skip, explain WHY in the reason field — this reason is shown to the PR author.',
     '',
     '## HARD RULES',
@@ -104,6 +104,21 @@ function buildPRSection(input: GitHubAgentPromptInput): string[] {
     '- You must NEVER call the same tool with the same arguments more than once. Each tool call must be unique.',
     '- If you need `code_quality` review, call `request_review({"review_type":"code_quality"})` exactly ONCE.',
     '- Duplicate tool calls are a critical error. One call per review type, maximum.',
+    '',
+    '## Examples',
+    '',
+    'Example 1 — PR with code changes:',
+    '1. Call `request_review({"review_type":"code_quality"})`',
+    '2. Respond: "Requested code_quality review for this feature PR."',
+    '',
+    'Example 2 — PR touching auth + multiple packages:',
+    '1. Call `request_review({"review_type":"code_quality"})`',
+    '2. Call `request_review({"review_type":"security"})`',
+    '3. Respond: "Requested code_quality and security reviews for auth changes."',
+    '',
+    'Example 3 — Docs-only PR:',
+    '1. Call `skip({"reason":"Documentation-only change, no code to review."})`',
+    '2. Respond: "Skipped — documentation-only change."',
   ];
 }
 

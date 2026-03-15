@@ -28,6 +28,7 @@ import { ALLOWED_BOTS, type GitHubWebhookBody } from '../../../routes/webhooks/g
 import type { GitHubWebhookAuditEventRepository } from '../../../domain/repositories/gitHubWebhookAuditEventRepository.js';
 import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
 import type { EventDecisionRepository } from '../../../domain/repositories/eventDecisionRepository.js';
+import { waitForDetachedAsync, waitForSettlement } from '../../helpers/waitForDetachedAsync.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
@@ -517,8 +518,8 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Give the fire-and-forget evaluate a tick to start
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      // Wait for the fire-and-forget evaluate to complete
+      await waitForDetachedAsync(() => mockEvaluate.mock.calls.length >= 1);
 
       // The unified evaluator should have been called
       expect(mockEvaluate).toHaveBeenCalled();
@@ -864,7 +865,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForDetachedAsync(() => mockDetectOnPush.mock.calls.length >= 1);
 
       expect(mockDetectOnPush).toHaveBeenCalledTimes(1);
     });
@@ -1343,7 +1344,7 @@ describe('POST /webhooks/github', () => {
 
       // Non-whitelisted bot should NOT dispatch
       // Wait a tick to let the async dispatch settle
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1419,7 +1420,7 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       // Non-owner sender should NOT dispatch (regardless of body content)
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1494,7 +1495,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1570,7 +1571,7 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       // Non-whitelisted bot should NOT dispatch
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1646,7 +1647,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       // issue_comment events now return needs_triage (INT-744), not dispatched directly
       expect(mockDispatch).not.toHaveBeenCalled();
     });
@@ -1723,7 +1724,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       // issue_comment events now return needs_triage (INT-744), not dispatched directly
       expect(mockDispatch).not.toHaveBeenCalled();
     });
@@ -1799,7 +1800,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockDispatch).not.toHaveBeenCalled();
     });
 
@@ -1875,7 +1876,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       // issue_comment events now return needs_triage (INT-744), not dispatched directly
       expect(mockDispatch).not.toHaveBeenCalled();
     });
@@ -1952,7 +1953,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockDispatch).not.toHaveBeenCalled();
     });
   });
@@ -2709,7 +2710,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
 
       expect(mockServices.automationLog.record).toHaveBeenCalledWith(
         { repository: 'pbuchman/intexuraos', prNumber: 123 },
@@ -2719,6 +2720,7 @@ describe('POST /webhooks/github', () => {
           action: 'opened',
           sender: 'testuser',
           deliveryId: 'delivery-wh-1',
+          summary: 'Test PR',
         },
       );
     });
@@ -2797,7 +2799,7 @@ describe('POST /webhooks/github', () => {
       const body = JSON.parse(response.body);
       expect(body.data.message).toBe('ignored');
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 2);
 
       // Should have recorded webhook_received first, then skipped
       const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
@@ -2810,6 +2812,7 @@ describe('POST /webhooks/github', () => {
           action: 'opened',
           sender: 'testuser',
           deliveryId: 'delivery-oos-1',
+          summary: 'Test PR',
         },
       ]);
       expect(recordCalls[1]).toEqual([
@@ -2842,7 +2845,7 @@ describe('POST /webhooks/github', () => {
       const body = JSON.parse(response.body);
       expect(body.data.message).toBe('duplicate');
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 2);
 
       const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
       expect(recordCalls.length).toBe(2);
@@ -2854,6 +2857,7 @@ describe('POST /webhooks/github', () => {
           action: 'opened',
           sender: 'testuser',
           deliveryId: 'delivery-dup-1',
+          summary: 'Test PR',
         },
       ]);
       expect(recordCalls[1]).toEqual([
@@ -2905,7 +2909,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
 
       expect(mockServices.automationLog.record).toHaveBeenCalledWith(
         { repository: 'pbuchman/intexuraos', prNumber: 123 },
@@ -2940,7 +2944,7 @@ describe('POST /webhooks/github', () => {
       const body = JSON.parse(response.body);
       expect(body.data.message).toBe('acknowledged');
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 2);
 
       const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
       expect(recordCalls.length).toBe(2);

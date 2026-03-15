@@ -3,10 +3,14 @@ import type { CodeTask, CodeTaskStatus } from '@/types';
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type StepState = 'completed' | 'running' | 'failed' | 'waiting' | 'actionable';
 
+export interface PipelineStepData {
+  agentType: string;
+  state: StepState;
+  label: string;
+}
+
 export interface PipelineState {
-  planning: StepState | null;
-  execution: StepState | null;
-  review: StepState | null;
+  steps: PipelineStepData[];
   pr: { url: string; number: string } | null;
   failedAttempts: number;
   archivedCount: number;
@@ -44,6 +48,22 @@ const ACTIVE_STATUSES: ReadonlySet<CodeTaskStatus> = new Set<CodeTaskStatus>([
   'queued',
 ]);
 
+const AGENT_TYPE_LABELS: Record<string, string> = {
+  planning: 'Planning',
+  execution: 'Execution',
+  pull_request: 'PR Task',
+  review: 'Review',
+};
+
+function getAgentTypeLabel(agentType: string): string {
+  const label = AGENT_TYPE_LABELS[agentType];
+  if (label !== undefined) {
+    return label;
+  }
+  // Capitalize first letter for unknown agent types
+  return agentType.charAt(0).toUpperCase() + agentType.slice(1);
+}
+
 function deriveStepState(status: CodeTaskStatus): StepState {
   if (status === 'planned' || status === 'implemented' || status === 'reviewed') {
     return 'completed';
@@ -56,36 +76,48 @@ function deriveStepState(status: CodeTaskStatus): StepState {
 }
 
 function derivePipeline(tasks: CodeTask[]): PipelineState {
-  // Find latest non-archived planning task
-  const planningTask = tasks.find(
-    (t) => t.agentType === 'planning' && t.status !== 'archived',
-  );
+  // Tasks are already sorted by updatedAt desc from the caller.
+  // Group by agentType, keeping only the first non-archived task per type (= latest by updatedAt).
+  const stepMap = new Map<string, { task: CodeTask; step: PipelineStepData }>();
 
-  // Find latest non-archived execution task
-  const executionTask = tasks.find(
-    (t) => t.agentType === 'execution' && t.status !== 'archived',
-  );
-
-  // Planning step
-  const planning = planningTask !== undefined ? deriveStepState(planningTask.status) : null;
-
-  // Execution step
-  let execution: StepState | null = null;
-  if (executionTask !== undefined) {
-    execution = deriveStepState(executionTask.status);
-  } else if (
-    planning === 'completed' &&
-    planningTask !== undefined &&
-    planningTask.implementationTaskId === undefined
-  ) {
-    execution = 'actionable';
+  for (const task of tasks) {
+    if (task.agentType === undefined || task.status === 'archived') {
+      continue;
+    }
+    if (!stepMap.has(task.agentType)) {
+      stepMap.set(task.agentType, {
+        task,
+        step: {
+          agentType: task.agentType,
+          state: deriveStepState(task.status),
+          label: getAgentTypeLabel(task.agentType),
+        },
+      });
+    }
   }
 
-  // Review step
-  const reviewTask = tasks.find(
-    (t) => t.agentType === 'review' && t.status !== 'archived',
-  );
-  const review = reviewTask !== undefined ? deriveStepState(reviewTask.status) : null;
+  // Sort steps by the representative task's createdAt ascending (chronological order)
+  const entries = [...stepMap.values()];
+  entries.sort((a, b) => a.task.createdAt.localeCompare(b.task.createdAt));
+
+  const steps = entries.map((e) => e.step);
+
+  // Actionable logic: if planning completed, no execution step exists, and no implementationTaskId
+  const planningEntry = stepMap.get('planning');
+  const executionEntry = stepMap.get('execution');
+  if (
+    planningEntry?.step.state === 'completed' &&
+    executionEntry === undefined &&
+    planningEntry.task.implementationTaskId === undefined
+  ) {
+    // Insert synthetic execution step right after planning
+    const planningIndex = steps.findIndex((s) => s.agentType === 'planning');
+    steps.splice(planningIndex + 1, 0, {
+      agentType: 'execution',
+      state: 'actionable',
+      label: 'Execution',
+    });
+  }
 
   // PR step — extract from latest non-archived task's result.prUrl
   let pr: PipelineState['pr'] = null;
@@ -115,7 +147,7 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
   // archivedCount: count of tasks with status === 'archived'
   const archivedCount = tasks.filter((t) => t.status === 'archived').length;
 
-  return { planning, execution, review, pr, failedAttempts, archivedCount };
+  return { steps, pr, failedAttempts, archivedCount };
 }
 
 function deriveAggregateStatus(tasks: CodeTask[], pipeline: PipelineState): GroupStatus {
@@ -125,8 +157,8 @@ function deriveAggregateStatus(tasks: CodeTask[], pipeline: PipelineState): Grou
     return 'active';
   }
 
-  // Needs-action: has planned task without implementationTaskId
-  if (pipeline.execution === 'actionable') {
+  // Needs-action: has actionable step
+  if (pipeline.steps.some((s) => s.state === 'actionable')) {
     return 'needs-action';
   }
 

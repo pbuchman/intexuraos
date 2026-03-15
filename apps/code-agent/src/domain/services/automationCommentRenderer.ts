@@ -20,16 +20,19 @@ export function renderHeader(): string {
 
 /**
  * Renders a single automation event as one or more Markdown lines.
+ *
+ * Returns `null` for events that should be hidden from the log
+ * (deterministic skips from webhook_route or hard_rules).
  */
 export function renderEvent(
   event: AutomationEvent,
   options?: RenderEventOptions
-): string {
+): string | null {
   const ts = formatTimestamp();
 
   switch (event.type) {
     case 'webhook_received':
-      return `**${ts}** -- \`${event.eventType}.${event.action}\` by @${event.sender}`;
+      return renderWebhookReceived(ts, event);
 
     case 'skipped':
       return renderSkipped(ts, event);
@@ -67,10 +70,30 @@ export function renderEvent(
 // Internal renderers
 // ---------------------------------------------------------------------------
 
+function renderWebhookReceived(
+  ts: string,
+  event: Extract<AutomationEvent, { type: 'webhook_received' }>
+): string {
+  const eventLabel = `\`${event.eventType}.${event.action}\``;
+  const linkedLabel = event.eventUrl !== undefined
+    ? `[${eventLabel}](${event.eventUrl})`
+    : eventLabel;
+  const base = `**${ts}** -- ${linkedLabel} by @${event.sender}`;
+  if (event.summary !== undefined) {
+    return `${base} — ${event.summary}`;
+  }
+  return base;
+}
+
 function renderSkipped(
   ts: string,
   event: Extract<AutomationEvent, { type: 'skipped' }>
-): string {
+): string | null {
+  // Hide deterministic noise — webhook_route and hard_rules skips
+  if (event.decidedBy === 'webhook_route' || event.decidedBy === 'hard_rules') {
+    return null;
+  }
+
   const summary = `**${ts}** -- **Skipped** | ${event.reason}`;
   const details: string[] = [];
 

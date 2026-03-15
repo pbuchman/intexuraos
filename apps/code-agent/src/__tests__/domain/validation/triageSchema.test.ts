@@ -86,26 +86,30 @@ describe('TriageResultSchema', () => {
 });
 
 describe('buildTriageRepairMessage', () => {
-  it('includes the error message in the output', () => {
-    const message = buildTriageRepairMessage(
-      { skipped: false, skipReason: undefined, reviewsRequested: [] },
-      'No tool was called',
-    );
-    expect(message).toContain('No tool was called');
-  });
-
-  it('includes the current state JSON in the output', () => {
-    const state = { skipped: true, skipReason: '', reviewsRequested: [] };
-    const message = buildTriageRepairMessage(state, 'Invalid skip reason');
+  it('tells LLM tools were recorded when reviews already requested', () => {
+    const state = { skipped: false, skipReason: undefined, reviewsRequested: ['code_quality'] };
+    const message = buildTriageRepairMessage(state);
+    expect(message).toContain('recorded successfully');
+    expect(message).toContain('Do NOT call any more tools');
     expect(message).toContain(JSON.stringify(state));
+    expect(message).not.toContain('incomplete');
   });
 
-  it('includes tool call instructions', () => {
-    const message = buildTriageRepairMessage(
-      { skipped: false, skipReason: undefined, reviewsRequested: ['code_quality'] },
-      'Ambiguous state',
-    );
+  it('tells LLM to call a tool when no tools were called', () => {
+    const state = { skipped: false, skipReason: undefined, reviewsRequested: [] };
+    const message = buildTriageRepairMessage(state);
+    expect(message).toContain('incomplete');
     expect(message).toContain('skip(reason)');
     expect(message).toContain('request_review(review_type)');
+    expect(message).toContain(JSON.stringify(state));
+    expect(message).not.toContain('recorded successfully');
+  });
+
+  it('tells LLM tools were recorded when skip was called', () => {
+    const state = { skipped: true, skipReason: 'Docs only', reviewsRequested: [] };
+    const message = buildTriageRepairMessage(state);
+    expect(message).toContain('recorded successfully');
+    expect(message).toContain('Do NOT call any more tools');
+    expect(message).not.toContain('incomplete');
   });
 });

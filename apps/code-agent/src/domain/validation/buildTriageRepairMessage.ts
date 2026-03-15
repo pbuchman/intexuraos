@@ -1,15 +1,29 @@
-// Prompt version: 1.0.0
+// Prompt version: 2.0.0
 export function buildTriageRepairMessage(
-  invalidState: { skipped: boolean; skipReason: string | undefined; reviewsRequested: string[] },
-  errorMessage: string,
+  state: { skipped: boolean; skipReason: string | undefined; reviewsRequested: string[] },
 ): string {
-  return `Your triage decision is incomplete. ${errorMessage}
+  const toolsAlreadyCalled = state.skipped || state.reviewsRequested.length > 0;
 
-CURRENT STATE: ${JSON.stringify(invalidState)}
+  if (toolsAlreadyCalled) {
+    return [
+      'Your tool calls have been recorded successfully.',
+      '',
+      `CURRENT STATE: ${JSON.stringify(state)}`,
+      '',
+      'Your triage decision is complete. Do NOT call any more tools.',
+      'Respond with ONLY a brief text summary of your decision.',
+    ].join('\n');
+  }
 
-You MUST call exactly one tool:
-- skip(reason): if no review needed — reason is shown to the PR author
-- request_review(review_type): if review is needed
-
-Call the tool NOW, then provide a brief text summary.`;
+  return [
+    'Your triage decision is incomplete. No tool was called.',
+    '',
+    `CURRENT STATE: ${JSON.stringify(state)}`,
+    '',
+    'You MUST call exactly one tool:',
+    '- skip(reason): if no review needed',
+    '- request_review(review_type): if review is needed',
+    '',
+    'Call the tool, then respond with a brief text summary.',
+  ].join('\n');
 }
