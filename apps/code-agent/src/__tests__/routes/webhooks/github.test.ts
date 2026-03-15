@@ -2529,6 +2529,167 @@ describe('POST /webhooks/github', () => {
     });
   });
 
+  describe('v8 ignore block coverage', () => {
+    it('acknowledges event when gitHubPREventRepo.save() returns FIRESTORE_ERROR', async () => {
+      mockEventRepo.save = (): Promise<ReturnType<typeof err<{ code: 'FIRESTORE_ERROR'; message: string }>>> =>
+        Promise.resolve(err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' }));
+
+      setServices({
+        ...mockServices,
+        gitHubPREventRepo: mockEventRepo,
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'save-error',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('acknowledged');
+    });
+
+    it('processes event but warns when gitHubPRSummaryRepo.upsert() fails', async () => {
+      const upsertMock = vi.fn().mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Summary upsert failed' })
+      );
+
+      setServices({
+        ...mockServices,
+        gitHubPRSummaryRepo: {
+          ...mockSummaryRepo,
+          upsert: upsertMock,
+        },
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'upsert-error',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('processed');
+      expect(upsertMock).toHaveBeenCalled();
+    });
+
+    it('returns 500 when persistRouteDecision fails for invalid payload', async () => {
+      // Mock eventDecisionRepo.save to return an error to trigger the !saved branch
+      mockEventDecisionRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR' as const,
+        message: 'Database unavailable'
+      }));
+
+      setServices({
+        ...mockServices,
+        eventDecisionRepo: mockEventDecisionRepo,
+      });
+
+      const invalidPayload = {
+        action: 'opened',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        // sender and pull_request intentionally omitted so parsing fails
+      };
+
+      const { payload, signature } = signPayload(invalidPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'persist-error-invalid',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when persistRouteDecision fails for unsupported event', async () => {
+      // Mock eventDecisionRepo.save to return an error to trigger the !saved branch
+      mockEventDecisionRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR' as const,
+        message: 'Database unavailable'
+      }));
+
+      setServices({
+        ...mockServices,
+        eventDecisionRepo: mockEventDecisionRepo,
+      });
+
+      const unsupportedPayload = {
+        action: 'queued',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'octocat',
+          id: 1,
+          type: 'User',
+        },
+      };
+
+      const { payload, signature } = signPayload(unsupportedPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'workflow_run',
+          'x-github-delivery': 'persist-error-unsupported',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
   describe('automation log recording', () => {
     it('records webhook_received for pull_request events with PR context', async () => {
       const prPayload = createPullRequestPayload();
