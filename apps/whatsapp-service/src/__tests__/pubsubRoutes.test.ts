@@ -635,7 +635,6 @@ describe('Pub/Sub Routes', () => {
 
       const sentMessages = messageSender.getSentMessages();
       expect(sentMessages).toHaveLength(1);
-      // Empty buttons array falls through to plain text (buttons.length > 0 is false)
       expect(sentMessages[0]?.buttons).toBeUndefined();
       expect(sentMessages[0]?.message).toBe('No buttons');
     });
@@ -663,6 +662,7 @@ describe('Pub/Sub Routes', () => {
       const saved = outboundMessageRepository.getMessages();
       expect(saved).toHaveLength(1);
       expect(saved[0]?.correlationId).toBe('corr-save-ok');
+      expect(saved[0]?.userId).toBe('user-save-ok');
     });
   });
 
