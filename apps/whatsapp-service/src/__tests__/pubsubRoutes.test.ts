@@ -609,6 +609,61 @@ describe('Pub/Sub Routes', () => {
       expect(sentMessages[0]?.ctaUrl).toEqual(ctaUrl);
       expect(sentMessages[0]?.buttons).toBeUndefined();
     });
+
+    it('sends plain text message when buttons array is empty', async () => {
+      await userMappingRepository.saveMapping('user-empty-btns', ['+48111222333']);
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-empty-btns',
+        message: 'No buttons',
+        buttons: [],
+        correlationId: 'corr-empty-btns',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      const sentMessages = messageSender.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.buttons).toBeUndefined();
+      expect(sentMessages[0]?.message).toBe('No buttons');
+    });
+
+    it('saves outbound message successfully after sending', async () => {
+      await userMappingRepository.saveMapping('user-save-ok', ['+48111222333']);
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-save-ok',
+        message: 'Save success',
+        correlationId: 'corr-save-ok',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const saved = outboundMessageRepository.getMessages();
+      expect(saved).toHaveLength(1);
+      expect(saved[0]?.correlationId).toBe('corr-save-ok');
+      expect(saved[0]?.userId).toBe('user-save-ok');
+    });
   });
 
   describe('POST /internal/whatsapp/pubsub/media-cleanup', () => {
