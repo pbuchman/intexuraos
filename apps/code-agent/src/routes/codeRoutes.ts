@@ -35,7 +35,7 @@ const logger = createAppLogger({ name: 'code-routes' });
  * Track in-flight health probe requests per user for deduplication.
  * Prevents thundering herd when multiple concurrent requests arrive while health status is stale.
  */
-const inFlightRequests = new Map<string, Promise<void>>();
+export const inFlightRequests = new Map<string, Promise<void>>();
 
 export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
@@ -1355,7 +1355,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
       }
 
-      // Validate workerLocation if provided
+      // Validate workerLocation and compute worker ordering if provided
+      let orderedWorkers = enabledWorkers;
       if (body.workerLocation !== undefined) {
         const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
 
@@ -1364,20 +1365,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
         }
 
+        // Move the requested worker to the front of the list
+        orderedWorkers = [
+          requestedWorker,
+          ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
+        ];
+
         // Health is checked live via WorkerHealthProbe at dispatch time (capacity-aware dispatch, INT-741).
         // No cached health check needed here — the dispatcher probes all workers and excludes unhealthy ones.
-      }
-
-      // If workerLocation specified, put that worker first in the list
-      let orderedWorkers = enabledWorkers;
-      if (body.workerLocation !== undefined) {
-        const selectedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
-        if (selectedWorker !== undefined) {
-          orderedWorkers = [
-            selectedWorker,
-            ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
-          ];
-        }
       }
 
       const workerCredentials = {

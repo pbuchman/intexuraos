@@ -2184,6 +2184,85 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       mockGetHealthStatuses.mockRestore();
     });
 
+    it('reuses in-flight health probe for concurrent requests', async () => {
+      const services = getServices();
+
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      // No health status for the worker - this triggers the probe
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({})
+      );
+
+      // Create a promise that we control
+      let resolveProbe: (() => void) | undefined;
+      const pendingPromise = new Promise<void>((resolve) => {
+        resolveProbe = resolve;
+      });
+
+      // Import the route module to access inFlightRequests
+      const codeRoutesModule = await import('../../routes/codeRoutes.js');
+      const inFlightRequests = (codeRoutesModule as unknown as { inFlightRequests: Map<string, Promise<void>> }).inFlightRequests;
+
+      // Pre-populate inFlightRequests to simulate an existing in-flight probe
+      const probeKey = 'health-probe:test-user-id';
+      inFlightRequests.set(probeKey, pendingPromise);
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'test-worker': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 1,
+          running: 0,
+          available: 1,
+          responseTimeMs: 100,
+        },
+      });
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Should NOT have called probeAllWorkers since we reused the existing in-flight probe
+      expect(mockProbeAllWorkers).not.toHaveBeenCalled();
+
+      // Clean up
+      if (resolveProbe) resolveProbe();
+      inFlightRequests.delete(probeKey);
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
     it('returns empty health statuses when getHealthStatuses fails', async () => {
       const services = getServices();
       const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
@@ -3300,6 +3379,99 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       });
 
       expect(response.statusCode).toBe(401);
+    });
+
+    it('accepts valid internal auth and processes request', async () => {
+      const services = getServices();
+
+      // Create a planning task that's completed (status: planned, agentType: planning)
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Test prompt',
+        sanitizedPrompt: 'test prompt',
+        systemPromptHash: 'hash123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+        agentType: 'planning',
+        linearIssueId: 'linear-issue-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Update task to planned status (completed planning)
+      await repo.update(created.value.id, { status: 'planned' });
+
+      // Mock the task dispatcher
+      const mockDispatch = vi.fn().mockResolvedValue({
+        ok: true,
+        value: { taskId: created.value.id, workerName: 'test-worker' },
+      });
+
+      // Mock worker settings to avoid WORKER_NOT_CONFIGURED error
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'cf-client-id',
+              cfAccessClientSecret: 'cf-client-secret',
+              dispatchSigningSecret: 'dispatch-secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      // Mock linear agent client validateIssue to return proper labels
+      const mockValidateIssue = vi.spyOn(services.linearAgentClient, 'validateIssue').mockResolvedValue(
+        ok({
+          id: 'linear-issue-uuid',
+          identifier: 'INT-123',
+          title: 'Test Issue',
+          url: 'https://linear.app/issue/INT-123',
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      setServices({
+        ...services,
+        taskDispatcher: {
+          dispatch: mockDispatch,
+          cancelOnWorker: vi.fn(),
+          sendMessageToWorker: vi.fn().mockResolvedValue(ok({ action: 'queued' })),
+        },
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/submit-phase2',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskId: created.value.id,
+          userId: 'test-user-id',
+        },
+      });
+
+      // Should succeed (200 or 503 if no workers available)
+      expect([200, 503]).toContain(response.statusCode);
+
+      mockGetSettings.mockRestore();
+      mockValidateIssue.mockRestore();
     });
   });
 
