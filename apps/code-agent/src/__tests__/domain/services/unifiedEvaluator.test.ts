@@ -1477,12 +1477,12 @@ describe('LLM retry for pull_request events', () => {
   });
 
   describe('enforcement loop cap', () => {
-    it('dispatches CODE_WORKER_ACTIONABLE_REVIEW when no prior enforcement exists', async () => {
+    it('dispatches CODE_WORKER_REVIEW when no prior enforcement exists', async () => {
       const deps = createFakeDeps({
         webhookRules: {
           evaluate: vi.fn().mockReturnValue({
             action: 'dispatch',
-            reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+            reason: 'CODE_WORKER_REVIEW',
           }),
         } as unknown as WebhookRulesService,
         eventDecisionRepo: {
@@ -1496,7 +1496,7 @@ describe('LLM retry for pull_request events', () => {
             senderLogin: 'intexuraos-code-worker[bot]',
             decidedBy: 'hard_rules',
             decision: 'dispatch',
-            reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+            reason: 'CODE_WORKER_REVIEW',
             createdAt: new Date(),
             decisionLatencyMs: 1,
           })),
@@ -1516,17 +1516,17 @@ describe('LLM retry for pull_request events', () => {
       expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
           decision: 'dispatch',
-          reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+          reason: 'CODE_WORKER_REVIEW',
         }),
       );
     });
 
-    it('skips CODE_WORKER_ACTIONABLE_REVIEW when enforcement already ran for this PR', async () => {
+    it('skips CODE_WORKER_REVIEW when enforcement already ran for this PR', async () => {
       const deps = createFakeDeps({
         webhookRules: {
           evaluate: vi.fn().mockReturnValue({
             action: 'dispatch',
-            reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+            reason: 'CODE_WORKER_REVIEW',
           }),
         } as unknown as WebhookRulesService,
         eventDecisionRepo: {
@@ -1570,7 +1570,7 @@ describe('LLM retry for pull_request events', () => {
         webhookRules: {
           evaluate: vi.fn().mockReturnValue({
             action: 'dispatch',
-            reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+            reason: 'CODE_WORKER_REVIEW',
           }),
         } as unknown as WebhookRulesService,
       });
