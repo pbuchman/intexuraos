@@ -43,23 +43,9 @@ import type { WebhookDispatchService } from '../../../domain/services/gitHubDisp
 import type { GitHubAgentEvalResult, GitHubAgentError } from '../../../domain/usecases/githubAgent.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { CreateReviewTaskResult, CreateReviewTaskError, CreateReviewTaskRequest } from '../../../domain/usecases/createReviewTask.js';
+import { waitForDetachedAsync } from '../../helpers/waitForDetachedAsync.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
-
-/**
- * Poll until a condition is met, for fire-and-forget async operations
- * (detached evaluate()) to settle. Replaces fixed-delay waits that are
- * unreliable in CI where runner speed varies.
- */
-async function waitForDetachedAsync(
-  condition: () => boolean,
-  { timeout = 2000, interval = 10 } = {},
-): Promise<void> {
-  const start = Date.now();
-  while (!condition() && Date.now() - start < timeout) {
-    await new Promise((resolve) => setTimeout(resolve, interval));
-  }
-}
 
 describe('Automation log integration flows', () => {
   let app: FastifyInstance;
