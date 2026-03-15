@@ -510,6 +510,35 @@ describe('evaluateEvent', () => {
         'GitHub Agent evaluation complete'
       );
     });
+
+    it('includes correctionContext in messages when provided on retry', async () => {
+      let capturedMessages: { role: string; content: string }[] = [];
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          capturedMessages = [...params.messages];
+          const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
+          if (requestReview !== undefined) {
+            await requestReview.run({ review_type: 'code_quality' });
+          }
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent();
+      const correction = 'Your previous attempt failed. You MUST call a tool.';
+
+      await evaluateEvent(deps, event, correction);
+
+      expect(capturedMessages).toHaveLength(2);
+      expect(capturedMessages[0]?.content).toBe('Evaluate this PR and decide what reviews to request.');
+      expect(capturedMessages[1]?.content).toBe(correction);
+    });
   });
 
   describe('issue_comment events', () => {
@@ -940,6 +969,39 @@ describe('evaluateEvent', () => {
         }),
         'GitHub Agent requested conflicting review worker types'
       );
+    });
+
+    it('includes correctionContext in messages for comment events when provided', async () => {
+      let capturedMessages: { role: string; content: string }[] = [];
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          capturedMessages = [...params.messages];
+          const skipTool = params.tools.find((t: ToolDefinition) => t.name === 'skip');
+          if (skipTool !== undefined) {
+            await skipTool.run({ reason: 'Not actionable' });
+          }
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 80, outputTokens: 30, totalTokens: 110, costUsd: 0.001 },
+          });
+        },
+      };
+
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: 'some comment',
+      });
+      const correction = 'Previous attempt failed. You MUST call a tool.';
+
+      await evaluateEvent(deps, event, correction);
+
+      expect(capturedMessages).toHaveLength(2);
+      expect(capturedMessages[0]?.content).toBe('Evaluate this comment and decide what action to take.');
+      expect(capturedMessages[1]?.content).toBe(correction);
     });
   });
 

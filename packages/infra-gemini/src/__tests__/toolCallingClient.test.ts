@@ -1016,6 +1016,69 @@ describe('createGeminiToolCallingClient', () => {
     expect(result.error.message).toContain('maxIterations');
   });
 
+  it('sends mode ANY on first iteration when tools are provided', async () => {
+    mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'my_tool',
+          description: 'A tool',
+          parameters: {},
+          run: vi.fn().mockResolvedValue('ok'),
+        },
+      ],
+    });
+
+    const config = mockGenerateContent.mock.calls[0]?.[0]?.config as
+      | { toolConfig?: { functionCallingConfig?: { mode?: string } } }
+      | undefined;
+    expect(config?.toolConfig?.functionCallingConfig?.mode).toBe('ANY');
+  });
+
+  it('sends mode AUTO on second iteration after a tool call', async () => {
+    mockGenerateContent.mockResolvedValueOnce(functionCallResponse('my_tool', { a: 1 }));
+    mockGenerateContent.mockResolvedValueOnce(textResponse('done'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'my_tool',
+          description: 'A tool',
+          parameters: {},
+          run: vi.fn().mockResolvedValue('{"ok":true}'),
+        },
+      ],
+    });
+
+    const secondConfig = mockGenerateContent.mock.calls[1]?.[0]?.config as
+      | { toolConfig?: { functionCallingConfig?: { mode?: string } } }
+      | undefined;
+    expect(secondConfig?.toolConfig?.functionCallingConfig?.mode).toBe('AUTO');
+  });
+
+  it('does not include toolConfig when no tools are provided', async () => {
+    mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    const config = mockGenerateContent.mock.calls[0]?.[0]?.config as
+      | { toolConfig?: unknown }
+      | undefined;
+    expect(config?.toolConfig).toBeUndefined();
+  });
+
   it('does not call onExhausted when text response received', async () => {
     const onExhausted = vi.fn().mockReturnValue('repair');
 
