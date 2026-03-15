@@ -26,6 +26,7 @@ import type {
 } from '../../domain/repositories/codeTaskRepository.js';
 
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
+const DEDUP_CANDIDATE_LIMIT = 5; // Fetch up to 5 candidates for app-level active-status filtering
 const ACTIVE_TASK_STATUSES = ['queued', 'dispatched', 'running'] as const;
 
 function stripLegacyLinearFields(data: Record<string, unknown>): Record<string, unknown> {
@@ -132,7 +133,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           const dedupQuery = collection
             .where('dedupKey', '==', dedupKey)
             .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
-            .limit(5);
+            .limit(DEDUP_CANDIDATE_LIMIT);
           const dedupSnapshot = await transaction.get(dedupQuery);
 
           // Only active tasks block dedup — terminal tasks (cancelled, failed, etc.) are ignored
