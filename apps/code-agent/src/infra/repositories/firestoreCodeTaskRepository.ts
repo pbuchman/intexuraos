@@ -26,6 +26,7 @@ import type {
 } from '../../domain/repositories/codeTaskRepository.js';
 
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
+const DEDUP_CANDIDATE_LIMIT = 5; // Fetch up to 5 candidates for app-level active-status filtering
 const ACTIVE_TASK_STATUSES = ['queued', 'dispatched', 'running'] as const;
 
 function stripLegacyLinearFields(data: Record<string, unknown>): Record<string, unknown> {
@@ -132,21 +133,25 @@ export const createFirestoreCodeTaskRepository = (deps: {
           const dedupQuery = collection
             .where('dedupKey', '==', dedupKey)
             .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
-            .limit(1);
+            .limit(DEDUP_CANDIDATE_LIMIT);
           const dedupSnapshot = await transaction.get(dedupQuery);
 
-          if (!dedupSnapshot.empty) {
-            const existingTask = dedupSnapshot.docs[0]!;
+          // Only active tasks block dedup — terminal tasks (cancelled, failed, etc.) are ignored
+          const activeStatuses: readonly string[] = ACTIVE_TASK_STATUSES;
+          const activeMatch = dedupSnapshot.docs.find(
+            (doc) => activeStatuses.includes(String(doc.data()['status']))
+          );
+          if (activeMatch !== undefined) {
             logger.info({
               dedupLayer: 2,
               dedupType: 'DUPLICATE_PROMPT',
-              existingTaskId: existingTask.id,
+              existingTaskId: activeMatch.id,
               dedupKey,
             }, 'Dedup triggered: duplicate prompt within 5 minutes');
             return err({
               code: 'DUPLICATE_PROMPT',
               message: 'Duplicate prompt within 5 minutes',
-              existingTaskId: existingTask.id,
+              existingTaskId: activeMatch.id,
             } as const);
           }
         }
