@@ -201,6 +201,61 @@ describe('Internal Routes', () => {
       expect(body.data.id).toBeDefined();
       expect(body.data.bookmark.url).toBe('https://example.com');
     });
+
+    it('publishes enrich event with correct shape after successful create', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          url: 'https://example.com',
+          title: 'Example',
+          tags: ['internal'],
+          source: 'actions-agent',
+          sourceId: 'action-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+
+      // Verify the enrich event was published with correct shape
+      expect(ctx.enrichPublisher.publishedEvents).toHaveLength(1);
+      const event = ctx.enrichPublisher.publishedEvents[0];
+      expect(event?.type).toBe('bookmarks.enrich');
+      expect(event?.bookmarkId).toBe(body.data.id);
+      expect(event?.userId).toBe('user-1');
+      expect(event?.url).toBe('https://example.com');
+    });
+
+    it('creates bookmark with draft status when status param is provided', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          url: 'https://example.com/draft',
+          tags: [],
+          source: 'actions-agent',
+          sourceId: 'action-draft',
+          status: 'draft',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.bookmark.status).toBe('draft');
+    });
   });
 
   describe('GET /internal/bookmarks/:id', () => {
@@ -506,6 +561,66 @@ describe('Internal Routes', () => {
       expect(body.data.tags).toEqual(['new-tag']);
       expect(body.data.archived).toBe(true);
     });
+
+    it('sets ogFetchedAt when ogPreview is provided and persists on subsequent updates', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      // First PATCH with ogPreview and ogFetchStatus='processed'
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/internal/bookmarks/${createResult.value.id}`,
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          ogPreview: {
+            title: 'Example Site',
+            description: 'An example website',
+            image: 'https://example.com/image.jpg',
+            siteName: 'Example',
+            type: 'website',
+            favicon: 'https://example.com/favicon.ico',
+          },
+          ogFetchStatus: 'processed',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.ogFetchedAt).not.toBeNull();
+
+      // Validate it's a valid ISO date string
+      const ogFetchedAt = body.data.ogFetchedAt as string;
+      expect(() => new Date(ogFetchedAt)).not.toThrow();
+      const fetchedAtDate = new Date(ogFetchedAt);
+      expect(fetchedAtDate.toISOString()).toBe(ogFetchedAt);
+
+      // Second PATCH with only title (no ogPreview) - ogFetchedAt should remain unchanged
+      const response2 = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/internal/bookmarks/${createResult.value.id}`,
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          title: 'New Title',
+        },
+      });
+
+      expect(response2.statusCode).toBe(200);
+      const body2 = JSON.parse(response2.body);
+      expect(body2.data.ogFetchedAt).toBe(ogFetchedAt);
+    });
   });
 
   describe('POST /internal/bookmarks/:id/force-refresh', () => {
@@ -561,6 +676,38 @@ describe('Internal Routes', () => {
         favicon: 'https://example.com/favicon.ico',
         type: null,
       });
+    });
+
+    it('returns updated bookmark with ogFetchedAt timestamp after successful refresh', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/article',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/internal/bookmarks/${createResult.value.id}/force-refresh`,
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.ogFetchStatus).toBe('processed');
+
+      // Verify ogFetchedAt is set and is a valid ISO date string
+      expect(body.data.ogFetchedAt).not.toBeNull();
+      const ogFetchedAt = body.data.ogFetchedAt as string;
+      expect(() => new Date(ogFetchedAt)).not.toThrow();
+      const fetchedAtDate = new Date(ogFetchedAt);
+      expect(fetchedAtDate.toISOString()).toBe(ogFetchedAt);
     });
 
     it('sets ogFetchStatus to failed when fetchPreview fails', async () => {
