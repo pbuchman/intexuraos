@@ -78,6 +78,27 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       );
 
       if (ruleOutcome.action === 'dispatch') {
+        // Enforcement loop cap: skip if enforcement already ran for this PR within the last hour
+        if (ruleOutcome.reason === 'CODE_WORKER_ACTIONABLE_REVIEW' && deps.eventDecisionRepo.existsByPRAndReason !== undefined) {
+          const ENFORCEMENT_CAP_WINDOW_MS = 60 * 60 * 1000;
+          const alreadyEnforced = await deps.eventDecisionRepo.existsByPRAndReason(
+            event.repository, event.pullRequestNumber,
+            'CODE_WORKER_ACTIONABLE_REVIEW', new Date(Date.now() - ENFORCEMENT_CAP_WINDOW_MS)
+          );
+          if (alreadyEnforced.ok && alreadyEnforced.value) {
+            logger.info(
+              { eventId: event.id, repository: event.repository, prNumber: event.pullRequestNumber },
+              'Enforcement already ran for this PR within the cap window, skipping'
+            );
+            await recordDecision(deps, event, {
+              decidedBy: 'hard_rules',
+              decision: 'skip',
+              reason: 'ENFORCEMENT_ALREADY_RAN',
+            }, startTime, logger);
+            return;
+          }
+        }
+
         await dispatchAndRecord(deps, event, ruleOutcome, startTime, logger);
         return;
       }

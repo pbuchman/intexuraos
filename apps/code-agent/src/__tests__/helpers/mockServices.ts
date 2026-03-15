@@ -159,7 +159,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
     userServiceClient: mockUserServiceClient,
     firestore: fakeFirestore,
-    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS, CODE_WORKER_BOTS),
     allowedBots: ALLOWED_BOTS,
     orchestratorSecret: 'test-secret',
     serviceUrl: 'http://localhost:8080',

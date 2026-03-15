@@ -1475,4 +1475,115 @@ describe('LLM retry for pull_request events', () => {
       }),
     );
   });
+
+  describe('enforcement loop cap', () => {
+    it('dispatches CODE_WORKER_ACTIONABLE_REVIEW when no prior enforcement exists', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({
+            action: 'dispatch',
+            reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+          }),
+        } as unknown as WebhookRulesService,
+        eventDecisionRepo: {
+          save: vi.fn().mockResolvedValue(ok({
+            id: 'ed_evt-1',
+            eventId: 'audit-evt-1',
+            repository: 'intexuraos/intexuraos',
+            pullRequestNumber: 42,
+            eventType: 'pull_request_review',
+            eventAction: 'submitted',
+            senderLogin: 'intexuraos-code-worker[bot]',
+            decidedBy: 'hard_rules',
+            decision: 'dispatch',
+            reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+            createdAt: new Date(),
+            decisionLatencyMs: 1,
+          })),
+          existsByPRAndReason: vi.fn().mockResolvedValue(ok(false)),
+        } as unknown as EventDecisionRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({
+        eventType: 'pull_request_review',
+        action: 'submitted',
+        senderLogin: 'intexuraos-code-worker[bot]',
+      });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decision: 'dispatch',
+          reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+        }),
+      );
+    });
+
+    it('skips CODE_WORKER_ACTIONABLE_REVIEW when enforcement already ran for this PR', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({
+            action: 'dispatch',
+            reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+          }),
+        } as unknown as WebhookRulesService,
+        eventDecisionRepo: {
+          save: vi.fn().mockResolvedValue(ok({
+            id: 'ed_evt-1',
+            eventId: 'audit-evt-1',
+            repository: 'intexuraos/intexuraos',
+            pullRequestNumber: 42,
+            eventType: 'pull_request_review',
+            eventAction: 'submitted',
+            senderLogin: 'intexuraos-code-worker[bot]',
+            decidedBy: 'hard_rules',
+            decision: 'skip',
+            reason: 'ENFORCEMENT_ALREADY_RAN',
+            createdAt: new Date(),
+            decisionLatencyMs: 1,
+          })),
+          existsByPRAndReason: vi.fn().mockResolvedValue(ok(true)),
+        } as unknown as EventDecisionRepository,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({
+        eventType: 'pull_request_review',
+        action: 'submitted',
+        senderLogin: 'intexuraos-code-worker[bot]',
+      });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.dispatchService.dispatch).not.toHaveBeenCalled();
+      expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decision: 'skip',
+          reason: 'ENFORCEMENT_ALREADY_RAN',
+        }),
+      );
+    });
+
+    it('dispatches normally when existsByPRAndReason is not implemented', async () => {
+      const deps = createFakeDeps({
+        webhookRules: {
+          evaluate: vi.fn().mockReturnValue({
+            action: 'dispatch',
+            reason: 'CODE_WORKER_ACTIONABLE_REVIEW',
+          }),
+        } as unknown as WebhookRulesService,
+      });
+      const evaluator = createUnifiedEvaluator(deps);
+      const event = createFakeEvent({
+        eventType: 'pull_request_review',
+        action: 'submitted',
+        senderLogin: 'intexuraos-code-worker[bot]',
+      });
+
+      await evaluator.evaluate(event, logger);
+
+      expect(deps.dispatchService.dispatch).toHaveBeenCalled();
+    });
+  });
 });
