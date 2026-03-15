@@ -313,6 +313,7 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     clearInterval(handlers.tokenRefreshInterval);
     clearInterval(handlers.webhookRetryInterval);
     handlers.isolationProvider?.stopPeriodicCleanup?.();
+    handlers.isolationProvider?.stopHealthMonitor?.();
     handlers.heartbeatManager.stop();
 
     // Wait for running tasks (up to timeout)
