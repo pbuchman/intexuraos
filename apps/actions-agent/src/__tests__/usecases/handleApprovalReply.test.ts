@@ -2718,16 +2718,10 @@ describe('HandleApprovalReplyUseCase', () => {
   describe('reminder action type fallback', () => {
     it('falls back to event publishing when approving a reminder action', async () => {
       const reminderAction: Action = {
+        ...testAction,
         id: 'reminder-action-1',
         type: 'reminder',
-        userId: 'user-1',
-        commandId: 'cmd-1',
         title: 'Test reminder',
-        status: 'awaiting_approval',
-        confidence: 0.85,
-        payload: {},
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
       };
       await actionRepository.save(reminderAction);
 
@@ -2753,16 +2747,10 @@ describe('HandleApprovalReplyUseCase', () => {
 
     it('still succeeds when event publishing fails after reminder approval', async () => {
       const reminderAction: Action = {
+        ...testAction,
         id: 'reminder-action-2',
         type: 'reminder',
-        userId: 'user-1',
-        commandId: 'cmd-1',
         title: 'Test reminder fail publish',
-        status: 'awaiting_approval',
-        confidence: 0.85,
-        payload: {},
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
       };
       await actionRepository.save(reminderAction);
 
