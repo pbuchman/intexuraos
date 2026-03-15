@@ -295,40 +295,80 @@ export async function generateEmbedding(text: string, apiKey: string): Promise<n
  */
 export async function batchEmbeddings(texts: string[], apiKey: string): Promise<number[][]> {
   const results: number[][] = [];
-  const batchSize = 20; // OpenAI max per request
+  const batchSize = 10;
+  const maxRetries = 5;
 
-  for (const batch of chunk(texts, batchSize)) {
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: batch,
-      }),
-    });
+  const batches = chunk(texts, batchSize);
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    const batch = batches[batchIndex];
+    let lastError: Error | null = null;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
-    }
-
-    const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
-
-    for (let i = 0; i < batch.length; i++) {
-      const embedding = data.data[i]?.embedding;
-      if (!Array.isArray(embedding) || embedding.length !== 1536) {
-        throw new Error(
-          `Invalid embedding at index ${i}: expected 1536-dim array, got ${embedding?.length ?? 0}`
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delayMs = Math.pow(2, attempt) * 1000;
+        console.log(
+          `  Batch ${batchIndex + 1}/${batches.length}: retry ${attempt}/${maxRetries} in ${delayMs}ms...`
         );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-      results.push(embedding);
+
+      try {
+        const response = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: batch,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          lastError = new Error(`OpenAI API error: ${response.status} ${errorText}`);
+          if (response.status >= 500 || response.status === 429) {
+            continue; // Retry on server errors and rate limits
+          }
+          throw lastError; // Non-retryable client error
+        }
+
+        const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
+
+        for (let i = 0; i < batch.length; i++) {
+          const embedding = data.data[i]?.embedding;
+          if (!Array.isArray(embedding) || embedding.length !== 1536) {
+            throw new Error(
+              `Invalid embedding at index ${i}: expected 1536-dim array, got ${embedding?.length ?? 0}`
+            );
+          }
+          results.push(embedding);
+        }
+
+        lastError = null;
+        break; // Success — exit retry loop
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (!lastError.message.includes('500') && !lastError.message.includes('429')) {
+          throw lastError; // Non-retryable
+        }
+      }
     }
 
-    // Rate limit delay: 100ms between batches
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (lastError !== null) {
+      console.log(
+        `  WARNING: Batch ${batchIndex + 1} failed after ${maxRetries} retries — skipping ${batch.length} chunks`
+      );
+      lastError = null; // Skip failed batch, continue with rest
+    }
+
+    // Rate limit delay: 150ms between batches
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    if ((batchIndex + 1) % 50 === 0) {
+      console.log(`  Progress: ${results.length}/${texts.length} embeddings generated`);
+    }
   }
 
   return results;
