@@ -141,6 +141,17 @@ export interface GitHubPRClient {
   ): Promise<Result<GitHubPullRequestDetails, GitHubPRClientError>>;
 
   /**
+   * Get an existing issue comment by ID.
+   * Used to read the current comment body before appending new content.
+   */
+  getIssueComment(
+    token: string,
+    owner: string,
+    repo: string,
+    commentId: number,
+  ): Promise<Result<{ body: string }, GitHubPRClientError>>;
+
+  /**
    * Update an existing issue comment.
    */
   updateIssueComment(

@@ -150,14 +150,14 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               contents,
               config: {
                 systemInstruction: systemPrompt,
-                tools: [{ functionDeclarations }],
                 ...(functionDeclarations.length > 0 && {
+                  tools: [{ functionDeclarations }],
                   toolConfig: {
                     functionCallingConfig: {
                       mode:
-                        totalToolCalls > 0
-                          ? FunctionCallingConfigMode.AUTO
-                          : FunctionCallingConfigMode.ANY,
+                        totalToolCalls === 0
+                          ? FunctionCallingConfigMode.ANY
+                          : FunctionCallingConfigMode.AUTO,
                     },
                   },
                 }),

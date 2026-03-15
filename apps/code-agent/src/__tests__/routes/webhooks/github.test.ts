@@ -224,6 +224,7 @@ describe('POST /webhooks/github', () => {
       eventDecisionRepo: mockEventDecisionRepo,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     };
 
     setServices(mockServices);
@@ -2525,6 +2526,267 @@ describe('POST /webhooks/github', () => {
         expect(mockEventDecisionRepo.findByEventIds).toHaveBeenCalledWith(['audit-1']);
       });
       expect(mockEventDecisionRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('automation log recording', () => {
+    it('records webhook_received for pull_request events with PR context', async () => {
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-wh-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(mockServices.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        {
+          type: 'webhook_received',
+          eventType: 'pull_request',
+          action: 'opened',
+          sender: 'testuser',
+          deliveryId: 'delivery-wh-1',
+        },
+      );
+    });
+
+    it('does not record webhook_received for ping events (no PR context)', async () => {
+      const { payload, signature } = signPayload({ zen: 'keep it real' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'ping',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockServices.automationLog.record).not.toHaveBeenCalled();
+    });
+
+    it('does not record webhook_received for push events (pullRequestNumber is 0)', async () => {
+      const pushPayload = {
+        ref: 'refs/heads/main',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: { login: 'intexuraos', id: 789 },
+        },
+        sender: { login: 'pusher', id: 222, type: 'User' },
+      };
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockServices.automationLog.record).not.toHaveBeenCalled();
+    });
+
+    it('records skipped event for repository_out_of_scope with PR context', async () => {
+      const prPayload = createPullRequestPayload({
+        repository: {
+          id: 456,
+          name: 'other-repo',
+          full_name: 'someone/other-repo',
+          owner: { login: 'someone', id: 789 },
+        },
+      });
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-oos-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.message).toBe('ignored');
+
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      // Should have recorded webhook_received first, then skipped
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      expect(recordCalls.length).toBe(2);
+      expect(recordCalls[0]).toEqual([
+        { repository: 'someone/other-repo', prNumber: 123 },
+        {
+          type: 'webhook_received',
+          eventType: 'pull_request',
+          action: 'opened',
+          sender: 'testuser',
+          deliveryId: 'delivery-oos-1',
+        },
+      ]);
+      expect(recordCalls[1]).toEqual([
+        { repository: 'someone/other-repo', prNumber: 123 },
+        { type: 'skipped', decidedBy: 'webhook_route', reason: 'repository_out_of_scope' },
+      ]);
+    });
+
+    it('records skipped event for duplicate_delivery with PR context', async () => {
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'DUPLICATE_EVENT' as const, message: 'Duplicate delivery' })
+      );
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-dup-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.message).toBe('duplicate');
+
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      expect(recordCalls.length).toBe(2);
+      expect(recordCalls[0]).toEqual([
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        {
+          type: 'webhook_received',
+          eventType: 'pull_request',
+          action: 'opened',
+          sender: 'testuser',
+          deliveryId: 'delivery-dup-1',
+        },
+      ]);
+      expect(recordCalls[1]).toEqual([
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        { type: 'skipped', decidedBy: 'webhook_route', reason: 'duplicate_delivery' },
+      ]);
+    });
+
+    it('does not break webhook processing when automationLog.record() rejects', async () => {
+      vi.mocked(mockServices.automationLog.record).mockRejectedValue(new Error('log service down'));
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-err-1',
+        },
+        body: payload,
+      });
+
+      // Webhook should still succeed even though automation log failed
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('processed');
+    });
+
+    it('records webhook_received with fallback values when headers are missing', async () => {
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          // No x-github-delivery header
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(mockServices.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        expect.objectContaining({
+          type: 'webhook_received',
+          deliveryId: 'unknown',
+        }),
+      );
+    });
+
+    it('records skipped event for normalized_event_save_failed with PR context', async () => {
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
+      );
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-save-fail-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.message).toBe('acknowledged');
+
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      expect(recordCalls.length).toBe(2);
+      expect(recordCalls[1]).toEqual([
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        { type: 'skipped', decidedBy: 'webhook_route', reason: 'normalized_event_save_failed' },
+      ]);
     });
   });
 });

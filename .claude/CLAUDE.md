@@ -55,6 +55,10 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Code Task Investigation:** When user pastes `dev.intexuraos.cloud/#/code-tasks/task_*` or `intexuraos.cloud/#/code-tasks/task_*` URL — use `/debug-code-task` skill. NEVER WebFetch/curl the SPA URL (hash routing returns shell HTML). Data is in Firestore `code_tasks` collection.
 
-**User Communication:** Ask ONE clarifying question at a time. Do not batch.
+**User Communication:** ALWAYS use the `AskUserQuestion` tool for questions — never inline questions in text responses. If multiple questions are needed, aggregate them into a single multi-part `AskUserQuestion` call. Non-negotiable.
+
+**Git CLI:** Always prefer `gh` CLI over raw `git` commands. Use `gh` for status, diff, log, branching, PRs, and any operation `gh` supports. Fall back to `git` only when `gh` has no equivalent.
+
+**Full Investigation:** NEVER present partial investigation results with hedging language ("maybe", "possibly", "there are multiple possible causes", "could be"). Always perform complete investigation with all mandatory evidence before presenting findings. Present definitive root cause backed by concrete evidence (logs, code, config). If evidence is genuinely insufficient, say exactly what evidence is missing and fetch it — do not guess. Non-negotiable.
 
 **Plan Documentation:** Plans with HTTP endpoints MUST include "Endpoint Changes" section: Modified, Created, Removed, Unchanged.

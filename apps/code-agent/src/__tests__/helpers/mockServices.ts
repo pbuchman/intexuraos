@@ -39,6 +39,7 @@ import { ALLOWED_BOTS, CODE_WORKER_BOTS } from '../../routes/webhooks/github.js'
 import { createFirestoreEventDecisionRepository } from '../../infra/firestore/eventDecisionRepository.js';
 import { createFirestoreDispatchRetryRepository } from '../../infra/firestore/dispatchRetryRepository.js';
 import { createUnifiedEvaluator } from '../../domain/services/unifiedEvaluator.js';
+import type { AutomationLog } from '../../domain/ports/automationLog.js';
 
 /**
  * Mock UserServiceClient that returns empty results.
@@ -131,6 +132,12 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     new BotReviewEditRule(ALLOWED_BOTS),
   ]);
 
+  const automationLog: AutomationLog = {
+    async record() {
+      // No-op in tests
+    },
+  };
+
   const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
 
   const dispatchService = createWebhookDispatchService({
@@ -157,6 +164,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     orchestratorSecret: 'test-secret',
     serviceUrl: 'http://localhost:8080',
     dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
+    automationLog,
   });
 
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
@@ -250,7 +258,9 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       evaluateEvent: undefined,
       createReviewTask: async () => ({ ok: true as const, value: { status: 'created' as const, taskId: 'mock-task', workerType: 'qwen' } }),
       allowedBots: ALLOWED_BOTS,
+      automationLog,
     }),
+    automationLog,
   };
 
   setServices(container);

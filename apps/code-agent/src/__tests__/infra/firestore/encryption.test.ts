@@ -110,7 +110,7 @@ describe('encryption', () => {
     });
 
     it('throws when encrypted data has wrong number of parts', () => {
-      expect(() => decryptToken('a:b')).toThrow('Invalid encrypted data format');
+      expect(() => decryptToken('invalid-no-colons')).toThrow('Invalid encrypted data format');
     });
   });
 

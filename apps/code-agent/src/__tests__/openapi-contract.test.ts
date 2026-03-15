@@ -158,6 +158,7 @@ describe('OpenAPI contract', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -188,7 +189,7 @@ describe('OpenAPI contract', () => {
       eventDecisionRepo: import('../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../domain/ports/automationLog.js').AutomationLog;
     });
 
     app = await buildServer();

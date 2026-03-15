@@ -48,6 +48,7 @@ const defaultInput = {
   repository: 'pbuchman/intexuraos',
   formattedTranscript: '[MSG-001] ASSISTANT tool_use: Bash\n  command: "pnpm run ci:tracked"',
   agentClaims: {
+    outcome: 'implemented' as const,
     superpowers_executing_plans: 'used' as const,
     superpowers_requesting_code_review: 'used' as const,
     gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1071',
@@ -191,6 +192,7 @@ describe('buildDeepValidationPrompt', () => {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: 'test',
       agentClaims: {
+        outcome: 'implemented',
         superpowers_executing_plans: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',
@@ -216,6 +218,7 @@ describe('buildDeepValidationPrompt', () => {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: '[MSG-001] ASSISTANT tool_use: Bash\n  command: "pnpm run ci:tracked"',
       agentClaims: {
+        outcome: 'implemented',
         superpowers_executing_plans: 'not used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1071',
@@ -237,6 +240,7 @@ describe('buildDeepValidationPrompt', () => {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: 'transcript here',
       agentClaims: {
+        outcome: 'implemented',
         superpowers_executing_plans: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',
@@ -253,6 +257,7 @@ describe('buildDeepValidationPrompt', () => {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: 'test',
       agentClaims: {
+        outcome: 'implemented',
         superpowers_executing_plans: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',
@@ -275,6 +280,7 @@ describe('buildDeepValidationPrompt', () => {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: longTranscript,
       agentClaims: {
+        outcome: 'implemented',
         superpowers_executing_plans: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: '',

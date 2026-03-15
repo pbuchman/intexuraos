@@ -48,9 +48,7 @@ export class FirestoreLogLineRepository implements LogLineRepository {
       }
       this.logger.debug({ taskId, count: lines.length }, 'Stored formatted log lines');
       return ok(undefined);
-    /* v8 ignore start -- test-infra: firestoreloglinerepository batch.commit error path @preserve */
     } catch (error) {
-    /* v8 ignore stop @preserve */
       this.logger.error({ taskId, error: getErrorMessage(error) }, 'Failed to store log lines');
       return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
     }

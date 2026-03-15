@@ -72,7 +72,7 @@ export interface TaskResult {
   planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
-  execution_outcome_label?: 'implemented';
+  execution_outcome_label?: 'implemented' | 'already_completed';
   execution_superpowers_executing_plans_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
   execution_linear_issue_url?: string;
