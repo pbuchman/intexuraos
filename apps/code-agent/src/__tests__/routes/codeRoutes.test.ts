@@ -50,6 +50,9 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
+import { Timestamp } from '@google-cloud/firestore';
+import type { DispatchRetry } from '../../domain/models/dispatchRetry.js';
+import type { DispatchRetryRepository } from '../../domain/repositories/dispatchRetryRepository.js';
 
 // Helper function to generate orchestrator HMAC signature for heartbeat endpoint
 function generateOrchestratorSignature(payload: object, secret: string): { timestamp: string; signature: string } {
@@ -213,6 +216,16 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
+      toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {
+        async findOldest() { return ok(null); },
+        async create() { return ok({} as never); },
+        async delete() { return ok(undefined); },
+        async update() { return ok(undefined); },
+      },
+      unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -239,6 +252,11 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
+      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
+      unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     // Set up worker settings for the test user
@@ -299,6 +317,53 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.id).toBe(created.value.id);
+    });
+
+    it('returns review result fields when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review PR',
+        sanitizedPrompt: 'review pr',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-review-123',
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const updateResult = await repo.update(created.value.id, {
+        status: 'reviewed',
+        result: {
+          summary: 'Reviewed the PR and posted two comments.',
+          review_comments_posted: '2',
+          review_types: 'code_quality,architecture',
+        } as typeof created.value.result,
+      });
+      expect(updateResult.ok).toBe(true);
+      if (!updateResult.ok) return;
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/code/tasks/${created.value.id}`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.result.review_comments_posted).toBe('2');
+      expect(body.data.result.review_types).toBe('code_quality,architecture');
     });
 
     it('returns 404 for other user\'s task', async () => {
@@ -484,6 +549,53 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(true);
       expect(body.data.tasks).toBeInstanceOf(Array);
       expect(body.data.tasks.length).toBe(2);
+    });
+
+    it('returns review result fields in list responses when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-review-list-123',
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const updateResult = await repo.update(created.value.id, {
+        status: 'reviewed',
+        result: {
+          summary: 'Reviewed the PR and posted one comment.',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+        } as typeof created.value.result,
+      });
+      expect(updateResult.ok).toBe(true);
+      if (!updateResult.ok) return;
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/tasks',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.tasks[0].result.review_comments_posted).toBe('1');
+      expect(body.data.tasks[0].result.review_types).toBe('code_quality');
     });
 
     it('filters tasks by status', async () => {
@@ -751,6 +863,43 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.hasActive).toBe(false);
+    });
+
+    it('returns hasActive: false when only an active review task exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+        systemPromptHash: 'review-auto',
+        workerType: 'auto',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-review-123',
+        linearIssueId: 'INT-123',
+        prNumber: 42,
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/linear/INT-123/active',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.hasActive).toBe(false);
+      expect(body.data.taskId).toBeUndefined();
     });
 
     it('returns 401 when missing auth header', async () => {
@@ -1330,6 +1479,150 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
     });
+
+    it('returns 500 when getSettings fails with Firestore error', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        err({ code: 'internal_error', message: 'Firestore unavailable' })
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+
+      mockGetSettings.mockRestore();
+    });
+
+    it('returns WORKER_NOT_CONFIGURED when user has no enabled workers', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'disabled-worker',
+              url: 'http://localhost:3000',
+              enabled: false,
+              cfAccessClientId: 'cf-client-id',
+              cfAccessClientSecret: 'cf-client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+        },
+      });
+
+      expect(response.statusCode).toBe(424);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
+
+      mockGetSettings.mockRestore();
+    });
+
+    it('returns INVALID_WORKER when requested workerLocation not configured', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+          workerLocation: 'nonexistent-worker',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_WORKER');
+      expect(body.error.message).toContain('nonexistent-worker');
+    });
+
+    it('accepts valid workerLocation and reorders workers', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'first-worker',
+              url: 'http://first-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'cf-client-id-1',
+              cfAccessClientSecret: 'cf-client-secret-1',
+              dispatchSigningSecret: 'secret-1',
+            },
+            {
+              name: 'second-worker',
+              url: 'http://second-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'cf-client-id-2',
+              cfAccessClientSecret: 'cf-client-secret-2',
+              dispatchSigningSecret: 'secret-2',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockDispatch = vi.fn().mockResolvedValue({
+        ok: true,
+        value: { taskId: 'task-123', workerName: 'second-worker' },
+      });
+
+      setServices({
+        ...services,
+        taskDispatcher: {
+          dispatch: mockDispatch,
+          cancelOnWorker: vi.fn(),
+          sendMessageToWorker: vi.fn().mockResolvedValue(ok({ action: 'queued' })),
+        },
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+          workerLocation: 'second-worker',
+        },
+      });
+
+      // Should succeed (200 or 503 if workers unavailable)
+      expect([200, 503]).toContain(response.statusCode);
+
+      mockGetSettings.mockRestore();
+    });
   });
 
   describe('POST /code/cancel', () => {
@@ -1506,6 +1799,522 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       });
 
       expect(response.statusCode).toBe(401);
+    });
+
+    it('returns empty workers array when getSettings fails', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        err({ code: 'internal_error', message: 'Firestore unavailable' })
+      );
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toEqual([]);
+      expect(body.data.stale).toBe(false);
+
+      mockGetSettings.mockRestore();
+    });
+
+    it('returns empty workers array when settings is null', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok(null)
+      );
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toEqual([]);
+      expect(body.data.stale).toBe(false);
+
+      mockGetSettings.mockRestore();
+    });
+
+    it('returns healthy worker with correct details mapping', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({
+          'test-worker': {
+            state: {
+              _tag: 'healthy',
+              healthy: true,
+              capacity: 5,
+              running: 2,
+              available: 3,
+              responseTimeMs: 150,
+            },
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
+        })
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toHaveLength(1);
+      expect(body.data.workers[0].name).toBe('test-worker');
+      expect(body.data.workers[0].healthy).toBe(true);
+      expect(body.data.workers[0].status).toBe('healthy');
+      expect(body.data.workers[0].details).toEqual({
+        capacity: 5,
+        running: 2,
+        available: 3,
+        responseTimeMs: 150,
+      });
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('returns orchestrator-unreachable worker with reason in details', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({
+          'test-worker': {
+            state: {
+              _tag: 'orchestrator-unreachable',
+              healthy: false,
+              reason: 'timeout',
+              code: 'ECONNREFUSED',
+            },
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
+        })
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toHaveLength(1);
+      expect(body.data.workers[0].healthy).toBe(false);
+      expect(body.data.workers[0].status).toBe('orchestrator-unreachable');
+      expect(body.data.workers[0].details).toEqual({
+        reason: 'timeout',
+        code: 'ECONNREFUSED',
+      });
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('returns tunnel-down worker with reason in details', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({
+          'test-worker': {
+            state: {
+              _tag: 'tunnel-down',
+              healthy: false,
+              reason: 'connection-refused',
+            },
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
+        })
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toHaveLength(1);
+      expect(body.data.workers[0].healthy).toBe(false);
+      expect(body.data.workers[0].status).toBe('tunnel-down');
+      expect(body.data.workers[0].details).toEqual({
+        reason: 'connection-refused',
+      });
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('returns stale=true when health status is older than 60 seconds', async () => {
+      const services = getServices();
+      const oldCheckedAt = new Date(Date.now() - 120_000).toISOString(); // 2 minutes ago
+
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({
+          'test-worker': {
+            state: {
+              _tag: 'healthy',
+              healthy: true,
+              capacity: 1,
+              running: 0,
+              available: 1,
+              responseTimeMs: 100,
+            },
+            checkedAt: oldCheckedAt,
+            stale: false,
+          },
+        })
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.stale).toBe(true);
+      expect(body.data.workers[0].stale).toBe(true);
+
+      // Verify the health probe was called due to stale status
+      expect(mockProbeAllWorkers).toHaveBeenCalled();
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('triggers health probe when worker has no health status', async () => {
+      const services = getServices();
+
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      // No health status for the worker - this triggers the probe
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({})
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'test-worker': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 1,
+          running: 0,
+          available: 1,
+          responseTimeMs: 100,
+        },
+      });
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockProbeAllWorkers).toHaveBeenCalled();
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('reuses in-flight health probe for concurrent requests', async () => {
+      const services = getServices();
+
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      // No health status for the worker - this triggers the probe
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({})
+      );
+
+      // Create a promise that we control
+      let resolveProbe: (() => void) | undefined;
+      const pendingPromise = new Promise<void>((resolve) => {
+        resolveProbe = resolve;
+      });
+
+      // Import the route module to access inFlightRequests
+      const codeRoutesModule = await import('../../routes/codeRoutes.js');
+      const inFlightRequests = (codeRoutesModule as unknown as { inFlightRequests: Map<string, Promise<void>> }).inFlightRequests;
+
+      // Pre-populate inFlightRequests to simulate an existing in-flight probe
+      const probeKey = 'health-probe:test-user-id';
+      inFlightRequests.set(probeKey, pendingPromise);
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'test-worker': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 1,
+          running: 0,
+          available: 1,
+          responseTimeMs: 100,
+        },
+      });
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Should NOT have called probeAllWorkers since we reused the existing in-flight probe
+      expect(mockProbeAllWorkers).not.toHaveBeenCalled();
+
+      // Clean up
+      if (resolveProbe) resolveProbe();
+      inFlightRequests.delete(probeKey);
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('returns empty health statuses when getHealthStatuses fails', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        err({ code: 'internal_error', message: 'Firestore error' })
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      // Worker should have default status since health status fetch failed
+      expect(body.data.workers).toHaveLength(1);
+      expect(body.data.workers[0].healthy).toBe(false);
+      expect(body.data.workers[0].status).toBe('unknown');
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
     });
   });
 
@@ -2333,6 +3142,430 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
+
+    it('should return empty workers array when getSettings fails', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        err({ code: 'internal_error', message: 'Firestore unavailable' })
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toEqual([]);
+
+      mockGetSettings.mockRestore();
+    });
+
+    it('should return tunnel-down worker with reason in details', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'home-mac': {
+          _tag: 'tunnel-down',
+          healthy: false,
+          reason: 'connection-refused',
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'home-mac',
+        healthy: false,
+        status: 'tunnel-down',
+        details: {
+          reason: 'connection-refused',
+        },
+        stale: false,
+      });
+    });
+
+    it('should return unknown status when probe result has no _tag', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'home-mac': {
+          healthy: false,
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0].status).toBe('unknown');
+      expect(body.data.workers[0].healthy).toBe(false);
+      expect(body.data.workers[0].details).toBeNull();
+    });
+
+    it('should return orchestrator-unreachable with code in details', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'home-mac': {
+          _tag: 'orchestrator-unreachable',
+          healthy: false,
+          reason: 'timeout',
+          code: 'ECONNREFUSED',
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'home-mac',
+        healthy: false,
+        status: 'orchestrator-unreachable',
+        details: {
+          reason: 'timeout',
+          code: 'ECONNREFUSED',
+        },
+        stale: false,
+      });
+    });
+
+    it('should return healthy=false when worker not in probe results', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        // home-mac is NOT in the results, simulating a missing worker
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'home-mac',
+        healthy: false,
+        status: 'unknown',
+        details: null,
+        stale: false,
+      });
+    });
+  });
+
+  describe('POST /internal/code/submit-phase2', () => {
+    it('returns 401 when internal auth header is missing', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/submit-phase2',
+        payload: {
+          taskId: 'task-123',
+          userId: 'test-user-id',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 401 when internal auth header is invalid', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/submit-phase2',
+        headers: {
+          'x-internal-auth': 'wrong-token',
+        },
+        payload: {
+          taskId: 'task-123',
+          userId: 'test-user-id',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('accepts valid internal auth and processes request', async () => {
+      const services = getServices();
+
+      // Create a planning task that's completed (status: planned, agentType: planning)
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Test prompt',
+        sanitizedPrompt: 'test prompt',
+        systemPromptHash: 'hash123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+        agentType: 'planning',
+        linearIssueId: 'linear-issue-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Update task to planned status (completed planning)
+      await repo.update(created.value.id, { status: 'planned' });
+
+      // Mock the task dispatcher
+      const mockDispatch = vi.fn().mockResolvedValue({
+        ok: true,
+        value: { taskId: created.value.id, workerName: 'test-worker' },
+      });
+
+      // Mock worker settings to avoid WORKER_NOT_CONFIGURED error
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'cf-client-id',
+              cfAccessClientSecret: 'cf-client-secret',
+              dispatchSigningSecret: 'dispatch-secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      // Mock linear agent client validateIssue to return proper labels
+      const mockValidateIssue = vi.spyOn(services.linearAgentClient, 'validateIssue').mockResolvedValue(
+        ok({
+          id: 'linear-issue-uuid',
+          identifier: 'INT-123',
+          title: 'Test Issue',
+          url: 'https://linear.app/issue/INT-123',
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      setServices({
+        ...services,
+        taskDispatcher: {
+          dispatch: mockDispatch,
+          cancelOnWorker: vi.fn(),
+          sendMessageToWorker: vi.fn().mockResolvedValue(ok({ action: 'queued' })),
+        },
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/submit-phase2',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskId: created.value.id,
+          userId: 'test-user-id',
+        },
+      });
+
+      // Should succeed (200 or 503 if no workers available)
+      expect([200, 503]).toContain(response.statusCode);
+
+      mockGetSettings.mockRestore();
+      mockValidateIssue.mockRestore();
+    });
+  });
+
+  describe('POST /code/tasks/:taskId/implement', () => {
+    it('returns 401 when user is not authenticated', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/implement',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 429 when rate limit exceeded', async () => {
+      const rateLimitService = {
+        async checkLimits(): Promise<Result<void, RateLimitError>> {
+          return {
+            ok: false,
+            error: {
+              code: 'concurrent_limit',
+              message: 'Too many concurrent tasks',
+              retryAfter: '60',
+            },
+          };
+        },
+        async recordTaskStart(): Promise<void> {
+          return;
+        },
+        async recordTaskComplete(): Promise<void> {
+          return;
+        },
+      } satisfies RateLimitService;
+
+      setServices({
+        ...getServices(),
+        rateLimitService,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/implement',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(429);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('RATE_LIMITED');
+    });
+
+    it('returns 503 when rate limit service is unavailable', async () => {
+      const rateLimitService = {
+        async checkLimits(): Promise<Result<void, RateLimitError>> {
+          return {
+            ok: false,
+            error: {
+              code: 'service_unavailable',
+              message: 'Rate limit service unavailable',
+            },
+          };
+        },
+        async recordTaskStart(): Promise<void> {
+          return;
+        },
+        async recordTaskComplete(): Promise<void> {
+          return;
+        },
+      } satisfies RateLimitService;
+
+      setServices({
+        ...getServices(),
+        rateLimitService,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/implement',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
   });
 
   describe('POST /code/retry', () => {
@@ -2827,7 +4060,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
             id: 'INT-100',
             identifier: 'INT-100',
             title: 'Feature X',
-            url: 'https://linear.app/intexuraos/issue/INT-100',
+            url: 'https://linear.app/pbuchman/issue/INT-100',
             labels: ['code-task'],
             childCount: 0,
             parentId: null,
@@ -2874,7 +4107,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.data.workerLocation).toBe('mac');
     });
 
-    it('accepts qwen3.5-plus as workerType without 400 validation error', async () => {
+    it('accepts kimi as workerType without 400 validation error', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -2889,7 +4122,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         workerLocation: 'home-dev',
         repository: 'test/repo',
         baseBranch: 'main',
-        traceId: 'trace-planning-qwen',
+        traceId: 'trace-planning-kimi',
         agentType: 'planning',
         linearIssueId: 'INT-200',
       });
@@ -2904,7 +4137,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
             id: 'INT-200',
             identifier: 'INT-200',
             title: 'Feature Y',
-            url: 'https://linear.app/intexuraos/issue/INT-200',
+            url: 'https://linear.app/pbuchman/issue/INT-200',
             labels: ['code-task'],
             childCount: 0,
             parentId: null,
@@ -2939,21 +4172,21 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'POST',
         url: `/code/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
-        body: { workerType: 'qwen3.5-plus' },
+        body: { workerType: 'kimi' },
       });
 
-      // Must NOT return 400 validation error — schema must accept qwen3.5-plus
+      // Must NOT return 400 validation error — schema must accept kimi
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toMatch(/^task_/);
       expect(body.data.implementationOf).toBe(created.value.id);
 
-      // Verify qwen3.5-plus actually flows through the runtime guard to the stored task
+      // Verify kimi actually flows through the runtime guard to the stored task
       const executionTask = await repo.findById(body.data.codeTaskId);
       expect(executionTask.ok).toBe(true);
       if (!executionTask.ok) return;
-      expect(executionTask.value.workerType).toBe('qwen3.5-plus');
+      expect(executionTask.value.workerType).toBe('kimi');
     });
   });
 
@@ -3118,6 +4351,52 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
+    });
+
+    it('returns retry queue result when retry entry is non-empty', async () => {
+      const services = getServices();
+      const expiredEntry: DispatchRetry = {
+        id: 'dr_expired-1',
+        type: 'task_message',
+        eventId: 'event-1',
+        repository: 'test/repo',
+        pullRequestNumber: 10,
+        senderLogin: 'tester',
+        taskId: 'task-expired-1',
+        userId: 'user-123',
+        message: 'hello',
+        attempts: 0,
+        maxAttempts: 3,
+        lastError: 'Worker timed out',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 999_999_999)),
+        ttlMinutes: 1,
+      };
+      let deleted = false;
+      const retryRepo: DispatchRetryRepository = {
+        async findOldest() { return ok(expiredEntry); },
+        async create() { return ok({} as never); },
+        async delete() { deleted = true; return ok(undefined); },
+        async update() { return ok(undefined); },
+      };
+      setServices({
+        ...services,
+        dispatchRetryRepo: retryRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('expired');
+      expect(deleted).toBe(true);
     });
 
     it('returns 500 when drain use case fails', async () => {

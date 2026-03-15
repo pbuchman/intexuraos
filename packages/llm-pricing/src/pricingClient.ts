@@ -71,8 +71,6 @@ export interface AllPricingResponse {
   anthropic: ProviderPricing;
   /** Perplexity pricing */
   perplexity: ProviderPricing;
-  /** Zai GLM pricing */
-  zai: ProviderPricing;
 }
 
 /**
@@ -229,7 +227,6 @@ export class PricingContext implements IPricingContext {
       LlmProviders.OpenAI,
       LlmProviders.Anthropic,
       LlmProviders.Perplexity,
-      LlmProviders.Zai,
     ] as const) {
       const providerPricing = allPricing[provider];
       for (const [model, pricing] of Object.entries(providerPricing.models)) {

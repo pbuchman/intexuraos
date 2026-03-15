@@ -30,6 +30,7 @@ export { LlmPricingPage } from './LlmPricingPage.js';
 export { LlmCostsPage } from './LlmCostsPage.js';
 export { CodeTasksPage } from './CodeTasksPage.js';
 export { CodeTaskViewPage } from './CodeTaskViewPage.js';
+export { CodeTaskViewPageV2 } from './CodeTaskViewPageV2.js';
 export { CodeTaskNewPage } from './CodeTaskNewPage.js';
 export { VisualizationsListPage } from './VisualizationsListPage.js';
 export { WorkerSettingsPage } from './WorkerSettingsPage.js';

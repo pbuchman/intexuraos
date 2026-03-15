@@ -320,7 +320,7 @@ curl -X PATCH http://localhost:3000/internal/issues/ISSUE_ID/state \
   -d '{"state": "in_progress"}'
 ```
 
-Available states: `backlog`, `todo`, `in_progress`, `in_review`, `qa`.
+Available states: `backlog`, `todo`, `in_progress`, `in_review`, `qa`, `done`.
 
 ### Step 5.5: Add a Comment
 
@@ -371,7 +371,7 @@ Returns display data for each found issue (missing identifiers are omitted).
 
 ## Part 6: Auto-Trigger Code Tasks (3 minutes)
 
-When an issue is assigned in Linear for the first time, Linear Agent automatically triggers a code task.
+When an issue with a "planning-task" or "code-task" label is assigned in Linear for the first time, Linear Agent automatically triggers a code task.
 
 ### How It Works
 
@@ -381,15 +381,16 @@ The auto-trigger fires when all of these conditions are met:
 2. The issue had no previous assignee (`updatedFrom.assigneeId` is null)
 3. The issue now has an assignee
 4. The issue is in a `backlog` or `unstarted` state
+5. The issue has a `planning-task` or `code-task` label
 
 The prompt depends on the issue's labels:
 
 - **With `code-task` label:** EXECUTION_PROMPT — implement requirements, write code, run CI, create PR
-- **Without `code-task` label:** ASSIGNMENT_PROMPT — analyze issue, enrich description, add acceptance criteria
+- **With `planning-task` label:** ASSIGNMENT_PROMPT — analyze issue, enrich description, add acceptance criteria
 
 ### Test the Auto-Trigger
 
-1. Create a new issue in Linear (status: Todo, no assignee)
+1. Create a new issue in Linear (status: Todo, no assignee, add a "planning-task" label)
 2. Assign yourself to the issue
 3. Check the linear-agent logs for: `Code task triggered from assignment`
 
@@ -556,4 +557,4 @@ Now that you understand the basics:
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-15

@@ -13,6 +13,7 @@ import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../dom
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { hasCodeTaskLabel, hasUnclearLabel } from '../../domain/utils/labelUtils.js';
 import { randomUUID } from 'node:crypto';
@@ -31,7 +32,7 @@ export interface SubmitToExecutionAgentRequest {
   /** User ID submitting the request */
   userId: string;
   /** Optional worker type to use for the implementation */
-  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType?: WorkerType;
 }
 
 /**
@@ -176,7 +177,6 @@ export async function submitToExecutionAgent(
 
   // Step 6: Fetch user's worker settings
   const settingsResult = await workerSettingsRepo.getSettings(userId);
-  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!settingsResult.ok) {
     logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings for Execution Agent submission');
     return err({
@@ -184,14 +184,11 @@ export async function submitToExecutionAgent(
       message: 'Failed to fetch worker settings',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const settings = settingsResult.value;
 
   // Handle null settings by providing empty array
-  /* v8 ignore start -- ts-type: optional chaining for database result @preserve */
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
-  /* v8 ignore stop @preserve */
 
   if (enabledWorkers.length === 0) {
     logger.warn({ userId }, 'User has no workers configured for Execution Agent submission');
@@ -287,7 +284,6 @@ export async function submitToExecutionAgent(
 
   const createResult = await codeTaskRepo.create(createInput);
 
-  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!createResult.ok) {
     // Rollback the optimistic lock
     logger.error({ error: createResult.error }, 'Failed to create Execution Agent task, rolling back optimistic lock');
@@ -303,7 +299,6 @@ export async function submitToExecutionAgent(
       message: 'Failed to create Execution Agent task',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const executionTask = createResult.value;
 
@@ -385,9 +380,9 @@ export async function submitToExecutionAgent(
         logger.error({ error: countResult.error }, 'Failed to count queued tasks, treating as queue full');
       }
 
-      const queuedCount = countResult.ok ? countResult.value : config.queue.maxSize;
+      const queuedCount = countResult.ok ? countResult.value : config.queue.maxSize + 1;
 
-      if (queuedCount >= config.queue.maxSize) {
+      if (queuedCount > config.queue.maxSize) {
         // Queue is full — rollback and fail
         logger.warn(
           { taskId: executionTaskId, queuedCount, maxSize: config.queue.maxSize },
@@ -395,14 +390,12 @@ export async function submitToExecutionAgent(
         );
 
         const lockRollbackResult = await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
-        /* v8 ignore start -- upstream: Firestore write failure within dispatch failure path @preserve */
         if (!lockRollbackResult.ok) {
           logger.error(
             { taskId: originalTask.id, executionTaskId, error: lockRollbackResult.error },
             'Failed to rollback implementationTaskId after queue full'
           );
         }
-        /* v8 ignore stop @preserve */
 
         const failMarkResult = await codeTaskRepo.update(executionTaskId, {
           status: 'failed',
@@ -411,14 +404,12 @@ export async function submitToExecutionAgent(
             message: 'All workers at capacity and queue is full',
           },
         });
-        /* v8 ignore start -- upstream: Firestore write failure within dispatch failure path @preserve */
         if (!failMarkResult.ok) {
           logger.error(
             { executionTaskId, error: failMarkResult.error },
             'Failed to mark execution task as failed after queue full'
           );
         }
-        /* v8 ignore stop @preserve */
 
         return err({
           code: 'queue_full',
@@ -426,8 +417,8 @@ export async function submitToExecutionAgent(
         });
       }
 
-      // Queue has room — enqueue the task (do NOT rollback)
-      const position = queuedCount + 1;
+      // Queue has room — task is already in 'queued' status from creation
+      const position = queuedCount;
       const estimatedWaitMinutes = position * 5;
 
       logger.info(
@@ -436,18 +427,15 @@ export async function submitToExecutionAgent(
       );
 
       const queueResult = await codeTaskRepo.update(executionTaskId, {
-        status: 'queued',
         queuedAt: new Date(),
       });
 
-      /* v8 ignore start -- upstream: Firestore write failure within queue path @preserve */
       if (!queueResult.ok) {
         logger.error(
           { executionTaskId, error: queueResult.error },
-          'Failed to update execution task to queued status'
+          'Failed to update execution task with queuedAt timestamp'
         );
       }
-      /* v8 ignore stop @preserve */
 
       const queuedTask = queueResult.ok ? queueResult.value : executionTask;
 
@@ -473,14 +461,12 @@ export async function submitToExecutionAgent(
 
     // Roll back optimistic lock on planning task
     const lockRollbackResult = await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
-    /* v8 ignore start -- upstream: Firestore write failure within dispatch failure path @preserve */
     if (!lockRollbackResult.ok) {
       logger.error(
         { taskId: originalTask.id, executionTaskId, error: lockRollbackResult.error },
         'Failed to rollback implementationTaskId after dispatch failure'
       );
     }
-    /* v8 ignore stop @preserve */
 
     // Mark Execution Agent task as failed
     const failMarkResult = await codeTaskRepo.update(executionTaskId, {
@@ -490,14 +476,12 @@ export async function submitToExecutionAgent(
         message: dispatchError.message,
       },
     });
-    /* v8 ignore start -- upstream: Firestore write failure within dispatch failure path @preserve */
     if (!failMarkResult.ok) {
       logger.error(
         { executionTaskId, error: failMarkResult.error },
         'Failed to mark Execution Agent task as failed after dispatch failure'
       );
     }
-    /* v8 ignore stop @preserve */
 
     return err({
       code: 'internal_error',
@@ -515,12 +499,13 @@ export async function submitToExecutionAgent(
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(executionTaskId, {
+    status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
   });
 
-  /* v8 ignore start -- test-infra: update success path tested but not detected by coverage tool @preserve */
   if (updateResult.ok) {
     const updatedTask = updateResult.value;
     const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
@@ -533,7 +518,6 @@ export async function submitToExecutionAgent(
   } else {
     logger.warn({ taskId: executionTaskId, error: updateResult.error }, 'Failed to update Execution Agent task with cancel nonce');
   }
-  /* v8 ignore stop @preserve */
 
   // Step 15: Return success
   return ok({

@@ -226,8 +226,6 @@ export const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
   [LlmModels.Sonar]: ['sonar basic'],
   [LlmModels.SonarPro]: ['sonar', 'sonar pro', 'pplx', 'perplexity'],
   [LlmModels.SonarDeepResearch]: ['sonar deep', 'perplexity deep', 'deep sonar'],
-  [LlmModels.Glm47]: ['glm', 'glm-4', 'glm-4.7', 'zai'],
-  [LlmModels.Glm47Flash]: ['glm flash', 'glm-flash', 'glm-4.7-flash'],
 };
 
 /**
@@ -239,7 +237,6 @@ export const PROVIDER_DEFAULT_MODELS: Record<string, ResearchModel> = {
   anthropic: LlmModels.ClaudeSonnet45,
   openai: LlmModels.GPT52,
   perplexity: LlmModels.SonarPro,
-  zai: LlmModels.Glm47,
 };
 
 /**

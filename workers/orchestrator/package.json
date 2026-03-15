@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/orchestrator",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -43,6 +43,7 @@
     "@types/dockerode": "^4.0.1",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.5",
+    "memfs": "^4.56.11",
     "nock": "^13.5.5",
     "typescript": "^5.7.3",
     "vitest": "^4.0.16"

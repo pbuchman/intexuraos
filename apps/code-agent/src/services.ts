@@ -6,9 +6,11 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
-import { ok } from '@intexuraos/common-core';
+import { ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
+import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from './domain/repositories/logLineRepository.js';
@@ -49,10 +51,32 @@ import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
-import { ALLOWED_BOTS } from './routes/webhooks/github.js';
+import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
+import { createToolCallingClient } from '@intexuraos/llm-factory';
+import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
+import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
+import type { DispatchRetryRepository } from './domain/repositories/dispatchRetryRepository.js';
+import { createFirestoreDispatchRetryRepository } from './infra/firestore/dispatchRetryRepository.js';
+import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services/unifiedEvaluator.js';
+import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
+import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
+import { createReviewTask } from './domain/usecases/createReviewTask.js';
+import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
+import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
+import { fetchGitHubToken } from './domain/utils/gitHubTokenResolver.js';
+import type { GitHubWebhookAuditEventRepository } from './domain/repositories/gitHubWebhookAuditEventRepository.js';
+import { createFirestoreGitHubWebhookAuditEventRepository } from './infra/firestore/gitHubWebhookAuditEventRepository.js';
+import type { GitHubEventLogEntryRepository } from './domain/repositories/gitHubEventLogEntryRepository.js';
+import { createFirestoreGitHubEventLogEntryRepository } from './infra/firestore/gitHubEventLogEntryRepository.js';
+import type { AutomationLog } from './domain/ports/automationLog.js';
+import { createGitHubPRAutomationLog } from './infra/services/gitHubPRAutomationLog.js';
+import { createFirestorePRAutomationCommentRepository } from './infra/firestore/prAutomationCommentRepository.js';
+
+const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
+const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -75,12 +99,22 @@ export interface ServiceContainer {
   workerHealthProbe: WorkerHealthProbe;
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
+  gitHubWebhookAuditEventRepo?: GitHubWebhookAuditEventRepository;
+  gitHubEventLogEntryRepo?: GitHubEventLogEntryRepository;
   turnMetricsRepo: TurnMetricsRepository;
   userServiceClient: UserServiceClient;
   gitHubPRClient: GitHubPRClient;
   userLookupService?: UserLookupService;
   webhookRules: WebhookRulesService;
   dispatchService: WebhookDispatchService;
+  // GitHub Agent (INT-743)
+  toolCallingClient: ToolCallingClient | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  // INT-744: Unified Webhook Evaluator
+  eventDecisionRepo: EventDecisionRepository;
+  dispatchRetryRepo: DispatchRetryRepository;
+  unifiedEvaluator: UnifiedEvaluator;
+  mergeConflictDetector?: MergeConflictDetector;
+  automationLog: AutomationLog;
 }
 
 // Configuration required to initialize services
@@ -96,6 +130,8 @@ export interface ServiceConfig {
   orchestratorSecret: string;
   serviceUrl: string;
   userServiceUrl: string;
+  // GitHub Agent (INT-743)
+  geminiAppApiKey: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -163,7 +199,7 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         root: {
           id: request.issueId,
           identifier: `INT-${request.issueId}`,
-          url: `https://linear.app/intexuraos/issue/${request.issueId}`,
+          url: `https://linear.app/pbuchman/issue/${request.issueId}`,
           parentId: null,
           labels: [],
           assigneeId: null,
@@ -283,9 +319,19 @@ export function initServices(config: ServiceConfig): void {
   const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
   const logLineRepo = createFirestoreLogLineRepository({ firestore, logger });
   const workerSettingsRepo = createWorkerSettingsRepository({ firestore, logger });
-  const taskDispatcher = createTaskDispatcherService({ logger });
+  const workerHealthProbe = createWorkerHealthProbe();
+  const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe });
   const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher, linearAgentClient });
   const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000 });
+
+  const prAutomationCommentRepo = createFirestorePRAutomationCommentRepository({ logger });
+
+  const automationLog = createGitHubPRAutomationLog({
+    gitHubPRClient,
+    prAutomationCommentRepo,
+    resolveOAuthToken: async (userId) => await fetchGitHubToken(userServiceClient, userId, logger),
+    logger,
+  });
 
   const statusMirrorService = createStatusMirrorService({
     actionsAgentClient,
@@ -296,6 +342,118 @@ export function initServices(config: ServiceConfig): void {
     gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient, logger }),
     workerSettingsRepo,
     logger,
+  });
+
+  const webhookRules = createWebhookRulesService([
+    // Note: RepositoryScopeRule is NOT included here because the route handler
+    // already filters via shouldProcessRepository() which correctly handles
+    // both intexuraos/* and */intexuraos patterns. Adding it here would be
+    // redundant and risks scope mismatch (see PR #997 review).
+    new CodeWorkerOutputRule(CODE_WORKER_BOTS),
+    new ActionableEventRule(ALLOWED_BOTS),
+    new ProtectedBaseBranchRule(),
+    new SenderWhitelistRule(ALLOWED_BOTS),
+    new SkipPrefixRule(['@claude', '@codex', '@ignore']),
+    // Note: BotReviewEditRule is NOT included here because it introduces
+    // new "meaningful changes" filtering not present in the original code.
+    // The original dispatched all edited bot comments without payload inspection.
+  ]);
+
+  const toolCallingClient = config.geminiAppApiKey !== ''
+    ? createToolCallingClient({
+        apiKey: config.geminiAppApiKey,
+        model: GEMINI_TOOL_CALLING_MODEL,
+        userId: 'system:github-agent',
+        pricing: GEMINI_TOOL_CALLING_PRICING,
+        logger,
+      })
+    : undefined;
+
+  const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
+  const gitHubPRSummaryRepo = createFirestoreGitHubPRSummariesRepository({ logger });
+  const gitHubWebhookAuditEventRepo = createFirestoreGitHubWebhookAuditEventRepository({ logger });
+  const gitHubEventLogEntryRepo = createFirestoreGitHubEventLogEntryRepository({ logger });
+  const dispatchRetryRepo = createFirestoreDispatchRetryRepository({ logger });
+
+  const mergeConflictDetector = createDetectMergeConflictsOnPush({
+    logger,
+    gitHubPRClient,
+    gitHubPRSummaryRepo,
+    codeTaskRepo,
+    userServiceClient,
+    gitHubPREventRepo,
+    linearIssueService,
+    taskDispatcher,
+    logLineRepo,
+    workerSettingsRepo,
+    statusMirrorService,
+    whatsappNotifier,
+    allowedBots: ALLOWED_BOTS,
+    serviceUrl: config.serviceUrl,
+    orchestratorSecret: config.orchestratorSecret,
+  });
+
+  const dispatchService = createWebhookDispatchService({
+    gitHubPREventRepo,
+    codeTaskRepo,
+    logLineRepo,
+    userLookupService,
+    linearIssueService,
+    taskDispatcher,
+    whatsappNotifier,
+    workerSettingsRepo,
+    statusMirrorService,
+    gitHubPRClient,
+    userServiceClient,
+    firestore,
+    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
+    allowedBots: ALLOWED_BOTS,
+    orchestratorSecret: config.orchestratorSecret,
+    serviceUrl: config.serviceUrl,
+    dispatchRetryRepo,
+    automationLog,
+  });
+
+  const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
+
+  const unifiedEvaluator = createUnifiedEvaluator({
+    webhookRules,
+    dispatchService,
+    eventDecisionRepo,
+    gitHubEventLogEntryRepo,
+    evaluateEvent: toolCallingClient !== undefined
+      ? (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
+          { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS },
+          event,
+          correctionContext,
+        )
+      : undefined,
+    createReviewTask: (taskLogger, request) => createReviewTask(
+      {
+        logger: taskLogger,
+        codeTaskRepo,
+        userLookupService,
+        taskDispatcher,
+        linearAgentClient,
+        gitHubPRClient,
+        userServiceClient,
+        workerSettingsRepo,
+        whatsappNotifier,
+        orchestratorSecret: config.orchestratorSecret,
+        serviceUrl: config.serviceUrl,
+        automationLog,
+      },
+      request,
+    ),
+    automationLog,
+    resolveTokenUserId: async (senderLogin) => {
+      const userResult = await userServiceClient.resolveGitHubUsername(senderLogin);
+      if (!userResult.ok) return undefined;
+      const resolvedUser = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
+      if (resolvedUser === null) return undefined;
+      return resolvedUser.userId;
+    },
+    allowedBots: ALLOWED_BOTS,
   });
 
   container = {
@@ -328,42 +486,23 @@ export function initServices(config: ServiceConfig): void {
     }),
     metricsClient,
     workerSettingsRepo,
-    workerHealthProbe: createWorkerHealthProbe(),
-    gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
-    gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
+    workerHealthProbe,
+    gitHubPREventRepo,
+    gitHubPRSummaryRepo,
+    gitHubWebhookAuditEventRepo,
+    gitHubEventLogEntryRepo,
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
     userServiceClient,
     gitHubPRClient,
     userLookupService,
-    webhookRules: createWebhookRulesService([
-      // Note: RepositoryScopeRule is NOT included here because the route handler
-      // already filters via shouldProcessRepository() which correctly handles
-      // both intexuraos/* and */intexuraos patterns. Adding it here would be
-      // redundant and risks scope mismatch (see PR #997 review).
-      new ActionableEventRule(ALLOWED_BOTS),
-      new SenderWhitelistRule(ALLOWED_BOTS),
-      new SkipPrefixRule(['@claude', '@codex', '@ignore']),
-      // Note: BotReviewEditRule is NOT included here because it introduces
-      // new "meaningful changes" filtering not present in the original code.
-      // The original dispatched all edited bot comments without payload inspection.
-    ]),
-    dispatchService: createWebhookDispatchService({
-      codeTaskRepo,
-      logLineRepo,
-      userLookupService,
-      linearIssueService,
-      taskDispatcher,
-      whatsappNotifier,
-      workerSettingsRepo,
-      statusMirrorService,
-      gitHubPRClient,
-      userServiceClient,
-      firestore,
-      messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
-      allowedBots: ALLOWED_BOTS,
-      orchestratorSecret: config.orchestratorSecret,
-      serviceUrl: config.serviceUrl,
-    }),
+    webhookRules,
+    toolCallingClient,
+    dispatchService,
+    eventDecisionRepo,
+    dispatchRetryRepo,
+    unifiedEvaluator,
+    mergeConflictDetector,
+    automationLog,
   };
 }
 

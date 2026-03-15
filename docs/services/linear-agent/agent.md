@@ -207,7 +207,7 @@ interface IssueResponse {
 
 ```typescript
 interface UpdateStateInput {
-  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa';
+  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa' | 'done';
 }
 ```
 
@@ -220,6 +220,7 @@ interface UpdateStateInput {
 | `in_progress` | In Progress       |
 | `in_review`   | In Review         |
 | `qa`          | QA                |
+| `done`        | Done              |
 
 **Example:**
 
@@ -680,26 +681,26 @@ interface ConnectionOutput {
 
 ## Constraints
 
-| Rule                         | Description                                                                      |
-| ---------------------------- | -------------------------------------------------------------------------------- |
-| **Linear API Key Required**  | User must have Linear API key configured via `/linear/connection`                |
-| **Team Scope**               | Issues created in user's configured team                                         |
-| **Priority Scale**           | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low                       |
-| **Idempotency**              | Same `actionId` returns cached result, no duplicate issues                       |
-| **Auth Required**            | Public endpoints require Bearer token, internal requires X-Internal-Auth         |
-| **Internal API Auth**        | Internal issues endpoints also require X-User-Id header                          |
-| **Webhook Secret**           | Webhook events require HMAC-SHA256 signature validation per connection           |
-| **Issue Identifier Format**  | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)                 |
-| **Title Length**             | Generated titles are max 80 characters                                           |
-| **Title Error on Failure**   | `generateIssueTitle` returns err() after 2 failed attempts — no fallback         |
-| **Dashboard from Firestore** | `GET /linear/issues` reads local cache; sync first if data looks stale           |
-| **Labels in POST /issues**   | `labels` field accepted but not forwarded to Linear API yet                      |
-| **sync-all Auth**            | Accepts OIDC (Cloud Scheduler) or X-Internal-Auth                                |
-| **Auto-Trigger Guards**      | Only fires on first assignment, backlog or unstarted state, no "Code Task" label |
-| **Auto-Trigger Fire-Forget** | Code task trigger does not block webhook response; errors logged only            |
-| **Metadata Ownership**       | `PATCH /metadata` returns 404 (not 403) if issue belongs to another user         |
-| **Display Batch Omission**   | `POST /display-batch` silently omits identifiers not found in user's sync        |
-| **Tree from Local Sync**     | `GET /tree` uses Firestore data only — no Linear API calls                       |
+| Rule                         | Description                                                                                           |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Linear API Key Required**  | User must have Linear API key configured via `/linear/connection`                                     |
+| **Team Scope**               | Issues created in user's configured team                                                              |
+| **Priority Scale**           | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low                                            |
+| **Idempotency**              | Same `actionId` returns cached result, no duplicate issues                                            |
+| **Auth Required**            | Public endpoints require Bearer token, internal requires X-Internal-Auth                              |
+| **Internal API Auth**        | Internal issues endpoints also require X-User-Id header                                               |
+| **Webhook Secret**           | Webhook events require HMAC-SHA256 signature validation per connection                                |
+| **Issue Identifier Format**  | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)                                      |
+| **Title Length**             | Generated titles are max 80 characters                                                                |
+| **Title Error on Failure**   | `generateIssueTitle` returns err() after 2 failed attempts — no fallback                              |
+| **Dashboard from Firestore** | `GET /linear/issues` reads local cache; sync first if data looks stale                                |
+| **Labels in POST /issues**   | `labels` field accepted but not forwarded to Linear API yet                                           |
+| **sync-all Auth**            | Accepts OIDC (Cloud Scheduler) or X-Internal-Auth                                                     |
+| **Auto-Trigger Guards**      | Only fires on first assignment, backlog or unstarted state, requires planning-task or code-task label |
+| **Auto-Trigger Fire-Forget** | Code task trigger does not block webhook response; errors logged only                                 |
+| **Metadata Ownership**       | `PATCH /metadata` returns 404 (not 403) if issue belongs to another user                              |
+| **Display Batch Omission**   | `POST /display-batch` silently omits identifiers not found in user's sync                             |
+| **Tree from Local Sync**     | `GET /tree` uses Firestore data only — no Linear API calls                                            |
 
 ---
 
@@ -744,13 +745,13 @@ interface ConnectionOutput {
 ### Pattern 4: Auto-Trigger Code Task on Assignment
 
 ```
-1. User assigns themselves to a backlog or unstarted issue in Linear
+1. User assigns themselves to a backlog or unstarted issue with planning-task or code-task label
 2. Linear sends webhook update event to POST /linear/webhook
 3. Webhook fans out to all connected users for the team
-4. shouldTriggerCodeTask validates: first assignment, backlog/unstarted state, no "code-task" label
-5. Checks for "code-task" label to select prompt:
+4. shouldTriggerCodeTask validates: first assignment, backlog/unstarted state, has planning-task or code-task label
+5. Selects prompt based on label:
    - Has "code-task" label -> EXECUTION_PROMPT (implement requirements)
-   - No "code-task" label -> ASSIGNMENT_PROMPT (analyze/enrich/mark ready)
+   - Has "planning-task" label -> ASSIGNMENT_PROMPT (analyze/enrich/mark ready)
 6. triggerCodeTaskFromAssignment calls code-agent POST /internal/code/process (fire-and-forget)
 ```
 
@@ -867,4 +868,4 @@ Linear state names map to dashboard columns:
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-15

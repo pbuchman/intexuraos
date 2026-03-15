@@ -8,6 +8,7 @@
 import type { Logger } from '@intexuraos/common-core';
 import { DockerProvider, type DockerProviderConfig } from './docker-provider.js';
 import type { IsolationProvider } from './types.js';
+import { withTimeout } from '../../with-timeout.js';
 
 /**
  * Create a Docker isolation provider.
@@ -22,17 +23,16 @@ export async function createIsolationProvider(
 ): Promise<IsolationProvider> {
   const provider = new DockerProvider(config, logger);
 
-  // Timeout wrapper for Docker cleanup
-  const DOCKER_CLEANUP_TIMEOUT_MS = 30 * 1000; // 30 seconds
-  const cleanupPromise = provider.cleanupOrphanedContainers();
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
-      reject(new Error('Docker cleanup timeout'));
-    }, DOCKER_CLEANUP_TIMEOUT_MS);
-  });
+  const DOCKER_CHECK_TIMEOUT_MS = 30 * 1000; // 30 seconds
 
   try {
-    await Promise.race([cleanupPromise, timeoutPromise]);
+    await withTimeout(
+      provider.assertDockerAvailable(),
+      DOCKER_CHECK_TIMEOUT_MS,
+      'Docker availability check timeout'
+    );
+    provider.startPeriodicCleanup();
+    provider.startHealthMonitor();
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     if (
@@ -42,7 +42,7 @@ export async function createIsolationProvider(
     ) {
       process.stderr.write(`\n❌ PRECONDITION FAILED: Cannot connect to Docker\n`);
       process.stderr.write(
-        `   Docker cleanup failed after ${String(DOCKER_CLEANUP_TIMEOUT_MS / 1000)} seconds\n`
+        `   Docker availability check failed after ${String(DOCKER_CHECK_TIMEOUT_MS / 1000)} seconds\n`
       );
       process.stderr.write(`   Ensure:\n`);
       process.stderr.write(`     1. Docker Desktop is running\n`);

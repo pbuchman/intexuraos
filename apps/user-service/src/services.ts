@@ -114,7 +114,6 @@ export function initializeServices(pricingContext?: PricingContext, logger: Logg
       openai: pricingContext.getPricing(LlmModels.GPT4oMini),
       anthropic: pricingContext.getPricing(LlmModels.ClaudeHaiku35),
       perplexity: pricingContext.getPricing(LlmModels.Sonar),
-      zai: pricingContext.getPricing(LlmModels.Glm47),
     };
     llmValidator = new LlmValidatorImpl(validationPricing, logger);
   }

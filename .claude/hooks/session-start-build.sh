@@ -40,7 +40,7 @@ fi
 # ── Phase 2: Verify critical env vars are loadable ─────────────────────────
 # Source .envrc + .envrc.local in a subshell to test without affecting parent.
 # This catches issues like missing .envrc.local or broken variable references.
-CRITICAL_VARS="INTEXURAOS_GCP_PROJECT_ID INTEXURAOS_INTERNAL_AUTH_TOKEN INTEXURAOS_AUTH_JWKS_URL INTEXURAOS_ZAI_APP_API_KEY INTEXURAOS_OPENAI_APP_API_KEY INTEXURAOS_SENTRY_DSN"
+CRITICAL_VARS="INTEXURAOS_GCP_PROJECT_ID INTEXURAOS_INTERNAL_AUTH_TOKEN INTEXURAOS_AUTH_JWKS_URL INTEXURAOS_ZAI_APP_API_KEY INTEXURAOS_DASHSCOPE_APP_API_KEY INTEXURAOS_OPENAI_APP_API_KEY INTEXURAOS_SENTRY_DSN"
 
 missing_vars=$(
   # Source in subshell to avoid polluting hook environment
@@ -68,23 +68,31 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # ── Phase 4: Build packages if dist/ is missing ───────────────────────────
-# Only check packages that have a "build" script in package.json
-missing_dist=false
+# Build only specific packages with missing dist/ (not full monorepo).
+# Full `pnpm build` includes apps/web (Vite) which OOM-kills in containers.
+missing_pkgs=""
+
 for pkg in packages/*/; do
   if [ -f "$pkg/package.json" ]; then
     has_build=$(jq -r '.scripts.build // empty' "$pkg/package.json" 2>/dev/null) || true
     if [ -n "$has_build" ] && [ ! -d "$pkg/dist" ]; then
-      missing_dist=true
-      break
+      pkg_name=$(jq -r '.name // empty' "$pkg/package.json" 2>/dev/null) || true
+      if [ -n "$pkg_name" ]; then
+        missing_pkgs="$missing_pkgs $pkg_name"
+      fi
     fi
   fi
 done
 
-if [ "$missing_dist" = true ]; then
-  echo "Building packages (dist/ missing)..." >&2
-  # Skip actual build in test mode (set by hook tests)
+if [ -n "$missing_pkgs" ]; then
+  echo "Building packages with missing dist/:$missing_pkgs" >&2
   if [ "${HOOK_DRY_RUN:-}" != "1" ]; then
-    pnpm build >&2
+    for pkg_name in $missing_pkgs; do
+      echo "  Building $pkg_name..." >&2
+      pnpm --filter "$pkg_name" build >&2 || {
+        echo "  WARNING: Failed to build $pkg_name (exit $?), continuing..." >&2
+      }
+    done
   fi
 fi
 

@@ -15,11 +15,19 @@ import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../dom
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
+import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { randomUUID } from 'node:crypto';
-import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
+import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import {
+  bootstrapContinuationPrTaskComment,
+  resolveExecutionContinuationPr,
+} from '../../domain/utils/continuationPr.js';
+import type { AutomationLog } from '../../domain/ports/automationLog.js';
 
 /**
  * Request to submit feedback on a task.
@@ -68,8 +76,11 @@ export interface SubmitTaskFeedbackDeps {
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  gitHubPRClient: GitHubPRClient;
+  userServiceClient: UserServiceClient;
   orchestratorSecret: string;
   serviceUrl: string;
+  automationLog: AutomationLog;
 }
 
 /**
@@ -107,7 +118,7 @@ export async function submitTaskFeedback(
   const originalTask = originalTaskResult.value;
 
   // Step 2: Validate status is completed
-  if (originalTask.status !== 'planned' && originalTask.status !== 'implemented') {
+  if (originalTask.status !== 'planned' && originalTask.status !== 'implemented' && originalTask.status !== 'reviewed') {
     logger.warn({ taskId: originalTask.id, status: originalTask.status }, 'Attempted to provide feedback on non-completed task');
     return err({
       code: 'invalid_status',
@@ -116,9 +127,7 @@ export async function submitTaskFeedback(
   }
 
   // Step 3: Check for active tasks on same Linear issue (if exists)
-  /* v8 ignore start -- ts-type: optional field check for linearIssueId creates type narrowing branch @preserve */
   if (originalTask.linearIssueId !== undefined) {
-    /* v8 ignore stop @preserve */
     const activeCheckResult = await codeTaskRepo.hasActiveTaskForLinearIssue(originalTask.linearIssueId);
 
     if (!activeCheckResult.ok) {
@@ -141,7 +150,6 @@ export async function submitTaskFeedback(
 
   // Step 4: Fetch user's worker settings
   const settingsResult = await workerSettingsRepo.getSettings(userId);
-  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!settingsResult.ok) {
     logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings for feedback');
     return err({
@@ -149,14 +157,11 @@ export async function submitTaskFeedback(
       message: 'Failed to fetch worker settings',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const settings = settingsResult.value;
 
   // Handle null settings by providing empty array
-  /* v8 ignore start -- ts-type: optional chaining for database result @preserve */
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
-  /* v8 ignore stop @preserve */
 
   if (enabledWorkers.length === 0) {
     logger.warn({ userId }, 'User has no workers configured for feedback');
@@ -213,9 +218,37 @@ ${feedback.trim()}
     }
   }
 
-  const agentType: 'planning' | 'execution' | 'pull_request' = originalTask.agentType === 'pull_request'
-    ? 'pull_request'
-    : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'planning';
+  const agentType = resolveTaskAgentType(originalTask, linearIssueLabelsForDispatch);
+  const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabelsForDispatch, agentType);
+
+  // resolveTaskAgentType() already routes legacy PR-linked tasks back to execution
+  // when they only carry prNumber, prBranch, or result.prUrl metadata.
+  const continuationResult = await resolveExecutionContinuationPr(
+    {
+      logger,
+      codeTaskRepo,
+      gitHubPRClient: deps.gitHubPRClient,
+      userServiceClient: deps.userServiceClient,
+    },
+    {
+      agentType,
+      task: originalTask,
+      userId,
+    }
+  );
+
+  if (!continuationResult.ok) {
+    logger.error(
+      { originalTaskId, userId, error: continuationResult.error },
+      'Failed to resolve continuation PR for feedback task'
+    );
+    return err({
+      code: 'internal_error',
+      message: continuationResult.error.message,
+    });
+  }
+
+  const continuationPr = continuationResult.value;
 
   // Step 8: Create follow-up task with parentTaskId
   const createInput = {
@@ -238,14 +271,14 @@ ${feedback.trim()}
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.actionId !== undefined && { actionId: originalTask.actionId }),
     ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
-    ...(originalTask.prNumber !== undefined && { prNumber: originalTask.prNumber }),
+    ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
+    ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
     /* v8 ignore stop @preserve */
     agentType,
   };
 
   const createResult = await codeTaskRepo.create(createInput);
 
-  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!createResult.ok) {
     logger.error({ error: createResult.error }, 'Failed to create follow-up task');
     return err({
@@ -253,9 +286,35 @@ ${feedback.trim()}
       message: 'Failed to create follow-up task',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const followUpTask = createResult.value;
+
+  const commentResult = await bootstrapContinuationPrTaskComment(
+    {
+      logger,
+      codeTaskRepo,
+      gitHubPRClient: deps.gitHubPRClient,
+      userServiceClient: deps.userServiceClient,
+      automationLog: deps.automationLog,
+    },
+    {
+      continuationPr,
+      task: followUpTask,
+      userId,
+      commentTitle: 'Execution Follow-up Task Created',
+    }
+  );
+
+  if (!commentResult.ok) {
+    logger.error(
+      { taskId: followUpTask.id, originalTaskId, error: commentResult.error },
+      'Failed to post continuation PR bootstrap comment for feedback task'
+    );
+    return err({
+      code: 'internal_error',
+      message: commentResult.error.message,
+    });
+  }
 
   logger.info(
     { originalTaskId: originalTask.id, followUpTaskId: followUpTask.id },
@@ -263,9 +322,7 @@ ${feedback.trim()}
   );
 
   // Step 9: Update Linear issue to In Progress (if exists)
-  /* v8 ignore start -- ts-type: optional field check for linearIssueId creates type narrowing branch @preserve */
   if (originalTask.linearIssueId !== undefined) {
-    /* v8 ignore stop @preserve */
     const updateResult = await linearAgentClient.updateIssueState({
       userId,
       issueId: originalTask.linearIssueId,
@@ -318,7 +375,7 @@ ${feedback.trim()}
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+    workerType: WorkerType;
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;
@@ -326,7 +383,9 @@ ${feedback.trim()}
     parentTaskId?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
-    agentType: 'planning' | 'execution' | 'pull_request';
+    agentType: 'planning' | 'execution' | 'pull_request' | 'review';
+    continuationPrNumber?: number;
+    continuationPrBranch?: string;
   } = {
     taskId: followUpTask.id,
     prompt: followUpTask.sanitizedPrompt,
@@ -338,25 +397,23 @@ ${feedback.trim()}
     webhookSecret,
     workerCredentials,
     parentTaskId: originalTask.id,
-    linearIssueLabels: linearIssueLabelsForDispatch,
+    linearIssueLabels: dispatchLabels,
     hasChildren: hasChildrenForDispatch,
     agentType: followUpTask.agentType ?? 'planning',
+    ...(continuationPr !== null && { continuationPrNumber: continuationPr.prNumber }),
+    ...(continuationPr !== null && { continuationPrBranch: continuationPr.prBranch }),
   };
 
   // Add optional fields if defined
-  /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
   if (followUpTask.linearIssueId !== undefined) {
     dispatchRequest.linearIssueId = followUpTask.linearIssueId;
   }
-  /* v8 ignore stop @preserve */
   // traceId was set in createInput, safe to assign directly
   dispatchRequest.traceId = followUpTask.traceId;
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
 
-  /* v8 ignore start -- upstream: dispatcher error handling covered by integration tests @preserve */
   if (!dispatchResult.ok) {
-    /* v8 ignore stop @preserve */
     // Update task with error and mark as failed
     const dispatchError = dispatchResult.error;
     await codeTaskRepo.update(followUpTask.id, {
@@ -384,25 +441,27 @@ ${feedback.trim()}
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(followUpTask.id, {
+    status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
   });
 
-  /* v8 ignore start -- test-infra: update success path tested but not detected by coverage tool @preserve */
   if (updateResult.ok) {
     const updatedTask = updateResult.value;
     const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
+    /* v8 ignore start -- test-infra: notifyResult.error branch tested but not detected by coverage tool @preserve */
     if (!notifyResult.ok) {
       logger.warn(
         { taskId: followUpTask.id, error: notifyResult.error },
         'Failed to send task started notification for feedback'
       );
     }
+    /* v8 ignore stop @preserve */
   } else {
     logger.warn({ taskId: followUpTask.id, error: updateResult.error }, 'Failed to update task with cancel nonce');
   }
-  /* v8 ignore stop @preserve */
 
   return ok({
     codeTaskId: followUpTask.id,

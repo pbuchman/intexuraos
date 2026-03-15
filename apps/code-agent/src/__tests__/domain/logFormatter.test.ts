@@ -1737,5 +1737,73 @@ describe('formatLogChunk', () => {
       // Should NOT contain the omitted middle lines
       expect(result[0]?.text).not.toContain('line 15:');
     });
+
+    it('does not truncate when content exceeds chars but has few lines', () => {
+      // Content > 2048 chars but <= 50 lines (HEAD_LINES + TAIL_LINES)
+      const fewLongLines = Array.from({ length: 5 }, (_, i) => `line ${String(i + 1)}: ${'y'.repeat(500)}`);
+      const content = fewLongLines.join('\n');
+      expect(content.length).toBeGreaterThan(2048);
+      const result = formatLogChunk(toolResult(content), 0, ts());
+      // Should NOT truncate — all lines are preserved
+      expect(result[0]?.text).not.toContain('lines omitted');
+      expect(result[0]?.text).toContain('line 1:');
+      expect(result[0]?.text).toContain('line 5:');
+    });
+  });
+
+  describe('non-JSON catch block truncation', () => {
+    it('truncates long non-JSON strings over 2048 chars', () => {
+      const longText = 'x'.repeat(3000);
+      const result = formatLogChunk(longText, 0, ts());
+      expect(result).toHaveLength(1);
+      const text = result[0]?.text ?? '';
+      expect(text).toContain('[... TRUNCATED from 3000 chars ...]');
+      // First 1024 chars preserved
+      expect(text.startsWith('x'.repeat(1024))).toBe(true);
+      // Last 512 chars preserved
+      expect(text.endsWith('x'.repeat(512))).toBe(true);
+    });
+  });
+
+  describe('formatToolUse with id field', () => {
+    it('populates toolCallsById when tool_use event has id', () => {
+      const state = createFormatterState();
+      const json = JSON.stringify({
+        type: 'tool_use',
+        tool_name: 'Bash',
+        id: 'call_xyz',
+        tool_input: { command: 'git status' },
+      });
+      const result = formatLogChunk(json, 0, ts(), state);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.text).toBe('[tool] Bash: git status');
+      expect(state.toolCallsById.get('call_xyz')).toBe('Bash');
+      expect(state.lastToolName).toBe('Bash');
+    });
+  });
+
+  describe('registerToolContext for top-level tool_use events', () => {
+    it('sets lastToolName and toolCallsById for top-level tool_use', () => {
+      const state = createFormatterState();
+      const json = JSON.stringify({
+        type: 'tool_use',
+        tool_name: 'SomeTool',
+        id: 'call_123',
+      });
+      formatLogChunk(json, 0, ts(), state);
+      expect(state.lastToolName).toBe('SomeTool');
+      expect(state.toolCallsById.get('call_123')).toBe('SomeTool');
+    });
+
+    it('sets lastToolName without id for top-level tool_use', () => {
+      const state = createFormatterState();
+      const json = JSON.stringify({
+        type: 'tool_use',
+        tool_name: 'AnotherTool',
+      });
+      formatLogChunk(json, 0, ts(), state);
+      expect(state.lastToolName).toBe('AnotherTool');
+      expect(state.toolCallsById.size).toBe(0);
+    });
   });
 });

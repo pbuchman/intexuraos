@@ -48,8 +48,6 @@ function providerToKeyField(provider: LlmProvider) {
       return 'anthropic';
     case LlmProviders.Perplexity:
       return 'perplexity';
-    case LlmProviders.Zai:
-      return 'zai';
   }
 }
 
@@ -85,7 +83,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             openai?: string | null;
             anthropic?: string | null;
             perplexity?: string | null;
-            zai?: string | null;
           };
         };
 
@@ -93,11 +90,9 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
         // Convert null values to undefined (null is used by JSON to distinguish from missing)
         const result: DecryptedApiKeys = {};
-        /* v8 ignore start -- test-infra: response shape depends on user's configured API keys @preserve */
         if (data.google !== null && data.google !== undefined) {
           result.google = data.google;
         }
-        /* v8 ignore stop @preserve */
         if (data.openai !== null && data.openai !== undefined) {
           result.openai = data.openai;
         }
@@ -106,9 +101,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         }
         if (data.perplexity !== null && data.perplexity !== undefined) {
           result.perplexity = data.perplexity;
-        }
-        if (data.zai !== null && data.zai !== undefined) {
-          result.zai = data.zai;
         }
 
         return ok(result);
@@ -221,29 +213,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             return ok(fallbackClient);
           }
 
-          if (config.platformZaiApiKey !== undefined) {
-            logger.warn(
-              { userId, provider, requestedModel: defaultModel },
-              'No API key for provider, falling back to platform Glm47Flash'
-            );
-            const fallbackModel = LlmModels.Glm47Flash;
-            const fallbackPricing = config.pricingContext.getPricing(fallbackModel);
-            const fallbackClient = createLlmClient({
-              apiKey: config.platformZaiApiKey,
-              model: fallbackModel,
-              userId,
-              pricing: fallbackPricing,
-              logger: config.logger,
-            });
-
-            logger.info(
-              { userId, model: fallbackModel, provider: LlmProviders.Zai },
-              'LLM client created successfully'
-            );
-
-            return ok(fallbackClient);
-          }
-
           logger.info({ userId, provider }, 'No API key configured for provider');
           return err({
             code: 'NO_API_KEY',
@@ -292,9 +261,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             },
           }
         );
-        /* v8 ignore start -- test-infra: best effort, silent failure intentional @preserve */
       } catch {
-        /* v8 ignore stop @preserve */
         // Best effort - don't block on failure
       }
     },

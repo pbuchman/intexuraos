@@ -1,10 +1,10 @@
-import { createContext, type ReactNode, useContext, useMemo } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef } from 'react';
 import { useAuth0, type User } from '@auth0/auth0-react';
 
 interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
-  user: User | undefined;
+  user: User | undefined; // @allow-undefined-type -- Auth0 user is always present but may be undefined, not optional
   login: () => void;
   logout: () => void;
   getAccessToken: () => Promise<string>;
@@ -26,6 +26,16 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
     getAccessTokenSilently,
   } = useAuth0();
 
+  const getAccessTokenRef = useRef(getAccessTokenSilently);
+  getAccessTokenRef.current = getAccessTokenSilently;
+
+  const stableGetAccessToken = useCallback(
+    async (): Promise<string> => {
+      return await getAccessTokenRef.current();
+    },
+    []
+  );
+
   const value = useMemo(
     (): AuthContextValue => ({
       isAuthenticated,
@@ -41,11 +51,9 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
           },
         });
       },
-      getAccessToken: async (): Promise<string> => {
-        return await getAccessTokenSilently();
-      },
+      getAccessToken: stableGetAccessToken,
     }),
-    [isAuthenticated, isLoading, user, loginWithRedirect, auth0Logout, getAccessTokenSilently]
+    [isAuthenticated, isLoading, user, loginWithRedirect, auth0Logout, stableGetAccessToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

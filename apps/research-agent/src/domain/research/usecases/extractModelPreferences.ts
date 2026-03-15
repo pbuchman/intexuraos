@@ -48,8 +48,6 @@ const RESEARCH_MODELS: ResearchModel[] = [
   LlmModels.Sonar,
   LlmModels.SonarPro,
   LlmModels.SonarDeepResearch,
-  LlmModels.Glm47,
-  LlmModels.Glm47Flash,
 ];
 
 /**
@@ -65,8 +63,6 @@ const MODEL_DISPLAY_NAMES: Record<ResearchModel, string> = {
   [LlmModels.Sonar]: 'Sonar',
   [LlmModels.SonarPro]: 'Sonar Pro',
   [LlmModels.SonarDeepResearch]: 'Sonar Deep Research',
-  [LlmModels.Glm47]: 'GLM 4.7',
-  [LlmModels.Glm47Flash]: 'GLM 4.7 Flash',
 };
 
 /**
@@ -78,7 +74,6 @@ const PROVIDER_KEY_MAP: Record<string, keyof ApiKeyStore> = {
   openai: 'openai',
   anthropic: 'anthropic',
   perplexity: 'perplexity',
-  zai: 'zai',
 };
 
 function providerToKeyField(provider: string): keyof ApiKeyStore {
@@ -116,7 +111,7 @@ function buildAvailableModels(keys: ApiKeyStore): AvailableModelInfo[] {
  * 1. Only one model per provider
  * 2. Models must be in the available list
  */
-function validateSelectedModels(
+export function validateSelectedModels(
   models: ResearchModel[],
   availableModels: AvailableModelInfo[]
 ): ResearchModel[] {
@@ -125,9 +120,7 @@ function validateSelectedModels(
   const valid: ResearchModel[] = [];
 
   for (const model of models) {
-    /* v8 ignore start -- test-infra: filtering invalid models requires test setup with unavailable models @preserve */
     if (!availableIds.has(model)) {
-    /* v8 ignore stop @preserve */
       continue;
     }
 
@@ -147,7 +140,7 @@ function validateSelectedModels(
  * Validate synthesis model.
  * Must be in SYNTHESIS_MODELS list and user must have API key for it.
  */
-function validateSynthesisModel(
+export function validateSynthesisModel(
   model: ResearchModel | null,
   availableModels: AvailableModelInfo[]
 ): ResearchModel | undefined {
@@ -163,9 +156,7 @@ function validateSynthesisModel(
   }
 
   // Check if user has API key for this model
-  /* v8 ignore start -- test-infra: filtering models without API keys requires specific test setup @preserve */
   if (!availableIds.has(model)) {
-  /* v8 ignore stop @preserve */
     return undefined;
   }
 

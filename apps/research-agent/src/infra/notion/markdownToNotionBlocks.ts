@@ -144,7 +144,7 @@ function parseInlineFormatting(text: string): RichTextSegment[] {
 
     // Single special character that's not part of formatting
     // Loop condition guarantees remaining has at least 1 character
-    /* v8 ignore start -- ts-type: loop condition guarantees remaining has characters, fallback is defensive @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires ?? fallback; loop condition guarantees remaining[0] is defined @preserve */
     const char = remaining[0] ?? '';
     /* v8 ignore stop @preserve */
     segments.push({
@@ -266,7 +266,7 @@ function mapLanguage(lang: string): NotionLanguage {
 
 function parseCodeBlock(lines: string[], startIndex: number): { block: NotionBlock; linesConsumed: number } | null {
   const firstLine = lines[startIndex];
-  /* v8 ignore start -- ts-type: startIndex validated by caller to be within bounds @preserve */
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires undefined check; startIndex validated by caller to be within bounds @preserve */
   if (firstLine === undefined) return null;
   /* v8 ignore stop @preserve */
 
@@ -343,7 +343,7 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
 
   while (i < lines.length) {
     const line = lines[i];
-    /* v8 ignore start -- ts-type: loop bounds guarantee array access is valid @preserve */
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires undefined check; loop bounds guarantee array access is valid @preserve */
     if (line === undefined) {
     /* v8 ignore stop @preserve */
       i++;
@@ -443,16 +443,12 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
 
     // Image: ![alt](url)
     const imageMatch = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
-    /* v8 ignore start -- test-infra: image parsing requires markdown with image syntax @preserve */
     if (imageMatch !== null) {
-    /* v8 ignore stop @preserve */
-      /* v8 ignore start -- regex: regex capture groups guarantee values, fallbacks are defensive @preserve */
+      /* v8 ignore start -- regex: regex capture groups guaranteed by match; ?? is defensive fallback for noUncheckedIndexedAccess @preserve */
       const alt = imageMatch[1] ?? '';
-      /* v8 ignore stop @preserve */
-      /* v8 ignore start -- regex: regex capture groups guarantee values, fallbacks are defensive @preserve */
       const url = imageMatch[2] ?? '';
       /* v8 ignore stop @preserve */
-      /* v8 ignore start -- test-infra: non-empty URL branch requires valid image URL in test @preserve */
+      /* v8 ignore start -- upstream: regex capture group [^)]+ guarantees url is always non-empty @preserve */
       if (url !== '') {
       /* v8 ignore stop @preserve */
         const imageBlock: NotionBlock = {
@@ -461,9 +457,7 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
           image: {
             type: 'external' as const,
             external: { url },
-            /* v8 ignore start -- ts-type: conditional spread filtered by condition @preserve */
             ...(alt !== '' && { caption: [{ type: 'text' as const, text: { content: alt } }] }),
-            /* v8 ignore stop @preserve */
           },
         };
         blocks.push(imageBlock);

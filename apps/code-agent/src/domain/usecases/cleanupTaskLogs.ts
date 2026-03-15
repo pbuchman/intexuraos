@@ -85,7 +85,7 @@ export function createCleanupTaskLogsUseCase(
         }
       }
 
-      /* v8 ignore start -- test-infra: pagination termination depends on fixture count @preserve */
+      /* v8 ignore start -- upstream: test fixture always returns exact tasksPerRun count, cannot trigger partial-page exit @preserve */
       if (tasks.length < tasksPerRun) {
         hasMoreTasks = false;
       }

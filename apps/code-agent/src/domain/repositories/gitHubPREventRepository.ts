@@ -12,7 +12,7 @@ export type RepositoryError =
 export interface GitHubPREventRepository {
   /**
    * Save a new GitHub PR event.
-   * Returns error if event with same githubEventId already exists (deduplication).
+   * Returns DUPLICATE_EVENT error if event with same deliveryId already exists.
    */
   save(input: CreateGitHubPREventInput): Promise<Result<GitHubPREvent, RepositoryError>>;
 

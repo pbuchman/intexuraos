@@ -72,6 +72,7 @@ sequenceDiagram
 
 | Commit     | Description                                        | Date       |
 | ---------- | -------------------------------------------------- | ---------- |
+| `a7f5fa98` | Write tests for v8-ignore blocks (INT-794)         | 2026-03-13 |
 | `b3f34d85` | Release v3.1.0                                     | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                     | 2026-02-19 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability    | 2026-02-16 |

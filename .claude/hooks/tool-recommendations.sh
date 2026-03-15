@@ -1,13 +1,12 @@
 #!/bin/bash
 # SOFT-BLOCK: Recommend modern CLI tools over legacy ones
-# Suggests: grep -r → rg, cat (file reading) → Read/bat, find -name → fd/Glob
+# Suggests: grep -r → rg, find -name → fd/Glob
 #
 # BEHAVIOR: Soft block (JSON decision: block, exit 0) — educates, doesn't enforce
 # Uses log_warned level since these are suggestions, not hard blocks.
 #
 # Conservative patterns to avoid false positives:
 #   - grep: Only blocks recursive flags (-r, -rn, --recursive), not pipe filtering
-#   - cat: Only blocks standalone file reading, not heredocs or pipelines
 #   - find: Only blocks search-only usage (-name/-iname/-type), not action usage (-exec/-delete)
 #
 # Reference: CLAUDE.md → Bash tool description recommends built-in tools (Grep, Read, Glob)
@@ -48,30 +47,6 @@ if echo "$COMMAND" | grep -qE '(^|[;&]\s*)grep\s+(-[a-zA-Z]*r[a-zA-Z]*\s|--recur
 {
   "decision": "block",
   "reason": "Use the built-in Grep tool or `rg` instead of `grep -r` for code search. The Grep tool is faster, respects .gitignore, and provides better output. See CLAUDE.md: 'Content search: Use Grep (NOT grep or rg)'."
-}
-EOF
-    exit 0
-fi
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Pattern 2: cat for reading files → suggest Read tool or bat
-# Match: cat <filepath> (standalone file reading)
-# Allow: cat << (heredoc), | cat (pipeline stdin), cat > (redirect/write)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Check for standalone cat reading a file (not heredoc, not piped-to, not redirect)
-if echo "$COMMAND" | grep -qE '(^|[;&]\s*)cat\s+[^<>|]' && \
-   ! echo "$COMMAND" | grep -qE '(^|[;&]\s*)cat\s+<<' && \
-   ! echo "$COMMAND" | grep -qE '\|\s*cat(\s|$)'; then
-
-    log_warned "$HOOK_NAME" "cat-file-read" "-" \
-        "Using cat to read file contents" \
-        "Use the built-in Read tool or bat command instead"
-
-    cat << 'EOF'
-{
-  "decision": "block",
-  "reason": "Use the built-in Read tool or `bat` instead of `cat` for reading files. The Read tool provides line numbers and handles large files gracefully. See CLAUDE.md: 'Read files: Use Read (NOT cat/head/tail)'."
 }
 EOF
     exit 0

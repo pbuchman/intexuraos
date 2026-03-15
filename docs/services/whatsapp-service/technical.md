@@ -111,22 +111,24 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                       | Date       |
-| ---------- | ----------------------------------------------------------------- | ---------- |
-| `44ea683a` | Release v3.2.0                                                    | 2026-03-07 |
-| `9cd1f458` | Resolve conflicts with development branch                         | 2026-03-07 |
-| `d0d38f53` | Refactor: address code review feedback for INT-738                | 2026-03-07 |
-| `55b959e6` | feat: add deep link ctaUrl to WhatsApp notifications              | 2026-03-07 |
-| `a41ca812` | feat: replace PR URL text with WhatsApp CTA URL buttons           | 2026-03-06 |
-| `9e2184ea` | test: add missing test coverage for INT-684 review                | 2026-03-06 |
-| `1a71a52e` | fix: address code review feedback for INT-684                     | 2026-03-06 |
-| `96ae9463` | INT-684: Migrate from Speechmatics to event-driven transcription  | 2026-03-06 |
-| `78214f01` | Fix critical schema gap: add planningPr fields                    | 2026-03-01 |
-| `e1c2bcc2` | Fix Implement button + planning PR lifecycle                      | 2026-03-01 |
-| `b3f34d85` | Release v3.1.0                                                    | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                                    | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                   | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                               | 2026-02-16 |
+| Commit      | Description                                                       | Date       |
+| ----------- | ----------------------------------------------------------------- | ---------- |
+| `582960d0`  | Write tests for v8-ignore blocks and remove exemptions (INT-799)  | 2026-03-10 |
+| `e348b66e`  | Fix silent dispatch failures and nested transaction (INT-810/811) | 2026-03-10 |
+| `44ea683a`  | Release v3.2.0                                                    | 2026-03-07 |
+| `55b959e6`  | feat: add deep link ctaUrl to WhatsApp notifications              | 2026-03-07 |
+| `a41ca812`  | feat: replace PR URL text with WhatsApp CTA URL buttons           | 2026-03-06 |
+| `96ae9463`  | INT-684: Migrate from Speechmatics to event-driven transcription  | 2026-03-06 |
+| `78214f01`  | Fix critical schema gap: add planningPr fields                    | 2026-03-01 |
+| `e1c2bcc2`  | Fix Implement button + planning PR lifecycle                      | 2026-03-01 |
+
+### v8 Ignore Test Replacement (INT-799)
+
+Replaced v8 ignore blocks with real tests across multiple files. New test suites added for: `sender.ts` (CTA URL message formatting), `outboundMessageRepository.ts` (Firestore save/query edge cases), `pubsubRoutes.ts` (empty buttons routing, outbound message save), `webhookRoutes.ts` (metadata and button edge cases), and `webhookAsyncProcessing.ts` (comprehensive async processing paths). Coverage exemptions removed from `sender.ts`, `outboundMessageRepository.ts`, `messageRoutes.ts`, and `pubsubRoutes.ts`. Remaining 56 v8 ignore directives across 6 files use documented categories: `ts-type`, `async-timing`, `test-infra`.
+
+### Silent Dispatch Failures Fix (INT-810, INT-811)
+
+Fixed two bugs in webhook async processing: (1) dispatch failures were silently swallowed when Pub/Sub publish failed, and (2) a nested Firestore transaction caused intermittent failures during message processing. The fix ensures dispatch errors are properly logged and surfaced.
 
 ## API Endpoints
 

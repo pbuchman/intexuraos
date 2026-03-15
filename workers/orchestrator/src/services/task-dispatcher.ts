@@ -1,8 +1,14 @@
 import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
-import { type Result, type Logger, hasCodeTaskLabel } from '@intexuraos/common-core';
+import {
+  type Result,
+  type Logger,
+  getErrorMessage,
+  hasCodeTaskLabel,
+} from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
+import { withTimeout } from '../with-timeout.js';
 import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { SendMessageResult, SendMessageError } from '../types/schemas.js';
@@ -24,17 +30,36 @@ import {
   getLast50Lines,
 } from './completion-verifier.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
+import type { ExecutionDeepValidator, DeepValidationInput } from './execution-deep-validator.js';
+import type { ExecutionAgentData } from './completion-verifier.js';
+import { readSessionTranscript } from './transcript-reader.js';
+import { formatTranscript } from './transcript-formatter.js';
+import {
+  extractPrNumber,
+  fetchLinearIssueContext,
+  readPlanReferencedInLinearIssue,
+} from './deep-validator-helpers.js';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+
+export function getTaskEventUrl(webhookUrl: string): string {
+  return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
+}
 
 const TASK_TIMEOUT_WARNING_MS = 115 * 60 * 1000; // 1h 55m
 const TASK_TIMEOUT_KILL_MS = 120 * 60 * 1000; // 2h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
+const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
 
 export interface DispatchError {
-  type: 'at_capacity' | 'invalid_request' | 'invalid_status' | 'service_error';
+  type:
+    | 'at_capacity'
+    | 'docker_unavailable'
+    | 'invalid_request'
+    | 'invalid_status'
+    | 'service_error';
   message: string;
   originalError?: unknown;
 }
@@ -53,7 +78,6 @@ export interface IsolationConfig {
     ANTHROPIC_API_KEY: string;
     LINEAR_API_KEY: string;
     SENTRY_AUTH_TOKEN: string;
-    ZAI_API_KEY: string;
     MINIMAX_API_KEY: string;
     DASHSCOPE_API_KEY: string;
   };
@@ -92,14 +116,28 @@ export class TaskDispatcher {
     private readonly logger: Logger,
     private readonly isolation: IsolationConfig,
     completionControl: CompletionControlConfig,
-    private readonly turnMetricsCollector?: TurnMetricsCollector
+    private readonly turnMetricsCollector?: TurnMetricsCollector,
+    private readonly executionDeepValidator?: ExecutionDeepValidator
   ) {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
     this.preserveFailedContainers = completionControl.preserveFailedContainers ?? false;
   }
 
+  private checkDockerAvailability(): Result<void, DispatchError> | null {
+    if (this.isolation.provider.isHealthy?.() === false) {
+      return {
+        ok: false,
+        error: { type: 'docker_unavailable', message: 'Docker daemon is not responding' },
+      };
+    }
+    return null;
+  }
+
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
+    const healthErr = this.checkDockerAvailability();
+    if (healthErr !== null) return healthErr;
+
     // Atomic capacity check
     const capacityCheck = await this.capacityMutex.runExclusive(() => {
       if (this.runningCount >= this.config.capacity) {
@@ -124,6 +162,9 @@ export class TaskDispatcher {
   }
 
   async adoptTask(task: Task): Promise<Result<void, DispatchError>> {
+    const healthErr = this.checkDockerAvailability();
+    if (healthErr !== null) return healthErr;
+
     // Check if task is already at maxAttempts
     if ((task.attemptCount ?? 0) >= (task.maxAttempts ?? this.completionMaxAttempts)) {
       return {
@@ -208,7 +249,14 @@ export class TaskDispatcher {
       // Create worktree
       let worktreePath: string;
       try {
-        worktreePath = await this.worktreeManager.createWorktree(taskId, baseBranch);
+        worktreePath =
+          request.continuationPrBranch === undefined
+            ? await this.worktreeManager.createWorktree(taskId, baseBranch)
+            : await this.worktreeManager.createWorktree(
+                taskId,
+                baseBranch,
+                request.continuationPrBranch
+              );
       } catch (error) {
         /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
         if (this.runningCount > 0) this.runningCount--;
@@ -276,6 +324,15 @@ export class TaskDispatcher {
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
         ...(request.agentType !== undefined && { agentType: request.agentType }),
+        ...(request.trackingCommentId !== undefined && {
+          trackingCommentId: request.trackingCommentId,
+        }),
+        ...(request.continuationPrNumber !== undefined && {
+          continuationPrNumber: request.continuationPrNumber,
+        }),
+        ...(request.continuationPrBranch !== undefined && {
+          continuationPrBranch: request.continuationPrBranch,
+        }),
         ...(request.planningPrBranch !== undefined && {
           planningPrBranch: request.planningPrBranch,
         }),
@@ -294,7 +351,6 @@ export class TaskDispatcher {
         /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
         if (this.runningCount > 0) this.runningCount--;
         /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: ternary type narrowing for error message extraction @preserve */
         this.logger.error(
           {
             taskId,
@@ -306,7 +362,6 @@ export class TaskDispatcher {
           },
           'Failed to create worker container'
         );
-        /* v8 ignore stop @preserve */
         this.isolation.tokenRefresher.unregisterTask(taskId);
         this.logForwarder.unregisterTask(taskId);
         await this.isolation.provider.cleanupTaskSession?.(taskId);
@@ -341,30 +396,32 @@ export class TaskDispatcher {
           `Linear issue: ${task.linearIssueId}${task.linearIssueTitle !== undefined ? ` — ${task.linearIssueTitle}` : ''}`
         );
       }
-      /* v8 ignore start -- test-infra: short prompts don't hit truncation branch in integration tests @preserve */
       const promptPreview =
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
-      /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const isPRComment = task.linearIssueLabels.some(
-        (l) => l.trim().toLowerCase() === 'pr-comment'
-      );
-      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all three agents @preserve */
-      const agentLabel = isPRComment
+      const isPullRequestTask =
+        task.agentType === 'pull_request' ||
+        task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
+      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all agents @preserve */
+      const agentLabel = isPullRequestTask
         ? 'Pull Request Agent'
-        : task.agentType === 'execution'
-          ? 'Execution Agent'
-          : task.agentType === 'planning'
-            ? 'Planning Agent'
-            : hasCodeTaskLabel(task.linearIssueLabels)
-              ? 'Execution Agent'
-              : 'Planning Agent';
+        : task.agentType === 'review'
+          ? 'Review Agent'
+          : task.agentType === 'execution'
+            ? 'Execution Agent'
+            : task.agentType === 'planning'
+              ? 'Planning Agent'
+              : hasCodeTaskLabel(task.linearIssueLabels)
+                ? 'Execution Agent'
+                : 'Planning Agent';
       const agentDesc =
         agentLabel === 'Pull Request Agent'
           ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
-          : agentLabel === 'Execution Agent'
-            ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
-            : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
+          : agentLabel === 'Review Agent'
+            ? 'Review Agent \u2014 read-only PR review, post review comments'
+            : agentLabel === 'Execution Agent'
+              ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
+              : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
       /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
@@ -523,26 +580,16 @@ export class TaskDispatcher {
         message.length > 200 ? message.slice(0, 200) + '\u2026' : message
       );
 
-      const preamble = this.buildResumePreamble();
-      const resumeResult = await this.startWorkerAttempt(task, {
-        prompt: preamble + message,
-        continueSession: true,
-        injectActiveGoal: true,
-      });
-
-      if (!resumeResult.ok) {
-        this.logger.error(
-          { taskId, error: resumeResult.error },
-          'Failed to resume task with message'
-        );
-        return { ok: false, error: { type: 'service_error', message: 'Failed to resume task' } };
-      }
-
+      const prompt = this.buildResumePreamble(task) + message;
       task.status = 'running';
-      task.containerId = resumeResult.containerId;
+      task.containerId = '';
       task.startedAt = new Date().toISOString();
       task.attemptCount = 1;
       task.verificationHistory = [];
+      task.pendingResumeStart = {
+        prompt,
+        acceptedAt: new Date().toISOString(),
+      };
       delete task.completedAt;
       if (wasCompleted) {
         task.resumedAfterSuccess = true;
@@ -552,11 +599,10 @@ export class TaskDispatcher {
       await this.saveTask(task);
 
       this.runningCount++;
-      this.scheduleTimeoutWarning(taskId);
-      this.scheduleTimeoutKill(taskId);
-      this.startCompletionMonitoring(taskId);
-
-      this.logger.info({ taskId }, 'Task resumed with user message');
+      void this.resumeTaskWithUserMessage(task).catch((error: unknown) => {
+        void this.failAcceptedResume(task, error);
+      });
+      this.logger.info({ taskId }, 'Task resume accepted with user message');
       return { ok: true, value: { action: 'resumed' } };
     }
 
@@ -573,6 +619,27 @@ export class TaskDispatcher {
   async getTask(taskId: string): Promise<Task | null> {
     const state = await this.statePersistence.load();
     return state.tasks[taskId] ?? null;
+  }
+
+  async recoverPendingResumeTask(task: Task): Promise<Result<void, DispatchError>> {
+    if (task.status !== 'running' || task.pendingResumeStart === undefined) {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_status',
+          message: 'Task does not have an accepted resume pending startup',
+        },
+      };
+    }
+
+    this.logForwarder.registerTask(task.taskId, task.webhookSecret);
+    this.runningCount++;
+    // `ok: true` here means startup recovery took ownership of the accepted resume.
+    // Worker startup may still fail, in which case resumeTaskWithUserMessage finalizes the task.
+    this.logger.info({ taskId: task.taskId }, 'Recovering pending accepted resume after restart');
+    await this.resumeTaskWithUserMessage(task);
+
+    return { ok: true, value: undefined };
   }
 
   getRunningCount(): number {
@@ -599,6 +666,44 @@ export class TaskDispatcher {
     await this.statePersistence.modify((state) => {
       state.tasks[task.taskId] = task;
     });
+  }
+
+  private async resumeTaskWithUserMessage(task: Task): Promise<void> {
+    const prompt = task.pendingResumeStart?.prompt;
+    /* v8 ignore start -- async-timing: sendMessage and recoverPendingResumeTask validate pendingResumeStart before invoking the async helper; this only guards against unexpected in-flight mutation @preserve */
+    if (prompt === undefined) {
+      await this.failAcceptedResume(
+        task,
+        new Error('Accepted resume is missing the persisted startup prompt')
+      );
+      return;
+    }
+    /* v8 ignore stop @preserve */
+
+    try {
+      const resumeResult = await this.startWorkerAttempt(task, {
+        prompt,
+        continueSession: true,
+        injectActiveGoal: true,
+      });
+
+      if (!resumeResult.ok) {
+        await this.failAcceptedResume(task, resumeResult.error);
+        return;
+      }
+
+      task.containerId = resumeResult.containerId;
+      delete task.pendingResumeStart;
+      await this.saveTask(task);
+
+      this.scheduleTimeoutWarning(task.taskId);
+      this.scheduleTimeoutKill(task.taskId);
+      this.startCompletionMonitoring(task.taskId);
+
+      this.logger.info({ taskId: task.taskId }, 'Task resumed with user message');
+    } catch (error) {
+      await this.failAcceptedResume(task, error);
+    }
   }
 
   private scheduleTimeoutWarning(taskId: string): void {
@@ -745,16 +850,20 @@ export class TaskDispatcher {
 
     const attempt = task.attemptCount ?? 1;
     const maxAttempts = task.maxAttempts ?? 5;
-    const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-    const completionAgentType: CompletionAgentType = isPRComment
+    const isPullRequestTask =
+      task.agentType === 'pull_request' ||
+      task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
+    const completionAgentType: CompletionAgentType = isPullRequestTask
       ? 'pull_request'
-      : task.agentType === 'execution'
-        ? 'execution'
-        : task.agentType === 'planning'
-          ? 'planning'
-          : hasCodeTaskLabel(task.linearIssueLabels)
-            ? 'execution'
-            : 'planning';
+      : task.agentType === 'review'
+        ? 'review'
+        : task.agentType === 'execution'
+          ? 'execution'
+          : task.agentType === 'planning'
+            ? 'planning'
+            : hasCodeTaskLabel(task.linearIssueLabels)
+              ? 'execution'
+              : 'planning';
     this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(
@@ -936,7 +1045,21 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       const finalResult = this.buildResultFromVerification(task, result, verification);
-      await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
+
+      // Deep validation for execution tasks: pre-read data before cleanup, then fire-and-forget
+      let deepValInput: DeepValidationInput | undefined;
+      if (completionAgentType === 'execution' && this.executionDeepValidator !== undefined) {
+        deepValInput = await this.prepareDeepValidationInput(task, finalResult, verification);
+      }
+
+      const keepLogOpen = deepValInput !== undefined;
+      await this.finalizeTaskWithResult(task, completionAgentType, finalResult, keepLogOpen);
+
+      if (deepValInput !== undefined) {
+        void this.executeDeepValidation(task.taskId, deepValInput).finally(() => {
+          void this.flushAndCloseLogForwarder(task.taskId);
+        });
+      }
       return;
     }
 
@@ -1072,7 +1195,7 @@ export class TaskDispatcher {
       }
       base.planning_unclear_clarification = agentData.unclear_clarification;
     } else if (agentData.agentType === 'execution') {
-      base.execution_outcome_label = 'implemented';
+      base.execution_outcome_label = agentData.outcome;
       base.execution_superpowers_executing_plans_used =
         agentData.superpowers_executing_plans === 'used' ? '1' : '0';
       base.execution_superpowers_requesting_code_review_used =
@@ -1081,8 +1204,14 @@ export class TaskDispatcher {
         base.prUrl = agentData.gh_pr_url;
       }
       if (task.linearIssueId !== undefined) {
-        base.execution_linear_issue_url = `https://linear.app/intexuraos/issue/${task.linearIssueId}`;
+        base.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
       }
+    } else if (agentData.agentType === 'review') {
+      if (agentData.gh_pr_url !== '') {
+        base.prUrl = agentData.gh_pr_url;
+      }
+      base.review_comments_posted = agentData.review_comments_posted;
+      base.review_types = agentData.review_types;
     } else {
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
@@ -1099,7 +1228,26 @@ export class TaskDispatcher {
   ): TaskResult | undefined {
     if (result === undefined) return undefined;
     if (task.agentType === 'execution' && task.linearIssueId !== undefined) {
-      result.execution_linear_issue_url = `https://linear.app/intexuraos/issue/${task.linearIssueId}`;
+      result.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
+    }
+    if (task.agentType === 'review' && task.lastSuccessResult !== undefined) {
+      if (
+        result.review_comments_posted === undefined &&
+        task.lastSuccessResult.review_comments_posted !== undefined
+      ) {
+        result.review_comments_posted = task.lastSuccessResult.review_comments_posted;
+      }
+      if (result.review_types === undefined && task.lastSuccessResult.review_types !== undefined) {
+        result.review_types = task.lastSuccessResult.review_types;
+      }
+    }
+    if (task.agentType === 'pull_request' && task.lastSuccessResult !== undefined) {
+      if (
+        result.comment_replied === undefined &&
+        task.lastSuccessResult.comment_replied !== undefined
+      ) {
+        result.comment_replied = task.lastSuccessResult.comment_replied;
+      }
     }
     return result;
   }
@@ -1107,20 +1255,27 @@ export class TaskDispatcher {
   private async finalizeTaskWithResult(
     task: Task,
     agentType: CompletionAgentType,
-    finalResult: TaskResult
+    finalResult: TaskResult,
+    keepLogForwarderOpen = false
   ): Promise<void> {
     if (agentType === 'planning' && finalResult.planning_outcome_label === 'unclear') {
-      await this.finalizeTask(task, 'failed', {
-        result: finalResult,
-        error: {
-          code: 'PLANNING_AGENT_UNCLEAR',
-          message:
-            finalResult.planning_unclear_clarification ?? 'Planning agent reported unclear outcome',
+      await this.finalizeTask(
+        task,
+        'failed',
+        {
+          result: finalResult,
+          error: {
+            code: 'PLANNING_AGENT_UNCLEAR',
+            message:
+              finalResult.planning_unclear_clarification ??
+              'Planning agent reported unclear outcome',
+          },
         },
-      });
+        keepLogForwarderOpen
+      );
       return;
     }
-    await this.finalizeTask(task, 'completed', { result: finalResult });
+    await this.finalizeTask(task, 'completed', { result: finalResult }, keepLogForwarderOpen);
 
     if (agentType === 'execution' && task.planningPrUrl !== undefined) {
       await this.closePlanningPr(task.planningPrUrl, task.taskId);
@@ -1165,11 +1320,36 @@ export class TaskDispatcher {
     }
   }
 
-  private buildResumePreamble(): string {
+  private buildResumePreamble(task?: Task): string {
+    const prViewCommand =
+      task?.continuationPrNumber !== undefined
+        ? `gh pr view ${String(task.continuationPrNumber)} --json state,mergedAt,number 2>/dev/null || echo "NO_PR"`
+        : 'gh pr view --json state,mergedAt,number 2>/dev/null || echo "NO_PR"';
+
+    const openInstructions =
+      task?.continuationPrBranch !== undefined
+        ? {
+            lines: [
+              'If PR is OPEN:',
+              '  1. Continue on current local branch normally',
+              `  2. Push updates with: git push origin HEAD:${task.continuationPrBranch}`,
+              '  3. Check for unaddressed PR comments:',
+            ],
+            finalStep: '  4. If the message below references a PR comment or review, address it',
+          }
+        : {
+            lines: [
+              'If PR is OPEN:',
+              '  1. Continue on current branch normally',
+              '  2. Check for unaddressed PR comments:',
+            ],
+            finalStep: '  3. If the message below references a PR comment or review, address it',
+          };
+
     return [
       '[RESUME PRE-FLIGHT — MANDATORY]',
       'Before making ANY changes, check your PR state:',
-      '  gh pr view --json state,merged,number 2>/dev/null || echo "NO_PR"',
+      `  ${prViewCommand}`,
       '',
       'If PR is MERGED or CLOSED or NO_PR:',
       '  1. git fetch origin',
@@ -1177,18 +1357,16 @@ export class TaskDispatcher {
       '  3. After changes → create NEW PR targeting development',
       '  4. Do NOT push to the old branch',
       '',
-      'If PR is OPEN:',
-      '  1. Continue on current branch normally',
-      '  2. Check for unaddressed PR comments:',
+      ...openInstructions.lines,
       '     gh api /repos/{owner}/{repo}/pulls/{number}/comments --jq "[.[] | select(.user.login != \\"intexuraos-code-worker[bot]\\")] | length"',
-      '  3. If the message below references a PR comment or review, address it',
+      openInstructions.finalStep,
       '---',
       '',
     ].join('\n');
   }
 
-  private buildActiveGoalSection(prompt: string): string {
-    const preamble = this.buildResumePreamble();
+  private buildActiveGoalSection(task: Task | undefined, prompt: string): string {
+    const preamble = this.buildResumePreamble(task);
     const goalText = prompt.startsWith(preamble) ? prompt.slice(preamble.length) : prompt;
     return [
       '',
@@ -1200,6 +1378,34 @@ export class TaskDispatcher {
       '',
       goalText,
     ].join('\n');
+  }
+
+  private parseContinuationPrOutput(
+    taskId: string,
+    prOutput: string
+  ):
+    | {
+        url?: string;
+        number?: number;
+        headRefName?: string;
+        title?: string;
+        state?: string;
+        mergedAt?: string | null;
+      }
+    | undefined {
+    try {
+      return JSON.parse(prOutput) as {
+        url?: string;
+        number?: number;
+        headRefName?: string;
+        title?: string;
+        state?: string;
+        mergedAt?: string | null;
+      };
+    } catch {
+      this.logger.warn({ taskId, prOutput }, 'Failed to parse continuation PR output');
+      return undefined;
+    }
   }
 
   private async handleResumedAfterSuccessCompletion(task: Task): Promise<void> {
@@ -1224,7 +1430,14 @@ export class TaskDispatcher {
       );
     }
 
-    const result = await this.checkForResult(task);
+    const checkResult = await this.checkForResult(task);
+    const effectiveResult = checkResult ?? task.lastSuccessResult;
+    if (checkResult === undefined && task.lastSuccessResult !== undefined) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        'checkForResult returned undefined, falling back to lastSuccessResult'
+      );
+    }
     const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
 
@@ -1267,7 +1480,7 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       delete task.resumedAfterSuccess;
-      const enrichedErrorResult = this.enrichResultForResumedTask(task, result);
+      const enrichedErrorResult = this.enrichResultForResumedTask(task, effectiveResult);
       await this.finalizeTask(task, 'failed', {
         ...(enrichedErrorResult !== undefined && { result: enrichedErrorResult }),
         error,
@@ -1317,7 +1530,7 @@ export class TaskDispatcher {
     const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
     const geminiSummary = await this.completionVerifier.extractResumeSummary(task.taskId, rawLogs);
 
-    const enrichedResult = this.enrichResultForResumedTask(task, result);
+    const enrichedResult = this.enrichResultForResumedTask(task, effectiveResult);
     if (enrichedResult !== undefined && geminiSummary !== undefined) {
       enrichedResult.summary = geminiSummary;
     }
@@ -1375,10 +1588,22 @@ export class TaskDispatcher {
           taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
           linearIssueLabels: task.linearIssueLabels,
           workerType: task.workerType,
+          ...(WORKER_TYPES[task.workerType].model !== undefined && {
+            modelName: WORKER_TYPES[task.workerType].model,
+          }),
           ...(task.agentType !== undefined && { agentType: task.agentType }),
+          ...(task.trackingCommentId !== undefined && {
+            trackingCommentId: task.trackingCommentId,
+          }),
+          ...(task.continuationPrNumber !== undefined && {
+            continuationPrNumber: task.continuationPrNumber,
+          }),
+          ...(task.continuationPrBranch !== undefined && {
+            continuationPrBranch: task.continuationPrBranch,
+          }),
         }) +
         /* v8 ignore stop @preserve */
-        (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
+        (params.injectActiveGoal === true ? this.buildActiveGoalSection(task, params.prompt) : ''),
       workerType: task.workerType,
       secrets: this.isolation.getSecrets(),
       gcpSaKeyPath: this.isolation.gcpSaKeyPath,
@@ -1422,11 +1647,38 @@ export class TaskDispatcher {
 
     try {
       await this.isolation.tokenRefresher.registerTask(task.taskId);
-      const handle = await this.isolation.provider.createWorker(workerConfig);
+
+      const handle = await withTimeout(
+        this.isolation.provider.createWorker(workerConfig),
+        CONTAINER_CREATE_TIMEOUT_MS,
+        `Container creation timed out after ${String(CONTAINER_CREATE_TIMEOUT_MS / 1000)}s — Docker may be unresponsive`
+      );
+
       this.appendOrchestratorTaskLog(
         task.taskId,
         `Worker container ready: containerId=${handle.containerId}`
       );
+
+      // Best-effort: send task_started event to code-agent
+      this.webhookClient
+        .send({
+          url: getTaskEventUrl(task.webhookUrl),
+          secret: task.webhookSecret,
+          payload: {
+            taskId: task.taskId,
+            event: 'task_started',
+            attempt: task.attemptCount ?? 1,
+            workerType: task.workerType,
+          },
+          taskId: task.taskId,
+        })
+        .catch((sendError: unknown) => {
+          this.logger.warn(
+            { taskId: task.taskId, error: sendError },
+            'Failed to send task_started event (best-effort)'
+          );
+        });
+
       return { ok: true, containerId: handle.containerId };
     } catch (error) {
       this.appendOrchestratorTaskLog(
@@ -1448,10 +1700,33 @@ export class TaskDispatcher {
     }
   }
 
+  private async failAcceptedResume(task: Task, error: unknown): Promise<void> {
+    this.logger.error(
+      { taskId: task.taskId, error },
+      'Accepted task resume failed during worker startup'
+    );
+
+    const resumeError: TaskError = {
+      code: 'RESUME_ATTEMPT_FAILED',
+      message: `Failed to resume task: ${error instanceof Error ? error.message : String(error)}`,
+      remediation: { action: 'retry' },
+    };
+
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Terminal failure: resume start failed (${resumeError.message})`
+    );
+
+    await this.finalizeTask(task, 'failed', {
+      error: resumeError,
+    });
+  }
+
   private async finalizeTask(
     task: Task,
     statusParam: TaskStatus,
-    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean }
+    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
+    keepLogForwarderOpen = false
   ): Promise<void> {
     const finalStatus = statusParam;
     const shouldPreserve =
@@ -1478,7 +1753,9 @@ export class TaskDispatcher {
     }
 
     this.appendOrchestratorTaskLog(task.taskId, `Finalizing: flushed logs`);
-    this.logForwarder.close(task.taskId);
+    if (!keepLogForwarderOpen) {
+      this.logForwarder.close(task.taskId);
+    }
 
     if (shouldPreserve) {
       await this.isolation.provider.preserveWorker?.(task.taskId);
@@ -1496,12 +1773,68 @@ export class TaskDispatcher {
     task.status = finalStatus;
     task.completedAt = new Date().toISOString();
     delete task.resumedAfterSuccess;
+    // Store result for resume-after-success fallback; clear on non-success
+    if (finalStatus === 'completed' && payload.result !== undefined) {
+      task.lastSuccessResult = payload.result;
+    } else {
+      delete task.lastSuccessResult;
+    }
+    delete task.pendingResumeStart;
     await this.saveTask(task);
 
     /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
     if (this.runningCount > 0) this.runningCount--;
     /* v8 ignore stop @preserve */
     this.clearTaskTimers(task.taskId);
+
+    // Send task lifecycle event to code-agent (best-effort)
+    const taskLifecycleEvent =
+      finalStatus === 'completed'
+        ? 'task_completed'
+        : finalStatus === 'failed'
+          ? 'task_failed'
+          : finalStatus === 'interrupted'
+            ? 'task_interrupted'
+            : undefined;
+
+    if (taskLifecycleEvent !== undefined) {
+      const agentStatusMap: Record<string, string> = {
+        execution: 'implemented',
+        review: 'reviewed',
+        planning: 'planned',
+      };
+      const taskEventPayload: Record<string, unknown> = {
+        taskId: task.taskId,
+        event: taskLifecycleEvent,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: completedAt set above but test mocks may bypass assignment
+        ...(task.completedAt !== undefined && {
+          duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
+        }),
+        ...(payload.result?.prUrl !== undefined && { prUrl: payload.result.prUrl }),
+        ...(payload.result?.commitDetails !== undefined && {
+          commits: payload.result.commitDetails,
+        }),
+        ...(payload.error !== undefined && { error: payload.error }),
+        ...(task.agentType !== undefined &&
+          agentStatusMap[task.agentType] !== undefined && {
+            status: agentStatusMap[task.agentType],
+          }),
+      };
+
+      this.webhookClient
+        .send({
+          url: getTaskEventUrl(task.webhookUrl),
+          secret: task.webhookSecret,
+          payload: taskEventPayload,
+          taskId: task.taskId,
+        })
+        .catch((sendError: unknown) => {
+          this.logger.warn(
+            { taskId: task.taskId, error: sendError },
+            'Failed to send task lifecycle event (best-effort)'
+          );
+        });
+    }
 
     await this.webhookClient.send({
       url: task.webhookUrl,
@@ -1526,6 +1859,59 @@ export class TaskDispatcher {
     try {
       const execOptions = { cwd: task.worktreePath };
 
+      if (task.continuationPrNumber !== undefined) {
+        const { stdout: prOutput } = await execAsync(
+          `gh pr view ${String(task.continuationPrNumber)} --json url,number,headRefName,title,state,mergedAt --jq .`,
+          execOptions
+        );
+        const pr = this.parseContinuationPrOutput(task.taskId, prOutput);
+        if (pr === undefined) {
+          return undefined;
+        }
+
+        if (
+          typeof pr.url === 'string' &&
+          typeof pr.headRefName === 'string' &&
+          typeof pr.title === 'string' &&
+          String(pr.state).toUpperCase() === 'OPEN' &&
+          (pr.mergedAt === null || pr.mergedAt === undefined)
+        ) {
+          let rebaseResult: TaskResult['rebaseResult'] | undefined;
+          try {
+            const { stdout: rebaseOutput } = await execAsync(
+              'cat .rebase-result.json 2>/dev/null || echo "{}"',
+              execOptions
+            );
+            const parsed = JSON.parse(rebaseOutput) as {
+              attempted?: boolean;
+              success?: boolean;
+              conflictFiles?: string[];
+            };
+            if (parsed.attempted === true && typeof parsed.success === 'boolean') {
+              rebaseResult = {
+                attempted: parsed.attempted,
+                success: parsed.success,
+                ...(parsed.conflictFiles !== undefined && { conflictFiles: parsed.conflictFiles }),
+              };
+            }
+          } catch (parseError) {
+            this.logger.warn(
+              { taskId: task.taskId, error: parseError },
+              'Failed to parse rebase result'
+            );
+          }
+
+          return {
+            branch: pr.headRefName,
+            prUrl: pr.url,
+            summary: pr.title,
+            ...(rebaseResult !== undefined && { rebaseResult }),
+          };
+        }
+
+        return undefined;
+      }
+
       // Get current branch name from worktree
       const { stdout: branchOutput } = await execAsync('git branch --show-current', execOptions);
       const currentBranch = branchOutput.trim();
@@ -1539,7 +1925,7 @@ export class TaskDispatcher {
         url: string;
         number: number;
         headRefName: string;
-        commits?: unknown[];
+        commits?: { oid: string; messageHeadline: string }[];
         title: string;
       }[];
 
@@ -1551,6 +1937,9 @@ export class TaskDispatcher {
         }
         const branch = pr.headRefName;
         const commits = Array.isArray(pr.commits) ? pr.commits.length : 0;
+        const commitDetails = Array.isArray(pr.commits)
+          ? pr.commits.map((c) => ({ sha: c.oid, message: c.messageHeadline }))
+          : undefined;
 
         // Check for rebase result
         let rebaseResult: TaskResult['rebaseResult'] | undefined;
@@ -1586,6 +1975,7 @@ export class TaskDispatcher {
           commits,
           prUrl: pr.url,
           summary: pr.title,
+          ...(commitDetails !== undefined && { commitDetails }),
           /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
           ...(rebaseResult !== undefined && { rebaseResult }),
           /* v8 ignore stop @preserve */
@@ -1611,6 +2001,22 @@ export class TaskDispatcher {
 
     for (const line of lines) {
       this.parseClaudeLogLine(taskId, line);
+    }
+
+    // Eagerly parse buffered remainder if it looks like a result line,
+    // in case the exec stream stalls before delivering the trailing newline.
+    if (remainder.includes('"type":"result"')) {
+      try {
+        const jsonStart = remainder.indexOf('{');
+        if (jsonStart !== -1) {
+          JSON.parse(remainder.slice(jsonStart));
+          this.parseClaudeLogLine(taskId, remainder);
+          this.claudeLogBuffers.set(taskId, '');
+          return;
+        }
+      } catch {
+        // Incomplete JSON — keep buffering.
+      }
     }
   }
 
@@ -1644,10 +2050,19 @@ export class TaskDispatcher {
         result?: string;
         error?: { message?: string };
       };
-      if (obj.type === 'result' && obj.is_error === true) {
-        const message = obj.result ?? obj.error?.message ?? 'Task failed';
-        this.claudeErrors.set(taskId, message);
-        this.logger.info({ taskId }, 'Detected Claude error in stream result');
+      if (obj.type === 'result') {
+        if (!this.attemptCompletionSignals.has(taskId)) {
+          this.taskExitCodes.set(taskId, obj.is_error === true ? 1 : 0);
+          this.attemptCompletionSignals.add(taskId);
+          this.logger.info(
+            { taskId, isError: obj.is_error === true },
+            'Detected Claude stream result; signaling attempt completion'
+          );
+        }
+        if (obj.is_error === true) {
+          const message = obj.result ?? obj.error?.message ?? 'Task failed';
+          this.claudeErrors.set(taskId, message);
+        }
       }
     } catch {
       // Ignore non-JSON stream lines.
@@ -1780,12 +2195,131 @@ export class TaskDispatcher {
     }
   }
 
+  private async prepareDeepValidationInput(
+    task: Task,
+    finalResult: TaskResult,
+    verification: CompletionVerifierVerdict
+  ): Promise<DeepValidationInput | undefined> {
+    if (this.executionDeepValidator === undefined) return undefined;
+    if (verification.agentData?.agentType !== 'execution') return undefined;
+
+    try {
+      const agentData: ExecutionAgentData = verification.agentData;
+
+      const prNumber = extractPrNumber(finalResult.prUrl);
+      if (prNumber === undefined) {
+        this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no PR number');
+        return undefined;
+      }
+
+      this.appendOrchestratorTaskLog(task.taskId, 'Starting deep validation');
+
+      const entries = await readSessionTranscript(
+        this.config.secretsBasePath,
+        task.taskId,
+        this.logger
+      );
+      if (entries.length === 0) {
+        this.logger.warn({ taskId: task.taskId }, 'Deep validation skipped: no transcript entries');
+        return undefined;
+      }
+
+      const formattedTranscript = formatTranscript(entries);
+
+      let linearIssueBody = this.buildLinearIssueSummary(task);
+      let planContent: string | undefined;
+      if (task.linearIssueId !== undefined) {
+        const issueContext = await fetchLinearIssueContext(
+          task.linearIssueId,
+          this.isolation.getSecrets().LINEAR_API_KEY,
+          this.logger
+        );
+        const description = issueContext?.description;
+        if (description !== undefined) {
+          linearIssueBody = `${linearIssueBody}\n\nDescription:\n${description}`;
+        }
+
+        if (issueContext !== undefined) {
+          planContent = await readPlanReferencedInLinearIssue(
+            task.worktreePath,
+            issueContext,
+            this.logger
+          );
+        }
+      }
+
+      return {
+        taskId: task.taskId,
+        prNumber,
+        repository: task.repository,
+        formattedTranscript,
+        agentClaims: {
+          outcome: agentData.outcome,
+          superpowers_executing_plans: agentData.superpowers_executing_plans,
+          superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
+          gh_pr_url: agentData.gh_pr_url,
+          summary: agentData.summary,
+        },
+        linearIssueBody,
+        planContent,
+      };
+    } catch (error) {
+      this.logger.warn(
+        { taskId: task.taskId, error: getErrorMessage(error) },
+        'Deep validation preparation failed (non-fatal, skipping deep validation)'
+      );
+      return undefined;
+    }
+  }
+
+  private async executeDeepValidation(taskId: string, input: DeepValidationInput): Promise<void> {
+    this.appendOrchestratorTaskLog(
+      taskId,
+      `Deep validation starting (transcript: ${String(input.formattedTranscript.length)} chars)`
+    );
+    try {
+      const result = await this.executionDeepValidator?.validate(input, (message: string) => {
+        this.appendOrchestratorTaskLog(taskId, `Deep validation: ${message}`);
+      });
+      if (result) {
+        this.appendOrchestratorTaskLog(taskId, 'Deep validation comment posted');
+        this.logger.info({ taskId }, 'Deep validation completed with comment posted');
+      } else {
+        this.appendOrchestratorTaskLog(taskId, 'Deep validation completed without comment');
+        this.logger.warn({ taskId }, 'Deep validation completed without comment');
+      }
+    } catch (error) {
+      this.appendOrchestratorTaskLog(taskId, `Deep validation error: ${getErrorMessage(error)}`);
+      this.logger.error(
+        { taskId, error: getErrorMessage(error) },
+        'Deep validation failed (non-fatal, task finalization continues)'
+      );
+    }
+  }
+
+  private async flushAndCloseLogForwarder(taskId: string): Promise<void> {
+    await this.flushTaskLogs(taskId);
+    try {
+      this.logForwarder.close(taskId);
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to close log forwarder after deep validation');
+    }
+  }
+
+  private buildLinearIssueSummary(task: Task): string {
+    const parts: string[] = [];
+    if (task.linearIssueId !== undefined) parts.push(`Linear Issue: ${task.linearIssueId}`);
+    if (task.linearIssueTitle !== undefined) parts.push(`Title: ${task.linearIssueTitle}`);
+    if (task.linearIssueLabels.length > 0)
+      parts.push(`Labels: ${task.linearIssueLabels.join(', ')}`);
+    if (parts.length === 0) return 'No Linear issue linked';
+    return parts.join('\n');
+  }
+
   private clearTaskTimers(taskId: string): void {
     const keys = [`${taskId}-warning`, `${taskId}-kill`, `${taskId}-monitor`];
     for (const key of keys) {
-      /* v8 ignore start -- test-infra: timer is always set before clearTaskTimers is called, else branch unreachable @preserve */
       const timer = this.activeTasks.get(key);
-      /* v8 ignore stop @preserve */
       if (timer !== undefined) {
         clearTimeout(timer);
         clearInterval(timer);

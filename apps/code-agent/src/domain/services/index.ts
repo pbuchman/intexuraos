@@ -3,12 +3,13 @@ export {
   GitHubWebhookRules,
   RepositoryScopeRule,
   ActionableEventRule,
+  ProtectedBaseBranchRule,
   SenderWhitelistRule,
   SkipPrefixRule,
   BotReviewEditRule,
   type WebhookRulesService,
   type WebhookRule,
-  type RuleResult,
+  type RuleOutcome,
 } from './gitHubWebhookRules.js';
 
 export {

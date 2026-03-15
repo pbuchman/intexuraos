@@ -1,0 +1,85 @@
+{
+  "_comment": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
+  "overrides": {
+    "PENDING-apps-bookmarks-agent": {
+      "files": ["apps/bookmarks-agent/src/infra/firestore/firestoreBookmarkRepository.ts"],
+      "description": "Firestore findByUserIdAndUrl ts-type guard fails pattern validation despite valid undefined check"
+    },
+    "PENDING-apps-code-agent": {
+      "files": [
+        "apps/code-agent/src/domain/services/logFormatter.ts",
+        "apps/code-agent/src/domain/usecases/processCodeAction.ts",
+        "apps/code-agent/src/domain/usecases/retryTask.ts",
+        "apps/code-agent/src/domain/usecases/sendTaskMessage.ts",
+        "apps/code-agent/src/domain/usecases/submitTaskFeedback.ts",
+        "apps/code-agent/src/domain/usecases/submitToExecutionAgent.ts",
+        "apps/code-agent/src/infra/firestore/gitHubPREventsRepository.ts",
+        "apps/code-agent/src/infra/firestore/gitHubPRSummariesRepository.ts",
+        "apps/code-agent/src/infra/firestore/userUsageFirestoreRepository.ts",
+        "apps/code-agent/src/infra/firestore/workerSettingsRepository.ts",
+        "apps/code-agent/src/infra/http/linearAgentHttpClient.ts",
+        "apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts",
+        "apps/code-agent/src/infra/repositories/firestoreLogLineRepository.ts",
+        "apps/code-agent/src/infra/services/taskDispatcherImpl.ts",
+        "apps/code-agent/src/infra/services/whatsappNotifierImpl.ts",
+        "apps/code-agent/src/routes/code/github-pr-summaries.ts",
+        "apps/code-agent/src/routes/code/github-pre-events.ts",
+        "apps/code-agent/src/routes/codeRoutes.ts",
+        "apps/code-agent/src/routes/webhookRoutes.ts",
+        "apps/code-agent/src/routes/webhooks/github.ts",
+        "apps/code-agent/src/routes/workerSettingsRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/code-agent"
+    },
+    "PENDING-apps-todos-agent": {
+      "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
+    },
+    "PENDING-apps-user-service": {
+      "files": [
+        "apps/user-service/src/domain/settings/formatLlmError.ts",
+        "apps/user-service/src/infra/firestore/oauthConnectionRepository.ts",
+        "apps/user-service/src/routes/deviceRoutes.ts",
+        "apps/user-service/src/routes/gitHubOAuthConnectionRoutes.ts",
+        "apps/user-service/src/routes/oauthConnectionRoutes.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in apps/user-service"
+    },
+    "PENDING-apps-whatsapp-service": {
+      "files": [
+        "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
+        "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
+        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
+      ],
+      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
+    },
+    "PENDING-apps-linear-agent": {
+      "files": [
+        "apps/linear-agent/src/infra/firestore/linearCommentRepository.ts",
+        "apps/linear-agent/src/infra/firestore/linearIssueRepository.ts"
+      ],
+      "description": "Firestore batch query functions (getCommentSummaries, findByIdentifiers) — requires emulator to exercise real chunked in-queries"
+    },
+    "PENDING-packages-internal-clients": {
+      "files": ["packages/internal-clients/src/user-service/client.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
+    },
+    "PENDING-workers-orchestrator": {
+      "files": [
+        "workers/orchestrator/src/github/token-service.ts",
+        "workers/orchestrator/src/routes.ts",
+        "workers/orchestrator/src/services/api-key-validator.ts",
+        "workers/orchestrator/src/services/execution-deep-validator.ts",
+        "workers/orchestrator/src/services/isolation/credential-refresher.ts",
+        "workers/orchestrator/src/services/isolation/docker-provider.ts",
+        "workers/orchestrator/src/services/log-forwarder.ts",
+        "workers/orchestrator/src/services/repo-manager.ts",
+        "workers/orchestrator/src/services/task-dispatcher.ts",
+        "workers/orchestrator/src/services/turn-metrics-collector.ts",
+        "workers/orchestrator/src/services/worktree-manager.ts",
+        "workers/orchestrator/src/start.ts"
+      ],
+      "description": "Write tests for tightened v8 ignore blocks in workers/orchestrator"
+    }
+  }
+}

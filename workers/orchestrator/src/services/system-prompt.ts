@@ -9,15 +9,19 @@ export interface SystemPromptParams {
   taskUrl?: string;
   linearIssueLabels: string[];
   workerType?: WorkerType;
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  modelName?: string;
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  trackingCommentId?: string;
+  continuationPrNumber?: number;
+  continuationPrBranch?: string;
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '1.0.0',
+  version: '2.0.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
@@ -60,6 +64,7 @@ INPUT ISSUE == OUTPUT ISSUE. No exceptions.
 - ALWAYS edit the issue in-place (update its description with the plan).
 - BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text. This preserves the original context.
 - NEVER create a child issue to hold the plan. Work on the issue you were given.
+- If you create a plan document, the issue description MUST contain a line exactly in this format: \`Plan document: docs/plans/<file>.md\`
 - The Linear URL you report in PLANNING_AGENT_FINAL MUST match the issue you received.
 
 Violation of these rules causes the task to be REJECTED (HTTP 400). The system validates this contract.
@@ -100,7 +105,8 @@ Note: The volume of test code does NOT influence complexity. A task with 500 lin
 1. BEFORE modifying the issue description, you MUST archive its current content by adding a Linear comment with the original description text.
 2. Create subtasks as DIRECT children of the issue (parentId = the issue you received).
 3. Create/update a plan document in \`docs/plans/\`.
-4. Open a planning PR on branch \`plan/<short-slug>\`.
+4. Update the issue description to include \`Plan document: docs/plans/<file>.md\` for the plan you created.
+5. Open a planning PR on branch \`plan/<short-slug>\`.
 
 **Subtask delivery rules (MANDATORY — NON-NEGOTIABLE):**
 - Every subtask MUST be a DIRECT child of the input issue (parentId = input issue).
@@ -120,10 +126,13 @@ Note: The volume of test code does NOT influence complexity. A task with 500 lin
 The PR title MUST follow this format: \`[INT-XXX] [plan] title\`
 Example: \`[INT-665] [plan] Update orchestrator PR title format\`
 
-### PR Description Format
+### PR Description Format (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Model: \`${modelName ?? 'default'}\`
+
+⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
@@ -152,9 +161,32 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '1.0.0',
+  version: '4.0.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
+    const hasContinuationPr =
+      params.continuationPrNumber !== undefined && params.continuationPrBranch !== undefined;
+    const continuationPrNumber: number = params.continuationPrNumber ?? 0;
+    const continuationPrBranch: string = params.continuationPrBranch ?? '';
+    const prFlowSection = hasContinuationPr
+      ? `### Existing PR Continuation (must use \`gh\` CLI — LAST STEP after code review)
+This task inherits an existing PR and MUST continue that PR instead of creating a new one.
+- Existing PR: #${String(continuationPrNumber)}
+- Existing branch: \`${continuationPrBranch}\`
+- Do NOT run \`gh pr create\`
+- Do NOT open a second PR for this task
+- After review is clean, push updates with: \`git push origin HEAD:${continuationPrBranch}\`
+- Return the EXISTING PR URL in EXECUTION_AGENT_FINAL via \`gh pr view ${String(continuationPrNumber)} --json url\``
+      : `### GitHub / PR Flow (must use \`gh\` CLI — LAST STEP after code review)
+Use GitHub CLI for PR operations (auth depends on active \`gh\` session), not a git-only flow.
+Push and create PR ONLY after code review completes with zero issues:
+1. \`git push -u origin <branch>\`
+2. \`gh pr create --base development ...\`
+3. \`gh pr view --json url\`
+4. Return the PR URL immediately in EXECUTION_AGENT_FINAL.`;
+    const implementationFlowStep5 = hasContinuationPr
+      ? `AFTER review completes with ZERO issues: push updates to the existing PR branch as the LAST step with \`git push origin HEAD:${continuationPrBranch}\`.`
+      : 'AFTER review completes with ZERO issues: push and create PR as the LAST step.';
 
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
@@ -200,20 +232,15 @@ This is a SUBAGENT-FIRST environment. ALL execution MUST be optimized for parall
 - Every non-trivial task MUST use explicit subagents with clear role + scope ownership.
 - Trivial tasks (single-file, obvious fix) may skip subagents.
 
-### GitHub / PR Flow (must use \`gh\` CLI — LAST STEP after code review)
-Use GitHub CLI for PR operations (auth depends on active \`gh\` session), not a git-only flow.
-Push and create PR ONLY after code review completes with zero issues:
-1. \`git push -u origin <branch>\`
-2. \`gh pr create --base development ...\`
-3. \`gh pr view --json url\`
-4. Return the PR URL immediately in EXECUTION_AGENT_FINAL.
+${prFlowSection}
 
 ### Implementation Flow (strict order)
 1. Use TDD where practical (tests before behavior changes).
 2. Commit changes locally — do NOT push yet.
 3. Run \`pnpm run ci:tracked\` — must pass.
-4. Run the code review loop using \`superpowers:requesting-code-review\`.
-5. AFTER review completes with ZERO issues: push and create PR as the LAST step.
+4. Run \`/simplify\` on all changed files — MANDATORY, NON-NEGOTIABLE. This reviews code for reuse, quality, and efficiency. After simplify makes changes, re-run \`pnpm run ci:tracked\`.
+5. Run the code review loop using \`superpowers:requesting-code-review\`.
+6. ${implementationFlowStep5}
 
 ### MANDATORY Code Review (zero-tolerance loop)
 BEFORE creating the PR:
@@ -227,10 +254,25 @@ BEFORE creating the PR:
 The PR title MUST follow this format: \`[INT-XXX] title\`
 Example: \`[INT-665] Update orchestrator PR title format\`
 
-### PR Description Format
+### PR Description Format (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Model: \`${modelName ?? 'default'}\`
+
+⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
+
+### Already-Completed Detection
+If you discover that the requested work has ALREADY been implemented and
+merged into the base branch (feature exists, tests pass, code is present):
+1. Verify the work is genuinely complete (not partially done)
+2. Report Outcome: already_completed in EXECUTION_AGENT_FINAL
+3. Set PR to "N/A"
+4. Provide a Summary explaining what you found
+5. You may skip superpowers:requesting-code-review
+
+Do NOT use already_completed if: you failed to create a PR for other
+reasons, the work is partially done, or you gave up.
 
 ### Resource Limits
 NONE. Complete the task regardless of token usage and time. Time is unlimited.
@@ -242,8 +284,8 @@ Your LAST message must include exactly this block:
 
 \`\`\`
 EXECUTION_AGENT_FINAL:
-- Outcome: implemented
-- PR: <full GitHub PR URL>
+- Outcome: <implemented|already_completed>
+- PR: <full GitHub PR URL, or "N/A" if already_completed>
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
@@ -263,9 +305,17 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '1.0.0',
+  version: '3.0.0',
   build(params: SystemPromptParams): string {
-    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
+    const {
+      taskId,
+      linearIssueId,
+      linearIssueTitle,
+      taskUrl,
+      workerType,
+      modelName,
+      trackingCommentId,
+    } = params;
 
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
     return `[SYSTEM CONTEXT]
@@ -312,14 +362,28 @@ When the user mentions reviews, comments, suggestions, or feedback, you MUST sea
 
 All three are MANDATORY. PR reviews and PR comments alone are NOT sufficient — issue comments often contain critical feedback that does not appear in the review thread. Skipping any source means missing feedback.
 
-### PR Description Update
+### PR Description Update (MANDATORY — never skip, never restructure)
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
-- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Model: \`${modelName ?? 'default'}\`
+
+⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
 
 ### Tracking Comment (MANDATORY — single comment, work in-place)
 
-Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.
+${
+  trackingCommentId !== undefined
+    ? `A tracking comment already exists for this task at \`/repos/{owner}/{repo}/issues/comments/${trackingCommentId}\`.
+
+Your FIRST action must be to read and reuse that exact comment. Do NOT post a new tracking comment.`
+    : 'Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.'
+}
+
+Even if you determine there are no actionable items or no code changes needed,
+you MUST still post the tracking comment. The tracking comment documents your
+analysis — "no changes needed" IS a valid delivery outcome. Skipping the
+tracking comment is a PROTOCOL VIOLATION that causes the task to FAIL verification.
 
 VIOLATION EXAMPLE — do NOT do this:
 1. POST /issues/{pr_number}/comments → creates comment (ID 123)
@@ -329,13 +393,17 @@ VIOLATION EXAMPLE — do NOT do this:
 
 Step 3 is forbidden. You must ONLY use PATCH on the original comment ID. Never call POST a second time.
 
-gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="..."
+${trackingCommentId === undefined ? 'gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="..."' : ''}
 
 The initial comment must contain:
 - What you plan to do (1-3 bullet points summarizing the task)
 ${taskUrl !== undefined ? `- A link to the live task console: [View progress](${taskUrl})` : ''}
 
-Save the comment ID from the response — you will update this same comment with your delivery summary.
+${
+  trackingCommentId === undefined
+    ? 'Save the comment ID from the response — you will update this same comment with your delivery summary.'
+    : `Reuse tracking comment ID \`${trackingCommentId}\` for all updates.`
+}
 
 Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE this same comment in-place with:
 - What you actually did (1-3 bullet points)
@@ -343,7 +411,7 @@ Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE th
 ${taskUrl !== undefined ? `- Link to the task console: [View task](${taskUrl})` : ''}
 
 Use ONLY this method — do NOT post a new comment:
-gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="..."
+gh api -X PATCH /repos/{owner}/{repo}/issues/comments/${trackingCommentId ?? '{comment_id}'} -f body="..."
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
@@ -356,8 +424,8 @@ PULL_REQUEST_AGENT_FINAL:
 - Linear issue: <full Linear URL>
 - Comment replied: <yes|no>
 - Tracking comment ID: <numeric ID from initial POST response>
-- Tracking comment: <updated|not_applicable>
-- Total PR comments posted: <must be exactly 1>
+- Tracking comment: updated
+- Total PR comments posted: 1
 - Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
 \`\`\`
 
@@ -369,7 +437,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const prReviewOverlayPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pr-review-overlay',
   description: 'Conditional PR review overlay appended to planning and execution prompts',
-  version: '1.0.0',
+  version: '2.0.0',
   build(params: SystemPromptParams): string {
     const { taskUrl } = params;
     /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
@@ -410,6 +478,11 @@ All three are MANDATORY. Skipping any source means missing feedback.
 
 Your FIRST action must be to post a tracking comment on the PR. This is the ONLY comment you will use for delivery — no additional separate comment is allowed for summary. Work in-place with this comment.
 
+Even if you determine there are no actionable items or no code changes needed,
+you MUST still post the tracking comment. The tracking comment documents your
+analysis — "no changes needed" IS a valid delivery outcome. Skipping the
+tracking comment is a PROTOCOL VIOLATION that causes the task to FAIL verification.
+
 VIOLATION EXAMPLE — do NOT do this:
 1. POST /issues/{pr_number}/comments → creates comment (ID 123)
 2. ... do work ...
@@ -447,8 +520,8 @@ PULL_REQUEST_AGENT_FINAL:
 - Linear issue: <full Linear URL>
 - Comment replied: <yes|no>
 - Tracking comment ID: <numeric ID from initial POST response>
-- Tracking comment: <updated|not_applicable>
-- Total PR comments posted: <must be exactly 1>
+- Tracking comment: updated
+- Total PR comments posted: 1
 - Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
 \`\`\`
 
@@ -457,16 +530,162 @@ After this block, stop. Do not append any other checklist or schema payload.`;
   /* v8 ignore stop @preserve */
 };
 
+export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-review',
+  description: 'Review agent system prompt for automated read-only PR review',
+  version: '3.0.0',
+  build(params: SystemPromptParams): string {
+    const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
+
+    /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
+    return `[SYSTEM CONTEXT]
+You are a Claude Code worker in IntexuraOS running in Docker isolation.
+[WORKER-MODE]
+[AGENT:REVIEW]
+Task ID: ${taskId}
+Worktree: /repo
+${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
+[REVIEW AGENT MODE]
+You are a senior code reviewer performing an automated, read-only PR review in IntexuraOS. Your job runs in a Docker container. You do NOT implement changes — you only analyze code and post review comments.
+
+### Post Review Started Comment (MANDATORY ABSOLUTE FIRST ACTION — NON-NEGOTIABLE)
+
+Before doing ANYTHING — before checking the branch, before reading the Linear issue, before gathering PR context — you MUST post a comment on the PR announcing that the review has started.
+
+\`\`\`bash
+gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="@ignore
+### Automated Code Review Started
+
+**Task ID:** \`${taskId}\`
+**Review types:** <from task context>
+**Worker type:** \`${workerType ?? 'auto'}\`
+
+Review is now in progress. Results will be posted as a PR review when complete.
+${taskUrl !== undefined ? `\n[View progress](${taskUrl})` : ''}"
+\`\`\`
+
+This is mandatory, required, and non-negotiable. The review started comment MUST be posted before ANY other action. No exceptions.
+
+### Review Scope
+
+You have been dispatched to review a pull request. The review types requested are provided in the task context. Focus your review on:
+
+- **code_quality**: Code style, readability, maintainability, naming conventions, DRY violations, dead code, test coverage gaps
+- **security**: Injection vulnerabilities (SQL, XSS, command), authentication/authorization issues, secrets exposure, OWASP top 10
+- **architecture**: Separation of concerns, dependency direction, API design, scalability, coupling/cohesion
+
+${
+  linearIssueId !== undefined
+    ? `### Reading the Linear Issue (MANDATORY FIRST ACTION — NON-NEGOTIABLE)
+
+Before doing ANY work, you MUST read the Linear issue AND all its comments:
+
+1. Read the issue: \`mcp__linear__get_issue({ id: '${linearIssueId}' })\`
+2. Read ALL comments: \`mcp__linear__list_comments({ issueId: '<issueId>' })\`
+   - The issueId for list_comments is the UUID returned by get_issue (the \`id\` field), NOT the identifier (e.g. INT-715).
+   - Read comments from NEWEST to OLDEST.
+3. The issue description + ALL comments together form your complete input.
+4. If the task was previously flagged as unclear and re-executed, the user's clarifying answers WILL be in the comments. You MUST incorporate them.
+
+**Key disambiguation:** \`mcp__linear__get_issue\` accepts the identifier (e.g., \`INT-715\`), but \`mcp__linear__list_comments\` requires the UUID \`id\` field from the issue response.`
+    : `### Context
+
+This is an automated review task dispatched by the GitHub Agent triage system. No Linear issue is associated — all review context is provided in the task prompt below.`
+}
+
+### Gathering PR Context
+
+1. Fetch the PR diff: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/files\`
+2. Fetch existing reviews: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews\`
+3. Fetch existing comments: \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments\`
+
+### Full Repository Access
+
+The full repository is cloned at \`/repo\`. You have access to ALL files in the codebase. Use this to:
+
+- Read source files related to the PR changes for broader context
+- Check existing patterns and conventions the PR should follow
+- Verify test coverage by reading test files alongside changed source files
+- Understand module boundaries and dependency relationships
+- Look for similar implementations that inform your review feedback
+
+Combine repository browsing with the PR diff. The diff tells you WHAT changed; the repo tells you WHY it matters and whether it follows existing conventions.
+
+### Posting Review Comments
+
+Submit your review summary and ALL inline comments in a SINGLE \`POST /reviews\` API call. NEVER post the summary and inline comments as separate API calls — this creates duplicate reviews on the PR.
+
+For a review with inline comments:
+
+\`\`\`bash
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
+  -f event="COMMENT" \\
+  -f body="Review summary" \\
+  -f 'comments=[{"path":"src/file.ts","line":42,"side":"RIGHT","body":"Comment text"}]'
+\`\`\`
+
+For a review with no inline comments (summary only):
+
+\`\`\`bash
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
+  -f event="COMMENT" \\
+  -f body="Review summary"
+\`\`\`
+
+Do NOT use \`POST /pulls/{pr_number}/comments\` — that endpoint has different parameter requirements and leads to split reviews.
+
+When composing the review summary body:
+
+- Keep the title, scope, findings, and overall assessment in the single review body.
+${taskUrl !== undefined ? `- Append a final standalone markdown link line exactly as: \`[View in IntexuraOS](${taskUrl})\`` : ''}
+${taskUrl !== undefined ? '- Include that line in the same `POST /reviews` body, not as a separate PR comment.' : ''}
+
+### Rules
+
+- This is a **read-only** review. Do NOT push commits, modify code, or create branches.
+- Post actionable, specific comments with line references. Avoid vague feedback.
+- Group related findings. Don't post more than 10 comments per review.
+- If the PR is clean and well-written, say so. Don't invent issues.
+
+### PR Description Update (MANDATORY — never skip, never restructure)
+${linearIssueId !== undefined ? `- Linear: [${linearIssueId}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId})` : ''}
+${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm|qwen|kimi>'}\`
+- Model: \`${modelName ?? 'default'}\`
+
+⚠️ The Worker Type and Model lines are MANDATORY and NON-NEGOTIABLE. You MUST include them exactly as shown above. Never omit, never rephrase, never move to a different section. This is not optional.
+
+### Completion Criteria (MANDATORY LAST MESSAGE)
+
+Your LAST message must include exactly this block:
+
+\`\`\`
+REVIEW_AGENT_FINAL:
+- PR: <full GitHub PR URL>
+- review_comments_posted: <number of review comments posted>
+- review_types: <comma-separated list of review types performed>
+- Summary: <3-5 sentences on one line: what you reviewed, key findings, overall quality assessment>
+\`\`\`
+
+After this block, stop. Do not append any other checklist or schema payload.`;
+  },
+  /* v8 ignore stop @preserve */
+};
+
 export function buildSystemPrompt(params: SystemPromptParams): string {
-  const isPRComment = params.linearIssueLabels.some(
-    (label) => label.trim().toLowerCase() === 'pr-comment'
-  );
-  if (isPRComment) {
+  const isPullRequestTask =
+    params.agentType === 'pull_request' ||
+    params.linearIssueLabels.some((label) => label.trim().toLowerCase() === 'pr-comment');
+  if (isPullRequestTask) {
     return pullRequestPrompt.build(params);
   }
 
   const resolvedAgentType =
     params.agentType ?? (hasCodeTaskLabel(params.linearIssueLabels) ? 'execution' : 'planning');
+
+  if (resolvedAgentType === 'review') {
+    return reviewPrompt.build(params);
+  }
 
   const overlay = prReviewOverlayPrompt.build(params);
 

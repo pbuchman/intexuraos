@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/research-agent",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -26,7 +26,6 @@
     "@intexuraos/infra-claude": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
-    "@intexuraos/infra-glm": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",
     "@intexuraos/infra-notion": "workspace:*",
     "@intexuraos/infra-otel": "workspace:*",

@@ -156,6 +156,7 @@
     "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/statusline.sh",
     "padding": 0
   },
+  "outputStyle": "Explanatory",
   "enabledPlugins": {
     "superpowers@superpowers-marketplace": true,
     "context7@claude-plugins-official": true,

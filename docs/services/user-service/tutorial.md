@@ -27,7 +27,7 @@ Before starting, ensure you have:
 - [ ] IntexuraOS development environment running
 - [ ] Auth0 tenant configured
 - [ ] Encryption key generated (32 bytes hex)
-- [ ] At least one LLM API key (Google, OpenAI, Anthropic, Perplexity, or Zai)
+- [ ] At least one LLM API key (Google, OpenAI, Anthropic, or Perplexity)
 
 ---
 
@@ -216,13 +216,11 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
     "openai": "sk-p...XXXX",
     "anthropic": null,
     "perplexity": null,
-    "zai": null,
     "testResults": {
       "google": null,
       "openai": null,
       "anthropic": null,
-      "perplexity": null,
-      "zai": null
+      "perplexity": null
     }
   }
 }
@@ -512,8 +510,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
     "google": "AIzaSyD1XXXXXXXXXXXXXXXXXXXXXXXXXX",
     "openai": "sk-proj-XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "anthropic": null,
-    "perplexity": null,
-    "zai": null
+    "perplexity": null
   }
 }
 ```

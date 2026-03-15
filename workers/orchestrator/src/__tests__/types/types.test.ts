@@ -79,6 +79,7 @@ describe('Orchestrator Types', () => {
         githubAppPrivateKeyPath: '/tmp/key.pem',
         githubInstallationId: 'test-installation-id',
         orchestratorSecret: 'test-secret',
+        secretsBasePath: '/tmp/secrets',
       };
 
       expect(config.capacity).toBe(5);

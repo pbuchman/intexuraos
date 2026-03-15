@@ -30,9 +30,10 @@ import {
   FakeResearchExportSettings,
   FakeUserServiceClient,
 } from './fakes.js';
-import type { Research } from '../domain/research/index.js';
+import type { Research, RepositoryError } from '../domain/research/index.js';
 import type {
   LlmError,
+  LlmResearchResult,
   TitleGenerateResult,
 } from '../domain/research/ports/llmProvider.js';
 import type {
@@ -329,7 +330,6 @@ describe('Research Routes - Authenticated', () => {
       openai: 'test-openai-key',
       anthropic: 'test-anthropic-key',
       perplexity: 'test-perplexity-key',
-      zai: 'test-zai-key',
     });
     fakeUserServiceClient.setApiKeys(OTHER_USER_ID, {
       google: 'other-google-key',
@@ -4471,6 +4471,225 @@ describe('Internal Routes', () => {
       setServices(services);
     });
 
+    it('returns 200 with empty response when API key fetch fails (fallback to empty keys)', async () => {
+      const research = createTestResearch({
+        status: 'pending',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      // With no API keys, synthesis key is undefined so research should be marked as failed
+      const updatedResearch = fakeRepo.getAll()[0];
+      expect(updatedResearch?.status).toBe('failed');
+      expect(updatedResearch?.synthesisError).toContain('API key required');
+    });
+
+    it('returns 200 and marks research as failed when synthesis API key is missing', async () => {
+      const research = createTestResearch({
+        status: 'pending',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.ClaudeOpus45,
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      // User has google key but not anthropic key (needed for ClaudeOpus45 synthesis)
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const updatedResearch = fakeRepo.getAll()[0];
+      expect(updatedResearch?.status).toBe('failed');
+      expect(updatedResearch?.synthesisError).toContain('API key required');
+    });
+
+    it('processes research without Google key (no title generator or context inferrer)', async () => {
+      const research = createTestResearch({
+        status: 'pending',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      // Provide the synthesis key (google) but mark it so we can verify
+      // the title generator / context inferrer conditional branches
+      // Actually, we need the google key for synthesis but NOT for title generator
+      // The route checks `apiKeys.google !== undefined` - so if we provide google key,
+      // both title generator and context inferrer will be created.
+      // To test the "no google key" branch, we need a non-google synthesis model
+      // BUT we also need the synthesis key to be present.
+      // So: use anthropic for synthesis model, provide anthropic key but NOT google key.
+      const researchNoGoogle = createTestResearch({
+        status: 'pending',
+        selectedModels: [LlmModels.ClaudeOpus45],
+        synthesisModel: LlmModels.ClaudeOpus45,
+        llmResults: [
+          { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus45, status: 'pending' },
+        ],
+      });
+      fakeRepo.clear();
+      fakeRepo.addResearch(researchNoGoogle);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        anthropic: 'anthropic-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: researchNoGoogle.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+
+    it('returns 500 when unexpected exception occurs during processing', async () => {
+      const research = createTestResearch({
+        status: 'pending',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+      });
+
+      // Make findById throw an unexpected error (not a Result error)
+      const originalFindById = fakeRepo.findById.bind(fakeRepo);
+      let callCount = 0;
+      fakeRepo.findById = async (id: string): Promise<Result<Research | null, RepositoryError>> => {
+        callCount++;
+        // First call succeeds (auth check passes), but processResearch also calls findById
+        // The route calls findById first, then processResearch calls it again
+        if (callCount === 1) {
+          return originalFindById(id);
+        }
+        throw new Error('Unexpected database crash');
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Unexpected database crash');
+    });
+
+    it('accepts report-analytics with x-internal-auth header (non-PubSub auth)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/report-analytics',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'llm.report',
+              researchId: 'test-research-123',
+              userId: TEST_USER_ID,
+              model: LlmModels.Gemini25Pro,
+              inputTokens: 100,
+              outputTokens: 200,
+              durationMs: 1000,
+            }),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+
     it('triggers synthesis when all LLMs are already completed', async () => {
       const research = createTestResearch({
         status: 'processing',
@@ -4945,7 +5164,6 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       openai: 'test-openai-key',
       anthropic: 'test-anthropic-key',
       perplexity: 'test-perplexity-key',
-      zai: 'test-zai-key',
     });
     fakeUserServiceClient.setApiKeys(OTHER_USER_ID, {
       google: 'other-google-key',
@@ -6186,8 +6404,511 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
 
+    it('returns 500 when repository findById fails for export-notion', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/some-id/export-notion',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when Notion token fetch fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+      fakeNotionClient.setFailNextGetNotionToken(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when research page ID fetch fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+      fakeExportSettings.setFailNextGetResearchPageId(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns research with notionExportInfo when findById fails after successful export', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+
+      // The export will succeed and update the repo, but then findById will fail
+      // We need findById to succeed the first time (for the research fetch),
+      // then the update to succeed, then findById to fail the second time.
+      // Since setFailNextFind only fails the next single call, we use the
+      // successful export flow and have findById fail on the second call (post-export).
+      // We need a custom approach: add research, let the route find it,
+      // let the exporter run, let update succeed, then fail the final findById.
+      // setFailNextFind fails on the NEXT call. We need to fail on the second.
+      // Solution: override update to also set failNextFind.
+      const originalUpdate = fakeRepo.update.bind(fakeRepo);
+      fakeRepo.update = async (id: string, updates: Partial<Research>): Promise<Result<Research, RepositoryError>> => {
+        const result = await originalUpdate(id, updates);
+        fakeRepo.setFailNextFind(true);
+        return result;
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { id: string; notionExportInfo?: { mainPageUrl: string } };
+      };
+      expect(body.success).toBe(true);
+      // Should return the original research with notionExportInfo manually added
+      expect(body.data.notionExportInfo).toBeDefined();
+      expect(body.data.notionExportInfo?.mainPageUrl).toBe('https://notion.so/test-main-page-id');
+    });
+
     // Note: Testing Notion API errors (rate limiting, unauthorized) requires integration tests
     // with actual Notion API mocking. The exporter's error handling is tested in
     // notionResearchExporter.test.ts. These tests focus on route-level validation.
+  });
+
+  describe('POST /research/draft - generatedBy with name/email claims', () => {
+    it('stores userName when JWT contains name claim', async () => {
+      const token = await createToken(TEST_USER_ID, { name: 'Draft User' });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Draft with name claim',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
+      expect(body.success).toBe(true);
+
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      expect(saved?.userName).toBe('Draft User');
+      expect(saved?.userEmail).toBeUndefined();
+    });
+
+    it('stores userEmail when JWT contains email claim', async () => {
+      const token = await createToken(TEST_USER_ID, { email: 'draft@example.com' });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Draft with email claim',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
+      expect(body.success).toBe(true);
+
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      expect(saved?.userEmail).toBe('draft@example.com');
+      expect(saved?.userName).toBeUndefined();
+    });
+
+    it('stores both userName and userEmail when JWT contains both claims', async () => {
+      const token = await createToken(TEST_USER_ID, {
+        name: 'Draft User',
+        email: 'draft@example.com',
+      });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Draft with both claims',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
+      expect(body.success).toBe(true);
+
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      expect(saved?.userName).toBe('Draft User');
+      expect(saved?.userEmail).toBe('draft@example.com');
+    });
+  });
+
+  describe('PATCH /research/:id - repository findById error', () => {
+    it('returns 500 when repository findById fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/some-id',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Updated prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('POST /research/validate-input - API key fetch failure', () => {
+    it('returns 500 when API key fetch fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/validate-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { prompt: 'Test prompt' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('POST /research/:id/enhance - error paths', () => {
+    it('returns 500 when API key fetch fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/test-research-123/enhance',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 404 when source research not found', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/nonexistent-id/enhance',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 409 when no changes specified', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'completed' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns 409 when research is not in completed status', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'pending' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns 403 when user does not own the research', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ userId: OTHER_USER_ID, status: 'completed' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 404 when research disappears between route check and enhanceResearch', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'completed' });
+      fakeRepo.addResearch(research);
+      // After the route's findById succeeds, delete the research so enhanceResearch's findById returns null
+      fakeRepo.setDeleteAfterNextFind(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 500 when repository save fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'completed' });
+      fakeRepo.addResearch(research);
+      fakeRepo.setFailNextSave(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('Internal routes - PubSub message parsing', () => {
+    function encodePubSubMessage(data: unknown): string {
+      return Buffer.from(JSON.stringify(data)).toString('base64');
+    }
+
+    function pubsubPayload(data: unknown): { message: { data: string; messageId: string; publishTime: string }; subscription: string } {
+      return {
+        message: {
+          data: encodePubSubMessage(data),
+          messageId: 'test-message-id',
+          publishTime: new Date().toISOString(),
+        },
+        subscription: 'projects/test/subscriptions/test-sub',
+      };
+    }
+
+    it('process-research handles unexpected event type with non-object parsed data', async () => {
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: pubsubPayload('just a string'),
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('report-analytics handles unexpected event type with non-object parsed data', async () => {
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/report-analytics',
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: pubsubPayload('just a string'),
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('process-llm-call handles unexpected event type with non-object parsed data', async () => {
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: pubsubPayload('just a string'),
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('process-llm-call triggers all_failed when selected models are failed and non-selected succeeds', async () => {
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+
+      // Selected model is Gemini25Pro (already failed), but we send a call for O4MiniDeepResearch (not selected).
+      // The O4 call succeeds, but checkLlmCompletion only looks at selectedModels where Gemini is failed,
+      // so it returns 'all_failed' on the success path switch.
+      const research = createTestResearch({
+        status: 'processing',
+        selectedModels: [LlmModels.Gemini25Pro],
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'failed',
+            error: 'Previous failure',
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'pending',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        openai: 'test-openai-key',
+      });
+
+      const llmCallEvent = {
+        type: 'llm.call',
+        researchId: research.id,
+        userId: TEST_USER_ID,
+        model: LlmModels.O4MiniDeepResearch,
+        prompt: 'Test prompt',
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: pubsubPayload(llmCallEvent),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updatedResearch = fakeRepo.getAll()[0];
+      expect(updatedResearch?.status).toBe('failed');
+    });
+
+    it('process-llm-call handles LLM result with usage but without costUsd', async () => {
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+
+      // Override services with a provider that returns usage without costUsd
+      const providerWithUsageNoCost = {
+        async research(): Promise<Result<LlmResearchResult, LlmError>> {
+          return ok({ content: 'Research content', usage: { inputTokens: 100, outputTokens: 50 } });
+        },
+      };
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        researchExportSettings: new FakeResearchExportSettings(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: new (await import('./fakes.js')).FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notionServiceClient: new FakeNotionServiceClient(),
+        notificationSender: new FakeNotificationSender(),
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: () => providerWithUsageNoCost,
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
+      };
+      setServices(services);
+
+      const research = createTestResearch({
+        status: 'processing',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'pending',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'test-google-key',
+      });
+
+      const llmCallEvent = {
+        type: 'llm.call',
+        researchId: research.id,
+        userId: TEST_USER_ID,
+        model: LlmModels.Gemini25Pro,
+        prompt: 'Test prompt',
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: pubsubPayload(llmCallEvent),
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
   });
 });

@@ -10,9 +10,48 @@ import type {
   TaskDispatcherDeps,
   DispatchWorkerCredentials,
 } from '../../../domain/services/taskDispatcher.js';
+import type { WorkerHealthProbe } from '../../../domain/ports/workerHealthProbe.js';
+import type { WorkerHealthState } from '../../../domain/models/workerSettings.js';
+import type { WorkerConfig as WorkerSettingsConfig } from '../../../domain/models/workerSettings.js';
 import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
 import { generateNonce, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
 import { generateWebhookSecret } from '../../../domain/utils/secrets.js';
+
+/**
+ * Create a mock WorkerHealthProbe with optional overrides.
+ * Default: all workers report healthy with 3 available slots.
+ */
+function createMockHealthProbe(
+  overrides?: Partial<WorkerHealthProbe>
+): WorkerHealthProbe {
+  return {
+    probeWorker: vi.fn().mockResolvedValue({
+      _tag: 'healthy',
+      healthy: true,
+      capacity: 5,
+      running: 2,
+      available: 3,
+      responseTimeMs: 50,
+    } satisfies WorkerHealthState),
+    probeAllWorkers: vi.fn().mockImplementation(
+      async (workers: WorkerSettingsConfig[]): Promise<Record<string, WorkerHealthState>> => {
+        const results: Record<string, WorkerHealthState> = {};
+        for (const w of workers) {
+          results[w.name] = {
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 5,
+            running: 2,
+            available: 3,
+            responseTimeMs: 50,
+          };
+        }
+        return results;
+      }
+    ),
+    ...overrides,
+  };
+}
 
 describe('taskDispatcherImpl', () => {
   let logger: Logger;
@@ -29,6 +68,7 @@ describe('taskDispatcherImpl', () => {
 
     baseDeps = {
       logger,
+      workerHealthProbe: createMockHealthProbe(),
     };
 
     testWorkerCredentials = {
@@ -939,6 +979,72 @@ describe('taskDispatcherImpl', () => {
       expect(body['planningPrUrl']).toBe('https://github.com/org/repo/pull/42');
     });
 
+    it('includes trackingCommentId in body when provided', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+        trackingCommentId: '12345',
+      });
+
+      const fetchCall = mockFetch.mock.calls[0];
+      if (!fetchCall) throw new Error('Fetch was not called');
+      const options = fetchCall[1];
+      if (!options) throw new Error('Fetch options not found');
+      const body = JSON.parse(options.body as string) as Record<string, unknown>;
+
+      expect(body['trackingCommentId']).toBe('12345');
+    });
+
+    it('includes continuation PR metadata in body when provided', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Continue existing PR work',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        continuationPrNumber: 1139,
+        continuationPrBranch: 'task_existing_pr_branch',
+      });
+
+      const fetchCall = mockFetch.mock.calls[0];
+      if (!fetchCall) throw new Error('Fetch was not called');
+      const options = fetchCall[1];
+      if (!options) throw new Error('Fetch options not found');
+      const body = JSON.parse(options.body as string) as Record<string, unknown>;
+
+      expect(body['continuationPrNumber']).toBe(1139);
+      expect(body['continuationPrBranch']).toBe('task_existing_pr_branch');
+    });
+
     it('omits linearIssueId when undefined', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
@@ -1436,6 +1542,276 @@ describe('taskDispatcherImpl', () => {
         }),
         expect.any(String)
       );
+    });
+  });
+
+  describe('capacity-aware dispatch', () => {
+    it('dispatches to worker with more available capacity', async () => {
+      const mockProbe = createMockHealthProbe({
+        probeAllWorkers: vi.fn().mockResolvedValue({
+          'home-mac': {
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 5,
+            running: 4,
+            available: 1,
+            responseTimeMs: 50,
+          },
+          'cloud-vm': {
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 5,
+            running: 1,
+            available: 4,
+            responseTimeMs: 50,
+          },
+        } satisfies Record<string, WorkerHealthState>),
+      });
+
+      const service = createTaskDispatcherService({
+        ...baseDeps,
+        workerHealthProbe: mockProbe,
+      });
+
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-cap-1',
+        prompt: 'Test capacity',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // cloud-vm has 4 available vs home-mac's 1, so it should be tried first
+        expect(result.value.workerLocation).toBe('cloud-vm');
+      }
+
+      // Verify fetch was called with cloud-vm's URL (sorted first by capacity)
+      expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+      const fetchUrl = vi.mocked(global.fetch).mock.calls[0]?.[0];
+      expect(fetchUrl).toBe('https://cc-vm.intexuraos.cloud/tasks');
+    });
+
+    it('uses priority as tiebreaker when capacity is equal', async () => {
+      const mockProbe = createMockHealthProbe({
+        probeAllWorkers: vi.fn().mockResolvedValue({
+          'home-mac': {
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 5,
+            running: 2,
+            available: 3,
+            responseTimeMs: 50,
+          },
+          'cloud-vm': {
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 5,
+            running: 2,
+            available: 3,
+            responseTimeMs: 50,
+          },
+        } satisfies Record<string, WorkerHealthState>),
+      });
+
+      const service = createTaskDispatcherService({
+        ...baseDeps,
+        workerHealthProbe: mockProbe,
+      });
+
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-cap-2',
+        prompt: 'Test tiebreak',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Equal capacity, home-mac has priority 1 (first in array), cloud-vm has priority 2
+        expect(result.value.workerLocation).toBe('home-mac');
+      }
+    });
+
+    it('excludes workers with failed health probes', async () => {
+      const mockProbe = createMockHealthProbe({
+        probeAllWorkers: vi.fn().mockResolvedValue({
+          'home-mac': {
+            _tag: 'tunnel-down',
+            healthy: false,
+            reason: 'connection-refused',
+            code: 'ECONNREFUSED',
+          },
+          'cloud-vm': {
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 5,
+            running: 1,
+            available: 4,
+            responseTimeMs: 50,
+          },
+        } satisfies Record<string, WorkerHealthState>),
+      });
+
+      const service = createTaskDispatcherService({
+        ...baseDeps,
+        workerHealthProbe: mockProbe,
+      });
+
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-cap-3',
+        prompt: 'Test probe exclusion',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // home-mac failed probe, only cloud-vm is available
+        expect(result.value.workerLocation).toBe('cloud-vm');
+      }
+
+      // Only one fetch call (to cloud-vm)
+      expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+      const fetchUrl = vi.mocked(global.fetch).mock.calls[0]?.[0];
+      expect(fetchUrl).toBe('https://cc-vm.intexuraos.cloud/tasks');
+    });
+
+    it('returns worker_unavailable when all health probes fail', async () => {
+      const mockProbe = createMockHealthProbe({
+        probeAllWorkers: vi.fn().mockResolvedValue({
+          'home-mac': {
+            _tag: 'tunnel-down',
+            healthy: false,
+            reason: 'dns-failed',
+          },
+          'cloud-vm': {
+            _tag: 'orchestrator-unreachable',
+            healthy: false,
+            reason: 'timeout',
+          },
+        } satisfies Record<string, WorkerHealthState>),
+      });
+
+      const service = createTaskDispatcherService({
+        ...baseDeps,
+        workerHealthProbe: mockProbe,
+      });
+
+      const result = await service.dispatch({
+        taskId: 'task-cap-4',
+        prompt: 'Test all probes fail',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_unavailable');
+        expect(result.error.message).toBe('All worker health probes failed');
+      }
+
+      // No dispatch attempt should be made
+      expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
+    });
+
+    it('works correctly with a single worker', async () => {
+      const singleWorkerCredentials: DispatchWorkerCredentials = {
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-dispatch-secret',
+          },
+        ],
+      };
+
+      const mockProbe = createMockHealthProbe({
+        probeAllWorkers: vi.fn().mockResolvedValue({
+          'home-mac': {
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 3,
+            running: 0,
+            available: 3,
+            responseTimeMs: 30,
+          },
+        } satisfies Record<string, WorkerHealthState>),
+      });
+
+      const service = createTaskDispatcherService({
+        ...baseDeps,
+        workerHealthProbe: mockProbe,
+      });
+
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-cap-5',
+        prompt: 'Test single worker',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: singleWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('home-mac');
+      }
     });
   });
 });

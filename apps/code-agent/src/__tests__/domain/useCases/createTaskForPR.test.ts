@@ -14,6 +14,7 @@ import type { TaskDispatcherService } from '../../../domain/services/taskDispatc
 import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
+import type { DispatchRetryRepository } from '../../../domain/repositories/dispatchRetryRepository.js';
 
 const logger = pino({ level: 'silent' }) as unknown as Logger;
 
@@ -54,7 +55,7 @@ function createMockLinearIssueService(): LinearIssueService {
 
 function createMockCodeTaskRepo(): CodeTaskRepository {
   return {
-    async create(): ReturnType<CodeTaskRepository['create']> {
+    async create(_input, _options): ReturnType<CodeTaskRepository['create']> {
       return ok({} as never);
     },
     async findById(): ReturnType<CodeTaskRepository['findById']> {
@@ -87,6 +88,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findByPR(): ReturnType<CodeTaskRepository['findByPR']> {
       return ok(null);
     },
+    async findActiveReviewForPR(): ReturnType<CodeTaskRepository['findActiveReviewForPR']> {
+      return ok(null);
+    },
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
       return ok(undefined);
     },
@@ -96,7 +100,13 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
       return ok(0);
     },
+    async findRecentTasksByLinearIssue(): ReturnType<CodeTaskRepository['findRecentTasksByLinearIssue']> {
+      return ok([]);
+    },
     async findPlannedTaskByLinearIssue(): ReturnType<CodeTaskRepository['findPlannedTaskByLinearIssue']> {
+      return ok(null);
+    },
+    async findLatestNonReviewTaskByPR(): ReturnType<CodeTaskRepository['findLatestNonReviewTaskByPR']> {
       return ok(null);
     },
   };
@@ -140,6 +150,9 @@ function createMockWhatsAppNotifier(): WhatsAppNotifier {
     async notifyTaskQueueExpired(): ReturnType<WhatsAppNotifier['notifyTaskQueueExpired']> {
       return ok(undefined);
     },
+    async notifyDispatchRetryExhausted(): ReturnType<WhatsAppNotifier['notifyDispatchRetryExhausted']> {
+      return ok(undefined);
+    },
   };
 }
 
@@ -147,6 +160,42 @@ function createMockGitHubPRClient(): GitHubPRClient {
   return {
     async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
       return ok(undefined);
+    },
+    async getPullRequestFiles(): ReturnType<GitHubPRClient['getPullRequestFiles']> {
+      return ok([]);
+    },
+    async getPullRequestCommits(): ReturnType<GitHubPRClient['getPullRequestCommits']> {
+      return ok([]);
+    },
+    async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+      return ok('main');
+    },
+    async getPullRequestStatus(): ReturnType<GitHubPRClient['getPullRequestStatus']> {
+      return ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' });
+    },
+    async postPRComment(): ReturnType<GitHubPRClient['postPRComment']> {
+      return ok({ commentId: 1 });
+    },
+    async listOpenPullRequestsByBaseBranch(): ReturnType<GitHubPRClient['listOpenPullRequestsByBaseBranch']> {
+      return ok([]);
+    },
+    async getPullRequestDetails(): ReturnType<GitHubPRClient['getPullRequestDetails']> {
+      return ok({
+        number: 1,
+        title: 'Test PR',
+        body: null,
+        authorLogin: 'alice',
+        baseBranch: 'main',
+        headBranch: 'feature/test',
+        mergeable: true,
+        mergeableState: 'clean',
+      });
+    },
+    async getIssueComment(): ReturnType<GitHubPRClient['getIssueComment']> {
+      return ok({ body: '' });
+    },
+    async updateIssueComment(): ReturnType<GitHubPRClient['updateIssueComment']> {
+      return ok({ commentId: 1 });
     },
   };
 }
@@ -188,6 +237,23 @@ function createMockFirestore(): CreateTaskForPRDeps['firestore'] {
   };
 }
 
+function createMockDispatchRetryRepo(): DispatchRetryRepository {
+  return {
+    async create(): ReturnType<DispatchRetryRepository['create']> {
+      return ok({} as never);
+    },
+    async findOldest(): ReturnType<DispatchRetryRepository['findOldest']> {
+      return ok(null);
+    },
+    async delete(): ReturnType<DispatchRetryRepository['delete']> {
+      return ok(undefined);
+    },
+    async update(): ReturnType<DispatchRetryRepository['update']> {
+      return ok(undefined);
+    },
+  };
+}
+
 function createDefaultDeps(): CreateTaskForPRDeps {
   return {
     logger,
@@ -201,6 +267,7 @@ function createDefaultDeps(): CreateTaskForPRDeps {
     gitHubPRClient: createMockGitHubPRClient(),
     userServiceClient: createMockUserServiceClient(),
     firestore: createMockFirestore(),
+    automationLog: { record: vi.fn().mockResolvedValue(undefined) },
   };
 }
 
@@ -252,6 +319,29 @@ describe('createTaskForPR', () => {
     expect(capturedCreateInput).not.toHaveProperty('linearIssueUrl');
     expect(capturedCreateInput).not.toHaveProperty('linearIssueLabels');
     expect(capturedCreateInput).not.toHaveProperty('linearFallback');
+  });
+
+  it('persists pull_request agentType and full prompt context for queued redispatch', async () => {
+    let capturedCreateInput: Record<string, unknown> = {};
+
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      async create(input): ReturnType<CodeTaskRepository['create']> {
+        capturedCreateInput = input as unknown as Record<string, unknown>;
+        return ok({} as never);
+      },
+    };
+
+    await createTaskForPR(deps, request);
+
+    expect(capturedCreateInput['agentType']).toBe('pull_request');
+    expect(capturedCreateInput['sanitizedPrompt']).toEqual(expect.any(String));
+    expect(String(capturedCreateInput['sanitizedPrompt'])).toContain(
+      '[PR Comment Task] Comment on PR #42 in pbuchman/intexuraos'
+    );
+    expect(String(capturedCreateInput['sanitizedPrompt'])).toContain('The commenter said:');
+    expect(String(capturedCreateInput['sanitizedPrompt'])).toContain('Please review this PR');
+    expect(capturedCreateInput['sanitizedPrompt']).not.toBe('Please review this PR');
   });
 
   it('returns user_not_found when user lookup fails with USER_NOT_FOUND', async () => {
@@ -367,6 +457,7 @@ describe('createTaskForPR', () => {
     let capturedNewTitle = '';
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(token, _owner, _repo, _prNumber, newTitle): ReturnType<GitHubPRClient['updatePRTitle']> {
         capturedToken = token;
         capturedNewTitle = newTitle;
@@ -391,6 +482,7 @@ describe('createTaskForPR', () => {
     };
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         prTitleUpdateCalled = true;
         return ok(undefined);
@@ -407,6 +499,7 @@ describe('createTaskForPR', () => {
     let prTitleUpdateCalled = false;
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         prTitleUpdateCalled = true;
         return ok(undefined);
@@ -432,6 +525,7 @@ describe('createTaskForPR', () => {
     let prTitleUpdateCalled = false;
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         prTitleUpdateCalled = true;
         return ok(undefined);
@@ -448,6 +542,7 @@ describe('createTaskForPR', () => {
 
   it('continues successfully when PR title update fails (best-effort)', async () => {
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         return err({ code: 'API_ERROR', message: 'GitHub API error' });
       },
@@ -456,6 +551,52 @@ describe('createTaskForPR', () => {
     const result = await createTaskForPR(deps, request);
 
     expect(result.ok).toBe(true);
+  });
+
+  it('records automation log after dispatch is accepted', async () => {
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      expect.objectContaining({ type: 'task_dispatched', agentType: 'pull_request' }),
+      expect.any(String),
+    );
+  });
+
+  it('includes workerType in automation log after dispatch when provided', async () => {
+    request.workerType = 'qwen';
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      expect.objectContaining({ type: 'task_dispatched', workerType: 'qwen', agentType: 'pull_request' }),
+      expect.any(String),
+    );
+  });
+
+  it('records dispatch failure in automation log when dispatch fails', async () => {
+    deps.taskDispatcher = {
+      ...createMockTaskDispatcher(),
+      async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+        return err({ code: 'worker_unavailable', message: 'No workers available' });
+      },
+    };
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(false);
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      expect.objectContaining({
+        type: 'task_dispatch_failed',
+        error: 'No workers available',
+        errorCode: 'worker_unavailable',
+      }),
+      expect.any(String),
+    );
   });
 
   it('returns task_creation_failed when dispatch fails', async () => {
@@ -495,6 +636,7 @@ describe('createTaskForPR', () => {
     let prTitleUpdateCalled = false;
 
     deps.gitHubPRClient = {
+      ...createMockGitHubPRClient(),
       async updatePRTitle(): ReturnType<GitHubPRClient['updatePRTitle']> {
         prTitleUpdateCalled = true;
         return ok(undefined);
@@ -592,13 +734,11 @@ describe('createTaskForPR', () => {
     });
 
     it('queues task when at_capacity and queue has room', async () => {
-      let capturedStatus = '';
+      const updateCalls: Record<string, unknown>[] = [];
       deps.codeTaskRepo = {
         ...createMockCodeTaskRepo(),
         async update(_id: string, data: Record<string, unknown>): ReturnType<CodeTaskRepository['update']> {
-          if (typeof data['status'] === 'string') {
-            capturedStatus = data['status'];
-          }
+          updateCalls.push(data);
           return ok({} as never);
         },
       };
@@ -609,14 +749,39 @@ describe('createTaskForPR', () => {
       if (result.ok) {
         expect(result.value.taskId).toMatch(/^task_/);
       }
-      expect(capturedStatus).toBe('queued');
+      // Task already starts as 'queued' — no status update call in the at_capacity path
+      const statusUpdates = updateCalls.filter(d => typeof d['status'] === 'string');
+      expect(statusUpdates).toHaveLength(0);
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        expect.objectContaining({ type: 'task_dispatched', agentType: 'pull_request' }),
+        expect.any(String),
+      );
+    });
+
+    it('includes workerType in automation log when queued with workerType', async () => {
+      request.workerType = 'minimax';
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        expect.objectContaining({ type: 'task_dispatched', workerType: 'minimax', agentType: 'pull_request' }),
+        expect.any(String),
+      );
     });
 
     it('returns queue_full when at_capacity and queue is full', async () => {
+      const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        postPRComment,
+      };
       deps.codeTaskRepo = {
         ...createMockCodeTaskRepo(),
         async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
-          return ok(10);
+          return ok(11);
         },
       };
 
@@ -626,6 +791,7 @@ describe('createTaskForPR', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('queue_full');
       }
+      expect(postPRComment).not.toHaveBeenCalled();
     });
 
     it('returns queue_full when countQueued fails (fail-closed)', async () => {
@@ -644,21 +810,228 @@ describe('createTaskForPR', () => {
       }
     });
 
-    it('returns internal_error when queue status update fails', async () => {
+  });
+
+  describe('baseBranch API fetch (Layer 2)', () => {
+    it('should fetch baseBranch from GitHub API when not in request', async () => {
+      let capturedBaseBranch = '';
+
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+          return ok('development');
+        },
+      };
+
       deps.codeTaskRepo = {
         ...createMockCodeTaskRepo(),
-        async update(): ReturnType<CodeTaskRepository['update']> {
-          return err({ code: 'FIRESTORE_ERROR', message: 'Failed to update' });
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedBaseBranch = (input as unknown as Record<string, string>)['baseBranch'] ?? '';
+          return ok({} as never);
         },
+      };
+
+      // Use request without baseBranch
+      const noBranchRequest: CreateTaskForPRRequest = {
+        repository: request.repository,
+        prNumber: request.prNumber,
+        prTitle: 'Fix the bug',
+        senderLogin: request.senderLogin,
+        comment: request.comment,
+        eventId: request.eventId,
+      };
+
+      await createTaskForPR(deps, noBranchRequest);
+
+      expect(capturedBaseBranch).toBe('development');
+    });
+
+    it('should not fetch baseBranch when already provided in request', async () => {
+      let getPullRequestBaseBranchCalled = false;
+
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+          getPullRequestBaseBranchCalled = true;
+          return ok('development');
+        },
+      };
+
+      request.baseBranch = 'feature-branch';
+
+      await createTaskForPR(deps, request);
+
+      expect(getPullRequestBaseBranchCalled).toBe(false);
+    });
+
+    it('should fall back to main when API fetch fails', async () => {
+      let capturedBaseBranch = '';
+
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+          return err({ code: 'NOT_FOUND', message: 'PR not found' });
+        },
+      };
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(input): ReturnType<CodeTaskRepository['create']> {
+          capturedBaseBranch = (input as unknown as Record<string, string>)['baseBranch'] ?? '';
+          return ok({} as never);
+        },
+      };
+
+      // Use request without baseBranch
+      const noBranchRequest: CreateTaskForPRRequest = {
+        repository: request.repository,
+        prNumber: request.prNumber,
+        prTitle: 'Fix the bug',
+        senderLogin: request.senderLogin,
+        comment: request.comment,
+        eventId: request.eventId,
+      };
+
+      const result = await createTaskForPR(deps, noBranchRequest);
+
+      expect(result.ok).toBe(true);
+      expect(capturedBaseBranch).toBe('main');
+    });
+
+    it('should dispatch with the same resolved baseBranch as the task record', async () => {
+      let dispatchedBaseBranch = '';
+
+      deps.gitHubPRClient = {
+        ...createMockGitHubPRClient(),
+        async getPullRequestBaseBranch(): ReturnType<GitHubPRClient['getPullRequestBaseBranch']> {
+          return ok('development');
+        },
+      };
+
+      deps.taskDispatcher = {
+        ...createMockTaskDispatcher(),
+        async dispatch(req): ReturnType<TaskDispatcherService['dispatch']> {
+          dispatchedBaseBranch = (req as unknown as Record<string, string>)['baseBranch'] ?? '';
+          return ok({ dispatched: true, workerLocation: 'home-mac' });
+        },
+      };
+
+      const noBranchRequest: CreateTaskForPRRequest = {
+        repository: request.repository,
+        prNumber: request.prNumber,
+        prTitle: 'Fix the bug',
+        senderLogin: request.senderLogin,
+        comment: request.comment,
+        eventId: request.eventId,
+      };
+
+      await createTaskForPR(deps, noBranchRequest);
+
+      expect(dispatchedBaseBranch).toBe('development');
+    });
+  });
+
+  describe('transaction structure (no nesting)', () => {
+    it('calls ensureIssueExists before runTransaction', async () => {
+      const callOrder: string[] = [];
+
+      deps.linearIssueService = {
+        ...createMockLinearIssueService(),
+        async ensureIssueExists(): Promise<EnsureIssueResult> {
+          callOrder.push('ensureIssueExists');
+          return {
+            linearIssueId: 'INT-100',
+            linearIssueTitle: 'Test Issue',
+            linearFallback: false,
+            linearIssueLabels: ['code-task'],
+            hasChildren: false,
+            linearIssueUrl: 'https://linear.app/intexura/issue/INT-100',
+          };
+        },
+      };
+
+      deps.firestore = {
+        async runTransaction<T>(fn: (transaction: never) => Promise<T>): Promise<T> {
+          callOrder.push('runTransaction');
+          const mockTransaction = {
+            get: async (): Promise<{ exists: boolean; data: () => null }> => ({ exists: false, data: (): null => null }),
+            set: (): void => undefined,
+          };
+          return fn(mockTransaction as never);
+        },
+        doc: mockDoc,
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(callOrder.indexOf('ensureIssueExists')).toBeLessThan(callOrder.indexOf('runTransaction'));
+    });
+
+    it('passes transaction option to codeTaskRepo.create', async () => {
+      let receivedOptions: unknown;
+
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async create(_input, options): ReturnType<CodeTaskRepository['create']> {
+          receivedOptions = options;
+          return ok({} as never);
+        },
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(receivedOptions).toBeDefined();
+      expect(receivedOptions).toHaveProperty('transaction');
+    });
+
+    it('calls runTransaction exactly once (no nesting)', async () => {
+      let transactionCallCount = 0;
+
+      deps.firestore = {
+        async runTransaction<T>(fn: (transaction: never) => Promise<T>): Promise<T> {
+          transactionCallCount++;
+          const mockTransaction = {
+            get: async (): Promise<{ exists: boolean; data: () => null }> => ({ exists: false, data: (): null => null }),
+            set: (): void => undefined,
+          };
+          return fn(mockTransaction as never);
+        },
+        doc: mockDoc,
+      };
+
+      await createTaskForPR(deps, request);
+
+      expect(transactionCallCount).toBe(1);
+    });
+
+    it('returns linear_issue_failed when ensureIssueExists fails before transaction', async () => {
+      deps.linearIssueService = {
+        ...createMockLinearIssueService(),
+        async ensureIssueExists(): Promise<EnsureIssueResult> {
+          throw new Error('Linear API timeout');
+        },
+      };
+
+      let transactionCalled = false;
+      deps.firestore = {
+        async runTransaction<T>(fn: (transaction: never) => Promise<T>): Promise<T> {
+          transactionCalled = true;
+          const mockTransaction = {
+            get: async (): Promise<{ exists: boolean; data: () => null }> => ({ exists: false, data: (): null => null }),
+            set: (): void => undefined,
+          };
+          return fn(mockTransaction as never);
+        },
+        doc: mockDoc,
       };
 
       const result = await createTaskForPR(deps, request);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('internal_error');
-        expect(result.error.message).toBe('Failed to queue task');
+        expect(result.error.code).toBe('linear_issue_failed');
       }
+      expect(transactionCalled).toBe(false);
     });
   });
 
@@ -691,7 +1064,7 @@ describe('createTaskForPR', () => {
       deps.codeTaskRepo = {
         ...createMockCodeTaskRepo(),
         async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
-          return ok(10);
+          return ok(11);
         },
       };
 
@@ -726,6 +1099,115 @@ describe('createTaskForPR', () => {
       expect(result.ok).toBe(true);
       // Verify lock was NOT deleted (task queued, not failed)
       expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('dispatch retry queue (retryable errors)', () => {
+    beforeEach(() => {
+      deps.taskDispatcher = {
+        ...createMockTaskDispatcher(),
+        async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
+          return err({ code: 'worker_unavailable', message: 'Worker timed out' });
+        },
+      };
+      deps.dispatchRetryRepo = createMockDispatchRetryRepo();
+    });
+
+    it('queues for retry when dispatch fails with retryable error and dispatchRetryRepo is available', async () => {
+      let retryCaptured: Record<string, unknown> | undefined;
+      deps.dispatchRetryRepo = {
+        ...createMockDispatchRetryRepo(),
+        async create(input): ReturnType<DispatchRetryRepository['create']> {
+          retryCaptured = input as unknown as Record<string, unknown>;
+          return ok({} as never);
+        },
+      };
+
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.taskId).toMatch(/^task_/);
+      }
+      expect(retryCaptured).toBeDefined();
+      expect(retryCaptured?.['type']).toBe('new_task');
+      expect(retryCaptured?.['repository']).toBe('pbuchman/intexuraos');
+      expect(retryCaptured?.['lastError']).toBe('Worker timed out');
+    });
+
+    it('includes prTitle in retry entry when present in request', async () => {
+      let retryCaptured: Record<string, unknown> | undefined;
+      deps.dispatchRetryRepo = {
+        ...createMockDispatchRetryRepo(),
+        async create(input): ReturnType<DispatchRetryRepository['create']> {
+          retryCaptured = input as unknown as Record<string, unknown>;
+          return ok({} as never);
+        },
+      };
+
+      request.prTitle = 'My PR Title';
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(retryCaptured?.['prTitle']).toBe('My PR Title');
+    });
+
+    it('omits prTitle from retry entry when not present in request', async () => {
+      let retryCaptured: Record<string, unknown> | undefined;
+      deps.dispatchRetryRepo = {
+        ...createMockDispatchRetryRepo(),
+        async create(input): ReturnType<DispatchRetryRepository['create']> {
+          retryCaptured = input as unknown as Record<string, unknown>;
+          return ok({} as never);
+        },
+      };
+
+      delete (request as unknown as Record<string, unknown>)['prTitle'];
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(retryCaptured).not.toHaveProperty('prTitle');
+    });
+
+    it('includes baseBranch in retry entry when resolved', async () => {
+      let retryCaptured: Record<string, unknown> | undefined;
+      deps.dispatchRetryRepo = {
+        ...createMockDispatchRetryRepo(),
+        async create(input): ReturnType<DispatchRetryRepository['create']> {
+          retryCaptured = input as unknown as Record<string, unknown>;
+          return ok({} as never);
+        },
+      };
+
+      request.baseBranch = 'development';
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(retryCaptured?.['baseBranch']).toBe('development');
+    });
+
+    it('does NOT delete PR task lock when queued for retry', async () => {
+      const result = await createTaskForPR(deps, request);
+
+      expect(result.ok).toBe(true);
+      expect(mockLockDeleteFn).not.toHaveBeenCalled();
+    });
+
+    it('updates task status to queued with queuedAt when queuing for retry', async () => {
+      const updateCalls: { id: string; data: Record<string, unknown> }[] = [];
+      deps.codeTaskRepo = {
+        ...createMockCodeTaskRepo(),
+        async update(id: string, data: Record<string, unknown>): ReturnType<CodeTaskRepository['update']> {
+          updateCalls.push({ id, data });
+          return ok({} as never);
+        },
+      };
+
+      await createTaskForPR(deps, request);
+
+      const statusUpdate = updateCalls.find(c => c.data['status'] === 'queued');
+      expect(statusUpdate).toBeDefined();
+      expect(statusUpdate?.data['queuedAt']).toBeInstanceOf(Date);
     });
   });
 });

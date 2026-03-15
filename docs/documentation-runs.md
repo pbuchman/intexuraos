@@ -1,3 +1,111 @@
+## 2026-03-15 — linear-agent, actions-agent, whatsapp-service, mobile-notifications-service, claude-worker (v3.3.0 DashScope migration batch)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/linear-agent/features.md` — Updated auto-trigger label gating (planning-task/code-task), already_completed outcome
+- `docs/services/linear-agent/technical.md` — New Recent Changes (v3.3.0), removed GLM-4.7/ZAI, planning-task label gating, batched reads, done state
+- `docs/services/linear-agent/tutorial.md` — Added done state, updated auto-trigger conditions
+- `docs/services/linear-agent/technical-debt.md` — v8 ignore reduction (92 to 56), 6 new resolved issues, updated analysis run
+- `docs/services/linear-agent/agent.md` — Added done state, updated auto-trigger constraints and patterns
+- `docs/services/actions-agent/technical.md` — New Recent Changes, removed ZAI env var, updated worker types (7 values), INT-785 test replacement
+- `docs/services/actions-agent/technical-debt.md` — Added INT-785 and ZAI removal to resolved issues
+- `docs/services/actions-agent/agent.md` — Updated CodeTaskWorkerType union (added qwen, kimi)
+- `docs/services/whatsapp-service/technical.md` — New Recent Changes for INT-799 and INT-810/811
+- `docs/services/whatsapp-service/technical-debt.md` — Added 2 resolved issues, updated analysis run
+- `docs/services/mobile-notifications-service/technical.md` — New Recent Changes for v8 ignore test replacement
+- `docs/services/mobile-notifications-service/technical-debt.md` — Added resolved issue, updated analysis run
+- `docs/services/claude-worker/technical.md` — New Recent Changes (cache bust, tasks env, orphan cleanup), added kimi worker type, updated toolchain (Codex CLI), updated config defaults
+- `docs/services/claude-worker/technical-debt.md` — Added 2 resolved issues (orphan cleanup, cache busting), updated analysis run
+- `docs/services/claude-worker/agent.md` — Updated WorkerType union (glm/qwen/kimi keys), added kimi config
+- `docs/documentation-runs.md` — This entry
+
+**Inferred Insights:**
+
+- linear-agent: GLM-4.7 models removed from required list (DashScope migration), v8 ignore count halved via real tests (INT-792), auto-trigger now gated on planning-task/code-task label, done state added for already_completed outcome
+- actions-agent: ZAI env var removed, worker types expanded to 7 (added qwen/kimi), v8 ignore blocks replaced with real tests across 7 files (INT-785)
+- whatsapp-service: v8 ignore blocks replaced with real tests across 5 files (INT-799), silent dispatch failures fixed (INT-810/811)
+- mobile-notifications-service: v8 ignore blocks replaced with real tests in repository files, reduced to 10 directives
+- claude-worker: kimi worker type added (kimi-k2.5 via DashScope), Docker cache busting for Claude CLI, Codex CLI installed, tasks env var enabled, orphaned child process cleanup
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0 new
+- Test gaps: 0 (v8 ignore reductions across all services)
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-03-15 — code-agent (v3.3.0 release update)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/code-agent/features.md` — Added GitHub Agent PR triage, unified automation log, planning-task label gate; updated worker types (qwen, kimi); updated retry branch inheritance
+- `docs/services/code-agent/technical.md` — Added 5 new Firestore collections, 6 new use cases, 5 new domain services, new validation/prompts sections, new endpoints (event-log, task-event), updated architecture diagram with GitHub Agent and automation log, full recent changes table since v3.2.0
+- `docs/services/code-agent/tutorial.md` — Added event decision log exercise, updated worker types, added reviewed status, updated retry section with branch inheritance
+- `docs/services/code-agent/technical-debt.md` — Added 16 resolved issues from v3.2.0-v3.3.0 (INT-743 through INT-924), added drainRetryQueue guard to future plans
+- `docs/services/code-agent/agent.md` — Added GitHub Agent, automation log, create review task, merge conflict detection capabilities; updated worker types; added task-event webhook; added GitHub API outgoing calls; updated collections list
+- `docs/documentation-runs.md` — This entry
+
+**Inferred Insights:**
+
+- Why: AI coding tools build on assumptions you never approved. Code Agent introduces a design-before-code checkpoint so the most expensive mistake — building the wrong thing — is caught before compute is spent.
+- Killer feature: Two-tier GitHub Agent evaluation pipeline — deterministic hard rules handle obvious cases instantly, then a Gemini tool-calling LLM evaluates nuanced PRs with structured output validation and automatic repair, recording every decision in an audit trail.
+- Future plans: Actual system prompt versioning (compute SHA-256 at startup), route splitting for codeRoutes.ts, distributed drain queue guards for horizontal scaling.
+- Limitations: Two workers per user, 30-min queue TTL, 10K char prompt cap, planning-task label gate for autonomous planning.
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 4
+- Test gaps: 0
+- Type issues: 2
+- TODOs: 2
+- SRP violations: 1
+
+---
+
+## 2026-03-15 — orchestrator (v3.3.0 release update)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/orchestrator/features.md` — Added Review Agent, Deep Validation, Kimi worker type, mandatory /simplify step, already-completed outcome, Docker health gate, PR branch inheritance
+- `docs/services/orchestrator/technical.md` — Added 16 Recent Changes entries for v3.3.0, Review Agent routing/contracts, ExecutionDeepValidator component, TranscriptReader/Formatter components, DeepValidatorHelpers, updated Task/TaskResult types, new gotchas (fatal exit codes, DashScope key sharing, container creation timeout, worktree mutex, deep validation fire-and-forget)
+- `docs/services/orchestrator/tutorial.md` — Added review task submission example, PR continuation example, updated worker type list with kimi, added Docker health gate troubleshooting entries
+- `docs/services/orchestrator/technical-debt.md` — Added v3.3.0 Recent Improvements section documenting 9 reliability improvements, updated last-updated date
+- `docs/services/orchestrator/agent.md` — Added review agent type, docker health fields in HealthResponse, continuationPr fields, lastSuccessResult/pendingResumeStart on Task, docker_unavailable error code, task-event outbound endpoint, updated worker type union with kimi, updated constraints with 7 worker types
+- `docs/documentation-runs.md` — This entry
+
+**Inferred Insights:**
+
+- Why: AI coding agents that run on third-party infrastructure require sending source code off-network. The orchestrator eliminates this by running autonomous coding workers on hardware the user controls, with Docker isolation, credential management, crash recovery, and real-time log streaming solved as one integrated system.
+- Killer feature: Two-stage independent verification pipeline — Completion Verifier (Gemini semantic validation with agent-specific Zod schemas) followed by Deep Validator (full transcript analysis posted as structured PR report) — ensuring autonomous agents actually completed their work rather than self-reporting success.
+- Future plans: Multi-machine orchestration (Pub/Sub queue, Firestore state), container image versioning (pinned tags, rolling updates), task priority queue (preemption, queue depth visibility), real-time resource usage monitoring and alerting.
+- Limitations: Single-machine architecture, Docker required, 2-hour attempt ceiling, 4MB log cap, Gemini dependency for verification.
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 2
+
+---
+
 ## 2026-03-07 — todos-agent (targeted refresh)
 
 **Action:** Updated
@@ -2689,5 +2797,52 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 | notion-service               | 0     | 0           | 0         | 0           |
 
 **Total:** 8 code smells identified across 16 services (all low severity)
+
+---
+
+## 2026-03-15 — v3.3.0 DashScope Migration (13 services)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Scope:** Alibaba Cloud Model Studio integration — removed ZAI provider references and GLM-4.7 models from documentation across 13 services as part of the unified integration for Chinese LLMs (Qwen, Kimi, GLM-5) via DashScope.
+
+**Services Updated:**
+
+1. bookmarks-agent — Recent Changes, technical-debt timestamp
+2. calendar-agent — Removed ZAI env var, GLM-4.7 models from External APIs, updated fallback references
+3. chat-agent — Switched guest model from GLM-4.7-Flash to Gemini 2.5 Flash, removed ZAI env var (now uses GEMINI as required)
+4. commands-agent — Removed GLM-4.7 from classifier models, updated gotchas and tutorials
+5. data-insights-agent — Removed GLM-4.7 from LLM Models table and env vars
+6. notion-service — Recent Changes, technical-debt timestamp
+7. research-agent — Removed ZAI provider from LLM Providers table, env vars, fallback chain, file structure
+8. todos-agent — Removed ZAI from model chain and env vars
+9. user-service — Removed zai from LlmKeys, validation models, provider naming
+10. web-agent — Removed ZAI from overview, architecture diagram, fallback chain, env vars
+11. app-settings-service — Updated provider count from 5 to 4, removed zai from pricing response schemas
+12. transcription — Recent Changes (v8-ignore test coverage)
+13. image-service — Removed ZAI env var, updated platform fallback references
+
+**Aggregation Updates:**
+
+- `docs/services/index.md` — Removed infra-glm package (deleted), updated chat-agent AI column, fixed model count
+
+**Inferred Insights:**
+
+- Why: ZAI provider consolidated into Alibaba Cloud Model Studio (DashScope) for unified Chinese LLM access
+- Killer feature: Unified integration for Chinese LLMs (Qwen, Kimi, GLM-5) via single DashScope endpoint
+- Future plans: GLM-5 retained as DashScope-backed code-task worker with backward-compatible 'glm' alias
+- Limitations: LLM contract now has 4 providers (Google, OpenAI, Anthropic, Perplexity) and 14 models
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Note:** All ZAI/GLM-4.7 references in historical context (commit messages, resolved issues) were preserved. Only active/current references were removed or updated.
 
 ---

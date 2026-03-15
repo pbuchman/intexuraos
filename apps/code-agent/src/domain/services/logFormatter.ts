@@ -114,11 +114,9 @@ export function formatLogChunk(
         continue; // Skip — will be completed by next chunk
       }
 
-      /* v8 ignore start -- ts-type: catch block handles unparseable JSON; short-line branch not triggered by test fixtures @preserve */
       text = trimmed.length > 2048
         ? trimmed.slice(0, 1024) + '\n[... TRUNCATED from ' + String(trimmed.length) + ' chars ...]\n' + trimmed.slice(-512)
         : trimmed;
-      /* v8 ignore stop @preserve */
     }
 
     text = stripSystemReminders(text);
@@ -215,11 +213,9 @@ function formatAssistant(obj: StreamJsonMessage): string {
 function formatToolUse(obj: StreamJsonMessage, state: FormatterState): string {
   const name = obj.tool_name ?? 'unknown';
   state.lastToolName = name;
-  /* v8 ignore start -- test-infra: some stream-json tool_use events omit id field in fixture logs @preserve */
   if (typeof obj.id === 'string') {
     state.toolCallsById.set(obj.id, name);
   }
-  /* v8 ignore stop @preserve */
   const ctx = extractToolContext(obj.tool_input);
   return `[tool] ${name}${ctx !== undefined ? `: ${ctx}` : ''}`;
 }
@@ -460,9 +456,7 @@ function formatToolResult(content: string, isError: boolean, toolName?: string):
 
   let lines = trimmed.split('\n');
 
-  /* v8 ignore start -- ts-type: combined condition branch where length exceeds chars but not lines @preserve */
   if (trimmed.length > MAX_TOOL_RESULT_CHARS && lines.length > HEAD_LINES + TAIL_LINES) {
-    /* v8 ignore stop @preserve */
     const head = lines.slice(0, HEAD_LINES);
     const tail = lines.slice(-TAIL_LINES);
     const omitted = lines.length - HEAD_LINES - TAIL_LINES;
@@ -523,16 +517,12 @@ function stripSystemReminders(input: string): string {
 function registerToolContext(obj: StreamJsonMessage, state: FormatterState): void {
   if (obj.type === 'tool_use') {
     const name = obj.tool_name;
-    /* v8 ignore start -- test-infra: fixture coverage focuses tool_result correlation and not non-string tool names @preserve */
     if (typeof name === 'string') {
       state.lastToolName = name;
-      /* v8 ignore start -- test-infra: some stream-json tool_use events omit id field in fixture logs @preserve */
       if (typeof obj.id === 'string') {
         state.toolCallsById.set(obj.id, name);
       }
-      /* v8 ignore stop @preserve */
     }
-    /* v8 ignore stop @preserve */
     return;
   }
 

@@ -33,11 +33,10 @@ interface AllProvidersPricing {
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
-  zai: ProviderPricing;
 }
 
 interface ProviderPricing {
-  provider: 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
+  provider: 'google' | 'openai' | 'anthropic' | 'perplexity';
   models: Record<string, ModelPricing>;
   updatedAt: string; // ISO date
 }
@@ -78,8 +77,7 @@ interface ModelPricing {
     },
     "openai": { "provider": "openai", "models": { "..." : "..." }, "updatedAt": "..." },
     "anthropic": { "..." : "..." },
-    "perplexity": { "..." : "..." },
-    "zai": { "..." : "..." }
+    "perplexity": { "..." : "..." }
   }
 }
 ```
@@ -113,8 +111,7 @@ interface ModelPricing {
     "google": { "..." : "..." },
     "openai": { "..." : "..." },
     "anthropic": { "..." : "..." },
-    "perplexity": { "..." : "..." },
-    "zai": { "..." : "..." }
+    "perplexity": { "..." : "..." }
   }
 }
 ```
@@ -259,13 +256,12 @@ interface CallTypeCost {
 
 ## Provider Coverage
 
-| Provider   | Models (16 total)                                                               |
+| Provider   | Models (14 total)                                                               |
 | ---------- | ------------------------------------------------------------------------------- |
 | Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image      |
 | OpenAI     | gpt-5.2, gpt-4o-mini, o4-mini-deep-research, gpt-image-1                        |
 | Anthropic  | claude-opus-4-5-20251101, claude-sonnet-4-5-20250929, claude-3-5-haiku-20241022 |
 | Perplexity | sonar, sonar-pro, sonar-deep-research                                           |
-| Zai        | glm-4.7, glm-4.7-flash                                                          |
 
 ---
 

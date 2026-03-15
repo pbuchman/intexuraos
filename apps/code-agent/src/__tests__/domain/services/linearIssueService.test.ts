@@ -170,7 +170,7 @@ describe('linearIssueService', () => {
           issueId: 'new-456',
           issueIdentifier: 'INT-456',
           issueTitle: 'Fix login authentication for SSO users',
-          issueUrl: 'https://linear.app/intexuraos/issue/INT-456',
+          issueUrl: 'https://linear.app/pbuchman/issue/INT-456',
         })
       );
 
@@ -184,7 +184,7 @@ describe('linearIssueService', () => {
       expect(result).toEqual({
         linearIssueId: 'INT-456',
         linearIssueTitle: 'Fix login authentication for SSO users',
-        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-456',
+        linearIssueUrl: 'https://linear.app/pbuchman/issue/INT-456',
         linearIssueType: 'bug',
         linearFallback: false,
         linearIssueLabels: [],

@@ -173,6 +173,22 @@ describe('Todo Routes', () => {
 
       expect(response.statusCode).toBe(500);
     });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/todos',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          title: 'New Todo',
+          tags: [],
+          source: 'web',
+          sourceId: 'src-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
   });
 
   describe('GET /todos/:id', () => {
@@ -231,6 +247,15 @@ describe('Todo Routes', () => {
       expect(response.statusCode).toBe(404);
     });
 
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/todos/any-id',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('returns 500 on storage error', async () => {
       ctx.todoRepository.simulateMethodError('findById', {
         code: 'STORAGE_ERROR',
@@ -275,6 +300,17 @@ describe('Todo Routes', () => {
       const body = JSON.parse(response.body);
       expect(body.data.title).toBe('Updated');
     });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/todos/any-id',
+        headers: { 'content-type': 'application/json' },
+        payload: { title: 'Updated' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
   });
 
   describe('DELETE /todos/:id', () => {
@@ -298,6 +334,15 @@ describe('Todo Routes', () => {
 
       expect(response.statusCode).toBe(200);
       expect(ctx.todoRepository.getAll()).toHaveLength(0);
+    });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/todos/any-id',
+      });
+
+      expect(response.statusCode).toBe(401);
     });
   });
 

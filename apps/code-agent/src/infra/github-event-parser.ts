@@ -67,6 +67,17 @@ function extractSender(payload: unknown): Result<
 }
 
 /**
+ * Extract base branch from a pull_request object's base.ref field.
+ */
+function extractBaseBranch(pr: Record<string, unknown>): string | null {
+  const prBase = pr['base'];
+  const baseBranchRef = prBase !== null && typeof prBase === 'object'
+    ? (prBase as Record<string, unknown>)['ref']
+    : undefined;
+  return typeof baseBranchRef === 'string' ? baseBranchRef : null;
+}
+
+/**
  * Parse a pull_request event payload.
  */
 export function parsePullRequestEvent(
@@ -112,6 +123,13 @@ export function parsePullRequestEvent(
   const prState = pr['state'] ?? null;
   const prMergedAt = pr['merged_at'];
 
+  const baseBranch = extractBaseBranch(pr);
+
+  const prUser = pr['user'];
+  const rawPrAuthorLogin = prUser !== null && typeof prUser === 'object'
+    ? (prUser as Record<string, unknown>)['login']
+    : undefined;
+
   if (typeof prNumber !== 'number' || typeof prId !== 'number') {
     return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data' });
   }
@@ -124,6 +142,7 @@ export function parsePullRequestEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: prNumber,
@@ -133,9 +152,11 @@ export function parsePullRequestEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: typeof rawPrAuthorLogin === 'string' ? rawPrAuthorLogin : null,
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof prBody === 'string' ? prBody : null,
     state: typeof prState === 'string' ? prState : null,
+    baseBranch,
     mergedAt:
       prMergedAt && typeof prMergedAt === 'string'
         ? new Date(prMergedAt)
@@ -240,6 +261,13 @@ export function parsePullRequestReviewEvent(
   const prState = pr['state'] ?? null;
   const prMergedAt = pr['merged_at'];
 
+  const baseBranch = extractBaseBranch(pr);
+
+  const reviewPrUser = pr['user'];
+  const rawReviewPrAuthorLogin = reviewPrUser !== null && typeof reviewPrUser === 'object'
+    ? (reviewPrUser as Record<string, unknown>)['login']
+    : undefined;
+
   if (typeof prNumber !== 'number' || typeof prId !== 'number') {
     return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data' });
   }
@@ -252,6 +280,7 @@ export function parsePullRequestReviewEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: prNumber,
@@ -261,9 +290,11 @@ export function parsePullRequestReviewEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: typeof rawReviewPrAuthorLogin === 'string' ? rawReviewPrAuthorLogin : null,
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof prBody === 'string' ? prBody : null,
     state: typeof prState === 'string' ? prState : null,
+    baseBranch,
     mergedAt:
       prMergedAt && typeof prMergedAt === 'string'
         ? new Date(prMergedAt)
@@ -319,6 +350,13 @@ export function parsePullRequestReviewCommentEvent(
   const prState = pr['state'] ?? null;
   const prMergedAt = pr['merged_at'];
 
+  const baseBranch = extractBaseBranch(pr);
+
+  const commentPrUser = pr['user'];
+  const rawCommentPrAuthorLogin = commentPrUser !== null && typeof commentPrUser === 'object'
+    ? (commentPrUser as Record<string, unknown>)['login']
+    : undefined;
+
   if (typeof prNumber !== 'number' || typeof prId !== 'number') {
     return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data' });
   }
@@ -338,6 +376,7 @@ export function parsePullRequestReviewCommentEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: prNumber,
@@ -347,9 +386,11 @@ export function parsePullRequestReviewCommentEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: typeof rawCommentPrAuthorLogin === 'string' ? rawCommentPrAuthorLogin : null,
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof commentBody === 'string' ? commentBody : null,
     state: typeof prState === 'string' ? prState : null,
+    baseBranch,
     mergedAt:
       prMergedAt && typeof prMergedAt === 'string'
         ? new Date(prMergedAt)
@@ -433,6 +474,7 @@ export function parseIssueCommentEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: prNumber,
@@ -442,9 +484,11 @@ export function parseIssueCommentEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: null,
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof commentBody === 'string' ? commentBody : null,
     state: typeof prState === 'string' ? prState : null,
+    baseBranch: null,
     mergedAt: null,
     createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
     payload,
@@ -490,6 +534,7 @@ export function parsePushEvent(
 
   return ok({
     githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    deliveryId: null,
     repository: repoName,
     repositoryId: repoId,
     pullRequestNumber: 0, // Push events are not PR-specific
@@ -499,9 +544,11 @@ export function parsePushEvent(
     senderLogin: senderResult.value.login,
     senderId: senderResult.value.id,
     senderType: senderResult.value.type,
+    prAuthorLogin: null,
     title: `Push to ${typeof ref === 'string' ? ref.replace('refs/heads/', '') : 'unknown'}`,
     body: null,
     state: null,
+    baseBranch: null,
     mergedAt: null,
     createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
     payload,

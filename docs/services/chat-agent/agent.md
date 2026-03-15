@@ -201,7 +201,7 @@ POST /chat { message: "What about error handling?", conversationHistory: [...] }
 
 ### Pattern 4: Guest Trial
 
-Use `x-guest-session` header instead of JWT. Runs on platform-provided GLM-4.7-Flash at no cost. Authenticated users default to Gemini 2.5 Flash. Limited to 100 messages/hour/session for guests.
+Use `x-guest-session` header instead of JWT. Runs on platform-provided Gemini 2.5 Flash. Authenticated users also default to Gemini 2.5 Flash. Limited to 100 messages/hour/session for guests.
 
 ```
 POST /chat

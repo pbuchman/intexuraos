@@ -54,11 +54,21 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 RUN curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir=/opt
 ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
 
+# Cache-busting: CACHE_BUST is set to COMMIT_SHA by the build script, ensuring
+# the Claude CLI (and everything after) is re-downloaded on each rebuild rather
+# than served from Docker layer cache with a stale version.
+ARG CACHE_BUST
+
 # Install Claude CLI
 # The installer puts claude in ~/.local/bin/claude
 RUN curl -fsSL https://claude.ai/install.sh | bash \
     && cp /root/.local/bin/claude /usr/local/bin/claude \
     && chmod +x /usr/local/bin/claude
+
+# Install Codex CLI (OpenAI) — intentionally included for testing and comparison
+# of alternative AI coding agent backends within the same worker infrastructure.
+# Not used in production workflows; kept for A/B evaluation purposes.
+RUN npm install -g @openai/codex
 
 # Pre-install MCP server packages globally.
 # Claude plugins invoke these via `npx -y <package>`. On Alpine, npx downloads to a

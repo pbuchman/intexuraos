@@ -5,7 +5,9 @@
  */
 
 import type { Result, Logger } from '@intexuraos/common-core';
+import type { WorkerType } from '../models/codeTask.js';
 import type { WorkerLocation } from '../models/worker.js';
+import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
 
 /**
  * Per-request worker credentials for dispatch.
@@ -36,17 +38,21 @@ export interface DispatchRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: WorkerType;
   webhookUrl: string;
   webhookSecret: string;
   traceId?: string;
   workerCredentials: DispatchWorkerCredentials;
-  /** Optional health statuses for filtering workers. Only healthy workers will be tried first. */
-  workerHealthStatuses?: Record<string, { healthy: boolean }>;
   /** For retried tasks: points to the original task ID that this task is retrying. */
   retriedFrom?: string;
   /** Agent type for orchestrator agent-based routing. */
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  /** Existing PR tracking comment to reuse for pull_request tasks. */
+  trackingCommentId?: string;
+  /** Existing PR number to continue instead of creating a fresh PR. */
+  continuationPrNumber?: number;
+  /** Existing PR branch to continue instead of creating a fresh PR. */
+  continuationPrBranch?: string;
   /** Branch name of planning PR to merge into execution worktree. */
   planningPrBranch?: string;
   /** PR URL to close after successful execution. */
@@ -83,6 +89,7 @@ export interface DispatchError {
  */
 export interface TaskDispatcherDeps {
   logger: Logger;
+  workerHealthProbe: WorkerHealthProbe;
 }
 
 /**

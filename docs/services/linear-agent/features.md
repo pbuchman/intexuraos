@@ -60,7 +60,9 @@ This keeps context where you need it. You do not bounce between IntexuraOS and L
 
 The Code Agent — another IntexuraOS service that picks up Linear issues and autonomously writes the code to resolve them — updates your board as it works. It creates related issues when implementation breaks into pieces, moves workflow states forward as each piece progresses, adds comments to track work, and updates labels and assignees. Your board reflects what the Code Agent has done without any manual status updates from you.
 
-When you assign an issue for the first time, the Linear Agent detects this and automatically triggers a code task. If the issue has a "code-task" label, the agent sends it straight for execution. Otherwise, the agent asks the code agent to first analyze the issue, enrich its description with requirements, acceptance criteria, and a test plan, then mark it ready. In both cases, the dispatched prompt instructs the code agent to read the full Linear issue and all its comments (newest-first) before starting work, so clarifications or follow-up context you added in the comments are never missed.
+When you assign an issue that carries a "planning-task" or "code-task" label, the Linear Agent detects this and automatically triggers a code task. If the issue has a "code-task" label, the agent sends it straight for execution. If it has a "planning-task" label, the agent asks the code agent to first analyze the issue, enrich its description with requirements, acceptance criteria, and a test plan, then mark it ready. In both cases, the dispatched prompt instructs the code agent to read the full Linear issue and all its comments (newest-first) before starting work, so clarifications or follow-up context you added in the comments are never missed.
+
+When the code agent discovers that the work described in an issue has already been completed or merged, it reports `already_completed` and the enforcement pipeline moves the issue to Done with a "Work already completed" comment — no manual cleanup needed.
 
 **Example:** You created an issue from a voice note about a broken CSV export. The code agent picks it up, creates related issues for the parsing fix and the test, adds comments along the way, and moves workflow states forward as it works. An hour later you glance at the dashboard and see the progress reflected on your board. You never touched Linear.
 
@@ -95,7 +97,7 @@ Connect your Linear account through the settings page — you will need your API
 - **Instant board access** — the dashboard reads from a local copy updated in real time, so you never wait for Linear's servers to respond.
 - **Living board** — automatic sync, scheduled reconciliation, webhook fan-out to all team users, and manual refresh keep the local copy current across six workflow columns.
 - **Code agent continuity** — issues move through your workflow as the code agent creates sub-tasks, adds comments, updates labels, and transitions states, visible on your board without manual status changes.
-- **Smart auto-trigger** — assign an issue and the code agent starts working automatically, choosing between enrichment and execution based on the issue's labels.
+- **Smart auto-trigger** — assign an issue with a "planning-task" or "code-task" label and the code agent starts working automatically, choosing between enrichment and execution based on the label.
 - **No lost input** — duplicate detection prevents double-creation, and failed extractions queue for review instead of vanishing.
 
 ## Limitations

@@ -3,6 +3,7 @@ import { apiRequest } from './apiClient.js';
 import type {
   CodeTask,
   CodeTaskStatus,
+  GitHubEventLogResponse,
   GitHubPREventsResponse,
   GitHubPRSummariesResponse,
   ListCodeTasksResponse,
@@ -176,4 +177,39 @@ export async function getGitHubPREvents(
  */
 export async function getGitHubPRSummaries(accessToken: string): Promise<GitHubPRSummariesResponse> {
   return await apiRequest<GitHubPRSummariesResponse>(config.codeAgentUrl, '/code/github-pr-summaries', accessToken);
+}
+
+export async function getGitHubEventLog(
+  accessToken: string,
+  options?: {
+    limit?: number;
+    cursor?: string;
+  }
+): Promise<GitHubEventLogResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit !== undefined) {
+    params.set('limit', String(options.limit));
+  }
+  if (options?.cursor !== undefined) {
+    params.set('cursor', options.cursor);
+  }
+
+  const query = params.toString();
+  const path = query !== '' ? `/code/github-event-log?${query}` : '/code/github-event-log';
+  return await apiRequest<GitHubEventLogResponse>(config.codeAgentUrl, path, accessToken);
+}
+
+export async function hydrateGitHubEventLogRows(
+  accessToken: string,
+  ids: string[]
+): Promise<GitHubEventLogResponse> {
+  return await apiRequest<GitHubEventLogResponse>(
+    config.codeAgentUrl,
+    '/code/github-event-log/rows',
+    accessToken,
+    {
+      method: 'POST',
+      body: { ids },
+    }
+  );
 }

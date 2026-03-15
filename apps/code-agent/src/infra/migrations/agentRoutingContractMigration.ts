@@ -2,7 +2,7 @@ import { FieldValue, type Firestore } from '@intexuraos/infra-firestore';
 import type { Logger } from 'pino';
 
 type LegacyExecutionPhase = 'design' | 'execution';
-type AgentType = 'planning' | 'execution' | 'pull_request';
+type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 
 function mapExecutionPhaseToAgentType(executionPhase: LegacyExecutionPhase): AgentType {
   return executionPhase === 'execution' ? 'execution' : 'planning';
@@ -78,11 +78,9 @@ export async function assertNoLegacyAgentRoutingContractValues({ firestore, logg
     const hasLegacyFollowUpReason = data.followUpReason === 'phase2_implement';
     if (hasLegacyExecutionPhase || hasLegacyStatus || hasLegacyFollowUpReason) {
       offenders.push(doc.id);
-      /* v8 ignore start -- test-infra: loop early-exit threshold branch depends on fixture cardinality @preserve */
       if (offenders.length >= 10) {
         break;
       }
-      /* v8 ignore stop @preserve */
     }
   }
 

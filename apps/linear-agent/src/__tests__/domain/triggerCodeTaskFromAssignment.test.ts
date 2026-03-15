@@ -30,8 +30,32 @@ function createEvent(overrides: Partial<LinearWebhookEvent> = {}): LinearWebhook
 }
 
 describe('shouldTriggerCodeTask', () => {
-  it('returns true for new assignment in unstarted state without Code Task label', () => {
-    expect(shouldTriggerCodeTask(createEvent())).toBe(true);
+  it('returns false for new assignment without planning-task or code-task label', () => {
+    expect(shouldTriggerCodeTask(createEvent())).toBe(false);
+  });
+
+  it('returns true when issue has planning-task label', () => {
+    const event = createEvent();
+    event.data.labels = [{ id: 'label-planning', name: 'planning-task' }];
+    expect(shouldTriggerCodeTask(event)).toBe(true);
+  });
+
+  it('returns true when issue has code-task label', () => {
+    const event = createEvent();
+    event.data.labels = [{ id: 'label-code', name: 'code-task' }];
+    expect(shouldTriggerCodeTask(event)).toBe(true);
+  });
+
+  it('returns true when issue has planning-task among other labels', () => {
+    const event = createEvent();
+    event.data.labels = [{ id: 'label-1', name: 'bug' }, { id: 'label-planning', name: 'planning-task' }];
+    expect(shouldTriggerCodeTask(event)).toBe(true);
+  });
+
+  it('returns false when labels are empty', () => {
+    const event = createEvent();
+    event.data.labels = [];
+    expect(shouldTriggerCodeTask(event)).toBe(false);
   });
 
   it('returns false when action is not update', () => {
@@ -64,9 +88,10 @@ describe('shouldTriggerCodeTask', () => {
     expect(shouldTriggerCodeTask(event)).toBe(false);
   });
 
-  it('returns true for backlog state', () => {
+  it('returns true for backlog state with planning-task label', () => {
     const event = createEvent();
     event.data.state = { id: 'state-backlog', name: 'Backlog', type: 'backlog' };
+    event.data.labels = [{ id: 'label-planning', name: 'planning-task' }];
     expect(shouldTriggerCodeTask(event)).toBe(true);
   });
 });

@@ -12,7 +12,7 @@
 - **Zod Schema Validation** — ResearchContext and SynthesisContext use Zod for field-level error reporting
 - **Parser + Repair Pattern** — Automatic LLM response repair when validation fails
 - **LLM Package Restructuring** — `llm-common` split into `llm-factory`, `llm-prompts`, `llm-utils`
-- **GLM-4.7-Flash** — Lightweight model added for cost-sensitive classification tasks
+- **GLM-5** — Latest Alibaba Cloud model for code tasks
 
 ---
 
@@ -88,7 +88,7 @@ graph TB
 | Task Type            | Primary Model         | Fallback Model      | Rationale                       |
 | -------------------- | --------------------- | ------------------- | ------------------------------- |
 | Research Synthesis   | Claude Opus 4.5       | GPT-5.2             | Nuanced reasoning, long context |
-| Quick Classification | Gemini 2.5 Flash      | GLM-4.7             | Fast, cost-effective            |
+| Quick Classification | Gemini 2.5 Flash      | GLM-5               | Fast, cost-effective            |
 | Deep Research        | O4 Mini Deep Research | Sonar Deep Research | Agentic web search              |
 | Fact Verification    | Perplexity Sonar      | Sonar Pro           | Real-time web grounding         |
 | Image Generation     | GPT Image 1           | Gemini Flash Image  | High quality, diverse styles    |
@@ -97,19 +97,18 @@ graph TB
 
 Models capable of complex reasoning, web search, and multi-step analysis.
 
-| Model                 | Provider   | Strengths                                        |
-| --------------------- | ---------- | ------------------------------------------------ |
-| Gemini 2.5 Pro        | Google     | Long context (1M tokens), grounded search        |
-| Gemini 2.5 Flash      | Google     | Fast, cost-effective, good reasoning             |
-| GPT-5.2               | OpenAI     | Latest OpenAI flagship, strong reasoning         |
-| O4 Mini Deep Research | OpenAI     | Agentic research with tool use                   |
-| Claude Opus 4.5       | Anthropic  | Best reasoning, nuanced analysis                 |
-| Claude Sonnet 4.5     | Anthropic  | Balanced performance/cost                        |
-| Sonar                 | Perplexity | Real-time web search                             |
-| Sonar Pro             | Perplexity | Enhanced web search with more sources            |
-| Sonar Deep Research   | Perplexity | Multi-step agentic research                      |
-| GLM-4.7               | Zai        | Alternative provider, good multilingual          |
-| GLM-4.7-Flash         | Zai        | Fast, lightweight model for cost-sensitive tasks |
+| Model                 | Provider      | Strengths                                        |
+| --------------------- | ------------- | ------------------------------------------------ |
+| Gemini 2.5 Pro        | Google        | Long context (1M tokens), grounded search        |
+| Gemini 2.5 Flash      | Google        | Fast, cost-effective, good reasoning             |
+| GPT-5.2               | OpenAI        | Latest OpenAI flagship, strong reasoning         |
+| O4 Mini Deep Research | OpenAI        | Agentic research with tool use                   |
+| Claude Opus 4.5       | Anthropic     | Best reasoning, nuanced analysis                 |
+| Claude Sonnet 4.5     | Anthropic     | Balanced performance/cost                        |
+| Sonar                 | Perplexity    | Real-time web search                             |
+| Sonar Pro             | Perplexity    | Enhanced web search with more sources            |
+| Sonar Deep Research   | Perplexity    | Multi-step agentic research                      |
+| GLM-5                 | Alibaba Cloud | Code tasks, multilingual                         |
 
 ### Fast Models (4)
 
@@ -119,7 +118,6 @@ Optimized for quick, low-cost operations like classification and extraction.
 | ---------------- | -------- | ----------------------------------------- |
 | Gemini 2.5 Flash | Google   | Intent classification, title generation   |
 | Gemini 2.0 Flash | Google   | API key validation, quick inference       |
-| GLM-4.7-Flash    | Zai      | Fast classification, cost-effective tasks |
 
 ### Image Models (2)
 
@@ -140,8 +138,6 @@ Cheap, fast models for API key validation and simple tasks.
 | Gemini 2.0 Flash | Google     | $0.075/M input |
 | GPT-4o Mini      | OpenAI     | $0.15/M input  |
 | Sonar            | Perplexity | $1.00/M input  |
-| GLM-4.7          | Zai        | $0.60/M input  |
-| GLM-4.7-Flash    | Zai        | $0             |
 
 ---
 
@@ -246,7 +242,6 @@ graph TB
     subgraph "Classification Layer"
         CMD[Commands Agent]
         GEM1[Gemini 2.5 Flash]
-        GLM1[GLM-4.7]
     end
 
     subgraph "Action Router"
@@ -312,7 +307,7 @@ graph TB
 
 **Purpose**: Classify user intent from natural language
 
-**AI Models**: Gemini 2.5 Flash, GLM-4.7
+**AI Models**: Gemini 2.5 Flash
 
 **Process**:
 
@@ -340,7 +335,7 @@ graph TB
 
 **Purpose**: Extract task items from natural language
 
-**AI Models**: Gemini 2.5 Flash, GLM-4.7
+**AI Models**: Gemini 2.5 Flash
 
 **Extraction Capabilities**:
 
@@ -367,7 +362,7 @@ graph TB
 
 **Purpose**: Create Linear issues from natural language
 
-**AI Models**: Gemini 2.5 Flash, GLM-4.7
+**AI Models**: Gemini 2.5 Flash
 
 **Extraction Capabilities**:
 
