@@ -28,23 +28,9 @@ import { ALLOWED_BOTS, type GitHubWebhookBody } from '../../../routes/webhooks/g
 import type { GitHubWebhookAuditEventRepository } from '../../../domain/repositories/gitHubWebhookAuditEventRepository.js';
 import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
 import type { EventDecisionRepository } from '../../../domain/repositories/eventDecisionRepository.js';
+import { waitForDetachedAsync, waitForSettlement } from '../../helpers/waitForDetachedAsync.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
-
-/**
- * Poll until a condition is met, for fire-and-forget async operations
- * (detached evaluate()) to settle. Replaces fixed-delay waits that are
- * unreliable in CI where runner speed varies.
- */
-async function waitForDetachedAsync(
-  condition: () => boolean,
-  { timeout = 2000, interval = 10 } = {},
-): Promise<void> {
-  const start = Date.now();
-  while (!condition() && Date.now() - start < timeout) {
-    await new Promise((resolve) => setTimeout(resolve, interval));
-  }
-}
 
 describe('POST /webhooks/github', () => {
   let app: FastifyInstance;
@@ -1358,7 +1344,7 @@ describe('POST /webhooks/github', () => {
 
       // Non-whitelisted bot should NOT dispatch
       // Wait a tick to let the async dispatch settle
-      await waitForDetachedAsync(() => false, { timeout: 50 });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1434,7 +1420,7 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       // Non-owner sender should NOT dispatch (regardless of body content)
-      await waitForDetachedAsync(() => false, { timeout: 50 });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1509,7 +1495,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForDetachedAsync(() => false, { timeout: 50 });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1585,7 +1571,7 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       // Non-whitelisted bot should NOT dispatch
-      await waitForDetachedAsync(() => false, { timeout: 50 });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1661,7 +1647,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForDetachedAsync(() => false, { timeout: 50 });
+      await waitForSettlement();
       // issue_comment events now return needs_triage (INT-744), not dispatched directly
       expect(mockDispatch).not.toHaveBeenCalled();
     });
@@ -1738,7 +1724,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForDetachedAsync(() => false, { timeout: 50 });
+      await waitForSettlement();
       // issue_comment events now return needs_triage (INT-744), not dispatched directly
       expect(mockDispatch).not.toHaveBeenCalled();
     });
@@ -1814,7 +1800,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForDetachedAsync(() => false, { timeout: 50 });
+      await waitForSettlement();
       expect(mockDispatch).not.toHaveBeenCalled();
     });
 
@@ -1890,7 +1876,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForDetachedAsync(() => false, { timeout: 50 });
+      await waitForSettlement();
       // issue_comment events now return needs_triage (INT-744), not dispatched directly
       expect(mockDispatch).not.toHaveBeenCalled();
     });
@@ -1967,7 +1953,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForDetachedAsync(() => false, { timeout: 50 });
+      await waitForSettlement();
       expect(mockDispatch).not.toHaveBeenCalled();
     });
   });
