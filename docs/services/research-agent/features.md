@@ -16,7 +16,7 @@ You are an HR director finalizing your company's position on permanent remote wo
 
 1. You type your question into IntexuraOS: "What does current research say about the long-term effects of fully remote work on employee productivity, mental health, and retention?" You attach two internal survey reports and a recent industry whitepaper — three of the five source slots, totaling well under the 60,000-character limit (about 40 pages of text) per attachment.
 
-2. You mention you want "Claude, Gemini, and Perplexity — plus whatever rounds it out." The system interprets your natural language and selects Claude Sonnet, Gemini Pro, and Perplexity Deep Research, adding two more models to reach five providers. If the interpretation seems off, you can adjust before anything runs.
+2. You mention you want "Claude, Gemini, and Perplexity — plus whatever rounds it out." The system interprets your natural language and selects Claude Sonnet, Gemini Pro, and Perplexity Deep Research, adding one more model to reach four providers. If the interpretation seems off, you can adjust before anything runs.
 
 3. Before any model is queried, the system refines your question. It identifies the domain (workplace psychology, HR policy), sets a time scope (last five years), infers you want a standard-depth analysis rather than a quick summary, generates sub-questions about productivity metrics and attrition drivers, and builds a research plan. You see a draft: the refined prompt, the selected models, your attached sources. Nothing happens until you approve.
 
@@ -68,7 +68,7 @@ Attach up to five documents — articles, internal reports, previous research, r
 
 ### Choose Models in Plain Language
 
-Say "use Claude and Gemini" or "use the two strongest" or "add Perplexity for web search." The system extracts your preferences and selects specific models. If the extraction fails or you do not specify, the draft presents the selection for you to adjust manually. One model per provider, up to five providers — you are paying for five distinct perspectives, not five versions of the same answer.
+Say "use Claude and Gemini" or "use the two strongest" or "add Perplexity for web search." The system extracts your preferences and selects specific models. If the extraction fails or you do not specify, the draft presents the selection for you to adjust manually. One model per provider, up to four providers — you are paying for four distinct perspectives, not four versions of the same answer.
 
 Perplexity's models are worth knowing about specifically: they perform live web searches while generating answers, returning more current information than models limited to training data. They take longer, but surface sources the others cannot reach — and when a web-grounded result contradicts a training-data result, that disagreement carries different weight than two closed models disagreeing with each other.
 
@@ -99,7 +99,7 @@ Start a new research from the IntexuraOS web app. Type your question, optionally
 ## Limitations
 
 - **No streaming** — Results arrive together once all models respond and synthesis completes, rather than appearing incrementally
-- **Five models maximum** — Each research queries up to five providers, one model per provider
+- **Four models maximum** — Each research queries up to four providers, one model per provider
 - **Five attachments, 60,000 characters each** — Source material slots are capped to keep model context manageable
 - **No in-place editing** — Completed research can be enhanced with additional models or context, favourited, shared, exported, or deleted — but the existing synthesis cannot be manually edited
 - **Single Notion export** — Re-exporting the same research to Notion is blocked; delete the previous export first

@@ -1,5 +1,77 @@
 # Changelog
 
+## 3.3.0
+
+### Added
+
+- GitHub Agent with tool calling for PR evaluation and unified webhook evaluator (INT-743, INT-744)
+- Unified PR automation log showing all PR actions in one place (INT-852)
+- Code Task Detail Page V2 with issue-centric grouped view (INT-742)
+- Structured output validation and automatic repair prompt for GitHub Agent triage (INT-839)
+- Alibaba Cloud Model Studio integration for Chinese LLMs — Qwen, Kimi, GLM-5 — replacing ZAI provider (INT-832, INT-833, INT-835, INT-836)
+- Gemini tool-call mode enforcement with retry on LLM failure and live pipeline progress display (INT-854)
+- Mandatory `/simplify` step in orchestrator workflow with refactoring reference docs (INT-856)
+- Fresh-start review dispatch with notification dedup and reliable review agent (INT-834)
+- PR branch inheritance across code task retries (INT-824)
+- Planning-task label gate for autonomous planning
+- `already_completed` execution outcome label (INT-773)
+- Dispatch retry queue for failed webhook dispatches (INT-823)
+- Execution deep validator for post-completion transcript analysis (INT-746)
+- GitHub event decision log for auditable triage decisions (INT-831)
+- Code task logs preview modal (INT-816)
+- `@review` issue comment triage with LLM-selected worker routing (INT-829)
+- Periodic stale worker cleanup (INT-828)
+- Queue support for review tasks (INT-921)
+- Docker health gate and container creation timeout (INT-920)
+- Capacity-aware task dispatch (INT-741)
+- Default review worker type per-user setting
+- Code review dispatch for bot-opened PRs with loop prevention
+- `@worker`/`@model` directive for task dispatch
+- `Started At` sorting and multi-column sort for code tasks (INT-812, INT-815)
+- `reviewed` status to code tasks list filter (INT-808)
+- Review tasks with linked PRs in code list (INT-819)
+- Cost info in deep validation PR comments
+
+### Changed
+
+- Tasks created in `queued` state, transitioned to `dispatched` on confirmed dispatch (INT-807)
+- Deep validation PR comments simplified to plain markdown with tabular format (INT-820)
+- Removed success outcome notifications, renamed to failure-only (INT-843, INT-846)
+- Removed redundant automated triage PR comments (INT-924)
+- Consolidated review prompt into single `POST /reviews` call
+- PR description format strengthened with mandatory model name (INT-855)
+- Workers status indicator moved to user menu (INT-745)
+- GitHub Agent migrated from static bot token to per-user OAuth tokens
+
+### Fixed
+
+- Docker exec stream leak causing successful tasks to hit 2h timeout (INT-802)
+- Silent dispatch failures and nested transaction bug (INT-810, INT-811)
+- Merge conflict detection for bot-authored PRs (INT-847)
+- PR comment routing preserved on redispatch (INT-619)
+- Review task dedup and active-task semantics (INT-825)
+- PR dispatch acks made restart-safe (INT-826)
+- Gemini tool calling loop and Firestore automation log path (INT-917)
+- Docker cache busting for Claude CLI + added Codex CLI (INT-922)
+- `getAccessToken` identity stabilized to prevent double-fetch
+- Worktree git operations serialized with async mutex
+- `createdAt` fallback for started-time sort (INT-850)
+- `dispatchedAt` added to all dispatch paths, Qwen label recognition fixed (INT-849)
+- Terraform GitHub App secrets restored after accidental removal (INT-814)
+
+### Improved
+
+- Orchestrator reliability: deep validation plans from Linear, fatal exit code handling, resume result preservation (INT-817, INT-818)
+- Repo-manager startup with resilient sanitization and graceful fetch (INT-821)
+- PR event log with noise filtering and added context (INT-918)
+- GitHub Event Log redesigned with compact inline layout (INT-844)
+- Code Tasks TIME column shows both created and started timestamps
+- Worker Settings UI with better spacing and in-button spinner
+- Firestore performance with batched reads replacing sequential queries
+- Deep validation with visual severity indicators and system context (INT-841)
+- Explicit PR comments for review skips, dispatch rejections, and outcomes (INT-830)
+- v8 ignore enforcement hardened with tighter detectors and override mechanism
+
 ## 3.2.0
 
 ### Added

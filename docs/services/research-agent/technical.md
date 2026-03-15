@@ -50,6 +50,9 @@ graph TB
 
 | Commit     | Description                                             | Date       |
 | ---------- | ------------------------------------------------------- | ---------- |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)        | 2026-03-12 |
+| `e348b66e` | Fix silent dispatch failures and nested transaction     | 2026-03-10 |
+| `7237798d` | Write tests for v8-ignore blocks (INT-795)              | 2026-03-09 |
 | `44ea683a` | Release v3.2.0                                          | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration and update mocks          | 2026-03-02 |
 | `e6399f3b` | Apply code review feedback for semantic checks          | 2026-02-27 |
@@ -63,7 +66,7 @@ graph TB
 | `e60eafc1` | Standardize API key secrets to APP naming convention    | 2026-02-15 |
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback       | 2026-02-15 |
 | `d7c6a061` | Add consistent icons to all WhatsApp messages           | 2026-02-10 |
-| `0f69a74b` | Add default model selector with platform Zai fallback   | 2026-02-08 |
+| `0f69a74b` | Add default model selector with platform fallback       | 2026-02-08 |
 
 ## Data Flow
 
@@ -296,7 +299,7 @@ Structural checks on improved prompts include response length validation (1–50
 
 | Field              | Type            | Description                             |
 | ------------------ | --------------- | --------------------------------------- |
-| `provider`         | LlmProvider     | claude, openai, google, perplexity, zai |
+| `provider`         | LlmProvider     | claude, openai, google, perplexity      |
 | `model`            | string          | Model name                              |
 | `status`           | LlmResultStatus | pending, processing, completed, failed  |
 | `result`           | string          | LLM response content                    |
@@ -415,7 +418,6 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 | OpenAI     | `gpt-5.2`, `o4-mini-deep-research`                                         |
 | Google     | `gemini-2.5-pro`, `gemini-2.5-flash` (research); `gemini-2.0-flash` (fast) |
 | Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research`                                |
-| Zai        | `glm-4.7`, `glm-4.7-flash`                                                 |
 
 **Fast model** (`gemini-2.0-flash`): Used for title generation, context inference, and input validation via the platform Gemini key. Not available as a user-selectable research model.
 
@@ -456,13 +458,12 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 | `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | Yes      | Research process queue topic                              |
 | `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Yes      | LLM call queue topic                                      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`            | No       | Platform Gemini key; enables `gemini-2.0-flash` fallback  |
-| `INTEXURAOS_ZAI_APP_API_KEY`               | No       | Platform Zai key; enables `glm-4.7-flash` fallback        |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`           | No       | Dash0 OTLP endpoint; enables distributed tracing          |
 | `INTEXURAOS_SENTRY_DSN`                    | No       | Sentry DSN for error reporting                            |
 
 ## Gotchas
 
-**Platform API key fallbacks**: When a user has no API key for their preferred model's provider, `getLlmClient` in `@intexuraos/internal-clients` tries platform keys in order: Gemini (`gemini-2.0-flash`) then Zai (`glm-4.7-flash`). Both platform keys are optional. If neither is set, the service returns `NO_API_KEY` error.
+**Platform API key fallback**: When a user has no API key for their preferred model's provider, `getLlmClient` in `@intexuraos/internal-clients` tries the platform Gemini key (`gemini-2.0-flash`). If the platform key is not set, the service returns `NO_API_KEY` error.
 
 **Idempotent LLM calls**: The `process-llm-call` endpoint checks if an LLM result is already `completed` or `failed` and skips processing if so. This enables safe retry without duplication.
 
@@ -548,7 +549,6 @@ apps/research-agent/src/
       GptAdapter.ts                 # OpenAI API integration
       GeminiAdapter.ts              # Google API integration
       PerplexityAdapter.ts          # Perplexity API integration
-      GlmAdapter.ts                 # GLM (Zai) API integration
       ContextInferenceAdapter.ts    # Zod-validated context inference
       InputValidationAdapter.ts     # Zod-validated input validation + structural checks
       LlmAdapterFactory.ts          # Factory pattern

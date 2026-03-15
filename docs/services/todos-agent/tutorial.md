@@ -268,7 +268,7 @@ curl -X POST http://localhost:8123/internal/todos \
 
 1. Todo created with `status: processing`
 2. Pub/Sub event triggers the AI extraction
-3. Your LLM (Gemini 2.5 Flash or GLM-4.7) parses the description
+3. Your LLM (Gemini 2.5 Flash) parses the description
 4. Items extracted: "Finish sales presentation", "Call dentist", "Review team updates"
 5. Due dates and priorities inferred from context
 6. Status changes to `pending`

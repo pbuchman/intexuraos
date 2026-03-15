@@ -1,6 +1,6 @@
 # Commands Agent — Technical Debt
 
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-15
 **Analysis Run:** Service documentation generation (v3.1.0 context)
 
 ---
@@ -194,7 +194,7 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 **Previous issue:** GLM-4.7-Flash was the default classification model but was taking 29s for simple tasks, exceeding HTTP timeouts.
 
-**Solution:** Switched default LLM to Gemini 2.5 Flash (faster, already supported). Added platform Gemini API key as primary fallback before Zai.
+**Solution:** Switched default LLM to Gemini 2.5 Flash (faster, already supported). Added platform Gemini API key as fallback. GLM-4.7 models fully removed in v3.3.0.
 
 ---
 

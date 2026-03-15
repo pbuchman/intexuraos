@@ -6,9 +6,9 @@ This tutorial will help you get started with the research-agent service, from cr
 
 - IntexuraOS development environment running
 - Auth0 access token for API requests
-- At least one LLM provider API key configured (Claude, OpenAI, Google, Perplexity, or Zai)
+- At least one LLM provider API key configured (Claude, OpenAI, Google, or Perplexity)
 
-**Note:** If `INTEXURAOS_GEMINI_APP_API_KEY` or `INTEXURAOS_ZAI_APP_API_KEY` are configured on the server, users without their own API keys automatically get `gemini-2.0-flash` or `glm-4.7-flash` as fallback models.
+**Note:** If `INTEXURAOS_GEMINI_APP_API_KEY` is configured on the server, users without their own API keys automatically get `gemini-2.0-flash` as a fallback model.
 
 ## Part 1: Hello World - Create Research
 
@@ -220,7 +220,6 @@ The `extractModelPreferences` use case will:
 | "gpt", "openai"       | `gpt-5.2`              |
 | "gemini", "google"    | `gemini-2.5-pro`       |
 | "perplexity", "sonar" | `sonar-pro`            |
-| "glm", "zai"          | `glm-4.7`              |
 | "deep research"       | deep research variants |
 | "fast", "flash"       | flash/mini variants    |
 

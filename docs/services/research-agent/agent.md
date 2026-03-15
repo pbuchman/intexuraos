@@ -10,7 +10,7 @@
 | -------- | ------------------------------------------------------------------------------------ |
 | **Name** | research-agent                                                                       |
 | **Role** | Multi-Model Research Orchestrator                                                    |
-| **Goal** | Execute parallel LLM queries across 5 providers, synthesize results with attribution |
+| **Goal** | Execute parallel LLM queries across 4 providers, synthesize results with attribution |
 
 ---
 
@@ -157,9 +157,7 @@ type ResearchModel =
   | 'claude-sonnet-4.5'
   | 'sonar'
   | 'sonar-pro'
-  | 'sonar-deep-research'
-  | 'glm-4.7'
-  | 'glm-4.7-flash';
+  | 'sonar-deep-research';
 
 type ResearchStatus =
   | 'draft'
@@ -219,7 +217,7 @@ interface LlmResult {
   copiedFromSource?: boolean;
 }
 
-type LlmProvider = 'anthropic' | 'openai' | 'google' | 'perplexity' | 'zai';
+type LlmProvider = 'anthropic' | 'openai' | 'google' | 'perplexity';
 
 interface InputContext {
   id: string;
@@ -272,7 +270,6 @@ When creating draft research via actions-agent, model preferences are extracted 
 | "gpt", "openai"       | `gpt-5.2`         | openai     |
 | "gemini", "google"    | `gemini-2.5-pro`  | google     |
 | "perplexity", "sonar" | `sonar-pro`       | perplexity |
-| "glm", "zai"          | `glm-4.7`         | zai        |
 | "deep research"       | deep variants     | varies     |
 | "fast", "flash"       | flash/mini        | varies     |
 
@@ -305,8 +302,7 @@ When a user has no API key for a provider, `getLlmClient` tries platform-owned k
 // Fallback resolution order:
 // 1. User's own API key
 // 2. Platform Gemini key -> 'gemini-2.0-flash' (if INTEXURAOS_GEMINI_APP_API_KEY set)
-// 3. Platform Zai key -> 'glm-4.7-flash' (if INTEXURAOS_ZAI_APP_API_KEY set)
-// 4. Error: NO_API_KEY
+// 3. Error: NO_API_KEY
 ```
 
 ### Graceful Degradation

@@ -27,7 +27,7 @@ Six settings, configured once. From this point on, you never think about credent
 
 ### One Vault for Every Provider
 
-Store API keys for Google (Gemini), OpenAI (GPT), Anthropic (Claude), Perplexity, and Zai (GLM) in a single encrypted vault. Keys are encrypted with AES-256-GCM the moment they arrive and never exist in plaintext at rest. When another service — the research-agent querying five models in parallel, or the image-service generating a cover — needs your key, it requests it through a secure internal channel. The key is decrypted in memory, used, and never written to disk by the requesting service.
+Store API keys for Google (Gemini), OpenAI (GPT), Anthropic (Claude), and Perplexity in a single encrypted vault. Keys are encrypted with AES-256-GCM the moment they arrive and never exist in plaintext at rest. When another service — the research-agent querying multiple models in parallel, or the image-service generating a cover — needs your key, it requests it through a secure internal channel. The key is decrypted in memory, used, and never written to disk by the requesting service.
 
 What you see in the dashboard is a masked preview: the first four and last four characters, enough to recognize which key is which, never enough to reconstruct it.
 
@@ -61,7 +61,7 @@ Set your preferred transcription provider for voice note processing. When you se
 
 - **Encrypted at rest, decrypted only in memory** — Keys never exist in plaintext outside of a single request lifecycle
 - **Validated before stored** — Real API calls catch problems at configuration time, not at runtime
-- **Provider-aware error translation** — Cryptic responses become actionable messages across all five providers
+- **Provider-aware error translation** — Cryptic responses become actionable messages across all four providers
 - **One default model, every agent** — Set your preferred fast model once and all agents inherit it
 - **Automatic token refresh** — Google OAuth tokens refresh before expiry with no user interaction
 - **Works without a browser** — Device code flow supports CLI and mobile authentication

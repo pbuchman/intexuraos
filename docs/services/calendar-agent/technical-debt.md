@@ -1,6 +1,6 @@
 # Calendar Agent — Technical Debt
 
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-15
 **Analysis Run:** post v3.1.0 (INT-535 synchronous preview, INT-621 full prompt text)
 
 ---
@@ -58,13 +58,13 @@ Added `POST /internal/calendar/preview` endpoint for synchronous preview generat
 
 **Status:** Complete
 
-Switched default LLM from generic Gemini to Gemini 2.5 Flash for better speed and accuracy. Required models now include Gemini 2.5 Flash, Gemini 2.5 Pro, GLM-4.7, and GLM-4.7 Flash. The service fetches pricing for all required models at startup via `INTEXURAOS_APP_SETTINGS_SERVICE_URL`.
+Switched default LLM from generic Gemini to Gemini 2.5 Flash for better speed and accuracy. Required models now include Gemini 2.5 Flash and Gemini 2.5 Pro (GLM-4.7 models removed in v3.3.0). The service fetches pricing for all required models at startup via `INTEXURAOS_APP_SETTINGS_SERVICE_URL`.
 
-### Default Model Selector with Platform Zai Fallback
+### Default Model Selector with Platform Gemini Fallback
 
 **Status:** Complete
 
-Added a model selector that falls back to platform Zai (`INTEXURAOS_ZAI_APP_API_KEY`) when user-configured Gemini is unavailable. Platform Gemini (`INTEXURAOS_GEMINI_APP_API_KEY`) is also supported as a fallback. Both are optional env vars.
+Added a model selector that falls back to platform Gemini (`INTEXURAOS_GEMINI_APP_API_KEY`) when user-configured LLM is unavailable. The ZAI platform fallback was removed in v3.3.0 as part of the unified Alibaba Cloud Model Studio migration.
 
 ### API Key Secrets APP Naming Convention
 
@@ -72,7 +72,6 @@ Added a model selector that falls back to platform Zai (`INTEXURAOS_ZAI_APP_API_
 
 Standardized platform LLM API key env vars to use `_APP_` naming convention:
 
-- `INTEXURAOS_ZAI_APP_API_KEY` (was `INTEXURAOS_ZAI_API_KEY`)
 - `INTEXURAOS_GEMINI_APP_API_KEY` (was `INTEXURAOS_GEMINI_API_KEY`)
 
 ### Dash0 OpenTelemetry Integration
@@ -242,7 +241,8 @@ No deprecated API usage detected.
 | 2026-02-20 | processAction returned internal /#/calendar URL   | Now uses Google Calendar htmlLink as resourceUrl    |
 | 2026-02-16 | No distributed tracing across service boundaries  | Added Dash0 OpenTelemetry integration               |
 | 2026-02-15 | API key env vars inconsistently named             | Standardized to APP naming convention               |
-| 2026-02-15 | Single LLM with no fallback on unavailability     | Added multi-model with Zai fallback                 |
+| 2026-03-12 | ZAI provider and GLM-4.7 models in LLM contract   | Removed ZAI; Chinese LLMs now via Alibaba DashScope |
+| 2026-02-15 | Single LLM with no fallback on unavailability     | Added multi-model with Gemini fallback              |
 | 2026-01-31 | Failed extractions could not be dismissed/retried | Added DELETE and POST retry endpoints               |
 | 2026-01-30 | LLM returning invalid JSON caused immediate fail  | Added repair prompt mechanism (1 retry attempt)     |
 | 2026-01-30 | Date-only format rejected for all-day events      | Updated schema to accept YYYY-MM-DD format          |

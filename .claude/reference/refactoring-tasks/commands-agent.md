@@ -7,14 +7,17 @@ Now I have all the information needed. Let me produce the detailed instructions 
 ## TASK: CA-COV-1 — Add tests for commandsRoutes.ts owner auth + status validation
 
 ### Context
+
 The `commandsRoutes.ts` file has owner-check logic on lines 270 and 376 (DELETE and PATCH) where `command?.userId !== user.userId` returns NOT_FOUND, and status-based validation on lines 274-279 (deletable statuses) and line 380 (only classified can be archived). The existing routes test file covers some of these but misses cross-user deletion/patch, archived-status deletion, and externalId auto-generation.
 
 ### Pre-conditions
+
 - [ ] Read `apps/commands-agent/src/routes/commandsRoutes.ts` (already read)
 - [ ] Read `apps/commands-agent/src/__tests__/routes.test.ts` (already read)
 - [ ] Read `apps/commands-agent/src/__tests__/fakes.ts` (already read)
 
 ### Steps
+
 1. Open `apps/commands-agent/src/__tests__/routes.test.ts`.
 2. Inside the existing `describe('DELETE /commands/:commandId (authenticated)')` block (starting at line 1244), add the following test cases after the existing tests (after line 1384):
 
@@ -61,12 +64,15 @@ The `commandsRoutes.ts` file has owner-check logic on lines 270 and 376 (DELETE 
    - Assert `body.data.command.externalId` is `'custom-ext-123'`.
 
 ### Files to Create
+
 - None
 
 ### Files to Modify
+
 - `apps/commands-agent/src/__tests__/routes.test.ts` — Add 5 new test cases in existing describe blocks as specified above.
 
 ### Test Requirements
+
 - [ ] Test: `returns 404 when trying to delete another user's command` — verifies line 270 owner check in DELETE handler
 - [ ] Test: `returns 400 when trying to delete archived command` — verifies line 275 status check catches `'archived'` status
 - [ ] Test: `returns 404 when trying to archive another user's command` — verifies line 376 owner check in PATCH handler
@@ -74,6 +80,7 @@ The `commandsRoutes.ts` file has owner-check logic on lines 270 and 376 (DELETE 
 - [ ] Test: `uses client-provided externalId when given` — verifies line 179 conditional in POST handler
 
 ### Acceptance Criteria
+
 - [ ] All 5 new tests pass
 - [ ] All existing tests pass unchanged
 - [ ] `pnpm run verify:workspace:tracked -- commands-agent` passes
@@ -83,14 +90,17 @@ The `commandsRoutes.ts` file has owner-check logic on lines 270 and 376 (DELETE 
 ## TASK: CA-COV-2 — Add tests for processCommand.ts existing command + exceptions
 
 ### Context
+
 The `processCommand.ts` use-case has branches for: existing command with non-classified status returning early (lines 62-72), `userServiceClient.getLlmClient` failing (lines 93-108), the classifier `catch` block (lines 244-255), and the relationship between `actionId` being set only when action creation succeeds (line 225). The existing test file covers some paths but misses: existing failed command reprocessing skip, classifier exception with non-Error type, and verifying `actionId` is undefined when action creation fails.
 
 ### Pre-conditions
+
 - [ ] Read `apps/commands-agent/src/domain/usecases/processCommand.ts` (already read)
 - [ ] Read `apps/commands-agent/src/__tests__/usecases/processCommand.test.ts` (already read)
 - [ ] Read `apps/commands-agent/src/__tests__/fakes.ts` (already read)
 
 ### Steps
+
 1. Open `apps/commands-agent/src/__tests__/usecases/processCommand.test.ts`.
 
 2. Inside the existing `describe('successful paths')` block (after the test at line 221 `'returns existing command without reprocessing'`), add:
@@ -132,18 +142,22 @@ The `processCommand.ts` use-case has branches for: existing command with non-cla
    - Add `import type { Classifier } from '../../domain/ports/classifier.js';`
 
 ### Files to Create
+
 - None
 
 ### Files to Modify
+
 - `apps/commands-agent/src/__tests__/usecases/processCommand.test.ts` — Add 4 new test cases and 1 import.
 
 ### Test Requirements
+
 - [ ] Test: `returns existing failed command without reprocessing` — verifies lines 62-72 for failed status existing commands
 - [ ] Test: `marks command as pending_classification when getLlmClient fails` — verifies lines 93-108 llm client fetch failure path
 - [ ] Test: `marks command as failed when classifier throws non-Error value` — verifies lines 244-255 catch block with non-Error exception
 - [ ] Test: `actionId is undefined when action creation fails` — verifies actionId is not set when line 151 condition triggers early return
 
 ### Acceptance Criteria
+
 - [ ] All 4 new tests pass
 - [ ] All existing tests pass unchanged
 - [ ] `pnpm run verify:workspace:tracked -- commands-agent` passes
@@ -153,14 +167,17 @@ The `processCommand.ts` use-case has branches for: existing command with non-cla
 ## TASK: CA-COV-3 — Add tests for retryPendingCommands.ts filtering + failures
 
 ### Context
+
 The `retryPendingCommands.ts` use-case has branches for: the `listByStatus('pending_classification')` query (line 43), multiple skips accumulating the same reason key (line 66), action creation failure incrementing `failed` counter without updating command status (lines 92-101), event publish failure throwing (line 122 is not wrapped in try/catch — it will propagate to the catch block on line 147), and different exception types in the catch block (lines 147-160).
 
 ### Pre-conditions
+
 - [ ] Read `apps/commands-agent/src/domain/usecases/retryPendingCommands.ts` (already read)
 - [ ] Read `apps/commands-agent/src/__tests__/usecases/retryPendingCommands.test.ts` (already read)
 - [ ] Read `apps/commands-agent/src/__tests__/fakes.ts` (already read)
 
 ### Steps
+
 1. Open `apps/commands-agent/src/__tests__/usecases/retryPendingCommands.test.ts`.
 
 2. After the last existing test (line 277), add the following test cases inside the main `describe('retryPendingCommands usecase')` block:
@@ -220,12 +237,15 @@ The `retryPendingCommands.ts` use-case has branches for: the `listByStatus('pend
    - Add `import type { Classifier } from '../../domain/ports/classifier.js';`
 
 ### Files to Create
+
 - None
 
 ### Files to Modify
+
 - `apps/commands-agent/src/__tests__/usecases/retryPendingCommands.test.ts` — Add 5 new test cases and 1 import.
 
 ### Test Requirements
+
 - [ ] Test: `only queries commands with pending_classification status` — verifies line 43 filter
 - [ ] Test: `accumulates multiple skips with same reason key` — verifies line 66 counter increment
 - [ ] Test: `action creation failure increments failed counter and continues` — verifies lines 92-101 continue behavior
@@ -233,6 +253,7 @@ The `retryPendingCommands.ts` use-case has branches for: the `listByStatus('pend
 - [ ] Test: `classifier throw with non-Error type sets failureReason correctly` — verifies lines 147-158 catch block with non-Error
 
 ### Acceptance Criteria
+
 - [ ] All 5 new tests pass
 - [ ] All existing tests pass unchanged
 - [ ] `pnpm run verify:workspace:tracked -- commands-agent` passes
@@ -242,9 +263,11 @@ The `retryPendingCommands.ts` use-case has branches for: the `listByStatus('pend
 ## TASK: CA-1 — Move repository calls from commandsRoutes.ts to use-cases
 
 ### Context
+
 The `commandsRoutes.ts` route handlers directly call `commandRepository.listByUserId`, `commandRepository.getById`, `commandRepository.delete`, and `commandRepository.update` for the GET, DELETE, and PATCH endpoints. These should be moved into domain use-cases to follow the same pattern as `processCommand` and `retryPendingCommands`.
 
 ### Pre-conditions
+
 - [ ] Read `apps/commands-agent/src/routes/commandsRoutes.ts` (already read)
 - [ ] Read `apps/commands-agent/src/services.ts` (already read)
 - [ ] Read `apps/commands-agent/src/__tests__/fakes.ts` (already read)
@@ -254,6 +277,7 @@ The `commandsRoutes.ts` route handlers directly call `commandRepository.listByUs
 ### Steps
 
 #### Step 1: Create `listCommands` use-case
+
 1. Create file `apps/commands-agent/src/domain/usecases/listCommands.ts`.
 2. Define the interface and factory:
    ```
@@ -269,6 +293,7 @@ The `commandsRoutes.ts` route handlers directly call `commandRepository.listByUs
 3. Implementation: call `deps.commandRepository.listByUserId(userId)` and return `{ commands }`.
 
 #### Step 2: Create `deleteCommand` use-case
+
 1. Create file `apps/commands-agent/src/domain/usecases/deleteCommand.ts`.
 2. Define:
    ```
@@ -292,6 +317,7 @@ The `commandsRoutes.ts` route handlers directly call `commandRepository.listByUs
    - Return `{ success: true }`.
 
 #### Step 3: Create `archiveCommand` use-case
+
 1. Create file `apps/commands-agent/src/domain/usecases/archiveCommand.ts`.
 2. Define:
    ```
@@ -315,12 +341,14 @@ The `commandsRoutes.ts` route handlers directly call `commandRepository.listByUs
    - Return `{ success: true, command }`.
 
 #### Step 4: Register use-cases in services.ts
+
 1. In `apps/commands-agent/src/services.ts`:
    - Import `createListCommandsUseCase`, `createDeleteCommandUseCase`, `createArchiveCommandUseCase` and their types.
    - Add to the `Services` interface: `listCommandsUseCase: ListCommandsUseCase`, `deleteCommandUseCase: DeleteCommandUseCase`, `archiveCommandUseCase: ArchiveCommandUseCase`.
    - In `initServices()`, create each use-case and add to the `container` object.
 
 #### Step 5: Update commandsRoutes.ts
+
 1. In the GET `/commands` handler (lines 100-103):
    - Replace `const { commandRepository } = getServices();` and `commandRepository.listByUserId(user.userId)` with:
    - `const { listCommandsUseCase } = getServices();` and `const result = await listCommandsUseCase.execute(user.userId);` then `return await reply.ok({ commands: result.commands });`.
@@ -340,15 +368,18 @@ The `commandsRoutes.ts` route handlers directly call `commandRepository.listByUs
    - If success, `return await reply.ok({ command: result.command })`.
 
 #### Step 6: Update fakes.ts and test setup
+
 1. In `apps/commands-agent/src/__tests__/fakes.ts`, update `createFakeServices` to also create the three new use-cases using their factory functions, passing `commandRepository` and the test `logger`.
 2. The `Services` interface change will require all `createFakeServices` calls to include the new fields.
 
 #### Step 7: Write unit tests for each new use-case
+
 1. Create `apps/commands-agent/src/__tests__/usecases/listCommands.test.ts` — test: returns empty when no commands for user, returns commands for matching user.
 2. Create `apps/commands-agent/src/__tests__/usecases/deleteCommand.test.ts` — test: NOT_FOUND for missing command, NOT_FOUND for wrong user, INVALID_STATUS for classified/archived, success for received/pending_classification/failed.
 3. Create `apps/commands-agent/src/__tests__/usecases/archiveCommand.test.ts` — test: NOT_FOUND for missing command, NOT_FOUND for wrong user, INVALID_STATUS for non-classified command, success for classified command.
 
 ### Files to Create
+
 - `apps/commands-agent/src/domain/usecases/listCommands.ts` — listCommands use-case
 - `apps/commands-agent/src/domain/usecases/deleteCommand.ts` — deleteCommand use-case
 - `apps/commands-agent/src/domain/usecases/archiveCommand.ts` — archiveCommand use-case
@@ -357,16 +388,19 @@ The `commandsRoutes.ts` route handlers directly call `commandRepository.listByUs
 - `apps/commands-agent/src/__tests__/usecases/archiveCommand.test.ts` — unit tests
 
 ### Files to Modify
+
 - `apps/commands-agent/src/services.ts` — Add 3 use-cases to interface and initialization
 - `apps/commands-agent/src/routes/commandsRoutes.ts` — Replace direct repo calls with use-case calls
 - `apps/commands-agent/src/__tests__/fakes.ts` — Add new use-cases to `createFakeServices`
 
 ### Test Requirements
+
 - [ ] Test: `listCommands.test.ts` — verifies list use-case returns correct commands per user
 - [ ] Test: `deleteCommand.test.ts` — verifies owner check, status check, successful delete
 - [ ] Test: `archiveCommand.test.ts` — verifies owner check, status check, successful archive
 
 ### Acceptance Criteria
+
 - [ ] Route handlers no longer import or call `commandRepository` directly (only use-cases)
 - [ ] All existing route tests pass unchanged (behavior is identical)
 - [ ] All new use-case unit tests pass
@@ -377,9 +411,11 @@ The `commandsRoutes.ts` route handlers directly call `commandRepository.listByUs
 ## TASK: CA-2 — Extract PubSub handling from internalRoutes.ts
 
 ### Context
+
 The `internalRoutes.ts` file (357 lines) contains inline PubSub types (`PubSubMessage`, `CommandEvent`), inline auth logic for dual OIDC/internal-auth, and inline base64 message decoding. These cross-cutting concerns should be extracted to dedicated files.
 
 ### Pre-conditions
+
 - [ ] Read `apps/commands-agent/src/routes/internalRoutes.ts` (already read)
 - [ ] Read `apps/commands-agent/src/__tests__/routes.test.ts` (already read)
 - [ ] Verify all existing tests pass before making changes
@@ -387,6 +423,7 @@ The `internalRoutes.ts` file (357 lines) contains inline PubSub types (`PubSubMe
 ### Steps
 
 #### Step 1: Extract types to domain
+
 1. Create file `apps/commands-agent/src/domain/events/commandEvent.ts`.
 2. Move the `CommandEvent` interface (lines 15-23 of `internalRoutes.ts`) into this new file:
    ```typescript
@@ -403,6 +440,7 @@ The `internalRoutes.ts` file (357 lines) contains inline PubSub types (`PubSubMe
    ```
 
 #### Step 2: Extract PubSub message type
+
 1. Create file `apps/commands-agent/src/infra/pubsub/types.ts`.
 2. Move the `PubSubMessage` interface (lines 6-13 of `internalRoutes.ts`) into this file:
    ```typescript
@@ -417,6 +455,7 @@ The `internalRoutes.ts` file (357 lines) contains inline PubSub types (`PubSubMe
    ```
 
 #### Step 3: Extract PubSub message decoder
+
 1. Create file `apps/commands-agent/src/infra/pubsub/decoder.ts`.
 2. Create a `decodePubSubMessage<T>` function:
    ```typescript
@@ -433,17 +472,22 @@ The `internalRoutes.ts` file (357 lines) contains inline PubSub types (`PubSubMe
    ```
 
 #### Step 4: Extract internal auth helper
+
 1. Create file `apps/commands-agent/src/routes/helpers/internalAuth.ts`.
 2. Create a function that encapsulates the dual auth pattern used in both `/internal/commands` and `/internal/retry-pending`:
+
    ```typescript
    import type { FastifyRequest, FastifyReply } from 'fastify';
    import { validateInternalAuth } from '@intexuraos/common-http';
-   
+
    export type InternalAuthStrategy = 'pubsub-oidc' | 'scheduler-oidc' | 'internal-token';
-   
-   export function authenticateInternalPubSub(request: FastifyRequest, reply: FastifyReply): 
-     { authenticated: true; strategy: InternalAuthStrategy } | { authenticated: false } 
+
+   export function authenticateInternalPubSub(
+     request: FastifyRequest,
+     reply: FastifyReply
+   ): { authenticated: true; strategy: InternalAuthStrategy } | { authenticated: false };
    ```
+
    - Check `from: noreply@google.com` header for PubSub OIDC.
    - Otherwise, validate `x-internal-auth` header.
    - Return the result (do not send reply — let the caller handle the 401).
@@ -451,6 +495,7 @@ The `internalRoutes.ts` file (357 lines) contains inline PubSub types (`PubSubMe
    Similarly, create `authenticateInternalScheduler` for the scheduler pattern (Bearer OIDC or x-internal-auth).
 
 #### Step 5: Update internalRoutes.ts
+
 1. Replace inline `PubSubMessage` import with import from `../infra/pubsub/types.js`.
 2. Replace inline `CommandEvent` import with import from `../domain/events/commandEvent.js`.
 3. Replace the try/catch base64 decode block (lines 131-138) with a call to `decodePubSubMessage<CommandEvent>(body.message.data)`, checking the result.
@@ -458,23 +503,28 @@ The `internalRoutes.ts` file (357 lines) contains inline PubSub types (`PubSubMe
 5. Remove the now-unused inline type definitions.
 
 #### Step 6: Update pubsub/index.ts barrel export
+
 1. Add re-exports for `PubSubMessage` from `./types.js` and `decodePubSubMessage` from `./decoder.js`.
 
 ### Files to Create
+
 - `apps/commands-agent/src/domain/events/commandEvent.ts` — CommandEvent type
 - `apps/commands-agent/src/infra/pubsub/types.ts` — PubSubMessage type
 - `apps/commands-agent/src/infra/pubsub/decoder.ts` — base64 decode helper
 - `apps/commands-agent/src/routes/helpers/internalAuth.ts` — dual auth helpers
 
 ### Files to Modify
+
 - `apps/commands-agent/src/routes/internalRoutes.ts` — Replace inline code with imports of extracted modules
 - `apps/commands-agent/src/infra/pubsub/index.ts` — Add new exports
 
 ### Test Requirements
+
 - [ ] Test: Create `apps/commands-agent/src/__tests__/infra/pubsub/decoder.test.ts` — test valid base64, invalid base64, invalid JSON
 - [ ] Test: All existing route integration tests pass unchanged (behavior is identical)
 
 ### Acceptance Criteria
+
 - [ ] `PubSubMessage` and `CommandEvent` types no longer defined inline in `internalRoutes.ts`
 - [ ] Base64 decoding logic extracted to a reusable function
 - [ ] Auth logic extracted to reusable helpers
@@ -486,9 +536,11 @@ The `internalRoutes.ts` file (357 lines) contains inline PubSub types (`PubSubMe
 ## TASK: CA-3 — Decompose processCommand.ts use-case
 
 ### Context
+
 The `processCommand.ts` file (260 lines) is a single monolithic function that handles classification, action creation, event publishing, and command status updates. These distinct responsibilities should be extracted into helper functions for readability and testability.
 
 ### Pre-conditions
+
 - [ ] Read `apps/commands-agent/src/domain/usecases/processCommand.ts` (already read)
 - [ ] Read `apps/commands-agent/src/__tests__/usecases/processCommand.test.ts` (already read)
 - [ ] Verify all existing tests pass before making changes
@@ -496,6 +548,7 @@ The `processCommand.ts` file (260 lines) is a single monolithic function that ha
 ### Steps
 
 #### Step 1: Extract classification helper
+
 1. Within the same file `apps/commands-agent/src/domain/usecases/processCommand.ts`, create a private helper function ABOVE the `createProcessCommandUseCase` export:
    ```typescript
    async function classifyCommand(deps: {
@@ -513,6 +566,7 @@ The `processCommand.ts` file (260 lines) is a single monolithic function that ha
 3. In the main use-case, replace lines 117-118 with a call to `classifyCommand(...)`.
 
 #### Step 2: Extract action creation helper
+
 1. Create another private helper:
    ```typescript
    async function createActionFromClassification(deps: {
@@ -540,6 +594,7 @@ The `processCommand.ts` file (260 lines) is a single monolithic function that ha
 2. In the main use-case, replace lines 139-149 with a call to `createActionFromClassification(...)`.
 
 #### Step 3: Extract event building + publishing helper
+
 1. Create another private helper:
    ```typescript
    async function publishActionEvent(deps: {
@@ -561,6 +616,7 @@ The `processCommand.ts` file (260 lines) is a single monolithic function that ha
 3. Call it from the main use-case.
 
 #### Step 4: Extract command finalization helper
+
 1. Create another private helper:
    ```typescript
    function finalizeClassifiedCommand(
@@ -582,16 +638,20 @@ The `processCommand.ts` file (260 lines) is a single monolithic function that ha
 2. Replace lines 218-226 with a call to this helper.
 
 ### Files to Create
+
 - None (all helpers stay within the same file)
 
 ### Files to Modify
+
 - `apps/commands-agent/src/domain/usecases/processCommand.ts` — Extract 4 helper functions, reduce main `execute` body
 
 ### Test Requirements
+
 - [ ] All existing `processCommand.test.ts` tests pass unchanged
 - [ ] All existing `routes.test.ts` tests pass unchanged
 
 ### Acceptance Criteria
+
 - [ ] The `execute` method body is reduced to ~50-60 lines (from ~210 lines)
 - [ ] Each helper has a clear, single responsibility
 - [ ] No public API change — `ProcessCommandUseCase` interface unchanged
@@ -602,9 +662,11 @@ The `processCommand.ts` file (260 lines) is a single monolithic function that ha
 ## TASK: CA-4 — Deduplicate retryPendingCommands.ts with processCommand
 
 ### Context
+
 `retryPendingCommands.ts` (lines 70-160) duplicates classification, action creation, event publishing, and command finalization logic from `processCommand.ts`. After CA-3 extracts helpers in processCommand.ts, retryPendingCommands should call those same helpers.
 
 ### Pre-conditions
+
 - [ ] **CA-3 must be completed first** — the helper functions must exist
 - [ ] Read `apps/commands-agent/src/domain/usecases/retryPendingCommands.ts` (already read)
 - [ ] Read `apps/commands-agent/src/domain/usecases/processCommand.ts` (post CA-3 version)
@@ -613,9 +675,11 @@ The `processCommand.ts` file (260 lines) is a single monolithic function that ha
 ### Steps
 
 #### Step 1: Export the helpers from processCommand.ts
+
 1. The four helper functions created in CA-3 (`classifyCommand`, `createActionFromClassification`, `publishActionEvent`, `finalizeClassifiedCommand`) are currently file-private. Export them with an `export` keyword.
 
 #### Step 2: Refactor retryPendingCommands.ts to use shared helpers
+
 1. Import the four helpers from `./processCommand.js`.
 2. Replace the duplicated classification logic (lines 71-72) with `classifyCommand(...)`.
 3. Replace the duplicated action creation logic (lines 83-89) with `createActionFromClassification(...)`.
@@ -624,22 +688,27 @@ The `processCommand.ts` file (260 lines) is a single monolithic function that ha
 6. Keep the retry-specific logic: the `for` loop, the `skipped`/`failed`/`processed` counters, the `skipReasons` tracking, and the `try/catch` wrapper.
 
 #### Step 3: Verify behavior is identical
+
 1. The `retryPendingCommands` use-case has one behavioral difference from `processCommand`: it does NOT pass `sourceType` to `classifier.classify()` (line 72 calls `classifier.classify(command.text)` with no options). The shared `classifyCommand` helper takes `sourceType` as a parameter. Pass `command.sourceType` to maintain parity, OR verify the existing test expectations still hold. Since `retryPendingCommands` currently doesn't pass sourceType, to avoid behavior change, make the `sourceType` parameter optional in `classifyCommand` and pass `undefined` from retry.
    - Actually, looking more carefully: `retryPendingCommands` line 72: `classifier.classify(command.text)` — no options object. In `processCommand` line 118: `classifier.classify(input.text, { sourceType: input.sourceType })`. The `classifyCommand` helper should accept an optional `sourceType`. When called from retry, pass `undefined`.
 
 ### Files to Create
+
 - None
 
 ### Files to Modify
+
 - `apps/commands-agent/src/domain/usecases/processCommand.ts` — Export the 4 helper functions
 - `apps/commands-agent/src/domain/usecases/retryPendingCommands.ts` — Replace duplicated code with imported helpers
 
 ### Test Requirements
+
 - [ ] All existing `retryPendingCommands.test.ts` tests pass unchanged
 - [ ] All existing `processCommand.test.ts` tests pass unchanged
 - [ ] All existing `routes.test.ts` tests pass unchanged
 
 ### Acceptance Criteria
+
 - [ ] `retryPendingCommands.ts` no longer contains duplicated classification/action/event/finalization code
 - [ ] Both use-cases share the same helper functions
 - [ ] No behavior change — all test assertions pass identically
@@ -650,9 +719,11 @@ The `processCommand.ts` file (260 lines) is a single monolithic function that ha
 ## TASK: CA-5 — Define domain ports for infrastructure clients
 
 ### Context
+
 The `processCommand.ts` use-case imports `UserServiceClient` from `@intexuraos/internal-clients` (line 9) and `ActionsAgentClient` from `../ports/actionsAgentClient.js` (line 10). The `UserServiceClient` import comes from an infrastructure package, violating the hexagonal architecture pattern. A domain port should be defined for the user-service dependency.
 
 ### Pre-conditions
+
 - [ ] Read `apps/commands-agent/src/domain/usecases/processCommand.ts` (already read — lines 9-10)
 - [ ] Read `apps/commands-agent/src/domain/ports/actionsAgentClient.ts` (already read — already a proper port)
 - [ ] Read `apps/commands-agent/src/__tests__/fakes.ts` lines 148-207 to understand `FakeUserServiceClient`
@@ -661,13 +732,16 @@ The `processCommand.ts` use-case imports `UserServiceClient` from `@intexuraos/i
 ### Steps
 
 #### Step 1: Identify the subset of UserServiceClient used by commands-agent
+
 1. Search for all uses of `userServiceClient` in the commands-agent codebase.
 2. In `processCommand.ts` line 93: `userServiceClient.getLlmClient(input.userId)` — only `getLlmClient` is used.
 3. In `retryPendingCommands.ts` line 58: `userServiceClient.getLlmClient(command.userId)` — only `getLlmClient` is used.
 4. So the domain port only needs the `getLlmClient` method.
 
 #### Step 2: Create the domain port
+
 1. Create file `apps/commands-agent/src/domain/ports/userServicePort.ts`:
+
    ```typescript
    import type { Result } from '@intexuraos/common-core';
    import type { LlmGenerateClient } from '@intexuraos/llm-factory';
@@ -683,6 +757,7 @@ The `processCommand.ts` use-case imports `UserServiceClient` from `@intexuraos/i
    ```
 
 #### Step 3: Update use-case deps to use the port
+
 1. In `apps/commands-agent/src/domain/usecases/processCommand.ts`:
    - Change the import on line 9 from `import type { UserServiceClient } from '@intexuraos/internal-clients';` to `import type { UserServicePort } from '../ports/userServicePort.js';`.
    - Change the deps type from `userServiceClient: UserServiceClient` to `userServiceClient: UserServicePort`.
@@ -692,22 +767,28 @@ The `processCommand.ts` use-case imports `UserServiceClient` from `@intexuraos/i
    - Change deps type from `userServiceClient: UserServiceClient` to `userServiceClient: UserServicePort`.
 
 #### Step 4: Ensure services.ts still works
+
 1. In `apps/commands-agent/src/services.ts`, the `Services` interface has `userServiceClient: UserServiceClient` from `@intexuraos/internal-clients`. This is the INFRA layer, which is correct — services.ts is the composition root. No change needed here because `UserServiceClient` (infra) implements the `UserServicePort` (domain) interface structurally (TypeScript structural typing). Verify this compiles.
 
 #### Step 5: Update fakes.ts
+
 1. In `apps/commands-agent/src/__tests__/fakes.ts`, `FakeUserServiceClient` implements `UserServiceClient` from `@intexuraos/internal-clients`. Since `services.ts` still uses `UserServiceClient`, the fake must still implement the full interface. No change needed.
 
 ### Files to Create
+
 - `apps/commands-agent/src/domain/ports/userServicePort.ts` — domain port for user service dependency
 
 ### Files to Modify
+
 - `apps/commands-agent/src/domain/usecases/processCommand.ts` — Change import + deps type to use domain port
 - `apps/commands-agent/src/domain/usecases/retryPendingCommands.ts` — Change import + deps type to use domain port
 
 ### Test Requirements
+
 - [ ] All existing tests pass unchanged (structural typing ensures compatibility)
 
 ### Acceptance Criteria
+
 - [ ] Domain use-cases no longer import from `@intexuraos/internal-clients`
 - [ ] Domain port defines the minimal interface needed
 - [ ] Composition root (`services.ts`) still uses the concrete infra type
@@ -718,15 +799,18 @@ The `processCommand.ts` use-case imports `UserServiceClient` from `@intexuraos/i
 ## TASK: CA-6 — Extract inline schemas from commandsRoutes.ts
 
 ### Context
+
 The `commandsRoutes.ts` file defines a large inline `commandSchema` object (lines 5-47) at the top of the file, mixed with route logic. This schema definition should be extracted to a dedicated schemas file for reusability and separation of concerns.
 
 ### Pre-conditions
+
 - [ ] Read `apps/commands-agent/src/routes/commandsRoutes.ts` lines 5-47 (already read)
 - [ ] Verify all existing tests pass before making changes
 
 ### Steps
 
 #### Step 1: Create schemas file
+
 1. Create file `apps/commands-agent/src/routes/schemas/commandSchemas.ts`.
 2. Move the `commandSchema` constant (lines 5-47 of `commandsRoutes.ts`) into this file:
    ```typescript
@@ -776,27 +860,33 @@ The `commandsRoutes.ts` file defines a large inline `commandSchema` object (line
    ```
 
 #### Step 2: Create barrel export
+
 1. Create file `apps/commands-agent/src/routes/schemas/index.ts`:
    ```typescript
    export { commandSchema } from './commandSchemas.js';
    ```
 
 #### Step 3: Update commandsRoutes.ts
+
 1. Remove lines 5-47 (the `commandSchema` definition).
 2. Add import at the top: `import { commandSchema } from './schemas/index.js';`.
 3. Verify the `commandSchema` is referenced in exactly 3 places within the route definitions: line 69 (GET response), line 133 (POST response), line 319 (PATCH response). All three references should still work with the import.
 
 ### Files to Create
+
 - `apps/commands-agent/src/routes/schemas/commandSchemas.ts` — extracted command schema
 - `apps/commands-agent/src/routes/schemas/index.ts` — barrel export
 
 ### Files to Modify
+
 - `apps/commands-agent/src/routes/commandsRoutes.ts` — Remove inline schema, add import from schemas module
 
 ### Test Requirements
+
 - [ ] All existing route tests pass unchanged (schema is identical, just moved)
 
 ### Acceptance Criteria
+
 - [ ] `commandSchema` no longer defined inline in `commandsRoutes.ts`
 - [ ] Schema is importable from `./schemas/index.js`
 - [ ] All existing tests pass unchanged
