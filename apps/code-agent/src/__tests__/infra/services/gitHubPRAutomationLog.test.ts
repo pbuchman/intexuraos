@@ -146,15 +146,16 @@ describe('GitHubPRAutomationLog', () => {
     });
 
     it('should GET existing comment, append event line, and PATCH', async () => {
-      const skippedEvent: AutomationEvent = {
-        type: 'skipped',
-        decidedBy: 'hard_rules',
-        reason: 'PROTECTED_BASE_BRANCH',
-        ruleName: 'ProtectedBaseBranchRule',
+      const triageEvent: AutomationEvent = {
+        type: 'triage_dispatch',
+        reviewTypes: ['code_review'],
+        cost: 0.05,
+        reasoning: 'Needs review.',
+        toolCalls: [],
       };
 
       const log = createLog();
-      await log.record(prRef, skippedEvent);
+      await log.record(prRef, triageEvent);
 
       // Should GET the existing comment
       const getIssueComment = gitHubPRClient.getIssueComment as ReturnType<typeof vi.fn>;
@@ -165,7 +166,7 @@ describe('GitHubPRAutomationLog', () => {
       expect(updateIssueComment).toHaveBeenCalledOnce();
       const [, , , , body] = updateIssueComment.mock.calls[0] as [string, string, string, number, string];
       expect(body).toContain('existing line');
-      expect(body).toContain('**Skipped** | PROTECTED_BASE_BRANCH');
+      expect(body).toContain('Dispatching review');
     });
 
     it('should update Firestore eventCount', async () => {
@@ -181,6 +182,58 @@ describe('GitHubPRAutomationLog', () => {
       await log.record(prRef, webhookEvent);
 
       expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('filtered events (renderEvent returns null)', () => {
+    it('should skip recording entirely for hard_rules skipped event', async () => {
+      const log = createLog();
+      const hardRulesEvent: AutomationEvent = {
+        type: 'skipped',
+        decidedBy: 'hard_rules',
+        reason: 'PROTECTED_BASE_BRANCH',
+        ruleName: 'ProtectedBaseBranchRule',
+      };
+
+      await log.record(prRef, hardRulesEvent, tokenUserId);
+
+      expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+      expect(gitHubPRClient.getIssueComment).not.toHaveBeenCalled();
+      expect(gitHubPRClient.updateIssueComment).not.toHaveBeenCalled();
+    });
+
+    it('should skip recording entirely for webhook_route skipped event', async () => {
+      const log = createLog();
+      const webhookRouteEvent: AutomationEvent = {
+        type: 'skipped',
+        decidedBy: 'webhook_route',
+        reason: 'UNSUPPORTED_EVENT',
+      };
+
+      await log.record(prRef, webhookRouteEvent, tokenUserId);
+
+      expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+      expect(gitHubPRClient.getIssueComment).not.toHaveBeenCalled();
+      expect(gitHubPRClient.updateIssueComment).not.toHaveBeenCalled();
+    });
+
+    it('should still record llm_triage skipped events', async () => {
+      const log = createLog();
+      const llmTriageEvent: AutomationEvent = {
+        type: 'skipped',
+        decidedBy: 'llm_triage',
+        reason: 'NO_ACTION_NEEDED',
+        cost: 0.042,
+        reasoning: 'Documentation-only change.',
+        toolCalls: [],
+      };
+
+      await log.record(prRef, llmTriageEvent, tokenUserId);
+
+      const postPRComment = gitHubPRClient.postPRComment as ReturnType<typeof vi.fn>;
+      expect(postPRComment).toHaveBeenCalledOnce();
+      const [, , , , body] = postPRComment.mock.calls[0] as [string, string, string, number, string];
+      expect(body).toContain('**Skipped** | NO_ACTION_NEEDED');
     });
   });
 

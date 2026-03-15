@@ -15,6 +15,8 @@ import { loadConfig } from '../../config.js';
 import {
   parseGitHubWebhookEvent,
 } from '../../infra/github-event-parser.js';
+import { extractEventUrl } from '../code/extractEventUrl.js';
+import { extractEventSummary } from '../code/extractEventSummary.js';
 import type { CreateGitHubPREventInput } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import {
@@ -389,18 +391,23 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
 
       // Best-effort: record webhook_received in the automation log when we have PR context
       if (repositoryDetails.repository !== null && pullRequestDetails.pullRequestNumber !== null && pullRequestDetails.pullRequestNumber !== 0) {
+        /* v8 ignore start -- ts-type: Fastify header typing allows string | string[] | undefined but GitHub always sends a string; exactOptionalPropertyTypes requires conditional spread for optional fields @preserve */
         const resolvedDeliveryId = typeof deliveryId === 'string' ? deliveryId : 'unknown';
+        const resolvedEventType = typeof eventType === 'string' ? eventType : 'unknown';
+        const eventUrl = extractEventUrl(resolvedEventType, request.body);
+        const eventSummary = extractEventSummary(resolvedEventType, request.body);
         void automationLog.record(
           { repository: repositoryDetails.repository, prNumber: pullRequestDetails.pullRequestNumber },
           {
             type: 'webhook_received',
-            /* v8 ignore start -- ts-type: Fastify header typing allows string | string[] | undefined but GitHub always sends a string @preserve */
-            eventType: typeof eventType === 'string' ? eventType : 'unknown',
+            eventType: resolvedEventType,
             action: request.body.action ?? 'unknown',
             sender: senderDetails.senderLogin ?? 'unknown',
-            /* v8 ignore stop @preserve */
             deliveryId: resolvedDeliveryId,
+            ...(eventUrl !== null ? { eventUrl } : {}),
+            ...(eventSummary !== null ? { summary: eventSummary } : {}),
           },
+        /* v8 ignore stop @preserve */
         ).catch((recordErr: unknown) => {
           logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record webhook_received in automation log');
         });
