@@ -21,6 +21,8 @@ export interface EnsureIssueResult {
   linearIssueTitle: string;
   linearIssueType?: LinearIssueType;
   linearFallback: boolean;
+  /** Error message when linearFallback is true */
+  linearFallbackError?: string;
   /** Labels from validated issue */
   linearIssueLabels: string[];
   /** Whether the issue has child issues */
@@ -80,6 +82,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
           return {
             linearIssueTitle: `Linked issue ${linearIssueId}`,
             linearFallback: true,
+            linearFallbackError: validationResult.error.message,
             linearIssueLabels: [],
             hasChildren: false,
           };
@@ -137,6 +140,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
           linearIssueTitle: title,
           linearIssueType: issueType,
           linearFallback: true,
+          linearFallbackError: createResult.error.message,
           linearIssueLabels: [],
           hasChildren: false,
         };

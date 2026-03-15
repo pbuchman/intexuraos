@@ -104,6 +104,7 @@ describe('linearIssueService', () => {
       expect(result.linearFallback).toBe(true);
       expect(result.linearIssueId).toBeUndefined();
       expect(result.linearIssueTitle).toBe('Linked issue INT-999');
+      expect(result.linearFallbackError).toBe('Issue INT-999 not found');
       expect(mockCreateIssue).not.toHaveBeenCalled();
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { linearIssueId: 'INT-999', error: { code: 'NOT_FOUND', message: 'Issue INT-999 not found' } },
@@ -415,6 +416,7 @@ describe('linearIssueService', () => {
       expect(result.linearIssueId).toBeUndefined();
       expect(result.linearIssueTitle).toBe('Generated Title');
       expect(result.linearIssueType).toBe('bug');
+      expect(result.linearFallbackError).toBe('Service down');
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { error: { code: 'UNAVAILABLE', message: 'Service down' } },
