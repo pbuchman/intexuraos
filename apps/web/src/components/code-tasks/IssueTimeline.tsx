@@ -49,6 +49,18 @@ function getActionLabel(task: CodeTask): string {
     if (status === 'running' || status === 'dispatched' || status === 'queued') return 'Planning running';
   }
 
+  if (agentType === 'pull_request') {
+    if (status === 'implemented') return 'PR Task completed';
+    if (status === 'failed') return 'PR Task failed';
+    if (status === 'running' || status === 'dispatched' || status === 'queued') return 'PR Task running';
+  }
+
+  if (agentType === 'review') {
+    if (status === 'reviewed') return 'Review completed';
+    if (status === 'failed') return 'Review failed';
+    if (status === 'running' || status === 'dispatched' || status === 'queued') return 'Review running';
+  }
+
   // Default: capitalize status
   return status.charAt(0).toUpperCase() + status.slice(1);
 }

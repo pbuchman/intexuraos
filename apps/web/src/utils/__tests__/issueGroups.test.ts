@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CodeTask } from '@/types';
 import { groupByLinearIssue, sortIssueGroups } from '../issueGroups.js';
-import type { IssueGroup, SortOption } from '../issueGroups.js';
+import type { IssueGroup, PipelineStepData, SortOption } from '../issueGroups.js';
 
 function createMockTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
   return {
@@ -22,6 +22,10 @@ function createMockTask(overrides: Partial<CodeTask> & { id: string }): CodeTask
     updatedAt: overrides.updatedAt ?? '2026-03-07T15:05:00Z',
     ...overrides,
   };
+}
+
+function findStep(pipeline: { steps: PipelineStepData[] } | undefined, agentType: string): PipelineStepData | undefined {
+  return pipeline?.steps.find((s) => s.agentType === agentType);
 }
 
 describe('groupByLinearIssue', () => {
@@ -64,7 +68,7 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.planning).toBe('completed');
+    expect(findStep(groups[0]?.pipeline, 'planning')?.state).toBe('completed');
   });
 
   it('derives execution step as completed', () => {
@@ -75,7 +79,7 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.execution).toBe('completed');
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('completed');
   });
 
   it('derives execution step as actionable', () => {
@@ -86,7 +90,7 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.execution).toBe('actionable');
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('actionable');
   });
 
   it('derives execution step as running', () => {
@@ -97,16 +101,14 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.execution).toBe('running');
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('running');
   });
 
   it('derives execution step as failed with attempt count', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'failed' }),
-      createMockTask({ id: 't2', linearIssueId: 'INT-100', agentType: 'execution', status: 'failed', updatedAt: '2026-03-07T14:00:00Z' }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-100', agentType: 'execution', status: 'archived', updatedAt: '2026-03-07T14:00:00Z' }),
     ];
-    // Archive one of them
-    tasks[1] = createMockTask({ id: 't2', linearIssueId: 'INT-100', agentType: 'execution', status: 'archived', updatedAt: '2026-03-07T14:00:00Z' });
 
     const groups = groupByLinearIssue(tasks);
 
@@ -308,7 +310,7 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.planning).toBe('completed');
+    expect(findStep(groups[0]?.pipeline, 'planning')?.state).toBe('completed');
   });
 
   it('empty input returns empty array', () => {
@@ -326,7 +328,7 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.review).toBe('completed');
+    expect(findStep(groups[0]?.pipeline, 'review')?.state).toBe('completed');
   });
 
   it('derives review step as running', () => {
@@ -338,10 +340,10 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.review).toBe('running');
+    expect(findStep(groups[0]?.pipeline, 'review')?.state).toBe('running');
   });
 
-  it('derives review step as null when no review task exists', () => {
+  it('derives review step as undefined when no review task exists', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented' }),
     ];
@@ -349,7 +351,7 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.review).toBeNull();
+    expect(findStep(groups[0]?.pipeline, 'review')).toBeUndefined();
   });
 
   it('excludes archived review tasks from review step', () => {
@@ -360,7 +362,7 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.review).toBeNull();
+    expect(findStep(groups[0]?.pipeline, 'review')).toBeUndefined();
   });
 
   it('review tasks do not affect planning/execution steps', () => {
@@ -371,12 +373,12 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.planning).toBeNull();
-    expect(groups[0]?.pipeline.execution).toBeNull();
-    expect(groups[0]?.pipeline.review).toBe('completed');
+    expect(findStep(groups[0]?.pipeline, 'planning')).toBeUndefined();
+    expect(findStep(groups[0]?.pipeline, 'execution')).toBeUndefined();
+    expect(findStep(groups[0]?.pipeline, 'review')?.state).toBe('completed');
   });
 
-  it('tasks with agentType pull_request do not affect planning/execution steps', () => {
+  it('pull_request tasks appear in pipeline steps with label "PR Task"', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'pull_request', status: 'implemented' }),
     ];
@@ -384,11 +386,25 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.planning).toBeNull();
-    expect(groups[0]?.pipeline.execution).toBeNull();
+    const step = findStep(groups[0]?.pipeline, 'pull_request');
+    expect(step).toBeDefined();
+    expect(step?.state).toBe('completed');
+    expect(step?.label).toBe('PR Task');
   });
 
-  it('tasks with agentType undefined do not affect planning/execution steps', () => {
+  it('pull_request tasks do not affect planning/execution steps', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'pull_request', status: 'implemented' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'planning')).toBeUndefined();
+    expect(findStep(groups[0]?.pipeline, 'execution')).toBeUndefined();
+  });
+
+  it('tasks with agentType undefined do not appear in pipeline steps', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', status: 'implemented' }),
     ];
@@ -396,8 +412,154 @@ describe('groupByLinearIssue', () => {
     const groups = groupByLinearIssue(tasks);
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.pipeline.planning).toBeNull();
-    expect(groups[0]?.pipeline.execution).toBeNull();
+    expect(groups[0]?.pipeline.steps).toHaveLength(0);
+  });
+
+  it('steps are ordered by task createdAt', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'pull_request',
+        status: 'implemented',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+      }),
+      createMockTask({
+        id: 't3',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-03-07T12:00:00Z',
+        updatedAt: '2026-03-07T12:05:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const steps = groups[0]?.pipeline.steps ?? [];
+    // Planning at T1 gets actionable execution appended after it
+    // Then pull_request at T2, then review at T3
+    expect(steps[0]?.agentType).toBe('planning');
+    expect(steps[1]?.agentType).toBe('execution'); // synthetic actionable
+    expect(steps[2]?.agentType).toBe('pull_request');
+    expect(steps[3]?.agentType).toBe('review');
+  });
+
+  it('multiple tasks of same agentType: only latest non-archived appears', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'archived',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T14:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'failed',
+        createdAt: '2026-03-07T12:00:00Z',
+        updatedAt: '2026-03-07T13:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const execSteps = groups[0]?.pipeline.steps.filter((s) => s.agentType === 'execution');
+    expect(execSteps).toHaveLength(1);
+    expect(execSteps[0]?.state).toBe('failed');
+  });
+
+  it('pipeline with 5+ steps supports vertical collapse data shape', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T10:05:00Z',
+        implementationTaskId: 'some-task',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-07T11:00:00Z',
+        updatedAt: '2026-03-07T11:05:00Z',
+      }),
+      createMockTask({
+        id: 't3',
+        linearIssueId: 'INT-100',
+        agentType: 'pull_request',
+        status: 'implemented',
+        createdAt: '2026-03-07T12:00:00Z',
+        updatedAt: '2026-03-07T12:05:00Z',
+      }),
+      createMockTask({
+        id: 't4',
+        linearIssueId: 'INT-100',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-03-07T13:00:00Z',
+        updatedAt: '2026-03-07T13:05:00Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const steps = groups[0]?.pipeline.steps ?? [];
+    const pr = groups[0]?.pipeline.pr ?? null;
+    // 4 steps + 1 PR = 5 total visible elements
+    expect(steps).toHaveLength(4);
+    expect(pr).not.toBeNull();
+    expect(steps[0]?.agentType).toBe('planning');
+    expect(steps[1]?.agentType).toBe('execution');
+    expect(steps[2]?.agentType).toBe('pull_request');
+    expect(steps[3]?.agentType).toBe('review');
+  });
+
+  it('step labels use the agent type label map', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'planning', status: 'planned', implementationTaskId: 'x' }),
+      createMockTask({ id: 't2', linearIssueId: 'INT-100', agentType: 'execution', status: 'implemented', createdAt: '2026-03-07T15:01:00Z', updatedAt: '2026-03-07T15:06:00Z' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const steps = groups[0]?.pipeline.steps ?? [];
+    expect(steps[0]?.label).toBe('Planning');
+    expect(steps[1]?.label).toBe('Execution');
+  });
+
+  it('unknown agent type gets capitalized label', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'merge_conflict' as string, status: 'running' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    const step = findStep(groups[0]?.pipeline, 'merge_conflict');
+    expect(step).toBeDefined();
+    expect(step?.label).toBe('Merge_conflict');
   });
 
   it('fully-archived group gets aggregateStatus archived', () => {
@@ -538,9 +700,11 @@ function makeGroup(overrides: {
     linearIssue: undefined,
     tasks: [latestTask],
     pipeline: {
-      planning: 'completed',
-      execution: 'completed',
-      review: 'completed',
+      steps: [
+        { agentType: 'planning', state: 'completed', label: 'Planning' },
+        { agentType: 'execution', state: 'completed', label: 'Execution' },
+        { agentType: 'review', state: 'completed', label: 'Review' },
+      ],
       pr:
         prNumber !== null
           ? { url: `https://github.com/org/repo/pull/${prNumber}`, number: prNumber }
