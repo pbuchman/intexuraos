@@ -1144,8 +1144,37 @@ describe('evaluateEvent', () => {
       expect(capturedOnExhausted).toBeTypeOf('function');
       if (typeof capturedOnExhausted === 'function') {
         const repairMessage = (capturedOnExhausted as (ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined)({ iterationCount: 5, toolCallsMade: 0 });
-        expect(repairMessage).toContain('triage decision is incomplete');
-        expect(repairMessage).toContain('No triage tool was called');
+        // skipTool.run() was called before onExhausted, so state.skipped=true → "recorded successfully"
+        expect(repairMessage).toContain('recorded successfully');
+        expect(repairMessage).toContain('Do NOT call any more tools');
+      }
+    });
+
+    it('onExhausted tells LLM to call a tool when no tools were called', async () => {
+      let capturedOnExhausted: ((ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined) | undefined;
+      const toolClient: ToolCallingClient = {
+        async run(params): ReturnType<ToolCallingClient['run']> {
+          capturedOnExhausted = params.onExhausted;
+          // Do NOT call any tools — simulate pure text responses exhausting iterations
+          return ok({
+            content: 'Done.',
+            toolCallsMade: 0,
+            iterationCount: 5,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+          });
+        },
+      };
+      const deps = createDeps({ toolCallingClient: toolClient });
+      const event = createFakePREvent();
+
+      await evaluateEvent(deps, event);
+
+      expect(capturedOnExhausted).toBeTypeOf('function');
+      if (typeof capturedOnExhausted === 'function') {
+        const repairMessage = (capturedOnExhausted as (ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined)({ iterationCount: 5, toolCallsMade: 0 });
+        expect(repairMessage).toContain('incomplete');
+        expect(repairMessage).toContain('skip(reason)');
+        expect(repairMessage).toContain('request_review(review_type)');
       }
     });
   });
