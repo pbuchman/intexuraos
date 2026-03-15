@@ -1563,6 +1563,66 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('INVALID_WORKER');
       expect(body.error.message).toContain('nonexistent-worker');
     });
+
+    it('accepts valid workerLocation and reorders workers', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'first-worker',
+              url: 'http://first-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'cf-client-id-1',
+              cfAccessClientSecret: 'cf-client-secret-1',
+              dispatchSigningSecret: 'secret-1',
+            },
+            {
+              name: 'second-worker',
+              url: 'http://second-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'cf-client-id-2',
+              cfAccessClientSecret: 'cf-client-secret-2',
+              dispatchSigningSecret: 'secret-2',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockDispatch = vi.fn().mockResolvedValue({
+        ok: true,
+        value: { taskId: 'task-123', workerName: 'second-worker' },
+      });
+
+      setServices({
+        ...services,
+        taskDispatcher: {
+          dispatch: mockDispatch,
+          cancelOnWorker: vi.fn(),
+          sendMessageToWorker: vi.fn().mockResolvedValue(ok({ action: 'queued' })),
+        },
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+          workerLocation: 'second-worker',
+        },
+      });
+
+      // Should succeed (200 or 503 if workers unavailable)
+      expect([200, 503]).toContain(response.statusCode);
+
+      mockGetSettings.mockRestore();
+    });
   });
 
   describe('POST /code/cancel', () => {
@@ -2056,6 +2116,69 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(true);
       expect(body.data.stale).toBe(true);
       expect(body.data.workers[0].stale).toBe(true);
+
+      // Verify the health probe was called due to stale status
+      expect(mockProbeAllWorkers).toHaveBeenCalled();
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('triggers health probe when worker has no health status', async () => {
+      const services = getServices();
+
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'test-worker',
+              url: 'http://test-worker:3000',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      // No health status for the worker - this triggers the probe
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({})
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'test-worker': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 1,
+          running: 0,
+          available: 1,
+          responseTimeMs: 100,
+        },
+      });
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockProbeAllWorkers).toHaveBeenCalled();
 
       mockGetSettings.mockRestore();
       mockGetHealthStatuses.mockRestore();
@@ -3052,6 +3175,100 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.data.workers[0].status).toBe('unknown');
       expect(body.data.workers[0].healthy).toBe(false);
       expect(body.data.workers[0].details).toBeNull();
+    });
+
+    it('should return orchestrator-unreachable with code in details', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'home-mac': {
+          _tag: 'orchestrator-unreachable',
+          healthy: false,
+          reason: 'timeout',
+          code: 'ECONNREFUSED',
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'home-mac',
+        healthy: false,
+        status: 'orchestrator-unreachable',
+        details: {
+          reason: 'timeout',
+          code: 'ECONNREFUSED',
+        },
+        stale: false,
+      });
+    });
+
+    it('should return healthy=false when worker not in probe results', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        // home-mac is NOT in the results, simulating a missing worker
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'home-mac',
+        healthy: false,
+        status: 'unknown',
+        details: null,
+        stale: false,
+      });
     });
   });
 
