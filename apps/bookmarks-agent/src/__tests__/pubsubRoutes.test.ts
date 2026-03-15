@@ -246,9 +246,10 @@ describe('pubsubRoutes', () => {
 
       const findResult = await ctx.bookmarkRepository.findById(createResult.value.id);
       expect(findResult.ok).toBe(true);
-      if (findResult.ok && findResult.value !== null) {
-        expect(findResult.value.ogFetchStatus).toBe('pending');
-      }
+      if (!findResult.ok) return;
+      expect(findResult.value).not.toBeNull();
+      if (findResult.value === null) return;
+      expect(findResult.value.ogFetchStatus).toBe('pending');
     });
   });
 
