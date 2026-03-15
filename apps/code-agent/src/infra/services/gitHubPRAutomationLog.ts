@@ -91,13 +91,15 @@ export function createGitHubPRAutomationLog(deps: GitHubPRAutomationLogDeps): Au
       const next = prev.then(() => doRecord(prRef, event, tokenUserId));
       // Swallow errors so next caller isn't blocked by a previous failure.
       // doRecord already catches internally, but belt-and-suspenders.
-      pending.set(key, next.catch(() => { /* swallow */ }));
+      const swallowed = next.catch(() => { /* swallow */ });
+      pending.set(key, swallowed);
       try {
         await next;
       } finally {
-        // Clean up map entry when chain settles to prevent memory leak.
-        // pending.get(key) is always defined here because we set it above.
-        void pending.get(key)?.then(() => { pending.delete(key); }, () => { pending.delete(key); });
+        // Only clean up if no subsequent call has replaced our chain entry.
+        if (pending.get(key) === swallowed) {
+          pending.delete(key);
+        }
       }
     },
   };
