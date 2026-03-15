@@ -495,6 +495,7 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   private failedIssues: FailedLinearIssue[] = [];
   private counter = 1;
   private shouldFailListByUser = false;
+  private shouldFailCreate = false;
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
   private shouldFailGetById = false;
   private shouldFailUpdate = false;
@@ -509,6 +510,7 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     error: string;
     reasoning: string | null;
   }): Promise<Result<FailedLinearIssue, LinearError>> {
+    if (this.shouldFailCreate) return err(this.failError);
     const failedIssue: FailedLinearIssue = {
       id: `failed-${this.counter++}`,
       userId: input.userId,
@@ -557,6 +559,11 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     return ok(undefined);
   }
 
+  setCreateFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailCreate = fail;
+    if (error) this.failError = error;
+  }
+
   setListByUserFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailListByUser = fail;
     if (error) this.failError = error;
@@ -585,6 +592,7 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   reset(): void {
     this.failedIssues = [];
     this.counter = 1;
+    this.shouldFailCreate = false;
     this.shouldFailListByUser = false;
     this.shouldFailGetById = false;
     this.shouldFailUpdate = false;
