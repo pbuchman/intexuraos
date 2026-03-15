@@ -28,6 +28,7 @@ import {
   resolveExecutionContinuationPr,
 } from '../../domain/utils/continuationPr.js';
 import { loadConfig } from '../../config.js';
+import type { AutomationLog } from '../../domain/ports/automationLog.js';
 
 /**
  * Cool-off period before retry is allowed (1 minute).
@@ -90,6 +91,7 @@ export interface RetryTaskDeps {
   userServiceClient: UserServiceClient;
   orchestratorSecret: string;
   serviceUrl: string;
+  automationLog: AutomationLog;
 }
 
 /**
@@ -341,6 +343,7 @@ ${additionalContext.trim()}
       codeTaskRepo,
       gitHubPRClient: deps.gitHubPRClient,
       userServiceClient: deps.userServiceClient,
+      automationLog: deps.automationLog,
     },
     {
       continuationPr,

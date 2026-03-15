@@ -122,6 +122,7 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
     allowedBots: new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']),
     orchestratorSecret: 'test-secret',
     serviceUrl: 'http://localhost:8080',
+    automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     ...overrides,
   };
 }
@@ -155,17 +156,14 @@ describe('GitHubDispatchService', () => {
         expect.objectContaining({ logger: mockLogger }),
         { taskId: 'task-123', userId: 'user-456', message: 'built-message' }
       );
-      expect(vi.mocked(deps.gitHubPRClient.postPRComment)).toHaveBeenCalledWith(
-        'ghp_test_token',
-        'test-owner',
-        'test-repo',
-        42,
-        expect.stringContaining('**Dispatch outcome:** Existing task queued')
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'test-owner/test-repo', prNumber: 42 },
+        expect.objectContaining({ type: 'task_dispatched', taskId: 'task-123', agentType: 'pull_request' }),
+        'user-456',
       );
-      expect(vi.mocked(deps.gitHubPRClient.updatePRTitle)).not.toHaveBeenCalled();
     });
 
-    it('should post immediate PR comment when existing task is resumed', async () => {
+    it('should record automation log when existing task is resumed', async () => {
       const existingTask = { id: 'task-123', userId: 'user-456', linearIssueId: 'INT-100' };
       vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(existingTask as never));
       mockedSendTaskMessage.mockResolvedValue(ok({ action: 'resumed' }));
@@ -178,12 +176,10 @@ describe('GitHubDispatchService', () => {
         dispatched: true,
         taskId: 'task-123',
       });
-      expect(vi.mocked(deps.gitHubPRClient.postPRComment)).toHaveBeenCalledWith(
-        'ghp_test_token',
-        'test-owner',
-        'test-repo',
-        42,
-        expect.stringContaining('**Dispatch outcome:** Existing task resumed')
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'test-owner/test-repo', prNumber: 42 },
+        expect.objectContaining({ type: 'task_dispatched', taskId: 'task-123', agentType: 'pull_request' }),
+        'user-456',
       );
     });
 
