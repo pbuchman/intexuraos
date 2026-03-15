@@ -40,10 +40,62 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toBe('**14:35** -- `pull_request.opened` by @octocat');
     });
+
+    it('renders event type as link when eventUrl is present', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'issue_comment',
+        action: 'created',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+        eventUrl: 'https://github.com/pbuchman/intexuraos/pull/42#issuecomment-123',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe(
+        '**14:35** -- [`issue_comment.created`](https://github.com/pbuchman/intexuraos/pull/42#issuecomment-123) by @octocat'
+      );
+    });
+
+    it('appends summary when present', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'issue_comment',
+        action: 'created',
+        sender: 'octocat',
+        deliveryId: 'abc-123',
+        summary: '@ignore Automated Code review',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe(
+        '**14:35** -- `issue_comment.created` by @octocat \u2014 @ignore Automated Code review'
+      );
+    });
+
+    it('renders both eventUrl and summary when both present', () => {
+      useFakeTime();
+      const event: AutomationEvent = {
+        type: 'webhook_received',
+        eventType: 'pull_request_review',
+        action: 'submitted',
+        sender: 'reviewer',
+        deliveryId: 'abc-123',
+        eventUrl: 'https://github.com/pbuchman/intexuraos/pull/42#pullrequestreview-1',
+        summary: 'APPROVED: Looks good',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe(
+        '**14:35** -- [`pull_request_review.submitted`](https://github.com/pbuchman/intexuraos/pull/42#pullrequestreview-1) by @reviewer \u2014 APPROVED: Looks good'
+      );
+    });
   });
 
   describe('skipped', () => {
-    it('renders reason for webhook_route skip', () => {
+    it('returns null for webhook_route skip (deterministic noise)', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'skipped',
@@ -52,10 +104,10 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toBe('**14:35** -- **Skipped** | UNSUPPORTED_EVENT');
+      expect(result).toBeNull();
     });
 
-    it('renders rule name in details for hard_rules skip', () => {
+    it('returns null for hard_rules skip (deterministic noise)', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'skipped',
@@ -65,9 +117,7 @@ describe('renderEvent', () => {
       };
 
       const result = renderEvent(event);
-      expect(result).toContain('**14:35** -- **Skipped** | PROTECTED_BASE_BRANCH');
-      expect(result).toContain('<details>');
-      expect(result).toContain('Rule: ProtectedBaseBranchRule');
+      expect(result).toBeNull();
     });
 
     it('renders cost, reasoning, and tool calls for llm_triage skip', () => {

@@ -2720,6 +2720,7 @@ describe('POST /webhooks/github', () => {
           action: 'opened',
           sender: 'testuser',
           deliveryId: 'delivery-wh-1',
+          summary: 'Test PR',
         },
       );
     });
@@ -2811,6 +2812,7 @@ describe('POST /webhooks/github', () => {
           action: 'opened',
           sender: 'testuser',
           deliveryId: 'delivery-oos-1',
+          summary: 'Test PR',
         },
       ]);
       expect(recordCalls[1]).toEqual([
@@ -2855,6 +2857,7 @@ describe('POST /webhooks/github', () => {
           action: 'opened',
           sender: 'testuser',
           deliveryId: 'delivery-dup-1',
+          summary: 'Test PR',
         },
       ]);
       expect(recordCalls[1]).toEqual([
