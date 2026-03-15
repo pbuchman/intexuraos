@@ -191,6 +191,9 @@ function createMockGitHubPRClient(): GitHubPRClient {
         mergeableState: 'clean',
       });
     },
+    async getIssueComment(): ReturnType<GitHubPRClient['getIssueComment']> {
+      return ok({ body: '' });
+    },
     async updateIssueComment(): ReturnType<GitHubPRClient['updateIssueComment']> {
       return ok({ commentId: 1 });
     },
@@ -264,6 +267,7 @@ function createDefaultDeps(): CreateTaskForPRDeps {
     gitHubPRClient: createMockGitHubPRClient(),
     userServiceClient: createMockUserServiceClient(),
     firestore: createMockFirestore(),
+    automationLog: { record: vi.fn().mockResolvedValue(undefined) },
   };
 }
 
@@ -549,53 +553,31 @@ describe('createTaskForPR', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('posts immediate PR comment only after dispatch is accepted', async () => {
-    const callOrder: string[] = [];
-
-    deps.taskDispatcher = {
-      ...createMockTaskDispatcher(),
-      async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
-        callOrder.push('dispatch');
-        return ok({ dispatched: true, workerLocation: 'home-mac' });
-      },
-    };
-
-    deps.gitHubPRClient = {
-      ...createMockGitHubPRClient(),
-      async postPRComment(): ReturnType<GitHubPRClient['postPRComment']> {
-        callOrder.push('comment');
-        return ok({ commentId: 1 });
-      },
-    };
-
+  it('records automation log after dispatch is accepted', async () => {
     const result = await createTaskForPR(deps, request);
 
     expect(result.ok).toBe(true);
-    expect(callOrder).toEqual(['dispatch', 'comment']);
-  });
-
-  it('includes workerType in PR comment after dispatch when provided', async () => {
-    request.workerType = 'qwen';
-
-    const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
-    deps.gitHubPRClient = {
-      ...createMockGitHubPRClient(),
-      postPRComment,
-    };
-
-    const result = await createTaskForPR(deps, request);
-
-    expect(result.ok).toBe(true);
-    expect(postPRComment).toHaveBeenCalledWith(
-      'ghp_test_token_123',
-      'pbuchman',
-      'intexuraos',
-      42,
-      expect.stringContaining('**Reviewer:** `qwen`'),
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      expect.objectContaining({ type: 'task_dispatched', agentType: 'pull_request' }),
+      expect.any(String),
     );
   });
 
-  it('does not post immediate PR comment when dispatch fails', async () => {
+  it('includes workerType in automation log after dispatch when provided', async () => {
+    request.workerType = 'qwen';
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result.ok).toBe(true);
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      expect.objectContaining({ type: 'task_dispatched', workerType: 'qwen', agentType: 'pull_request' }),
+      expect.any(String),
+    );
+  });
+
+  it('records dispatch failure in automation log when dispatch fails', async () => {
     deps.taskDispatcher = {
       ...createMockTaskDispatcher(),
       async dispatch(): ReturnType<TaskDispatcherService['dispatch']> {
@@ -603,25 +585,18 @@ describe('createTaskForPR', () => {
       },
     };
 
-    const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
-    deps.gitHubPRClient = {
-      ...createMockGitHubPRClient(),
-      postPRComment,
-    };
-
     const result = await createTaskForPR(deps, request);
 
     expect(result.ok).toBe(false);
-    // Dispatch failure comment SHOULD be posted
-    expect(postPRComment).toHaveBeenCalled();
-    const commentCall = vi.mocked(postPRComment).mock.calls[0];
-    expect(commentCall).toBeDefined();
-    if (commentCall !== undefined) {
-      const commentBody = commentCall[4];
-      expect(commentBody).toContain('Task Dispatch Failed');
-      expect(commentBody).toContain('WORKER_UNAVAILABLE');
-      expect(commentBody).toContain('Task was NOT queued');
-    }
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      expect.objectContaining({
+        type: 'task_dispatch_failed',
+        error: 'No workers available',
+        errorCode: 'worker_unavailable',
+      }),
+      expect.any(String),
+    );
   });
 
   it('returns task_creation_failed when dispatch fails', async () => {
@@ -768,12 +743,6 @@ describe('createTaskForPR', () => {
         },
       };
 
-      const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
-      deps.gitHubPRClient = {
-        ...createMockGitHubPRClient(),
-        postPRComment,
-      };
-
       const result = await createTaskForPR(deps, request);
 
       expect(result.ok).toBe(true);
@@ -783,33 +752,23 @@ describe('createTaskForPR', () => {
       // Task already starts as 'queued' — no status update call in the at_capacity path
       const statusUpdates = updateCalls.filter(d => typeof d['status'] === 'string');
       expect(statusUpdates).toHaveLength(0);
-      expect(postPRComment).toHaveBeenCalledWith(
-        'ghp_test_token_123',
-        'pbuchman',
-        'intexuraos',
-        42,
-        expect.stringContaining('**Dispatch outcome:** Created and queued')
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        expect.objectContaining({ type: 'task_dispatched', agentType: 'pull_request' }),
+        expect.any(String),
       );
     });
 
-    it('includes workerType in queued PR comment when provided', async () => {
+    it('includes workerType in automation log when queued with workerType', async () => {
       request.workerType = 'minimax';
-
-      const postPRComment = vi.fn().mockResolvedValue(ok({ commentId: 1 }));
-      deps.gitHubPRClient = {
-        ...createMockGitHubPRClient(),
-        postPRComment,
-      };
 
       const result = await createTaskForPR(deps, request);
 
       expect(result.ok).toBe(true);
-      expect(postPRComment).toHaveBeenCalledWith(
-        'ghp_test_token_123',
-        'pbuchman',
-        'intexuraos',
-        42,
-        expect.stringContaining('**Reviewer:** `minimax`'),
+      expect(deps.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 42 },
+        expect.objectContaining({ type: 'task_dispatched', workerType: 'minimax', agentType: 'pull_request' }),
+        expect.any(String),
       );
     });
 

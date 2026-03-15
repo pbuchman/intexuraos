@@ -167,6 +167,7 @@ describe('submitTaskFeedback', () => {
       userServiceClient: mockUserServiceClient as UserServiceClient,
       orchestratorSecret: MOCK_ORCHESTRATOR_SECRET,
       serviceUrl: MOCK_SERVICE_URL,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     };
   });
 

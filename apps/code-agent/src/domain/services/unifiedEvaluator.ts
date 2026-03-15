@@ -24,6 +24,7 @@ import type {
 import { isReviewCommandComment, extractReviewWorkerType } from '../utils/reviewTriage.js';
 import type { WorkerType } from '../models/codeTask.js';
 import type { GitHubEventLogEntryRepository } from '../repositories/gitHubEventLogEntryRepository.js';
+import type { AutomationLog } from '../ports/automationLog.js';
 
 export interface UnifiedEvaluatorDeps {
   webhookRules: WebhookRulesService;
@@ -39,6 +40,9 @@ export interface UnifiedEvaluatorDeps {
     prNumber: number,
     body: string,
   ) => Promise<Result<{ commentId: number }, { code: string; message: string }>>) | undefined;
+  automationLog: AutomationLog;
+  /** Resolve a GitHub login to a platform userId for OAuth token lookup. */
+  resolveTokenUserId?: ((senderLogin: string) => Promise<string | undefined>) | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
   allowedBots: Set<string>;
 }
 
@@ -132,6 +136,27 @@ export function buildSkipCommentBody(
 }
 
 export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvaluator {
+  const prRef = (event: GitHubPREvent): { repository: string; prNumber: number } => ({ repository: event.repository, prNumber: event.pullRequestNumber });
+
+  /** Best-effort automation log recording. Never throws. */
+  const recordLog = (event: GitHubPREvent, automationEvent: Parameters<AutomationLog['record']>[1], userId?: string): void => {
+    void deps.automationLog.record(prRef(event), automationEvent, userId).catch((recordErr: unknown) => {
+      // Fire-and-forget — automation log failures must not affect webhook processing
+      void recordErr;
+    });
+  };
+
+  /** Resolve senderLogin → platform userId for OAuth token lookup. Best-effort; returns undefined on failure. */
+  const resolveUserId = async (event: GitHubPREvent): Promise<string | undefined> => {
+    if (deps.resolveTokenUserId === undefined) return undefined;
+    try {
+      const login = resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots);
+      return await deps.resolveTokenUserId(login);
+    } catch {
+      return undefined;
+    }
+  };
+
   return {
     async evaluate(event: GitHubPREvent, logger: Logger): Promise<void> {
       const startTime = Date.now();
@@ -150,6 +175,15 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       }
 
       if (ruleOutcome.action === 'skip') {
+        // Record automation log: hard_rules skip
+        const userId = await resolveUserId(event);
+        recordLog(event, {
+          type: 'skipped',
+          decidedBy: 'hard_rules',
+          reason: ruleOutcome.reason,
+          ruleName: ruleOutcome.reason,
+        }, userId);
+
         await recordDecision(deps, event, {
           decidedBy: 'hard_rules',
           decision: 'skip',
@@ -161,7 +195,7 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       // Step 2: needs_triage → LLM
       if (deps.evaluateEvent === undefined) {
         logger.warn({ eventId: event.id }, 'No LLM configured for triage, using fallback');
-        await handleFallback(deps, event, 'no_llm_configured', startTime, logger);
+        await handleFallback(deps, event, 'no_llm_configured', startTime, logger, recordLog, resolveUserId);
         return;
       }
 
@@ -197,15 +231,25 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           /* v8 ignore start -- ts-type: defensive null coalescing, body is truthy when isReviewCommandComment passes @preserve */
           const workerType = extractReviewWorkerType(event.body ?? '');
           /* v8 ignore stop @preserve */
+
+          // Record automation log: triage_failed for @review
+          const userId = await resolveUserId(event);
+          recordLog(event, {
+            type: 'triage_failed',
+            error: llmResult.error.message,
+            fallbackAction: 'skip',
+          }, userId);
+
           await handleReviewTriageFailure(deps, event, llmResult.error.message, workerType, startTime, logger);
           return;
         }
 
-        await handleFallback(deps, event, llmResult.error.message, startTime, logger);
+        await handleFallback(deps, event, llmResult.error.message, startTime, logger, recordLog, resolveUserId);
         return;
       }
 
       const { triage, usage, reasoning } = llmResult.value; // @allow-result-access -- narrowed by !llmResult.ok
+      const toolCallSummaries = deduplicateToolCalls(usage.toolCalls);
 
       if (triage.action === 'dispatch') {
         const llmDispatchResult = await deps.dispatchService.dispatch({
@@ -216,6 +260,16 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
         if (!llmDispatchResult.success) {
           logger.warn({ eventId: event.id, error: llmDispatchResult.error }, 'Dispatch failed for LLM decision');
         }
+
+        // Record automation log: triage_dispatch (LLM dispatch)
+        const userId = await resolveUserId(event);
+        recordLog(event, {
+          type: 'triage_dispatch',
+          cost: usage.costUsd,
+          reasoning,
+          toolCalls: toolCallSummaries,
+        }, userId);
+
         await recordDecision(deps, event, {
           decidedBy: 'github_agent',
           decision: 'dispatch',
@@ -256,6 +310,14 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
             { eventId: event.id, error: reviewResult.error },
             'Failed to create review task'
           );
+
+          // Record automation log: triage_failed for review task creation failure
+          const userId = await resolveUserId(event);
+          recordLog(event, {
+            type: 'triage_failed',
+            error: `review_task_failed: ${reviewResult.error.message}`,
+            fallbackAction: 'skip',
+          }, userId);
 
           // Post error comment (best-effort)
           if (deps.postTriageComment !== undefined) {
@@ -305,6 +367,17 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
           return;
         }
 
+        // Record automation log: triage_dispatch for review
+        const userId = await resolveUserId(event);
+        recordLog(event, {
+          type: 'triage_dispatch',
+          reviewTypes: triage.reviewTypes,
+          workerType: reviewResult.value.workerType, // @allow-result-access -- narrowed by !reviewResult.ok above
+          cost: usage.costUsd,
+          reasoning,
+          toolCalls: toolCallSummaries,
+        }, userId);
+
         await postReviewTriageComment(
           deps,
           event,
@@ -339,6 +412,17 @@ export function createUnifiedEvaluator(deps: UnifiedEvaluatorDeps): UnifiedEvalu
       }
 
       // triage.action === 'skip'
+
+      // Record automation log: llm_triage skip
+      const userId = await resolveUserId(event);
+      recordLog(event, {
+        type: 'skipped',
+        decidedBy: 'llm_triage',
+        reason: triage.reason,
+        cost: usage.costUsd,
+        reasoning,
+        toolCalls: toolCallSummaries,
+      }, userId);
 
       // Post skip comment to PR (pull_request events only)
       if (event.eventType === 'pull_request' && deps.postTriageComment !== undefined) {
@@ -432,9 +516,20 @@ async function handleFallback(
   reason: string,
   startTime: number,
   logger: Logger,
+  recordLog: (event: GitHubPREvent, automationEvent: Parameters<AutomationLog['record']>[1], userId?: string) => void,
+  resolveUserId: (event: GitHubPREvent) => Promise<string | undefined>,
 ): Promise<void> {
   if (event.eventType === 'issue_comment' || event.eventType === 'pull_request_review' || event.eventType === 'pull_request_review_comment') {
     logger.warn({ eventId: event.id }, 'Fallback: dispatching comment event');
+
+    // Record automation log: triage_failed with fallback dispatch
+    const userId = await resolveUserId(event);
+    recordLog(event, {
+      type: 'triage_failed',
+      error: reason,
+      fallbackAction: 'dispatch',
+    }, userId);
+
     const fallbackResult = await deps.dispatchService.dispatch({
       event,
       decision: { action: 'dispatch', reason: `FALLBACK_DISPATCH: ${reason}` },
@@ -451,6 +546,14 @@ async function handleFallback(
       ...(fallbackResult.error !== undefined && { dispatchError: fallbackResult.error }),
     }, startTime, logger);
   } else {
+    // Record automation log: triage_failed with fallback skip
+    const userId = await resolveUserId(event);
+    recordLog(event, {
+      type: 'triage_failed',
+      error: reason,
+      fallbackAction: 'skip',
+    }, userId);
+
     await recordDecision(deps, event, {
       decidedBy: 'hard_rules',
       decision: 'skip',
@@ -589,4 +692,18 @@ async function recordDecision(
       'Failed to save event decision audit record'
     );
   }
+}
+
+/** Deduplicate tool calls into string summaries for automation log events. */
+function deduplicateToolCalls(toolCalls: { tool: string; args: Record<string, unknown> }[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const tc of toolCalls) {
+    const key = `${tc.tool}(${JSON.stringify(tc.args)})`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(key);
+    }
+  }
+  return result;
 }

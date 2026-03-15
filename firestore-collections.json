@@ -202,6 +202,10 @@
     "dispatch_retries": {
       "owner": "code-agent",
       "description": "Failed webhook dispatch retry queue with TTL and max-attempts bounds"
+    },
+    "pr_automation_comments": {
+      "owner": "code-agent",
+      "description": "PR automation comment tracking for unified PR log (one doc per PR, keyed by repository:prNumber)"
     }
   }
 }

@@ -18,10 +18,14 @@ vi.mock('@google/genai', () => {
   class MockGoogleGenAI {
     models = { generateContent: mockGenerateContent };
   }
-  return {
-    GoogleGenAI: MockGoogleGenAI,
-    FunctionCallingConfigMode: { AUTO: 'AUTO', ANY: 'ANY', NONE: 'NONE' },
-  };
+  const FunctionCallingConfigMode = {
+    MODE_UNSPECIFIED: 'MODE_UNSPECIFIED',
+    AUTO: 'AUTO',
+    ANY: 'ANY',
+    NONE: 'NONE',
+    VALIDATED: 'VALIDATED',
+  } as const;
+  return { GoogleGenAI: MockGoogleGenAI, FunctionCallingConfigMode };
 });
 
 vi.mock('@intexuraos/llm-audit', () => ({
@@ -1092,5 +1096,79 @@ describe('createGeminiToolCallingClient', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.content).toBe('All good.');
+  });
+
+  describe('toolConfig mode enforcement', () => {
+    it('sends mode ANY on first iteration when tools are provided', async () => {
+      mockGenerateContent.mockResolvedValueOnce(textResponse('done'));
+
+      const client = createClient();
+      await client.run({
+        systemPrompt: 'triage agent',
+        messages: [{ role: 'user', content: 'eval PR' }],
+        tools: [
+          {
+            name: 'skip',
+            description: 'Skip this PR',
+            parameters: {
+              type: 'object',
+              properties: { reason: { type: 'string' } },
+              required: ['reason'],
+            },
+            run: async (): Promise<string> => JSON.stringify({ success: true }),
+          },
+        ],
+      });
+
+      const firstCallConfig = mockGenerateContent.mock.calls[0]?.[0]?.config as
+        | { toolConfig?: { functionCallingConfig?: { mode?: string } } }
+        | undefined;
+      expect(firstCallConfig?.toolConfig?.functionCallingConfig?.mode).toBe('ANY');
+    });
+
+    it('sends mode AUTO on second iteration after a tool call', async () => {
+      const skipTool = {
+        name: 'skip',
+        description: 'Skip',
+        parameters: {
+          type: 'object',
+          properties: { reason: { type: 'string' } },
+          required: ['reason'],
+        },
+        run: async (): Promise<string> => JSON.stringify({ success: true }),
+      };
+
+      mockGenerateContent
+        .mockResolvedValueOnce(functionCallResponse('skip', { reason: 'trivial' }))
+        .mockResolvedValueOnce(textResponse('Skipped because trivial.'));
+
+      const client = createClient();
+      await client.run({
+        systemPrompt: 'triage agent',
+        messages: [{ role: 'user', content: 'eval PR' }],
+        tools: [skipTool],
+      });
+
+      const secondCallConfig = mockGenerateContent.mock.calls[1]?.[0]?.config as
+        | { toolConfig?: { functionCallingConfig?: { mode?: string } } }
+        | undefined;
+      expect(secondCallConfig?.toolConfig?.functionCallingConfig?.mode).toBe('AUTO');
+    });
+
+    it('does NOT add toolConfig when no tools are provided', async () => {
+      mockGenerateContent.mockResolvedValueOnce(textResponse('plain text response'));
+
+      const client = createClient();
+      await client.run({
+        systemPrompt: 'simple agent',
+        messages: [{ role: 'user', content: 'hello' }],
+        tools: [],
+      });
+
+      const callConfig = mockGenerateContent.mock.calls[0]?.[0]?.config as
+        | { toolConfig?: unknown }
+        | undefined;
+      expect(callConfig?.toolConfig).toBeUndefined();
+    });
   });
 });

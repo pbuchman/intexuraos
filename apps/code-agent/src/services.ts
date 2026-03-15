@@ -67,10 +67,14 @@ import { createReviewTask } from './domain/usecases/createReviewTask.js';
 import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
 import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
 import { parseOwnerRepo } from './domain/utils/parseOwnerRepo.js';
+import { fetchGitHubToken } from './domain/utils/gitHubTokenResolver.js';
 import type { GitHubWebhookAuditEventRepository } from './domain/repositories/gitHubWebhookAuditEventRepository.js';
 import { createFirestoreGitHubWebhookAuditEventRepository } from './infra/firestore/gitHubWebhookAuditEventRepository.js';
 import type { GitHubEventLogEntryRepository } from './domain/repositories/gitHubEventLogEntryRepository.js';
 import { createFirestoreGitHubEventLogEntryRepository } from './infra/firestore/gitHubEventLogEntryRepository.js';
+import type { AutomationLog } from './domain/ports/automationLog.js';
+import { createGitHubPRAutomationLog } from './infra/services/gitHubPRAutomationLog.js';
+import { createFirestorePRAutomationCommentRepository } from './infra/firestore/prAutomationCommentRepository.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
@@ -111,6 +115,7 @@ export interface ServiceContainer {
   dispatchRetryRepo: DispatchRetryRepository;
   unifiedEvaluator: UnifiedEvaluator;
   mergeConflictDetector?: MergeConflictDetector;
+  automationLog: AutomationLog;
 }
 
 // Configuration required to initialize services
@@ -320,6 +325,15 @@ export function initServices(config: ServiceConfig): void {
   const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher, linearAgentClient });
   const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000 });
 
+  const prAutomationCommentRepo = createFirestorePRAutomationCommentRepository({ logger });
+
+  const automationLog = createGitHubPRAutomationLog({
+    gitHubPRClient,
+    prAutomationCommentRepo,
+    resolveOAuthToken: async (userId) => await fetchGitHubToken(userServiceClient, userId, logger),
+    logger,
+  });
+
   const statusMirrorService = createStatusMirrorService({
     actionsAgentClient,
     logger,
@@ -398,6 +412,7 @@ export function initServices(config: ServiceConfig): void {
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
     dispatchRetryRepo,
+    automationLog,
   });
 
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
@@ -415,7 +430,7 @@ export function initServices(config: ServiceConfig): void {
         )
       : undefined,
     createReviewTask: (taskLogger, request) => createReviewTask(
-      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, gitHubPRClient, userServiceClient, workerSettingsRepo, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl },
+      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, gitHubPRClient, userServiceClient, workerSettingsRepo, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl, automationLog },
       request,
     ),
     postTriageComment: async (senderLogin, repository, prNumber, body) => {
@@ -446,6 +461,14 @@ export function initServices(config: ServiceConfig): void {
         return { ok: false, error: { code: commentResult.error.code, message: commentResult.error.message } };
       }
       return { ok: true, value: { commentId: commentResult.value.commentId } }; // @allow-result-access -- narrowed by !commentResult.ok
+    },
+    automationLog,
+    resolveTokenUserId: async (senderLogin) => {
+      const userResult = await userServiceClient.resolveGitHubUsername(senderLogin);
+      if (!userResult.ok) return undefined;
+      const resolvedUser = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
+      if (resolvedUser === null) return undefined;
+      return resolvedUser.userId;
     },
     allowedBots: ALLOWED_BOTS,
   });
@@ -496,6 +519,7 @@ export function initServices(config: ServiceConfig): void {
     dispatchRetryRepo,
     unifiedEvaluator,
     mergeConflictDetector,
+    automationLog,
   };
 }
 

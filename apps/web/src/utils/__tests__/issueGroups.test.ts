@@ -727,10 +727,10 @@ describe('sortIssueGroups', () => {
       expect(result[1]?.linearIssueId).toBe('INT-1');
     });
 
-    it('falls back to updatedAt desc when neither has dispatchedAt', () => {
+    it('falls back to createdAt desc when neither has dispatchedAt', () => {
       const groups: IssueGroup[] = [
-        makeGroup({ linearIssueId: 'INT-1', updatedAt: '2024-01-01T00:00:00.000Z' }),
-        makeGroup({ linearIssueId: 'INT-2', updatedAt: '2024-06-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-1', createdAt: '2024-01-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-2', createdAt: '2024-06-01T00:00:00.000Z' }),
       ];
       const result = sortIssueGroups(groups, 'started-time');
       expect(result[0]?.linearIssueId).toBe('INT-2');
