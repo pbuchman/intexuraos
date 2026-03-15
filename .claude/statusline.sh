@@ -175,6 +175,10 @@ if [ "$stored_api_host" = "api.z.ai" ]; then
   model_version=""  # Clear version for cleaner display
 fi
 
+# ---- model name cleanup ----
+model_name=$(echo "$model_name" | sed 's/ *(1M context)//' | sed 's/(1M context)//')
+model_name="${model_name} 1M"
+
 # ---- git colors ----
 git_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;150m'; fi; }  # soft green
 rst() { if [ "$use_color" -eq 1 ]; then printf '\033[0m'; fi; }
@@ -296,9 +300,7 @@ printf '  🤖 %s%s%s' "$(model_color)" "$model_name" "$(rst)"
 if [ -n "$model_version" ] && [ "$model_version" != "null" ]; then
   printf '  🏷️ %s%s%s' "$(version_color)" "$model_version" "$(rst)"
 fi
-if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
-  printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
-fi
+# claude version removed per user preference
 
 # Line 2: Context and hook metrics
 line2=""
