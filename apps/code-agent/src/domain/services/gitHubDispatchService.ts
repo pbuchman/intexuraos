@@ -18,8 +18,9 @@ import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { loadConfig } from '../../config.js';
-import { notifyPROfTaskDispatch } from '../utils/prTaskNotification.js';
+
 import { extractDispatchWorkerType } from '../utils/dispatchWorkerTriage.js';
+import type { AutomationLog } from '../ports/automationLog.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
@@ -59,6 +60,7 @@ export interface WebhookDispatchServiceDeps {
   orchestratorSecret: string;
   serviceUrl: string;
   dispatchRetryRepo?: DispatchRetryRepository;
+  automationLog: AutomationLog;
 }
 
 export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
@@ -161,6 +163,7 @@ async function handleNewTask(
       gitHubPRClient: deps.gitHubPRClient,
       userServiceClient: deps.userServiceClient,
       firestore: deps.firestore,
+      automationLog: deps.automationLog,
     },
     {
       repository: event.repository,
@@ -243,19 +246,19 @@ async function handleExistingTask(
     return { success: false, dispatched: false, taskId: task.id, error: sendResult.error.message };
   }
 
-  await notifyPROfTaskDispatch(
-    { logger, gitHubPRClient: deps.gitHubPRClient, userServiceClient: deps.userServiceClient },
+  deps.automationLog.record(
+    { repository: event.repository, prNumber: event.pullRequestNumber },
     {
+      type: 'task_dispatched',
       taskId: task.id,
-      repository: event.repository,
-      prNumber: event.pullRequestNumber,
-      userId: task.userId,
-      dispatchOutcome:
-        sendResult.value.action === 'resumed' ? 'existing_task_resumed' : 'existing_task_queued',
-      updateTitle: false,
+      workerType: 'auto',
+      agentType: 'pull_request',
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
     },
-  );
+    task.userId,
+  ).catch((error: unknown) => {
+    logger.warn({ error, taskId: task.id }, 'Failed to record automation log for existing task dispatch');
+  });
 
   logger.info(
     { taskId: task.id, action: sendResult.value.action },

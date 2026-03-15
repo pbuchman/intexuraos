@@ -408,6 +408,33 @@ export function createGitHubPRHttpClient(
       }
     },
 
+    async getIssueComment(
+      token: string,
+      owner: string,
+      repo: string,
+      commentId: number,
+    ): Promise<Result<{ body: string }, GitHubPRClientError>> {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/repos/${owner}/${repo}/issues/comments/${String(commentId)}`,
+          {
+            method: 'GET',
+            headers: githubHeaders(token),
+            signal: AbortSignal.timeout(config.timeoutMs),
+          }
+        );
+
+        if (!response.ok) {
+          return err(mapErrorStatus(response.status, `Comment #${String(commentId)} not found in ${owner}/${repo}`));
+        }
+
+        const data = (await response.json()) as { body?: string };
+        return ok({ body: data.body ?? '' });
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+      }
+    },
+
     async updateIssueComment(
       token: string,
       owner: string,

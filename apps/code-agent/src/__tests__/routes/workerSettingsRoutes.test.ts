@@ -171,6 +171,7 @@ describe('Worker Settings Routes', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();
