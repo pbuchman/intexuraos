@@ -7,9 +7,11 @@ I now have a complete picture of the codebase. Let me produce the detailed task 
 ## TASK: IS-COV-1
 
 ### Context
+
 The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test case (`'My Cool Image Title!!!'` -> `'my-cool-image-title'`). Several edge cases are uncovered: unicode/diacritics, empty string, maxLength boundary, consecutive dashes at the end after slicing. In `services.ts`, the env var fallback defaults on lines 62-63 (`INTEXURAOS_IMAGE_BUCKET` defaults to `''`, `INTEXURAOS_IMAGE_PUBLIC_BASE_URL` defaults to `undefined`) and the provider fallthrough in `createPromptGenerator` (lines 87-97: non-Google falls through to GPT) and `createImageGenerator` (lines 104-125: non-OpenAI falls through to Google) are not explicitly tested.
 
 ### Pre-conditions
+
 - [ ] Read `apps/image-service/src/routes/internalRoutes.ts` lines 18-28 (slugify function)
 - [ ] Read `apps/image-service/src/services.ts` lines 62-63 (env var defaults) and lines 87-97, 104-125 (provider fallthrough)
 - [ ] Read `apps/image-service/src/__tests__/internalRoutes.test.ts` (existing route tests)
@@ -24,6 +26,7 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
 2. Add the following test cases AFTER the existing test `'generates image with slug when title is provided'` (line 457), still inside the `describe('POST /internal/images/generate', ...)` block. Each test sends a valid generate-image request with a specific `title` value and asserts the slug saved in `fakeRepo`:
 
    **Test 1: Unicode/diacritics are stripped**
+
    ```typescript
    it('slugifies title with unicode diacritics correctly', async () => {
      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
@@ -45,9 +48,11 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
      expect(savedImage?.slug).toBe('cafe-resume-noel');
    });
    ```
+
    Note: The accented chars `Cafe Resume Noel` should actually include accents: `Café Résumé Noël`. Use the literal accented characters in the test string.
 
    **Test 2: Empty title produces undefined slug (not passed to saved image)**
+
    ```typescript
    it('does not set slug when title is empty string', async () => {
      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
@@ -69,9 +74,11 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
      expect(savedImage?.slug).toBeUndefined();
    });
    ```
+
    IMPORTANT: Look at `internalRoutes.ts` line 142: `const slug = title !== undefined ? slugify(title) : undefined;`. An empty string `''` is NOT `undefined`, so `slugify('')` will be called, returning `''`. Then line 199: `...(slug !== undefined && { slug })` -- an empty string is not undefined, so `slug: ''` WILL be set. If this is the actual behavior, adjust the assertion to `expect(savedImage?.slug).toBe('')`. Verify by tracing the logic before finalizing.
 
    **Test 3: maxLength boundary -- title longer than 50 chars is truncated**
+
    ```typescript
    it('truncates slug to 50 characters for long titles', async () => {
      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
@@ -94,6 +101,7 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
      expect(savedImage!.slug!.length).toBeLessThanOrEqual(50);
    });
    ```
+
    To determine the exact expected slug: run `slugify('This Is A Very Long Title That Should Be Truncated After Fifty Characters Exactly')` manually:
    - lowercase: `'this is a very long title that should be truncated after fifty characters exactly'`
    - normalize NFD + strip diacritics: no change
@@ -103,9 +111,10 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
    - slice(0,50): `'this-is-a-very-long-title-that-should-be-truncated'` (exactly 50 chars)
    - strip trailing dash: no trailing dash
    - Result: `'this-is-a-very-long-title-that-should-be-truncated'`
-   Add assertion: `expect(savedImage!.slug).toBe('this-is-a-very-long-title-that-should-be-truncated');`
+     Add assertion: `expect(savedImage!.slug).toBe('this-is-a-very-long-title-that-should-be-truncated');`
 
    **Test 4: Title exactly at maxLength boundary (50 chars) is not truncated**
+
    ```typescript
    it('does not truncate slug at exactly 50 characters', async () => {
      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
@@ -128,9 +137,11 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
      expect(savedImage).toBeDefined();
    });
    ```
+
    NOTE: Compute the actual slugified value of the title you choose. Make sure the slugified result is exactly 50 chars. Adjust the title input string accordingly.
 
    **Test 5: Multiple consecutive dashes are collapsed**
+
    ```typescript
    it('collapses multiple dashes in slug', async () => {
      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
@@ -152,9 +163,11 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
      expect(savedImage?.slug).toBe('hello-world-test');
    });
    ```
+
    Trace: `'Hello---World   &&&   Test'` -> lowercase `'hello---world   &&&   test'` -> NFD: no change -> strip non-alnum/space/dash: `'hello---world      test'` -> spaces to dash: `'hello----world------test'` -> collapse dashes: `'hello-world-test'` -> slice(0,50): same -> strip trailing dash: same. Result: `'hello-world-test'`.
 
    **Test 6: Trailing dash after slice is stripped**
+
    ```typescript
    it('strips trailing dash from slug after truncation', async () => {
      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
@@ -180,6 +193,7 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
      expect(savedImage!.slug).toBe('a'.repeat(49));
    });
    ```
+
    Trace: `'aaa...a bbbbb'` (49 a's + space + bbbbb) -> lowercase: same -> NFD: same -> strip non-alnum: same (space and letters preserved) -> spaces to dash: `'aaa...a-bbbbb'` -> collapse: same -> slice(0,50): `'aaa...a-'` (49 a's + dash = 50 chars) -> strip trailing dash: `'aaa...a'` (49 a's). Result: 49 `a`s.
 
 **Part B: Env var defaults and provider fallthrough tests in services.test.ts**
@@ -187,36 +201,39 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
 3. Open `apps/image-service/src/__tests__/services.test.ts`. Add the following test cases.
 
    **Test 7: Inside `describe('initializeServices', ...)` block, add test for missing `INTEXURAOS_IMAGE_BUCKET`:**
+
    ```typescript
    it('uses empty string as default when INTEXURAOS_IMAGE_BUCKET is not set', () => {
      delete process.env['INTEXURAOS_IMAGE_BUCKET'];
-     
+
      initializeServices(fakePricingContext);
-     
+
      const services = getServices();
      expect(services.imageStorage).toBeDefined();
    });
    ```
 
    **Test 8: Inside `describe('initializeServices', ...)` block, add test for missing `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`:**
+
    ```typescript
    it('uses undefined as default when INTEXURAOS_IMAGE_PUBLIC_BASE_URL is not set', () => {
      delete process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
-     
+
      initializeServices(fakePricingContext);
-     
+
      const services = getServices();
      expect(services.imageStorage).toBeDefined();
    });
    ```
 
    **Test 9: Inside `describe('initializeServices', ...)` block, add test for missing `INTEXURAOS_USER_SERVICE_URL`:**
+
    ```typescript
    it('uses default localhost URL when INTEXURAOS_USER_SERVICE_URL is not set', () => {
      delete process.env['INTEXURAOS_USER_SERVICE_URL'];
-     
+
      initializeServices(fakePricingContext);
-     
+
      const services = getServices();
      expect(services.userServiceClient).toBeDefined();
    });
@@ -229,13 +246,16 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
    Same situation. The type `ImageGenerationModel` is `GPTImage1 | Gemini25FlashImage`, and both are already tested at lines 102-130. **Skip this test** -- both branches are already covered.
 
 ### Files to Create
+
 - None
 
 ### Files to Modify
+
 - `apps/image-service/src/__tests__/internalRoutes.test.ts` -- Add 6 new test cases inside the existing `describe('POST /internal/images/generate', ...)` block after line 477
 - `apps/image-service/src/__tests__/services.test.ts` -- Add 3 new test cases inside the existing `describe('initializeServices', ...)` block after line 139
 
 ### Test Requirements
+
 - [ ] Test: `slugifies title with unicode diacritics correctly` -- verifies NFD normalization strips diacritics (`Cafe Resume Noel` with accents -> `cafe-resume-noel`)
 - [ ] Test: `does not set slug when title is empty string` -- verifies empty title behavior (trace actual slugify('') output: empty string, which IS set because `'' !== undefined`)
 - [ ] Test: `truncates slug to 50 characters for long titles` -- verifies maxLength=50 truncation
@@ -247,6 +267,7 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
 - [ ] Test: `uses default localhost URL when INTEXURAOS_USER_SERVICE_URL is not set` -- verifies env var default
 
 ### Acceptance Criteria
+
 - [ ] All 9 new tests pass
 - [ ] All existing tests pass unchanged
 - [ ] `pnpm run verify:workspace:tracked -- image-service` passes
@@ -257,9 +278,11 @@ The `slugify` function (lines 18-28 of `internalRoutes.ts`) has only one test ca
 ## TASK: IS-1
 
 ### Context
+
 The three route handlers in `internalRoutes.ts` contain business logic (API key resolution, image generation orchestration, cleanup-on-failure, slugification) that should be extracted into application-layer use-cases. This task creates the use-case interfaces, types, and implementations. The existing domain ports (`PromptGenerator`, `ImageGenerator`, `GeneratedImageRepository`, `ImageStorage`) are the dependencies these use-cases will consume.
 
 ### Pre-conditions
+
 - [ ] IS-COV-1 is complete and all tests pass
 - [ ] Read `apps/image-service/src/routes/internalRoutes.ts` -- all three handlers
 - [ ] Read all domain port interfaces in `apps/image-service/src/domain/ports/`
@@ -283,7 +306,7 @@ The three route handlers in `internalRoutes.ts` contain business logic (API key 
 
    export interface GeneratePromptInput {
      text: string;
-     model: string;           // raw model string from request
+     model: string; // raw model string from request
      userId: string;
    }
 
@@ -331,7 +354,13 @@ The three route handlers in `internalRoutes.ts` contain business logic (API key 
 
    ```typescript
    import type { Result, Logger } from '@intexuraos/common-core';
-   import type { ImageGenerationModel, GeneratedImageRepository, ImageGenerator, ImageStorage, GeneratedImageData } from '../domain/index.js';
+   import type {
+     ImageGenerationModel,
+     GeneratedImageRepository,
+     ImageGenerator,
+     ImageStorage,
+     GeneratedImageData,
+   } from '../domain/index.js';
    import type { UserServiceClient } from '@intexuraos/internal-clients';
 
    export interface GenerateImageInput {
@@ -435,9 +464,28 @@ The three route handlers in `internalRoutes.ts` contain business logic (API key 
 5. **Create `apps/image-service/src/application/index.ts`** barrel export:
 
    ```typescript
-   export { createGeneratePromptUseCase, type GeneratePromptUseCase, type GeneratePromptDeps, type GeneratePromptInput, type GeneratePromptError } from './generatePrompt.js';
-   export { createGenerateImageUseCase, type GenerateImageUseCase, type GenerateImageDeps, type GenerateImageInput, type GenerateImageOutput, type GenerateImageError } from './generateImage.js';
-   export { createDeleteImageUseCase, type DeleteImageUseCase, type DeleteImageDeps, type DeleteImageInput, type DeleteImageOutput } from './deleteImage.js';
+   export {
+     createGeneratePromptUseCase,
+     type GeneratePromptUseCase,
+     type GeneratePromptDeps,
+     type GeneratePromptInput,
+     type GeneratePromptError,
+   } from './generatePrompt.js';
+   export {
+     createGenerateImageUseCase,
+     type GenerateImageUseCase,
+     type GenerateImageDeps,
+     type GenerateImageInput,
+     type GenerateImageOutput,
+     type GenerateImageError,
+   } from './generateImage.js';
+   export {
+     createDeleteImageUseCase,
+     type DeleteImageUseCase,
+     type DeleteImageDeps,
+     type DeleteImageInput,
+     type DeleteImageOutput,
+   } from './deleteImage.js';
    export { slugify } from './slugify.js';
    ```
 
@@ -479,6 +527,7 @@ The three route handlers in `internalRoutes.ts` contain business logic (API key 
    All test files use the existing fakes from `apps/image-service/src/__tests__/fakes.ts` and the same `beforeEach`/`afterEach` pattern (no `setServices` needed -- use-cases receive deps directly).
 
 ### Files to Create
+
 - `apps/image-service/src/application/slugify.ts` -- pure function, extracted from internalRoutes.ts
 - `apps/image-service/src/application/generatePrompt.ts` -- GeneratePromptUseCase factory + types
 - `apps/image-service/src/application/generateImage.ts` -- GenerateImageUseCase factory + types
@@ -490,9 +539,11 @@ The three route handlers in `internalRoutes.ts` contain business logic (API key 
 - `apps/image-service/src/__tests__/application/deleteImage.test.ts` -- unit tests
 
 ### Files to Modify
+
 - None in this task (route handlers are NOT modified yet -- that is IS-2)
 
 ### Test Requirements
+
 - [ ] Test: `slugify basic` -- verifies `'Hello World' -> 'hello-world'`
 - [ ] Test: `slugify diacritics` -- verifies `'Cafe Resume Noel' (with accents) -> 'cafe-resume-noel'`
 - [ ] Test: `slugify empty` -- verifies `'' -> ''`
@@ -520,6 +571,7 @@ The three route handlers in `internalRoutes.ts` contain business logic (API key 
 - [ ] Test: `deleteImage with slug` -- passes slug to storage.delete
 
 ### Acceptance Criteria
+
 - [ ] All use-case files compile with `pnpm run typecheck` (run from `apps/image-service`)
 - [ ] All new tests pass
 - [ ] All existing tests pass unchanged (routes still have their own logic -- unchanged at this point)
@@ -532,9 +584,11 @@ The three route handlers in `internalRoutes.ts` contain business logic (API key 
 ## TASK: IS-2
 
 ### Context
+
 After IS-1 created the use-cases, this task wires the route handlers to delegate to use-cases instead of containing business logic inline. The route layer keeps: request parsing, auth validation, use-case invocation, error-code-to-HTTP-status mapping, and response formatting.
 
 ### Pre-conditions
+
 - [ ] IS-1 is complete and all tests pass
 - [ ] Read the use-case files created in IS-1 (`apps/image-service/src/application/*.ts`)
 - [ ] Read `apps/image-service/src/routes/internalRoutes.ts` -- the current handlers
@@ -545,16 +599,25 @@ After IS-1 created the use-cases, this task wires the route handlers to delegate
 1. **Update `apps/image-service/src/services.ts`** -- Add use-case factory functions or use-case instances to `ServiceContainer`. Two approaches are valid:
 
    **Option A (Recommended):** Add use-case instances to the container:
+
    ```typescript
-   import type { GeneratePromptUseCase, GenerateImageUseCase, DeleteImageUseCase } from './application/index.js';
+   import type {
+     GeneratePromptUseCase,
+     GenerateImageUseCase,
+     DeleteImageUseCase,
+   } from './application/index.js';
    ```
+
    Add to `ServiceContainer` interface:
+
    ```typescript
    // After existing fields:
    createGeneratePromptUseCase: (model: string, logger: Logger) => GeneratePromptUseCase;
-   createGenerateImageUseCase: (model: ImageGenerationModel, logger: Logger) => GenerateImageUseCase;
+   createGenerateImageUseCase: (model: ImageGenerationModel, logger: Logger) =>
+     GenerateImageUseCase;
    createDeleteImageUseCase: (logger: Logger) => DeleteImageUseCase;
    ```
+
    IMPORTANT: The use-cases need a `logger` at construction time (the request logger), so the container exposes factory functions that take `logger` as a parameter.
 
    Alternatively, the use-cases can be created inline in the route handler using services from the container directly. This is simpler and avoids changing ServiceContainer. Evaluate which approach is cleaner. The simpler approach:
@@ -562,26 +625,34 @@ After IS-1 created the use-cases, this task wires the route handlers to delegate
    **Option B (Simpler):** Import use-case factories directly in the route file and construct them in the handler using services from `getServices()`. No ServiceContainer changes needed.
 
    **Use Option B** -- it's simpler and avoids changing the ServiceContainer (which would require updating all test files that create ServiceContainer fakes). The route handler will do:
+
    ```typescript
    const services = getServices();
    const useCase = createGeneratePromptUseCase(
-     { userServiceClient: services.userServiceClient, createPromptGenerator: services.createPromptGenerator, logger: request.log },
+     {
+       userServiceClient: services.userServiceClient,
+       createPromptGenerator: services.createPromptGenerator,
+       logger: request.log,
+     },
      modelConfig
    );
    const result = await useCase({ text, model, userId });
    ```
 
 2. **Rewrite `apps/image-service/src/routes/internalRoutes.ts`:**
-
    - Remove the `slugify` function (lines 18-28) -- it's now in `application/slugify.ts`
    - Add import: `import { createGeneratePromptUseCase, createGenerateImageUseCase, createDeleteImageUseCase } from '../application/index.js';`
    - Keep import of `IMAGE_PROMPT_MODELS, IMAGE_GENERATION_MODELS` and their types
 
    **POST /internal/images/prompts/generate handler (lines 46-113):**
    Replace lines 57-112 with:
+
    ```typescript
    const { text, model, userId } = request.body;
-   request.log.info({ model, userId, textLength: text.length }, 'Processing prompt generation request');
+   request.log.info(
+     { model, userId, textLength: text.length },
+     'Processing prompt generation request'
+   );
 
    const modelConfig = IMAGE_PROMPT_MODELS[model as ImagePromptModel];
    const { userServiceClient, createPromptGenerator } = getServices();
@@ -612,15 +683,26 @@ After IS-1 created the use-cases, this task wires the route handlers to delegate
 
    **POST /internal/images/generate handler (lines 130-229):**
    Replace lines 141-228 with:
+
    ```typescript
    const { prompt, model, userId, title } = request.body;
-   request.log.info({ model, userId, promptLength: prompt.length }, 'Processing image generation request');
+   request.log.info(
+     { model, userId, promptLength: prompt.length },
+     'Processing image generation request'
+   );
 
-   const { userServiceClient, createImageGenerator, generatedImageRepository, imageStorage } = getServices();
+   const { userServiceClient, createImageGenerator, generatedImageRepository, imageStorage } =
+     getServices();
    const modelConfig = IMAGE_GENERATION_MODELS[model as ImageGenerationModel];
 
    const useCase = createGenerateImageUseCase(
-     { userServiceClient, createImageGenerator, generatedImageRepository, imageStorage, logger: request.log },
+     {
+       userServiceClient,
+       createImageGenerator,
+       generatedImageRepository,
+       imageStorage,
+       logger: request.log,
+     },
      modelConfig
    );
    const result = await useCase({ prompt, model: model as ImageGenerationModel, userId, title });
@@ -647,10 +729,15 @@ After IS-1 created the use-cases, this task wires the route handlers to delegate
 
    **DELETE /internal/images/:id handler (lines 247-284):**
    Replace lines 260-283 with:
+
    ```typescript
    const { generatedImageRepository, imageStorage } = getServices();
 
-   const useCase = createDeleteImageUseCase({ generatedImageRepository, imageStorage, logger: request.log });
+   const useCase = createDeleteImageUseCase({
+     generatedImageRepository,
+     imageStorage,
+     logger: request.log,
+   });
    const result = await useCase({ id });
 
    return await reply.ok(result.value);
@@ -659,17 +746,21 @@ After IS-1 created the use-cases, this task wires the route handlers to delegate
 3. **Verify all existing route-level tests still pass unchanged.** The route tests in `internalRoutes.test.ts` test through `app.inject()` and should produce identical HTTP responses since the use-cases implement the same logic.
 
 ### Files to Create
+
 - None
 
 ### Files to Modify
+
 - `apps/image-service/src/routes/internalRoutes.ts` -- Replace inline business logic with use-case delegation. Remove `slugify` function. Add application imports. Keep auth validation, logging, error-to-HTTP mapping in route layer.
 
 ### Test Requirements
+
 - [ ] All existing route tests in `internalRoutes.test.ts` pass unchanged (same HTTP status codes, same response bodies)
 - [ ] All existing service tests pass unchanged
 - [ ] All use-case tests from IS-1 pass unchanged
 
 ### Acceptance Criteria
+
 - [ ] `internalRoutes.ts` no longer contains business logic (no direct calls to `userServiceClient.getApiKeys`, `generator.generateThumbnailPrompt`, `generatedImageRepository.save`, etc.)
 - [ ] `internalRoutes.ts` no longer contains the `slugify` function
 - [ ] Route handlers are purely: parse request -> validate auth -> call use-case -> map result to HTTP response
@@ -682,9 +773,11 @@ After IS-1 created the use-cases, this task wires the route handlers to delegate
 ## TASK: IS-3
 
 ### Context
+
 `services.ts` (130 lines) combines two concerns: (1) the container type + get/set/reset functions (DI container), and (2) the `initializeServices()` factory function that constructs real implementations. Splitting these improves testability and separates configuration from runtime access.
 
 ### Pre-conditions
+
 - [ ] IS-2 is complete and all tests pass
 - [ ] Read `apps/image-service/src/services.ts` -- current combined file
 - [ ] Read `apps/image-service/src/index.ts` -- where `initializeServices` is called
@@ -776,7 +869,12 @@ After IS-1 created the use-cases, this task wires the route handlers to delegate
 
    ```typescript
    // Re-export everything from the split files for backward compatibility
-   export { type ServiceContainer, getServices, setServices, resetServices } from './serviceContainer.js';
+   export {
+     type ServiceContainer,
+     getServices,
+     setServices,
+     resetServices,
+   } from './serviceContainer.js';
    export { initializeServices } from './serviceFactory.js';
    export type { DecryptedApiKeys } from '@intexuraos/internal-clients';
    ```
@@ -792,6 +890,7 @@ After IS-1 created the use-cases, this task wires the route handlers to delegate
 5. **Update `apps/image-service/src/__tests__/services.test.ts`** -- Add tests for the split:
 
    Add a new `describe('serviceFactory', ...)` block:
+
    ```typescript
    describe('serviceFactory', () => {
      it('initializeServices sets container via setServices', () => {
@@ -801,21 +900,26 @@ After IS-1 created the use-cases, this task wires the route handlers to delegate
      });
    });
    ```
+
    Note: This is already covered by existing tests. Only add if coverage requires it.
 
 ### Files to Create
+
 - `apps/image-service/src/serviceContainer.ts` -- ServiceContainer type + get/set/reset functions
 - `apps/image-service/src/serviceFactory.ts` -- initializeServices factory function
 
 ### Files to Modify
+
 - `apps/image-service/src/services.ts` -- Replace implementation with re-exports from serviceContainer.ts and serviceFactory.ts
 
 ### Test Requirements
+
 - [ ] All existing tests in `services.test.ts` pass unchanged (since they import from `services.ts` which re-exports)
 - [ ] All existing tests in `internalRoutes.test.ts` pass unchanged
 - [ ] All use-case tests pass unchanged
 
 ### Acceptance Criteria
+
 - [ ] `serviceContainer.ts` contains ONLY the type definition and get/set/reset functions (~30 lines)
 - [ ] `serviceFactory.ts` contains ONLY the `initializeServices` function (~70 lines)
 - [ ] `services.ts` is a pure re-export barrel (~5 lines)

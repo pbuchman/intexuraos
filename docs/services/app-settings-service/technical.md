@@ -52,18 +52,18 @@ sequenceDiagram
     participant Firestore
 
     Note over Service: Startup: validateAllModelPricing()
-    Service->>Firestore: Fetch all 5 providers
+    Service->>Firestore: Fetch all 4 providers
     Firestore-->>Service: Provider pricing docs
-    Service->>Service: Check all 16 models have pricing
+    Service->>Service: Check all 14 models have pricing
     alt Missing models
         Service->>Service: Exit with error (fail-fast)
     end
 
     Note over Client,Service: Runtime: Pricing Request
     Client->>+Service: GET /settings/pricing (Bearer)
-    Service->>Firestore: Fetch 5 providers in parallel
+    Service->>Firestore: Fetch 4 providers in parallel
     Firestore-->>Service: Provider pricing docs
-    Service-->>-Client: { google, openai, anthropic, perplexity, zai }
+    Service-->>-Client: { google, openai, anthropic, perplexity }
 
     Note over Client,Service: Runtime: Usage Costs
     Client->>+Service: GET /settings/usage-costs?days=30
@@ -77,6 +77,7 @@ sequenceDiagram
 
 | Commit     | Description                                                 | Date       |
 | ---------- | ----------------------------------------------------------- | ---------- |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)            | 2026-03-12 |
 | `b3f34d85` | Release v3.1.0                                              | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                              | 2026-02-19 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability             | 2026-02-16 |
@@ -93,7 +94,7 @@ sequenceDiagram
 
 | Method | Path                    | Purpose                                   | Auth         |
 | ------ | ----------------------- | ----------------------------------------- | ------------ |
-| GET    | `/settings/pricing`     | Get LLM pricing for all 5 providers       | Bearer token |
+| GET    | `/settings/pricing`     | Get LLM pricing for all 4 providers       | Bearer token |
 | GET    | `/settings/usage-costs` | Get authenticated user's aggregated costs | Bearer token |
 
 ### Internal Endpoints
@@ -117,8 +118,7 @@ sequenceDiagram
   google: ProviderPricing,
   openai: ProviderPricing,
   anthropic: ProviderPricing,
-  perplexity: ProviderPricing,
-  zai: ProviderPricing
+  perplexity: ProviderPricing
 }
 ```
 
@@ -259,7 +259,7 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 ## Startup Validation
 
-On startup, `validateAllModelPricing()` fetches pricing for all 5 providers and verifies that every model listed in `ALL_LLM_MODELS` (16 models from `@intexuraos/llm-contract`) has pricing configured. If any model is missing, the service refuses to start and prints a detailed error listing the missing models and their providers.
+On startup, `validateAllModelPricing()` fetches pricing for all 4 providers and verifies that every model listed in `ALL_LLM_MODELS` (14 models from `@intexuraos/llm-contract`) has pricing configured. If any model is missing, the service refuses to start and prints a detailed error listing the missing models and their providers.
 
 This ensures no downstream service can boot with stale or incomplete pricing data.
 
@@ -267,7 +267,7 @@ This ensures no downstream service can boot with stale or incomplete pricing dat
 
 - **Startup boot order** -- Other services (user-service, commands-agent, actions-agent) depend on app-settings-service and poll its `/health` endpoint before starting. The `ecosystem.config.cjs` configures `waitForService: 'http://localhost:8122/health'` for these dependents.
 
-- **Missing providers return 500** -- If any of the 5 providers is missing from Firestore, both public and internal pricing endpoints return `reply.fail('INTERNAL_ERROR', ...)`. All 5 providers must be present.
+- **Missing providers return 500** -- If any of the 4 providers is missing from Firestore, both public and internal pricing endpoints return `reply.fail('INTERNAL_ERROR', ...)`. All 4 providers must be present.
 
 - **Collection group query reads all history** -- `FirestoreUsageStatsRepository.getUserCosts()` fetches ALL documents for a user via collection group query, then filters by date client-side. The `days` parameter does not reduce Firestore reads.
 

@@ -241,7 +241,7 @@ curl -X POST http://localhost:8127/internal/page-summaries \
 }
 ```
 
-**Note:** This error only occurs if the user has no API key AND the platform fallback keys (`INTEXURAOS_GEMINI_APP_API_KEY` / `INTEXURAOS_ZAI_APP_API_KEY`) are not configured on the platform. In normal operation, the platform Gemini 2.5 Flash fallback handles users without API keys automatically.
+**Note:** This error only occurs if the user has no API key AND the platform fallback key (`INTEXURAOS_GEMINI_APP_API_KEY`) is not configured on the platform. In normal operation, the platform Gemini 2.5 Flash fallback handles users without API keys automatically.
 
 **Solution:** Either configure platform fallback keys in the service environment, or have the user add their LLM API key via user-service settings.
 

@@ -1,6 +1,6 @@
 # Research Agent - Technical Debt
 
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-15
 **Analysis Run:** v3.2.0 documentation refresh
 
 ---
@@ -203,10 +203,10 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 
 | Date       | Issue                                               | Resolution                                                                    |
 | ---------- | --------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 2026-03-12 | ZAI provider and GLM-4.7 models in LLM contract     | Removed ZAI; Chinese LLMs now via Alibaba Cloud Model Studio (DashScope)      |
 | 2026-02-19 | Title generation timeout (glm-4.7-flash at 29s)     | Switched fast model to `gemini-2.0-flash`; platform Gemini key added          |
-| 2026-02-19 | Users without API keys had no LLM fallback          | Added Gemini (primary) + Zai (secondary) platform-owned key fallbacks         |
+| 2026-02-19 | Users without API keys had no LLM fallback          | Added platform Gemini-owned key fallback (ZAI fallback removed in v3.3.0)     |
 | 2026-02-19 | `buildSynthesisContextRepairPrompt` overly complex  | Simplified to pass `originalPrompt` directly; matches updated llm-prompts API |
-| 2026-02-19 | `INTEXURAOS_GUEST_ZAI_API_KEY` naming inconsistency | Consolidated to `INTEXURAOS_ZAI_APP_API_KEY`                                  |
 
 ### 2026-02-08 - Notion Export Integration
 

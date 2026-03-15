@@ -28,6 +28,22 @@ You run a SaaS product and your morning is already full. This is what happens wh
 
 ## How It Helps
 
+### AI-Powered PR Triage with Tool Calling
+
+When a pull request is opened or updated, a GitHub Agent — powered by Gemini with tool calling — evaluates the change in real time. The agent reads the PR diff, inspects individual files, and decides whether the change needs a code review, a security audit, an architecture review, or can be safely skipped. Every decision is recorded in an audit trail with the model's reasoning, tool calls, and cost. If the LLM produces an invalid response, a structured output validation layer detects the error and sends a repair prompt automatically, so triage produces reliable results without manual intervention.
+
+Hard rules run first — filtering out noise like protected-branch pushes, bot chatter, and ignored prefixes — so the LLM is only invoked when a genuine decision is needed. The result is a two-tier evaluation pipeline: deterministic rules handle the obvious cases instantly, and AI handles the nuanced ones.
+
+**Example:** A bot pushes a dependency update PR. The hard rules recognize the sender as a whitelisted code worker bot and skip LLM triage entirely. Seconds later, a developer opens a PR that refactors the authentication module. The GitHub Agent reads the diff, sees security-critical file changes, and requests both a code quality review and a security review. The review task dispatches automatically — no human had to decide which PRs need attention.
+
+### Unified PR Automation Log
+
+Every action taken on a pull request — webhook received, triage decision, task dispatched, task completed, task failed — is collected into a single chronological log visible as a PR comment on GitHub. Instead of piecing together what happened from scattered notifications and dashboards, you read one comment that tells the full story: which events arrived, what the agent decided, why it decided that way, and what happened next.
+
+The log updates itself as new events occur. Each entry includes context — the LLM's reasoning for a triage decision, the worker type selected for a review, the error code when a dispatch fails. Noise is filtered out: redundant events like label changes and draft conversions are excluded, keeping the log focused on decisions and outcomes.
+
+**Example:** You open a PR and want to know why a review task was created. You scroll to the automation log comment and see: webhook received (pull_request opened) then triage dispatch (code_quality review, Gemini reasoning: "new authentication logic requires review") then task dispatched (review, sonnet worker) then task completed (2 review comments posted). The entire decision chain is visible in one place.
+
 ### Design Before Code
 
 Every task the code agent receives goes through two distinct phases. In the first, the agent interprets your request, creates a project issue, and produces a design — an explanation of what it intends to build, which files it will touch, and how it plans to verify the result. Then it stops. No code is written. You review the design on your own schedule: over coffee, on the train, between meetings. If the approach looks right, you approve it. If not, you redirect. Only after your explicit approval does the second phase begin — writing tests, writing code, running the automated test suite, and opening a pull request.
@@ -50,9 +66,9 @@ The conversation between you and the agent does not end when you press submit. W
 
 After a pull request is open, the feedback loop shifts to where developers already work — the PR itself. Leave a review comment, and the agent detects the actionable feedback automatically. When no existing task is linked to the PR, the agent creates one from scratch — resolving the commenter's GitHub username to an IntexuraOS user, auto-creating a Linear issue from the PR title, and dispatching the task with full PR context. The PR title is automatically updated to include the Linear issue ID (e.g., `[INT-123] Fix auth bug`), so Linear's GitHub integration links the PR to the issue without manual effort. When an existing task is found, the comment is forwarded to it — queued if the task is still running, or used to resume it if it has finished. The agent picks up where it left off with the full context of the original work intact.
 
-Every agent — whether planning, implementing, or handling pull request feedback — reads the full Linear issue description and all its comments before starting work. Comments are read newest-first, so clarifications you added after flagging a task as unclear are seen immediately when the task is re-executed. Your follow-up context is never lost between runs.
+Every agent — whether planning, implementing, reviewing, or handling pull request feedback — reads the full Linear issue description and all its comments before starting work. Comments are read newest-first, so clarifications you added after flagging a task as unclear are seen immediately when the task is re-executed. Your follow-up context is never lost between runs.
 
-If a task fails or produces a result that is close but not quite right, you can retry it with additional guidance. Failed tasks observe a cooling period — long enough to prevent runaway retries, short enough to keep you moving. Completed tasks can be resumed with new context, pushing further without losing what was already built. Retried tasks archive the original, keeping your task list focused on active work.
+If a task fails or produces a result that is close but not quite right, you can retry it with additional guidance. Failed tasks observe a cooling period — long enough to prevent runaway retries, short enough to keep you moving. Completed tasks can be resumed with new context, pushing further without losing what was already built. Retried tasks archive the original, keeping your task list focused on active work. When a retry is dispatched, the task inherits the open PR branch so work is not lost.
 
 **Example:** You approve a design and the agent starts coding. Halfway through, you realize the feature also needs to update the help text users see when they hover over a form field. You send a mid-task message through the dashboard: "Also update the tooltip on the email field." The agent receives the message at its next pause point and includes the change in the same pull request.
 
@@ -60,17 +76,19 @@ If a task fails or produces a result that is close but not quite right, you can 
 
 While the agent works, a live terminal view in the web dashboard streams its output as it happens — every file it reads, every test it runs, every decision it makes. You are not waiting for an email that says "done." You are watching the work unfold.
 
-Each task is tracked from the moment you submit it through completion. Per-task metrics break down exactly what happened: processing time, memory used, AI tokens consumed, and how time was split across API calls, tool execution, and overhead. A timeline view on the dashboard shows every pull request event — new versions pushed, reviews submitted, comments left — with links back to the source. The dashboard shows live Linear issue data alongside each task, so you see the current issue state without switching tools. Logs are retained for ninety days. When a task completes, a separate Gemini model analyzes the agent's output and produces a three-to-five sentence narrative summary — what was analyzed or implemented, key decisions made, and deliverables produced. This summary appears on the task card and in notifications, so you can understand the outcome at a glance without reading the full log.
+Each task is tracked from the moment you submit it through completion. Per-task metrics break down exactly what happened: processing time, memory used, AI tokens consumed, and how time was split across API calls, tool execution, and overhead. A GitHub event decision log shows every webhook event that arrived, which evaluation path it took (hard rules or LLM triage), and what action resulted — giving you full transparency into the automation pipeline. The dashboard shows live Linear issue data alongside each task, so you see the current issue state without switching tools. Logs are retained for ninety days. When a task completes, a separate Gemini model analyzes the agent's output and produces a three-to-five sentence narrative summary — what was analyzed or implemented, key decisions made, and deliverables produced. This summary appears on the task card and in notifications, so you can understand the outcome at a glance without reading the full log.
+
+Merge conflicts are detected automatically. When a push lands on a base branch and a bot-authored PR develops a merge conflict, the system posts a GitHub comment explaining the conflict and dispatches a resolution task — remapping the bot author to the PR owner so the right user's worker handles the fix.
 
 **Example:** A task has been running for twenty minutes and you want to know if it is stuck or making progress. You open the dashboard, see the live log stream showing the agent is midway through running the test suite, and close the tab. No guessing, no pinging, no waiting.
 
 ### Guardrails That Stay Out of the Way
 
-The agent enforces per-user limits on concurrent tasks (three at a time), hourly rate (ten per hour), and monthly spend (two hundred dollars per month) — so you always know what the work costs before the bill arrives. The estimated cost per task is about $1.17. These limits are enforced in real time, not reconciled after the fact.
+The agent enforces per-user limits on concurrent tasks (three at a time), hourly rate (ten per hour), and monthly spend (two hundred dollars per month) — so you always know what the work costs before the bill arrives. These limits are enforced in real time, not reconciled after the fact.
 
 Every prompt passes through two sanitization layers before reaching your worker. The first strips embedded secrets — AWS keys, API tokens, private keys, passwords in environment variables — so sensitive credentials are never sent to the AI model. The second rejects prompt injection patterns — system override markers, base64 blobs, and control characters — preventing attempts to manipulate the agent's behavior.
 
-Tasks that go silent for thirty minutes are automatically interrupted, so a hung process does not burn through your budget overnight. WhatsApp notifications arrive when a task starts, finishes, or fails — each with a direct-tap CTA button linking to the pull request or the task dashboard. You stay informed without checking a dashboard. If a task encounters a transient infrastructure error (such as a Cloudflare tunnel glitch), the dispatch system recognizes it as retryable and routes to an alternate worker automatically.
+Tasks that go silent for thirty minutes are automatically interrupted, so a hung process does not burn through your budget overnight. WhatsApp notifications arrive when a task starts, finishes, or fails — each with a direct-tap CTA button linking to the pull request or the task dashboard. You stay informed without checking a dashboard. If a task encounters a transient infrastructure error (such as a Cloudflare tunnel glitch), the dispatch system recognizes it as retryable and enqueues it for automatic retry — with bounded attempts and TTL expiry so failures do not loop indefinitely.
 
 **Example:** You submit a task before bed. The agent finishes at 2 a.m. and sends a WhatsApp notification with a tap-to-open button linking to the pull request. When you wake up, you tap the button, review the PR, and merge it before breakfast. If the task had failed, you would have seen that notification too — with a "Check Logs" button to jump straight to the task details.
 
@@ -81,12 +99,14 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 ## Key Benefits
 
 - **Design before code** — You approve the plan before a single line is written, so no compute is wasted on wrong assumptions
+- **AI-powered PR triage** — A Gemini-based GitHub Agent evaluates every PR with tool calling, deciding what reviews are needed without human intervention
+- **Unified automation log** — Every decision and action on a PR is visible in a single chronological comment, so you never wonder what happened
 - **Your machines, your code** — Source code stays on infrastructure you own and control, using your own Claude subscription
 - **Responds to PR feedback** — Review comments on the pull request are forwarded to the agent, or a new task is created automatically if none exists, picking up with full context
 - **Submit from anywhere** — WhatsApp voice note, typed message, or web dashboard, every path leads to the same workflow
 - **Predictable spend** — Per-user limits on concurrency, hourly rate, and monthly cost, enforced before the work begins
-- **Always watching** — Live log streaming, per-task metrics, WhatsApp CTA buttons, and live Linear data hydration mean you know what is happening without switching tools
-- **Multi-model support** — Choose from Claude Opus, Sonnet, MiniMax, GLM, or Qwen models, or let the agent pick automatically
+- **Always watching** — Live log streaming, per-task metrics, WhatsApp CTA buttons, event decision log, and live Linear data hydration mean you know what is happening without switching tools
+- **Multi-model support** — Choose from Claude Opus, Sonnet, MiniMax, GLM, Qwen, or Kimi models, or let the agent pick automatically
 
 ## Limitations
 
@@ -97,6 +117,7 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 - **WhatsApp notifications require a connected account** — Without WhatsApp linked, you rely on the dashboard for status updates
 - **Prompt length capped at 10,000 characters** — Very long task descriptions need to be broken into smaller requests
 - **Queued tasks expire after 30 minutes** — If all workers remain busy beyond the queue TTL, the task fails and you are notified
+- **Planning-task label gate** — Autonomous planning only runs on issues explicitly tagged with the `planning-task` label
 
 ---
 

@@ -90,6 +90,8 @@ sequenceDiagram
 
 | Commit     | Description                                                    | Date       |
 | ---------- | -------------------------------------------------------------- | ---------- |
+| `1d89a24a` | Address review feedback for v8-ignore test coverage            | 2026-03-09 |
+| `5a4f7131` | Add coverage for v8-ignore blocks in speechmatics adapter      | 2026-03-09 |
 | `44ea683a` | Release v3.2.0                                                 | 2026-03-07 |
 | `60610a9d` | Clarify two-step event validation with inline comments         | 2026-03-06 |
 | `cead3f44` | Add type literal to event guard, clarify publisher/mediaId     | 2026-03-06 |

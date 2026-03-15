@@ -32,7 +32,7 @@ interface WorkerConfig {
   worktreePath: string;
   prompt: string; // User prompt content (written to secrets/user-prompt.txt)
   systemPrompt: string; // System prompt content (written to secrets/system-prompt.txt)
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
+  workerType: 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
@@ -98,7 +98,7 @@ interface IsolationProvider {
 ### Worker Types
 
 ```typescript
-type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm-5' | 'qwen3.5-plus';
+type WorkerType = 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
 
 const WORKER_TYPES: Record<
   WorkerType,
@@ -108,34 +108,39 @@ const WORKER_TYPES: Record<
     model?: string;
   }
 > = {
-  opus: {
-    apiBaseUrl: 'https://api.anthropic.com',
-    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    model: 'claude-opus-4-5-20251101',
-  },
   auto: {
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
   },
+  opus: {
+    apiBaseUrl: 'https://api.anthropic.com',
+    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+    model: 'opus',
+  },
   sonnet: {
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    model: 'claude-sonnet-4-20250514',
+    model: 'sonnet',
   },
   minimax: {
     apiBaseUrl: 'https://api.minimax.io/anthropic',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     model: 'MiniMax-M2.5',
   },
-  'glm-5': {
+  glm: {
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'glm-5',
   },
-  'qwen3.5-plus': {
+  qwen: {
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
     model: 'qwen3.5-plus',
+  },
+  kimi: {
+    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
+    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
+    model: 'kimi-k2.5',
   },
 };
 ```

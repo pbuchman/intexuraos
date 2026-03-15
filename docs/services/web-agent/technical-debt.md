@@ -1,6 +1,6 @@
 # Web Agent -- Technical Debt
 
-**Last Updated:** 2026-02-22
+**Last Updated:** 2026-03-15
 **Analysis Run:** v3.1.0 documentation refresh
 
 ---
@@ -122,8 +122,9 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 | 2026-02-19 | PromptBuilder lacked version enforcement            | Added `version: '1.0.0'` to both prompts; CI-enforced    |
 | 2026-02-16 | No distributed tracing                              | Added Dash0 OpenTelemetry via transparent preload module |
 | 2026-02-15 | `CRAWL4AI_API_KEY` nonstandard naming               | Renamed to `CRAWL4AI_APP_API_KEY` per APP convention     |
+| 2026-03-12 | ZAI provider removed from LLM contract              | Chinese LLMs now via Alibaba Cloud Model Studio          |
 | 2026-02-15 | Platform ZAI model too slow (29s) for summarization | Switched default platform fallback to Gemini 2.5 Flash   |
-| 2026-02-09 | No summarization fallback for users without API key | Added platform ZAI fallback (now secondary to Gemini)    |
+| 2026-02-09 | No summarization fallback for users without API key | Added platform Gemini fallback (ZAI removed in v3.3.0)   |
 | 2026-02-08 | INT-533 Summaries describing platforms              | Added CONTENT FOCUS section to summary prompts           |
 | 2026-02-08 | Response contract violations                        | Migrated internalRoutes to reply.ok() / reply.fail()     |
 | 2026-02-08 | Raw pino() logger usage                             | Migrated to createAppLogger() for Sentry integration     |
@@ -156,11 +157,11 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 
 ### Platform LLM Fallback Chain
 
-**Decision:** When user has no API key, fall back to platform Gemini 2.5 Flash, then platform ZAI.
+**Decision:** When user has no API key, fall back to platform Gemini 2.5 Flash.
 
 **Rationale:**
 
-- ZAI's glm-4.7-flash took 29s for summarization, exceeding HTTP timeouts
+- ZAI's glm-4.7-flash took 29s for summarization, exceeding HTTP timeouts (ZAI removed in v3.3.0)
 - Gemini 2.5 Flash is faster and already supported in llm-factory
 - Users without configured API keys still get summarization functionality
 
