@@ -98,7 +98,6 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     }
   }
 
-  /* v8 ignore start -- test-infra: tests use fake message sender @preserve */
   async sendInteractiveMessage(
     phoneNumber: string,
     message: string,
@@ -112,9 +111,7 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
 
     try {
       // Remove + prefix if present for WhatsApp API
-      /* v8 ignore start -- test-infra: tests use fake message sender @preserve */
       const normalizedPhone = phoneNumber.startsWith('+') ? phoneNumber.slice(1) : phoneNumber;
-      /* v8 ignore stop @preserve */
 
       // WhatsApp limits button titles to 20 characters
       const truncatedButtons = buttons.map((btn) => ({
@@ -271,5 +268,4 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
       });
     }
   }
-  /* v8 ignore stop @preserve */
 }

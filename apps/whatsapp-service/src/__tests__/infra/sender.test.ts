@@ -241,6 +241,22 @@ describe('WhatsAppCloudApiSender', () => {
       expect(body['to']).toBe('447123456789');
     });
 
+    it('handles phone number without + prefix for interactive messages', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<Record<string, unknown>> => Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendInteractiveMessage('447123456789', 'Test', [
+        { type: 'reply' as const, reply: { id: 'btn-1', title: 'OK' } },
+      ]);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as Record<string, unknown>;
+      expect(body['to']).toBe('447123456789');
+    });
+
     it('returns error on API failure for interactive message', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -303,6 +319,144 @@ describe('WhatsAppCloudApiSender', () => {
       const result = await sender.sendInteractiveMessage('+1234567890', 'Test', [
         { type: 'reply' as const, reply: { id: 'btn-1', title: 'OK' } },
       ]);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.wamid).toMatch(/^unknown-\d+$/);
+      }
+    });
+  });
+
+  describe('sendCtaUrlMessage', () => {
+    const ctaUrl = { displayText: 'View Details', url: 'https://example.com/details' };
+
+    it('sends CTA URL message successfully', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.cta-123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await sender.sendCtaUrlMessage('+1234567890', 'Check this out!', ctaUrl);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.wamid).toBe('wamid.cta-123');
+      }
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        })
+      );
+
+      // Verify body structure
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as Record<string, unknown>;
+      expect(body['messaging_product']).toBe('whatsapp');
+      expect(body['to']).toBe('1234567890');
+      expect(body['type']).toBe('interactive');
+      expect(body['interactive']).toEqual({
+        type: 'cta_url',
+        body: { text: 'Check this out!' },
+        action: {
+          name: 'cta_url',
+          parameters: {
+            display_text: 'View Details',
+            url: 'https://example.com/details',
+          },
+        },
+      });
+    });
+
+    it('removes + prefix from phone number for CTA URL messages', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<Record<string, unknown>> => Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendCtaUrlMessage('+447123456789', 'Test', ctaUrl);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as Record<string, unknown>;
+      expect(body['to']).toBe('447123456789');
+    });
+
+    it('handles phone number without + prefix for CTA URL messages', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<Record<string, unknown>> => Promise.resolve({ messages: [{ id: 'wamid.123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendCtaUrlMessage('447123456789', 'Test', ctaUrl);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(callArgs[1].body as string) as Record<string, unknown>;
+      expect(body['to']).toBe('447123456789');
+    });
+
+    it('returns error on API failure for CTA URL message', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: (): Promise<string> => Promise.resolve('Bad Request: Invalid CTA URL message'),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await sender.sendCtaUrlMessage('+1234567890', 'Test', ctaUrl);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('400');
+      }
+    });
+
+    it('returns error on network failure for CTA URL message', async () => {
+      const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await sender.sendCtaUrlMessage('+1234567890', 'Test', ctaUrl);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('Network error');
+      }
+    });
+
+    it('returns error on timeout for CTA URL message', async () => {
+      const abortError = new Error('Aborted');
+      abortError.name = 'AbortError';
+
+      const mockFetch = vi.fn().mockRejectedValue(abortError);
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await sender.sendCtaUrlMessage('+1234567890', 'Test', ctaUrl);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('timed out');
+      }
+    });
+
+    it('generates fallback wamid when response has no message id', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<Record<string, unknown>> => Promise.resolve({}),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await sender.sendCtaUrlMessage('+1234567890', 'Test', ctaUrl);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
