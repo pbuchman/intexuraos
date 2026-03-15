@@ -12,6 +12,7 @@ import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { createReviewTask, type CreateReviewTaskDeps } from '../../domain/usecases/createReviewTask.js';
+import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 
 function createFakeLogger(): Logger {
   return {
@@ -80,6 +81,20 @@ function createFakeWorkerSettingsRepo(): WorkerSettingsRepository {
   } as unknown as WorkerSettingsRepository;
 }
 
+function createFakeWhatsAppNotifier(): WhatsAppNotifier {
+  return {
+    notifyTaskComplete: vi.fn().mockResolvedValue(ok(undefined)),
+    notifyTaskFailed: vi.fn().mockResolvedValue(ok(undefined)),
+    notifyTaskStarted: vi.fn().mockResolvedValue(ok(undefined)),
+    notifyTaskResumed: vi.fn().mockResolvedValue(ok(undefined)),
+    notifyResumedTaskComplete: vi.fn().mockResolvedValue(ok(undefined)),
+    notifyDesignComplete: vi.fn().mockResolvedValue(ok(undefined)),
+    notifyTaskQueued: vi.fn().mockResolvedValue(ok(undefined)),
+    notifyTaskQueueExpired: vi.fn().mockResolvedValue(ok(undefined)),
+    notifyDispatchRetryExhausted: vi.fn().mockResolvedValue(ok(undefined)),
+  };
+}
+
 function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateReviewTaskDeps {
   return {
     logger: createFakeLogger(),
@@ -90,6 +105,7 @@ function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateRe
       findById: vi.fn().mockResolvedValue(ok(null)),
       findByUser: vi.fn().mockResolvedValue(ok([])),
       update: vi.fn().mockResolvedValue(ok(undefined)),
+      countQueued: vi.fn().mockResolvedValue(ok(0)),
     } as unknown as CodeTaskRepository,
     userLookupService: {
       resolveByGitHubUsername: vi.fn().mockResolvedValue(ok({
@@ -118,6 +134,7 @@ function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateRe
     workerSettingsRepo: createFakeWorkerSettingsRepo(),
     orchestratorSecret: 'test-secret',
     serviceUrl: 'https://code-agent.example.com',
+    whatsappNotifier: createFakeWhatsAppNotifier(),
     automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     ...overrides,
   };
@@ -1362,6 +1379,163 @@ describe('createReviewTask', () => {
       if (result.ok) {
         expect(result.value.workerType).toBe('auto');
       }
+    });
+  });
+
+  describe('queue support', () => {
+    it('queues task when dispatch returns at_capacity and queue has room', async () => {
+      const whatsappNotifier = createFakeWhatsAppNotifier();
+      const deps = createFakeDeps({
+        taskDispatcher: {
+          dispatch: vi.fn().mockResolvedValue(err({ code: 'at_capacity', message: 'All workers busy' })),
+          cancelOnWorker: vi.fn().mockResolvedValue(undefined),
+        } as unknown as TaskDispatcherService,
+        codeTaskRepo: {
+          create: vi.fn().mockResolvedValue(ok({ id: 'task-queued-1' })),
+          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+          findByPR: vi.fn().mockResolvedValue(ok(null)),
+          update: vi.fn().mockResolvedValue(ok(undefined)),
+          countQueued: vi.fn().mockResolvedValue(ok(2)),
+        } as unknown as CodeTaskRepository,
+        whatsappNotifier,
+      });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 50,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-queue-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('queued');
+        expect(result.value.taskId).toBe('task-queued-1');
+      }
+
+      // Should set queuedAt, NOT status: 'failed'
+      expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
+        'task-queued-1',
+        { queuedAt: expect.any(Date) },
+      );
+
+      // Should notify user
+      expect(whatsappNotifier.notifyTaskQueued).toHaveBeenCalledWith(
+        'user-1',
+        { id: 'task-queued-1' },
+        2,
+        expect.any(Number),
+      );
+    });
+
+    it('fails with queue_full when dispatch returns at_capacity and queue is full', async () => {
+      const deps = createFakeDeps({
+        taskDispatcher: {
+          dispatch: vi.fn().mockResolvedValue(err({ code: 'at_capacity', message: 'All workers busy' })),
+          cancelOnWorker: vi.fn().mockResolvedValue(undefined),
+        } as unknown as TaskDispatcherService,
+        codeTaskRepo: {
+          create: vi.fn().mockResolvedValue(ok({ id: 'task-full-1' })),
+          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+          findByPR: vi.fn().mockResolvedValue(ok(null)),
+          update: vi.fn().mockResolvedValue(ok(undefined)),
+          countQueued: vi.fn().mockResolvedValue(ok(11)),
+        } as unknown as CodeTaskRepository,
+      });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 51,
+        senderLogin: 'dev-user',
+        reviewTypes: ['security'],
+        eventId: 'evt-full-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+        expect(result.error.taskId).toBe('task-full-1');
+      }
+
+      // Should mark task as failed with queue_full error
+      expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
+        'task-full-1',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({ code: 'queue_full' }),
+        }),
+      );
+    });
+
+    it('treats queue as full when countQueued fails', async () => {
+      const deps = createFakeDeps({
+        taskDispatcher: {
+          dispatch: vi.fn().mockResolvedValue(err({ code: 'at_capacity', message: 'All workers busy' })),
+          cancelOnWorker: vi.fn().mockResolvedValue(undefined),
+        } as unknown as TaskDispatcherService,
+        codeTaskRepo: {
+          create: vi.fn().mockResolvedValue(ok({ id: 'task-count-fail-1' })),
+          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+          findByPR: vi.fn().mockResolvedValue(ok(null)),
+          update: vi.fn().mockResolvedValue(ok(undefined)),
+          countQueued: vi.fn().mockResolvedValue(err({ code: 'internal_error', message: 'Firestore unavailable' })),
+        } as unknown as CodeTaskRepository,
+      });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 53,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-count-fail-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+      }
+
+      // Should mark task as failed
+      expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
+        'task-count-fail-1',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({ code: 'queue_full' }),
+        }),
+      );
+    });
+
+    it('fails immediately on non-capacity dispatch errors', async () => {
+      const deps = createFakeDeps({
+        taskDispatcher: {
+          dispatch: vi.fn().mockResolvedValue(err({ code: 'network_error', message: 'Connection refused' })),
+          cancelOnWorker: vi.fn().mockResolvedValue(undefined),
+        } as unknown as TaskDispatcherService,
+      });
+
+      const result = await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 52,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-net-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('dispatch_failed');
+        expect(result.error.message).toBe('Connection refused');
+      }
+
+      // Should mark task as failed with dispatch_failed
+      expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
+        'task-review-1',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({ code: 'dispatch_failed' }),
+        }),
+      );
     });
   });
 });
