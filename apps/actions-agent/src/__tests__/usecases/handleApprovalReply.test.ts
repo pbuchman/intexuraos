@@ -2714,4 +2714,120 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(messages).toHaveLength(0);
     });
   });
+
+  describe('reminder action type fallback', () => {
+    it('falls back to event publishing when approving a reminder action', async () => {
+      const reminderAction: Action = {
+        ...testAction,
+        id: 'reminder-action-1',
+        type: 'reminder',
+        title: 'Test reminder',
+      };
+      await actionRepository.save(reminderAction);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'reminder-action-1',
+        buttonId: 'approve:reminder-action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.intent).toBe('approve');
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.actionType).toBe('reminder');
+    });
+
+    it('still succeeds when event publishing fails after reminder approval', async () => {
+      const reminderAction: Action = {
+        ...testAction,
+        id: 'reminder-action-2',
+        type: 'reminder',
+        title: 'Test reminder fail publish',
+      };
+      await actionRepository.save(reminderAction);
+
+      actionEventPublisher.setFailNext(true, {
+        code: 'PUBLISH_FAILED',
+        message: 'Simulated publish failure',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'reminder-action-2',
+        buttonId: 'approve:reminder-action-2',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.intent).toBe('approve');
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      // Event publishing failed, so no events recorded
+      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+  });
+
+  describe('non-terminal status handling', () => {
+    it('re-sends approval buttons for action in processing status (non-terminal)', async () => {
+      await actionRepository.save({
+        ...testAction,
+        status: 'processing',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.outcome).toBe('unclear_requested_clarification');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.buttons).toBeDefined();
+      expect(messages[0]?.buttons?.length).toBeGreaterThan(0);
+    });
+
+    it('returns race condition result when approving action in processing status', async () => {
+      await actionRepository.save({
+        ...testAction,
+        status: 'processing',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'action-1',
+        buttonId: 'approve:action-1',
+      });
+
+      // updateStatusIf expects 'awaiting_approval' but action is 'processing' → status_mismatch
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.actionId).toBe('action-1');
+        // Race condition path: no intent or outcome set
+        expect(result.value.intent).toBeUndefined();
+        expect(result.value.outcome).toBeUndefined();
+      }
+    });
+  });
 });
