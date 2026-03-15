@@ -423,9 +423,10 @@ export function initServices(config: ServiceConfig): void {
     eventDecisionRepo,
     gitHubEventLogEntryRepo,
     evaluateEvent: toolCallingClient !== undefined
-      ? (event: GitHubPREvent): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
+      ? (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
           { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS },
           event,
+          correctionContext,
         )
       : undefined,
     createReviewTask: (taskLogger, request) => createReviewTask(
