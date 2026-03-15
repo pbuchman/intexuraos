@@ -22,6 +22,8 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 
 import { createHmac } from 'node:crypto';
 import type { AutomationLog } from '../ports/automationLog.js';
+import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
+import { loadConfig } from '../../config.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
 
 export interface CreateReviewTaskRequest {
@@ -38,12 +40,12 @@ export interface CreateReviewTaskRequest {
 }
 
 export interface CreateReviewTaskError {
-  code: 'user_not_found' | 'no_workers_configured' | 'task_creation_failed' | 'dispatch_failed' | 'internal_error';
+  code: 'user_not_found' | 'no_workers_configured' | 'task_creation_failed' | 'dispatch_failed' | 'queue_full' | 'internal_error';
   message: string;
   taskId?: string;
 }
 
-export interface CreateReviewTaskResult { status: 'created'; taskId: string; workerType: WorkerType }
+export interface CreateReviewTaskResult { status: 'created' | 'queued'; taskId: string; workerType: WorkerType }
 
 export interface CreateReviewTaskDeps {
   logger: Logger;
@@ -54,6 +56,7 @@ export interface CreateReviewTaskDeps {
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  whatsappNotifier: WhatsAppNotifier;
   orchestratorSecret: string;
   serviceUrl: string;
   automationLog: AutomationLog;
@@ -336,13 +339,46 @@ export async function createReviewTask(
   });
 
   if (!dispatchResult.ok) {
-    logger.error({ taskId: task.id, error: dispatchResult.error }, 'Failed to dispatch review task');
+    const dispatchError = dispatchResult.error;
+
+    // Queue on at_capacity (matching processCodeAction pattern)
+    if (dispatchError.code === 'at_capacity') {
+      const config = loadConfig();
+      const queueCountResult = await codeTaskRepo.countQueued();
+      if (!queueCountResult.ok) {
+        logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
+      }
+      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
+
+      if (queueCount > config.queue.maxSize) {
+        await codeTaskRepo.update(task.id, {
+          status: 'failed',
+          error: {
+            code: 'queue_full',
+            message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
+          },
+        });
+        return err({ code: 'queue_full', message: 'All workers are busy and the queue is full.', taskId: task.id });
+      }
+
+      // Task already in 'queued' status from creation — just set queuedAt
+      await codeTaskRepo.update(task.id, { queuedAt: new Date() });
+
+      const queuePosition = queueCount;
+      const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
+      await deps.whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
+
+      logger.info({ taskId: task.id, queuePosition }, 'Review task queued due to worker capacity');
+      return ok({ status: 'queued', taskId: task.id, workerType: effectiveWorkerType });
+    }
+
+    // Non-capacity errors — fail immediately (existing behavior)
+    logger.error({ taskId: task.id, error: dispatchError }, 'Failed to dispatch review task');
     await codeTaskRepo.update(task.id, {
       status: 'failed',
-      error: { code: 'dispatch_failed', message: dispatchResult.error.message },
+      error: { code: 'dispatch_failed', message: dispatchError.message },
     });
-
-    return err({ code: 'dispatch_failed', message: dispatchResult.error.message, taskId: task.id });
+    return err({ code: 'dispatch_failed', message: dispatchError.message, taskId: task.id });
   }
 
   await codeTaskRepo.update(task.id, { status: 'dispatched', dispatchedAt: new Date() });

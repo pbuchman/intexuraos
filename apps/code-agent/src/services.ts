@@ -430,7 +430,20 @@ export function initServices(config: ServiceConfig): void {
         )
       : undefined,
     createReviewTask: (taskLogger, request) => createReviewTask(
-      { logger: taskLogger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, gitHubPRClient, userServiceClient, workerSettingsRepo, orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl, automationLog },
+      {
+        logger: taskLogger,
+        codeTaskRepo,
+        userLookupService,
+        taskDispatcher,
+        linearAgentClient,
+        gitHubPRClient,
+        userServiceClient,
+        workerSettingsRepo,
+        whatsappNotifier,
+        orchestratorSecret: config.orchestratorSecret,
+        serviceUrl: config.serviceUrl,
+        automationLog,
+      },
       request,
     ),
     postTriageComment: async (senderLogin, repository, prNumber, body) => {
