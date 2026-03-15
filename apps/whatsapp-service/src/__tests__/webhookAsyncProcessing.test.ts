@@ -2330,10 +2330,12 @@ describe('Webhook async processing', () => {
 
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalReplyEvents.length).toBeGreaterThanOrEqual(1);
-      const latestEvent2 = approvalReplyEvents[approvalReplyEvents.length - 1];
-      expect(latestEvent2?.actionId).toBe('task-xyz');
-      expect(latestEvent2?.buttonId).toBe('cancel-task:task-xyz');
-      expect(latestEvent2?.replyText).toBe('cancel-task');
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.type).toBe('action.approval.reply');
+      expect(latestEvent?.actionId).toBe('task-xyz');
+      expect(latestEvent?.buttonId).toBe('cancel-task:task-xyz');
+      expect(latestEvent?.buttonTitle).toBe('Cancel Task');
+      expect(latestEvent?.replyText).toBe('cancel-task');
     });
 
     it('processes view-task button', async () => {
@@ -2362,10 +2364,12 @@ describe('Webhook async processing', () => {
 
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalReplyEvents.length).toBeGreaterThanOrEqual(1);
-      const latestEvent2 = approvalReplyEvents[approvalReplyEvents.length - 1];
-      expect(latestEvent2?.actionId).toBe('task-abc');
-      expect(latestEvent2?.buttonId).toBe('view-task:task-abc');
-      expect(latestEvent2?.replyText).toBe('view-task');
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.type).toBe('action.approval.reply');
+      expect(latestEvent?.actionId).toBe('task-abc');
+      expect(latestEvent?.buttonId).toBe('view-task:task-abc');
+      expect(latestEvent?.buttonTitle).toBe('View Task');
+      expect(latestEvent?.replyText).toBe('view-task');
     });
 
     it('processes proceed-implementation button', async () => {
@@ -2394,10 +2398,12 @@ describe('Webhook async processing', () => {
 
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalReplyEvents.length).toBeGreaterThanOrEqual(1);
-      const latestEvent2 = approvalReplyEvents[approvalReplyEvents.length - 1];
-      expect(latestEvent2?.actionId).toBe('exec-123');
-      expect(latestEvent2?.buttonId).toBe('proceed-implementation:exec-123');
-      expect(latestEvent2?.replyText).toBe('proceed-implementation');
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.type).toBe('action.approval.reply');
+      expect(latestEvent?.actionId).toBe('exec-123');
+      expect(latestEvent?.buttonId).toBe('proceed-implementation:exec-123');
+      expect(latestEvent?.buttonTitle).toBe('Proceed');
+      expect(latestEvent?.replyText).toBe('proceed-implementation');
     });
 
     it('handles event publisher failure gracefully', async () => {
