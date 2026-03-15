@@ -7,13 +7,16 @@ I now have comprehensive knowledge of all source files and tests. Let me produce
 ## TASK: LA-COV-1 — Add tests for linearApiClient.ts real implementation
 
 ### Context
+
 The existing test file (`linearApiClient.test.ts`) only tests the `FakeLinearApiClient`. The real implementation in `linearApiClient.ts` exports several pure/testable functions (`mapIssueStateType`, `mapLinearError`, `createDedupKey`, `filterIssuesByCompletionDate`, `mapTeam`) that have no direct unit tests.
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/infra/linear/linearApiClient.ts` — confirm exported functions at lines 70, 240, 249, 270, 278
 - [ ] Read `apps/linear-agent/src/__tests__/infra/linearApiClient.test.ts` — confirm no tests for exported functions
 
 ### Steps
+
 1. Open `apps/linear-agent/src/__tests__/infra/linearApiClient.test.ts`
 2. Add a new import at the top:
    ```ts
@@ -31,6 +34,7 @@ The existing test file (`linearApiClient.test.ts`) only tests the `FakeLinearApi
 3. Add the following new `describe` blocks AFTER the existing `describe('LinearApiClient', ...)` block (at the same level, NOT nested inside):
 
 **describe('mapIssueStateType'):**
+
 - Test: `maps 'backlog' to 'backlog'` — `expect(mapIssueStateType('backlog')).toBe('backlog')`
 - Test: `maps 'unstarted' to 'unstarted'` — `expect(mapIssueStateType('unstarted')).toBe('unstarted')`
 - Test: `maps 'started' to 'started'` — `expect(mapIssueStateType('started')).toBe('started')`
@@ -40,9 +44,11 @@ The existing test file (`linearApiClient.test.ts`) only tests the `FakeLinearApi
 - Test: `maps empty string to 'backlog' as default` — `expect(mapIssueStateType('')).toBe('backlog')`
 
 **describe('mapTeam'):**
+
 - Test: `maps Linear SDK Team to LinearTeam` — create an object `{ id: 'team-1', name: 'Engineering', key: 'ENG' }` cast `as any` (since real Team has more fields), verify result equals `{ id: 'team-1', name: 'Engineering', key: 'ENG' }`
 
 **describe('mapLinearError'):**
+
 - Test: `maps rate limit error (429)` — `expect(mapLinearError(new Error('429 Too Many Requests'))).toEqual({ code: 'RATE_LIMIT', message: 'Linear API rate limit exceeded' })`
 - Test: `maps rate limit error (text match)` — `expect(mapLinearError(new Error('rate limit exceeded'))).toEqual({ code: 'RATE_LIMIT', message: 'Linear API rate limit exceeded' })`
 - Test: `maps 401 unauthorized error` — `expect(mapLinearError(new Error('401 Unauthorized'))).toEqual({ code: 'INVALID_API_KEY', message: 'Invalid Linear API key' })`
@@ -55,11 +61,13 @@ The existing test file (`linearApiClient.test.ts`) only tests the `FakeLinearApi
 - Test: `maps null error to fallback message` — `expect(mapLinearError(null)).toEqual({ code: 'API_ERROR', message: 'Unknown Linear API error' })`
 
 **describe('createDedupKey'):**
+
 - Test: `creates key with operation and single arg` — `expect(createDedupKey('listIssues', 'key123')).toBe('listIssues:key123')`
 - Test: `creates key with operation and multiple args` — `expect(createDedupKey('listIssues', 'key123', 'team-1', '7')).toBe('listIssues:key123:team-1:7')`
 - Test: `creates key with operation only` — `expect(createDedupKey('validate')).toBe('validate:')`
 
 **describe('filterIssuesByCompletionDate'):**
+
 - Create a helper `makeIssue(overrides)` that returns a `LinearIssue` with defaults and override capability. The `LinearIssue` type is imported from `../../domain/models.js`.
 - Test: `keeps non-completed issues regardless of date` — create issue with `state.type: 'started'`, old date. Verify it's kept.
 - Test: `keeps recently completed issues` — create issue with `state.type: 'completed'`, `completedAt: new Date().toISOString()`. Call `filterIssuesByCompletionDate([issue], 7)`. Verify kept.
@@ -71,15 +79,19 @@ The existing test file (`linearApiClient.test.ts`) only tests the `FakeLinearApi
 - Test: `returns all when none filtered` — pass array of active issues, verify all returned.
 
 **describe('cache utilities'):**
+
 - Test: `clearClientCache resets both caches` — call `clearClientCache()`, then `expect(getClientCacheSize()).toBe(0)` and `expect(getDedupCacheSize()).toBe(0)`.
 
 ### Files to Create
+
 None.
 
 ### Files to Modify
+
 - `apps/linear-agent/src/__tests__/infra/linearApiClient.test.ts` — add imports for exported functions; add describe blocks for `mapIssueStateType`, `mapTeam`, `mapLinearError`, `createDedupKey`, `filterIssuesByCompletionDate`, cache utilities
 
 ### Test Requirements
+
 - [ ] Test: mapIssueStateType for all 5 valid inputs + 2 edge cases (unknown, empty) — verifies switch case completeness
 - [ ] Test: mapTeam — verifies team field mapping
 - [ ] Test: mapLinearError for rate-limit, unauthorized, not-found, generic, null — verifies error classification
@@ -88,6 +100,7 @@ None.
 - [ ] Test: cache utilities — verifies clear/size functions
 
 ### Acceptance Criteria
+
 - [ ] All new tests pass
 - [ ] All existing tests pass unchanged
 - [ ] `pnpm run verify:workspace:tracked -- linear-agent` passes
@@ -97,14 +110,17 @@ None.
 ## TASK: LA-COV-2 — Add tests for processLinearAction.ts idempotency + save failure + failed issue save
 
 ### Context
+
 The existing test file covers the happy path, idempotency, and several failure modes. However, it does not test: (1) `buildDescription` with summary but without functionalRequirements or technicalDetails, (2) the failed issue repository `.create()` call failing silently (lines 128-136, 156-164, 189-197 all call `failedIssueRepository.create()` without checking the result — these succeed in tests but could fail and the use case should still return the correct response).
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/domain/useCases/processLinearAction.ts` lines 44-68, 86-104, 128-136, 156-164, 189-197, 221-226
 - [ ] Read `apps/linear-agent/src/__tests__/domain/useCases/processLinearAction.test.ts`
 - [ ] Read `apps/linear-agent/src/__tests__/fakes.ts` — confirm `FakeFailedIssueRepository` has no `setSaveFailure` method (it does NOT have one; its `create` always succeeds)
 
 ### Steps
+
 1. Open `apps/linear-agent/src/__tests__/fakes.ts`, find `FakeFailedIssueRepository.create()` method (line 484). Note that `create` always succeeds — there is no `shouldFailCreate` flag. Add a new flag and setter:
    - Add private field: `private shouldFailCreate = false;`
    - Modify `create()` to check: `if (this.shouldFailCreate) return err(this.failError);` at the top
@@ -144,19 +160,23 @@ The existing test file covers the happy path, idempotency, and several failure m
    - Verify description contains `## Key Points` and `- Key point A` but NOT `## Functional Requirements` and NOT `## Technical Details`
 
 ### Files to Create
+
 None.
 
 ### Files to Modify
+
 - `apps/linear-agent/src/__tests__/fakes.ts` — add `shouldFailCreate` flag and `setCreateFailure` setter to `FakeFailedIssueRepository`
 - `apps/linear-agent/src/__tests__/domain/useCases/processLinearAction.test.ts` — add 4 new tests
 
 ### Test Requirements
+
 - [ ] Test: `still returns failed when failedIssueRepo.create fails during extraction failure` — verifies lines 128-136 don't block on create failure
 - [ ] Test: `still returns failed when failedIssueRepo.create fails during invalid extraction` — verifies lines 156-164
 - [ ] Test: `still returns failed when failedIssueRepo.create fails during Linear API failure` — verifies lines 189-197
 - [ ] Test: `Key Points without functional/technical` — verifies buildDescription with summary-only
 
 ### Acceptance Criteria
+
 - [ ] All new tests pass
 - [ ] All existing tests pass unchanged
 - [ ] `pnpm run verify:workspace:tracked -- linear-agent` passes
@@ -166,14 +186,17 @@ None.
 ## TASK: LA-COV-3 — Add tests for internalIssuesRoutes.ts labels + tree edge cases
 
 ### Context
+
 The test file already has extensive coverage. Remaining gaps: (1) `toCommentSummary` helper (line 96-103) is tested indirectly but there's a v8 ignore on line 100; (2) `buildIssueDisplayResponse` (lines 66-94) has a v8 ignore on the assignee mapping (line 87); (3) label mutation logic (lines 359-372) with `addLabels`/`removeLabels` arrays has v8 ignores on lines 360-363; (4) tree endpoint with labels on root/descendants.
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/routes/internalIssuesRoutes.ts` lines 38-44, 66-103, 121-129, 359-372, 860-927
 - [ ] Read `apps/linear-agent/src/__tests__/routes/internalIssuesRoutes.test.ts`
 - [ ] Read `apps/linear-agent/src/__tests__/fakes.ts` — verify `FakeLinearApiClient.listIssueLabels()` returns `ok([])` by default
 
 ### Steps
+
 1. Open `apps/linear-agent/src/__tests__/routes/internalIssuesRoutes.test.ts`
 
 2. Inside the existing `describe('PATCH /internal/linear/issues/:issueId/metadata - updateIssue paths')` block, add new tests:
@@ -206,17 +229,21 @@ The test file already has extensive coverage. Remaining gaps: (1) `toCommentSumm
    - This test already exists (line 1289-1302) and correctly verifies that 'todo' maps to 'Todo' which is not found in the fake's workflow states. No new test needed.
 
 ### Files to Create
+
 None.
 
 ### Files to Modify
+
 - `apps/linear-agent/src/__tests__/fakes.ts` — add `setLabels` support to `FakeLinearApiClient`
 - `apps/linear-agent/src/__tests__/routes/internalIssuesRoutes.test.ts` — add tests for label mutation with addLabels/removeLabels, tree with labels/assigneeId
 
 ### Test Requirements
+
 - [ ] Test: `applies addLabels and removeLabels correctly` — verifies label mutation logic (lines 359-372)
 - [ ] Test: `tree includes labels and assigneeId` — verifies tree response shape (lines 910-926)
 
 ### Acceptance Criteria
+
 - [ ] All new tests pass
 - [ ] All existing tests pass unchanged
 - [ ] `pnpm run verify:workspace:tracked -- linear-agent` passes
@@ -226,14 +253,17 @@ None.
 ## TASK: LA-COV-4 — Add tests for linearRoutes.ts retry + pagination edge cases
 
 ### Context
+
 The existing tests cover most linearRoutes paths. Gaps: (1) retry route when `failedIssueRepository.update` fails during retry failure (lines 331-335 — logged but execution continues); (2) retry route when `failedIssueRepository.delete` fails after successful retry (lines 341-347 — logged but returns success); (3) `handleLinearError` with `INTERNAL_ERROR` code (line 35); (4) pagination edge case where offset equals total (no hasMore, 0 comments returned).
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/routes/linearRoutes.ts` lines 22-39, 316-349, 609-656
 - [ ] Read `apps/linear-agent/src/__tests__/routes/linearRoutes.test.ts`
 - [ ] Read `apps/linear-agent/src/__tests__/fakes.ts` — verify `FakeFailedIssueRepository` has `setUpdateFailure` and `setDeleteFailure`
 
 ### Steps
+
 1. Open `apps/linear-agent/src/__tests__/routes/linearRoutes.test.ts`
 
 2. Inside the existing `describe('POST /linear/failed-issues/:id/retry')` block, add:
@@ -272,12 +302,15 @@ The existing tests cover most linearRoutes paths. Gaps: (1) retry route when `fa
    - Rationale: Covers lines 35-36 of handleLinearError
 
 ### Files to Create
+
 None.
 
 ### Files to Modify
+
 - `apps/linear-agent/src/__tests__/routes/linearRoutes.test.ts` — add tests for retry error resilience, pagination edge cases, handleLinearError INTERNAL_ERROR path
 
 ### Test Requirements
+
 - [ ] Test: `retry — update failure doesn't block` — verifies lines 327-336
 - [ ] Test: `retry — delete failure doesn't block success` — verifies lines 341-347
 - [ ] Test: `pagination offset=total` — verifies lines 643-646 edge case
@@ -285,6 +318,7 @@ None.
 - [ ] Test: `handleLinearError INTERNAL_ERROR` — verifies line 35
 
 ### Acceptance Criteria
+
 - [ ] All new tests pass
 - [ ] All existing tests pass unchanged
 - [ ] `pnpm run verify:workspace:tracked -- linear-agent` passes
@@ -294,9 +328,11 @@ None.
 ## TASK: LA-1 — Extract domain logic from internalIssuesRoutes.ts
 
 ### Context
+
 `internalIssuesRoutes.ts` (933 lines) contains significant domain logic embedded in route handlers: `STATE_NAME_MAP`, `findStateId`, `toCommentSummary`, `buildIssueDisplayResponse`, label mutation logic, and tree traversal. These should be extracted to domain layer files so routes only handle HTTP concerns.
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/routes/internalIssuesRoutes.ts` — identify all non-route logic
 - [ ] Read `apps/linear-agent/src/domain/models.ts` — understand existing domain types
 - [ ] Read `apps/linear-agent/src/domain/index.ts` — understand current exports
@@ -323,7 +359,7 @@ None.
        addLabels: string[],
        removeLabels: string[],
        availableLabels: { id: string; name: string }[]
-     ): string[]
+     ): string[];
      ```
    - Logic: build set from current label names, add `addLabels`, remove `removeLabels`, then filter `availableLabels` by the resulting set, return their IDs
 
@@ -333,7 +369,7 @@ None.
      export function buildIssueTree(
        allIssues: SyncedLinearIssue[],
        rootId: string
-     ): { root: SyncedLinearIssue; descendants: SyncedLinearIssue[] } | null
+     ): { root: SyncedLinearIssue; descendants: SyncedLinearIssue[] } | null;
      ```
    - Returns null if root not found
    - Import `SyncedLinearIssue` from `../models.js`
@@ -342,7 +378,11 @@ None.
    - Add exports for new files:
      ```ts
      export { STATE_NAME_MAP, findStateId } from './stateUtils.js';
-     export { toCommentSummary, buildIssueDisplayResponse, type IssueDisplayResponse } from './issueDisplayMapper.js';
+     export {
+       toCommentSummary,
+       buildIssueDisplayResponse,
+       type IssueDisplayResponse,
+     } from './issueDisplayMapper.js';
      export { resolveDesiredLabelIds } from './useCases/resolveLabels.js';
      export { buildIssueTree } from './useCases/buildIssueTree.js';
      ```
@@ -376,6 +416,7 @@ None.
      - Test grandchildren included
 
 ### Files to Create
+
 - `apps/linear-agent/src/domain/stateUtils.ts` — STATE_NAME_MAP + findStateId
 - `apps/linear-agent/src/domain/issueDisplayMapper.ts` — toCommentSummary + buildIssueDisplayResponse + IssueDisplayResponse
 - `apps/linear-agent/src/domain/useCases/resolveLabels.ts` — resolveDesiredLabelIds
@@ -386,10 +427,12 @@ None.
 - `apps/linear-agent/src/__tests__/domain/useCases/buildIssueTree.test.ts`
 
 ### Files to Modify
+
 - `apps/linear-agent/src/domain/index.ts` — add exports
 - `apps/linear-agent/src/routes/internalIssuesRoutes.ts` — replace inline logic with domain imports
 
 ### Test Requirements
+
 - [ ] Test: findStateId match — verifies case-insensitive matching
 - [ ] Test: findStateId no match — verifies null return
 - [ ] Test: toCommentSummary empty/populated — verifies comment counting
@@ -398,6 +441,7 @@ None.
 - [ ] Test: buildIssueTree root/children/grandchildren/not-found — verifies tree traversal
 
 ### Acceptance Criteria
+
 - [ ] All extracted functions have direct unit tests
 - [ ] internalIssuesRoutes.ts is reduced by ~100-150 lines
 - [ ] Route handlers only handle HTTP concerns (auth, parse, call domain, format response)
@@ -409,9 +453,11 @@ None.
 ## TASK: LA-2 — Extract repository calls from linearRoutes.ts to use-cases
 
 ### Context
+
 `linearRoutes.ts` (983 lines) has route handlers that directly call repositories and embed business logic (e.g., failed issue retry with fallback values at lines 316-323, error update at lines 327-336, pagination at lines 643-646). These should be extracted to domain use-cases.
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/routes/linearRoutes.ts` — identify all direct repository/client calls
 - [ ] Read `apps/linear-agent/src/domain/useCases/` — understand existing use-case patterns
 - [ ] Run `pnpm run verify:workspace:tracked -- linear-agent` before starting
@@ -439,7 +485,7 @@ None.
      export async function retryFailedIssue(
        request: RetryFailedIssueRequest,
        deps: RetryFailedIssueDeps
-     ): Promise<Result<RetryFailedIssueResult, LinearError>>
+     ): Promise<Result<RetryFailedIssueResult, LinearError>>;
      ```
    - Move: getById check + ownership check + getApiKey + getFullConnection + createIssue with fallback values + update error on failure + delete on success
    - Keep the v8 ignore comments on lines 316-323 fallback values
@@ -468,7 +514,7 @@ None.
      export async function getIssueComments(
        request: GetIssueCommentsRequest,
        deps: GetIssueCommentsDeps
-     ): Promise<Result<PaginatedComments | null, LinearError>>
+     ): Promise<Result<PaginatedComments | null, LinearError>>;
      ```
    - Returns `null` in the Result value when issue not found (route maps to 404)
    - Handles: findByIdentifier + listByIssueId + countByIssueId + slice pagination
@@ -485,7 +531,7 @@ None.
        identifier: string,
        userId: string,
        deps: GetIssueDetailDeps
-     ): Promise<Result<IssueDetailResponse | null, LinearError>>
+     ): Promise<Result<IssueDetailResponse | null, LinearError>>;
      ```
    - Combine issue lookup + comment fetching + response assembly
 
@@ -499,6 +545,7 @@ None.
    - `apps/linear-agent/src/__tests__/domain/useCases/getIssueDetail.test.ts` — success with/without comments, not found
 
 ### Files to Create
+
 - `apps/linear-agent/src/domain/useCases/retryFailedIssue.ts`
 - `apps/linear-agent/src/domain/useCases/getIssueComments.ts`
 - `apps/linear-agent/src/domain/useCases/getIssueDetail.ts`
@@ -507,15 +554,18 @@ None.
 - `apps/linear-agent/src/__tests__/domain/useCases/getIssueDetail.test.ts`
 
 ### Files to Modify
+
 - `apps/linear-agent/src/domain/index.ts` — add exports
 - `apps/linear-agent/src/routes/linearRoutes.ts` — replace inline logic with use-case calls
 
 ### Test Requirements
+
 - [ ] Test: retryFailedIssue all paths (success, not found, ownership, not connected, API failure, save failures)
 - [ ] Test: getIssueComments pagination (normal, offset=total, offset>total, not found)
 - [ ] Test: getIssueDetail success and not found paths
 
 ### Acceptance Criteria
+
 - [ ] All use-cases have 100% branch coverage
 - [ ] linearRoutes.ts route handlers reduced to HTTP-only logic
 - [ ] All existing route tests pass unchanged
@@ -526,9 +576,11 @@ None.
 ## TASK: LA-3 — Extract webhook handler into use-case
 
 ### Context
+
 `linearWebhookRoutes.ts` has a 288-line `handleLinearWebhook` function (lines 75-362) mixing HTTP concerns with domain logic: type guards, connection lookups, signature validation, fan-out sync, code task triggering. The domain logic should live in a use-case.
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/routes/linearWebhookRoutes.ts` lines 75-362
 - [ ] Read `apps/linear-agent/src/domain/webhookTypes.ts`
 - [ ] Read `apps/linear-agent/src/domain/useCases/syncSingleIssueUseCase.ts`
@@ -580,20 +632,24 @@ None.
    - `apps/linear-agent/src/__tests__/domain/useCases/processWebhook.test.ts` — test ignored types, issue processing, comment processing, signature failure, connection not found
 
 ### Files to Create
+
 - `apps/linear-agent/src/domain/webhookTypeGuards.ts`
 - `apps/linear-agent/src/domain/useCases/processWebhook.ts`
 - `apps/linear-agent/src/__tests__/domain/webhookTypeGuards.test.ts`
 - `apps/linear-agent/src/__tests__/domain/useCases/processWebhook.test.ts`
 
 ### Files to Modify
+
 - `apps/linear-agent/src/domain/index.ts` — add exports
 - `apps/linear-agent/src/routes/linearWebhookRoutes.ts` — thin down to HTTP adapter
 
 ### Test Requirements
+
 - [ ] Test: type guards with issue data, comment data, unknown data
 - [ ] Test: processWebhook — ignored type, issue create, comment create, signature failure, no connection
 
 ### Acceptance Criteria
+
 - [ ] `handleLinearWebhook` reduced from ~288 lines to ~30 lines
 - [ ] All existing webhook route tests pass unchanged
 - [ ] `pnpm run verify:workspace:tracked -- linear-agent` passes
@@ -603,9 +659,11 @@ None.
 ## TASK: LA-4 — Split linearApiClient.ts into client + mappers
 
 ### Context
+
 `linearApiClient.ts` (637 lines) mixes pure mapper functions with API client implementation, caching, and deduplication. The pure functions should be extracted to make them independently testable and the client file focused on API communication.
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/infra/linear/linearApiClient.ts` — identify mapper functions and caching utilities
 - [ ] Run `pnpm run verify:workspace:tracked -- linear-agent` before starting
 
@@ -637,17 +695,21 @@ None.
 5. **Verify no import path breakage** — all consumers import via `linearApiClient.js` or `domain/index.js`
 
 ### Files to Create
+
 - `apps/linear-agent/src/infra/linear/linearMappers.ts` — pure mapper functions
 - `apps/linear-agent/src/infra/linear/requestCache.ts` — caching and deduplication
 
 ### Files to Modify
+
 - `apps/linear-agent/src/infra/linear/linearApiClient.ts` — import from new files, re-export
 
 ### Test Requirements
+
 - [ ] No new tests needed — existing tests validate via re-exports
 - [ ] All existing tests must pass with no changes to test files
 
 ### Acceptance Criteria
+
 - [ ] `linearApiClient.ts` reduced to ~200 lines
 - [ ] `linearMappers.ts` contains all pure mapping functions
 - [ ] `requestCache.ts` contains caching infrastructure
@@ -659,9 +721,11 @@ None.
 ## TASK: LA-5 — Move parsing/validation from linearActionExtractionService to domain
 
 ### Context
+
 `linearActionExtractionService.ts` (132 lines) contains response parsing logic (JSON parse, markdown stripping, Zod validation) that is domain-level concern mixed with infrastructure (LLM client calls). The parsing should be a separate domain function.
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/infra/llm/linearActionExtractionService.ts`
 - [ ] Read the `LinearIssueDataSchema` import — find its definition in `@intexuraos/llm-prompts`
 - [ ] Run `pnpm run verify:workspace:tracked -- linear-agent` before starting
@@ -669,6 +733,7 @@ None.
 ### Steps
 
 1. **Create `apps/linear-agent/src/domain/extractionParser.ts`:**
+
    ```ts
    import { err, ok, type Result } from '@intexuraos/common-core';
    import { LinearIssueDataSchema } from '@intexuraos/llm-prompts';
@@ -678,8 +743,9 @@ None.
 
    export function parseExtractionResponse(
      rawContent: string
-   ): Result<ExtractedIssueData, LinearError>
+   ): Result<ExtractedIssueData, LinearError>;
    ```
+
    - Move lines 74-127 logic: markdown code block stripping, JSON.parse, Zod validation, mapping to `ExtractedIssueData`
    - Return `err` with `EXTRACTION_FAILED` code for parse/validation errors
    - Return `ok` with `ExtractedIssueData` on success
@@ -700,14 +766,17 @@ None.
      - Test: JSON with `valid: false` -> returns ok with `valid: false` in result
 
 ### Files to Create
+
 - `apps/linear-agent/src/domain/extractionParser.ts`
 - `apps/linear-agent/src/__tests__/domain/extractionParser.test.ts`
 
 ### Files to Modify
+
 - `apps/linear-agent/src/domain/index.ts` — add export
 - `apps/linear-agent/src/infra/llm/linearActionExtractionService.ts` — replace inline parsing with domain call
 
 ### Test Requirements
+
 - [ ] Test: parseExtractionResponse with valid JSON
 - [ ] Test: parseExtractionResponse with markdown-wrapped JSON
 - [ ] Test: parseExtractionResponse with invalid JSON
@@ -715,6 +784,7 @@ None.
 - [ ] Test: parseExtractionResponse with valid=false response
 
 ### Acceptance Criteria
+
 - [ ] `linearActionExtractionService.ts` reduced to ~60 lines
 - [ ] Parsing logic fully testable without LLM client
 - [ ] All existing tests pass unchanged
@@ -725,9 +795,11 @@ None.
 ## TASK: LA-6 — Decompose listIssues.ts use-case
 
 ### Context
+
 `listIssues.ts` (209 lines) combines three concerns: (1) `syncedToLinearIssue` mapper, (2) parent-child tree building, (3) dashboard column grouping with date-based archive logic. These should be separate pure functions.
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/domain/useCases/listIssues.ts`
 - [ ] Read `apps/linear-agent/src/domain/models.ts` — `mapStateToDashboardColumn`
 - [ ] Run `pnpm run verify:workspace:tracked -- linear-agent` before starting
@@ -741,9 +813,11 @@ None.
 2. **Create `apps/linear-agent/src/domain/issueTreeBuilder.ts`:**
    - Extract tree building logic (lines 107-138) into:
      ```ts
-     export function buildIssueHierarchy(
-       syncedIssues: SyncedLinearIssue[]
-     ): { topLevel: LinearIssue[]; subtasks: LinearIssue[]; all: LinearIssue[] }
+     export function buildIssueHierarchy(syncedIssues: SyncedLinearIssue[]): {
+       topLevel: LinearIssue[];
+       subtasks: LinearIssue[];
+       all: LinearIssue[];
+     };
      ```
    - Uses `syncedToLinearIssue` internally (import from `./syncedIssueMapper.js`)
    - First pass: convert all issues, split into top-level and children
@@ -756,7 +830,7 @@ None.
      export function groupIssuesByDashboardColumn(
        issues: LinearIssue[],
        options: { includeArchive: boolean; doneDays?: number }
-     ): GroupedIssues
+     ): GroupedIssues;
      ```
    - Move `DONE_RECENT_DAYS` constant (line 45) here
    - Import `mapStateToDashboardColumn` from `./models.js`
@@ -787,6 +861,7 @@ None.
      - Test includeArchive=false excludes old done items
 
 ### Files to Create
+
 - `apps/linear-agent/src/domain/syncedIssueMapper.ts`
 - `apps/linear-agent/src/domain/issueTreeBuilder.ts`
 - `apps/linear-agent/src/domain/issueGrouper.ts`
@@ -795,15 +870,18 @@ None.
 - `apps/linear-agent/src/__tests__/domain/issueGrouper.test.ts`
 
 ### Files to Modify
+
 - `apps/linear-agent/src/domain/index.ts` — add exports
 - `apps/linear-agent/src/domain/useCases/listIssues.ts` — use extracted functions
 
 ### Test Requirements
+
 - [ ] Test: syncedToLinearIssue field mapping
 - [ ] Test: buildIssueHierarchy flat list, nested, empty
 - [ ] Test: groupIssuesByDashboardColumn all states, archive logic
 
 ### Acceptance Criteria
+
 - [ ] `listIssues.ts` reduced to ~50 lines of orchestration
 - [ ] Each extracted function is independently tested
 - [ ] All existing tests pass unchanged
@@ -814,9 +892,11 @@ None.
 ## TASK: LA-7 — Decompose processLinearAction.ts orchestration
 
 ### Context
+
 `processLinearAction.ts` (234 lines) is a single function combining: idempotency check, connection lookup, LLM extraction, description building, issue creation, and result recording. The `buildDescription` function (lines 44-68) is already separated but private. Sub-operations can be extracted.
 
 ### Pre-conditions
+
 - [ ] Read `apps/linear-agent/src/domain/useCases/processLinearAction.ts`
 - [ ] Run `pnpm run verify:workspace:tracked -- linear-agent` before starting
 
@@ -829,7 +909,7 @@ None.
        extracted: ExtractedIssueData,
        originalText: string,
        summary?: string
-     ): string
+     ): string;
      ```
    - Import `ExtractedIssueData` from `./models.js`
 
@@ -840,7 +920,7 @@ None.
        actionId: string,
        repository: ProcessedActionRepository,
        logger?: Logger
-     ): Promise<Result<ProcessLinearActionResponse | null, LinearError>>
+     ): Promise<Result<ProcessLinearActionResponse | null, LinearError>>;
      ```
    - Returns `ok(null)` if action not yet processed (caller should continue)
    - Returns `ok(ServiceFeedback)` if already processed (caller should return early)
@@ -868,20 +948,24 @@ None.
      - Test returns error when repository fails
 
 ### Files to Create
+
 - `apps/linear-agent/src/domain/descriptionBuilder.ts`
 - `apps/linear-agent/src/domain/useCases/checkIdempotency.ts`
 - `apps/linear-agent/src/__tests__/domain/descriptionBuilder.test.ts`
 - `apps/linear-agent/src/__tests__/domain/useCases/checkIdempotency.test.ts`
 
 ### Files to Modify
+
 - `apps/linear-agent/src/domain/index.ts` — add exports
 - `apps/linear-agent/src/domain/useCases/processLinearAction.ts` — use extracted functions
 
 ### Test Requirements
+
 - [ ] Test: buildIssueDescription all section combinations
 - [ ] Test: checkProcessedAction — not found, found, error
 
 ### Acceptance Criteria
+
 - [ ] `processLinearAction.ts` reduced by ~40 lines
 - [ ] `buildDescription` is directly testable (not buried in use-case)
 - [ ] All existing tests pass unchanged
