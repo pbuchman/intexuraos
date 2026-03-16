@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { ChatMessage } from './ChatMessage.js';
 import { ChatInput } from './ChatInput.js';
+import { Button } from '../ui/Button.js';
 import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat.js';
 
 /**
@@ -304,21 +305,41 @@ export function ChatPanel({
       {pendingAction !== null && pendingAction.awaitingConfirmation && (
         <div className="border-t border-gray-200 bg-blue-50 px-4 py-3 dark:border-gray-700 dark:bg-blue-900/20">
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 dark:text-blue-400" />
+            <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 dark:text-blue-400 shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                 Confirm action
               </p>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Say "yes" to create: <em>"{pendingCommandText ?? 'this command'}"</em>
+                Create: <em>"{pendingCommandText ?? 'this command'}"</em>
               </p>
+              <div className="flex gap-2 mt-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={() => { onSendMessage('yes'); }}
+                  className="text-xs"
+                >
+                  ✓ Yes
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={() => { onSendMessage('cancel'); }}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* Input area */}
-      <ChatInput onSend={onSendMessage} disabled={isLoading} {...(pendingAction?.awaitingConfirmation ? { placeholder: 'Say "yes" to confirm...' } : {})} />
+      <ChatInput onSend={onSendMessage} disabled={isLoading} />
     </div>
   );
 }
