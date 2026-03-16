@@ -11,6 +11,12 @@ import { ChatInput } from './ChatInput.js';
 import { Button } from '../ui/Button.js';
 import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat.js';
 
+/** Drag threshold constants for swipe-to-dismiss and expand/collapse gestures. */
+const DRAG_CLOSE_MIN = 100;
+const DRAG_CLOSE_MAX = 300;
+const DRAG_EXPAND_THRESHOLD = -100;
+const DRAG_COLLAPSE_THRESHOLD = 50;
+
 interface ChatBottomSheetProps {
   isOpen: boolean;
   messages: ChatMessageType[];
@@ -76,10 +82,9 @@ export function ChatBottomSheet({
   useEffect(() => {
     if (!isMenuOpen) return;
     const handleClickOutside = (e: MouseEvent): void => {
-      const target = e.target;
-      if (target instanceof Node && menuRef.current !== null && !menuRef.current.contains(target)) {
-        setIsMenuOpen(false);
-      }
+      if (!(e.target instanceof Node) || menuRef.current === null) return;
+      if (menuRef.current.contains(e.target)) return;
+      setIsMenuOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return (): void => {
@@ -101,16 +106,16 @@ export function ChatBottomSheet({
       const deltaY = clientY - startY;
 
       // If dragged down significantly and not at top, close
-      if (deltaY > 100 && deltaY < 300) {
+      if (deltaY > DRAG_CLOSE_MIN && deltaY < DRAG_CLOSE_MAX) {
         setIsDragging(false);
         onClose();
         return;
       }
 
       // If dragged up significantly, expand
-      if (deltaY < -100) {
+      if (deltaY < DRAG_EXPAND_THRESHOLD) {
         setIsExpanded(true);
-      } else if (deltaY > 50 && isExpanded) {
+      } else if (deltaY > DRAG_COLLAPSE_THRESHOLD && isExpanded) {
         setIsExpanded(false);
       }
     },
