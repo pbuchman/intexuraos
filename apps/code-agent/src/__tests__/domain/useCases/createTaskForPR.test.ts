@@ -670,6 +670,51 @@ describe('createTaskForPR', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('records linear_issue_failed event when linearFallback is true with error', async () => {
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      async ensureIssueExists(): Promise<EnsureIssueResult> {
+        return {
+          linearIssueTitle: 'Fallback task',
+          linearFallback: true,
+          linearFallbackError: 'Usage limit exceeded',
+          linearIssueLabels: ['code-task'],
+          hasChildren: false,
+        };
+      },
+    };
+
+    await createTaskForPR(deps, request);
+
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      { type: 'linear_issue_failed', error: 'Usage limit exceeded' },
+      'user-123',
+    );
+  });
+
+  it('records linear_issue_failed event with default message when linearFallbackError is undefined', async () => {
+    deps.linearIssueService = {
+      ...createMockLinearIssueService(),
+      async ensureIssueExists(): Promise<EnsureIssueResult> {
+        return {
+          linearIssueTitle: 'Fallback task',
+          linearFallback: true,
+          linearIssueLabels: ['code-task'],
+          hasChildren: false,
+        };
+      },
+    };
+
+    await createTaskForPR(deps, request);
+
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      { repository: 'pbuchman/intexuraos', prNumber: 42 },
+      { type: 'linear_issue_failed', error: 'Linear unavailable' },
+      'user-123',
+    );
+  });
+
   it('preserves pr-comment label when already present in existing issue labels', async () => {
     let capturedLabels: string[] = [];
 
