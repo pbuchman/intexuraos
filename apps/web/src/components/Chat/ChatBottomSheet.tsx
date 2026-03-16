@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { GripVertical, Trash2, Loader2, Minimize2, Maximize2, X, AlertCircle } from 'lucide-react';
 import { ChatMessage } from './ChatMessage.js';
 import { ChatInput } from './ChatInput.js';
+import { Button } from '../ui/Button.js';
 import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat.js';
 
 interface ChatBottomSheetProps {
@@ -246,15 +247,35 @@ export function ChatBottomSheet({
                 Confirm action
               </p>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Say "yes" to create: <em>"{typeof pendingAction.payload['text'] === 'string' ? pendingAction.payload['text'] : 'this command'}"</em>
+                Create: <em>"{typeof pendingAction.payload['text'] === 'string' ? pendingAction.payload['text'] : 'this command'}"</em>
               </p>
+              <div className="flex gap-2 mt-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={() => { onSendMessage('yes'); }}
+                  className="text-xs"
+                >
+                  ✓ Yes
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={() => { onSendMessage('cancel'); }}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       <div className="shrink-0 px-4 py-3">
-        <ChatInput onSend={onSendMessage} disabled={isLoading} {...(pendingAction?.awaitingConfirmation ? { placeholder: 'Say "yes" to confirm...' } : {})} />
+        <ChatInput onSend={onSendMessage} disabled={isLoading} />
       </div>
 
       {!isExpanded && (
