@@ -32,12 +32,13 @@ export function createUpdateActionUseCase(deps: UpdateActionDeps): UpdateActionU
       return { ok: false, error: { code: 'NOT_FOUND', message: 'Action not found' } };
     }
 
-    // 2. Handle type change if requested
+    // 2. Handle type change if requested (changeActionTypeUseCase handles its own persistence)
     if (type !== undefined && type !== action.type) {
       const result = await changeActionTypeUseCase({ actionId, userId, newType: type });
       if (!result.ok) {
         return { ok: false, error: result.error };
       }
+      // Update local reference for the response object only
       action.type = type;
     }
 
