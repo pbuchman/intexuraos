@@ -70,6 +70,8 @@ export function createGeneratePromptUseCase(
         { model: input.model, errorCode: result.error.code, errorMessage: result.error.message },
         'Prompt generation failed'
       );
+      // Preserve RATE_LIMITED as a distinct error code — callers can retry rate-limited
+      // requests, whereas GENERATION_FAILED is a terminal failure.
       if (result.error.code === 'RATE_LIMITED') {
         return err({ code: 'RATE_LIMITED', message: result.error.message });
       }
