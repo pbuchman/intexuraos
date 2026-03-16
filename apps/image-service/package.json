@@ -39,6 +39,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@intexuraos/llm-factory": "workspace:*",
     "nock": "^14.0.0"
   }
 }
