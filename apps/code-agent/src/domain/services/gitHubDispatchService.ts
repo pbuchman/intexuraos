@@ -150,6 +150,12 @@ async function handleNewTask(
     logger.info({ workerType, prNumber: event.pullRequestNumber }, 'Extracted worker type from comment');
   }
 
+  // Use messageBuilder for pull_request_review events to apply template routing
+  // (e.g. code-worker reviews → nitpick-nuker template)
+  const comment = event.eventType === 'pull_request_review'
+    ? deps.messageBuilder.build(event)
+    : event.body ?? '';
+
   const createResult = await createTaskForPR(
     {
       logger,
@@ -169,7 +175,7 @@ async function handleNewTask(
       repository: event.repository,
       prNumber: event.pullRequestNumber,
       senderLogin: resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
-      comment: event.body ?? '',
+      comment,
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
       ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),
