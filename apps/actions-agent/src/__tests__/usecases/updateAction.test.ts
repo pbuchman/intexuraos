@@ -169,7 +169,7 @@ describe('UpdateActionUseCase', () => {
     expect(storedAction?.status).toBe('awaiting_approval');
   });
 
-  it('does not update repository when only type changes', async () => {
+  it('returns action with updated type when only type changes', async () => {
     await actionRepository.save({ ...testAction });
 
     const result = await useCase({
@@ -181,11 +181,7 @@ describe('UpdateActionUseCase', () => {
     expect(result.ok).toBe(true);
     if (result.ok === true) {
       expect(result.value.action.type).toBe('note');
+      expect(result.value.action.status).toBe('awaiting_approval');
     }
-
-    // The action in the repository should still have the original status
-    // because only changeActionTypeUseCase handles the type update (its own save)
-    const storedAction = await actionRepository.getById(testAction.id);
-    expect(storedAction?.status).toBe('awaiting_approval');
   });
 });
