@@ -4,7 +4,7 @@ import type { PublishError } from '@intexuraos/infra-pubsub';
 import type {
   EnrichPublisher,
   EnrichBookmarkEvent,
-} from '../infra/pubsub/enrichPublisher.js';
+} from '../domain/ports/enrichPublisher.js';
 
 export class FakeEnrichPublisher implements EnrichPublisher {
   public publishedEvents: EnrichBookmarkEvent[] = [];

@@ -3,8 +3,8 @@ import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-htt
 import { getServices } from '../services.js';
 import { enrichBookmark } from '../domain/usecases/enrichBookmark.js';
 import { summarizeBookmark } from '../domain/usecases/summarizeBookmark.js';
-import type { EnrichBookmarkEvent } from '../infra/pubsub/enrichPublisher.js';
-import type { SummarizeBookmarkEvent } from '../infra/pubsub/summarizePublisher.js';
+import type { EnrichBookmarkEvent } from '../domain/ports/enrichPublisher.js';
+import type { SummarizeBookmarkEvent } from '../domain/ports/summarizePublisher.js';
 
 interface PubSubPushMessage {
   message: {

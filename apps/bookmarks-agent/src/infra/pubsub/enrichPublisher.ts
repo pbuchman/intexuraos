@@ -1,17 +1,9 @@
 import type { Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
+import type { EnrichBookmarkEvent, EnrichPublisher } from '../../domain/ports/enrichPublisher.js';
 
-export interface EnrichBookmarkEvent {
-  type: 'bookmarks.enrich';
-  bookmarkId: string;
-  userId: string;
-  url: string;
-}
-
-export interface EnrichPublisher {
-  publishEnrichBookmark(event: EnrichBookmarkEvent): Promise<Result<void, PublishError>>;
-}
+export type { EnrichBookmarkEvent, EnrichPublisher };
 
 export interface EnrichPublisherConfig {
   projectId: string;
