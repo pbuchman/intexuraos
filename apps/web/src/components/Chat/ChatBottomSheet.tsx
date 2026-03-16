@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { GripVertical, Trash2, Loader2, Minimize2, Maximize2, X, AlertCircle } from 'lucide-react';
+import { MoreVertical, Loader2, X, AlertCircle } from 'lucide-react';
 import { ChatMessage } from './ChatMessage.js';
 import { ChatInput } from './ChatInput.js';
 import { Button } from '../ui/Button.js';
@@ -40,6 +40,8 @@ export function ChatBottomSheet({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [startY, setStartY] = useState(0);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -56,6 +58,21 @@ export function ChatBottomSheet({
       window.removeEventListener('keydown', handleEscape);
     };
   }, [onClose]);
+
+  // Close menu on outside click (only listens when menu is open)
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent): void => {
+      const target = e.target;
+      if (target instanceof Node && menuRef.current !== null && !menuRef.current.contains(target)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return (): void => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
 
   // Handle drag start
   const handleDragStart = useCallback((clientY: number) => {
@@ -163,35 +180,48 @@ export function ChatBottomSheet({
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
       >
-        <div className="flex-1 flex justify-center">
-          <GripVertical className="h-6 w-6 text-gray-400" />
+        <div className="flex items-center gap-2">
+          <img
+            src="/apple-touch-icon-180x180.png"
+            alt="Intex"
+            className="h-7 w-7 rounded-full"
+          />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Intex
+          </h2>
         </div>
 
         <div className="flex items-center gap-1">
-          <div className="flex items-center gap-2">
-            <img
-              src="/apple-touch-icon-180x180.png"
-              alt="Intex"
-              className="h-7 w-7 rounded-full"
-            />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Intex
-            </h2>
+          {/* Dropdown menu */}
+          <div ref={menuRef} className="relative">
+            <button
+              onClick={() => { setIsMenuOpen((prev) => !prev); }}
+              className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              aria-label="More options"
+              aria-expanded={isMenuOpen}
+              aria-haspopup="true"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+            {isMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800 z-50">
+                <button
+                  onClick={() => { toggleExpand(); setIsMenuOpen(false); }}
+                  className="flex w-full items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  {isExpanded ? 'Collapse' : 'Expand'}
+                </button>
+                <button
+                  onClick={() => { onClear(); setIsMenuOpen(false); }}
+                  className="flex w-full items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  Clear conversation
+                </button>
+              </div>
+            )}
           </div>
-          <button
-            onClick={toggleExpand}
-            className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-            aria-label={isExpanded ? 'Collapse' : 'Expand'}
-          >
-            {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </button>
-          <button
-            onClick={onClear}
-            className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-            aria-label="Clear conversation"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+
+          {/* Close button stays standalone */}
           <button
             onClick={onClose}
             className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
