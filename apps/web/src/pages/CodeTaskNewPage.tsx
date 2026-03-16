@@ -180,7 +180,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
       const taskId = await submitTask(requestData);
       clearLongSubmitTimer();
-      void navigate(`/code-tasks/${taskId}/view`);
+      void navigate(`/code-tasks/${taskId}`);
     } catch (err) {
       clearLongSubmitTimer();
       setSubmitting(false);
@@ -195,7 +195,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
             const recentTask = findRecentTask(tasks, prompt.trim());
             if (recentTask !== null) {
               // Task was created successfully — navigate to it
-              void navigate(`/code-tasks/${recentTask.id}/view`);
+              void navigate(`/code-tasks/${recentTask.id}`);
               return;
             }
           } catch {
@@ -230,7 +230,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
   };
 
   const handleNavigateToTask = (taskId: string): void => {
-    void navigate(`/code-tasks/${taskId}/view`);
+    void navigate(`/code-tasks/${taskId}`);
   };
 
   const handleCloseConflictModal = (): void => {
