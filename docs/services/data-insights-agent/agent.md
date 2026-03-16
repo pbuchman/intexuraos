@@ -417,7 +417,7 @@ interface Visualization {
 | mobile-notifications-service | Query filtered notifications for feeds            |
 | app-settings-service         | LLM pricing data (fetched at startup)             |
 | Firestore                    | Persist feeds, sources, snapshots, visualizations |
-| LLM Providers (Gemini, Zai)  | Data analysis, title/chart generation, transform  |
+| LLM Provider (Gemini)        | Data analysis, title/chart generation, transform  |
 
 ---
 

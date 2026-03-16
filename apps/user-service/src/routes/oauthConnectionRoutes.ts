@@ -82,10 +82,8 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
         return await reply.fail('MISCONFIGURED', 'Google OAuth is not configured');
       }
 
-      /* v8 ignore start -- test-infra: test requests don't include x-forwarded headers @preserve */
       const protocol = String(request.headers['x-forwarded-proto'] ?? 'http');
-      /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: header nullish coalescing @preserve */
+      /* v8 ignore start -- test-infra: Fastify app.inject() always sets host header, cannot simulate missing host @preserve */
       const host = String(request.headers['x-forwarded-host'] ?? request.headers.host ?? 'localhost');
       /* v8 ignore stop @preserve */
       const redirectUri = `${protocol}://${host}/oauth/connections/google/callback`;
@@ -139,9 +137,7 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
 
       const query = request.query as { code?: string; state?: string; error?: string };
 
-      /* v8 ignore start -- test-infra: env var always set in test environment @preserve */
       const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? 'http://localhost:5173';
-      /* v8 ignore stop @preserve */
       const successRedirect = `${webAppUrl}/#/settings/calendar?oauth_success=true`;
       const errorRedirect = (msg: string): string =>
         `${webAppUrl}/#/settings/calendar?oauth_error=${encodeURIComponent(msg)}`;

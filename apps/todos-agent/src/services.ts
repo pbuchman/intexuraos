@@ -37,11 +37,8 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
 
-  // Support both Gemini and GLM for todo extraction
   const pricingContext = createPricingContext(pricingResult.value, [
     LlmModels.Gemini25Flash,
-    LlmModels.Glm47,
-    LlmModels.Glm47Flash,
   ]);
 
   const userServiceClient = createUserServiceClient({
@@ -49,7 +46,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthKey,
     pricingContext,
     logger: createAppLogger({ name: 'userServiceClient' }),
-    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 

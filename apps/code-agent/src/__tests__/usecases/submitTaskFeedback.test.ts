@@ -26,9 +26,11 @@ import { submitTaskFeedback, type SubmitTaskFeedbackDeps } from '../../domain/us
 describe('submitTaskFeedback use case', () => {
   let mockCodeTaskRepo: {
     findByIdForUser: ReturnType<typeof vi.fn>;
+    findById: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
+    findRecentTasksByLinearIssue: ReturnType<typeof vi.fn>;
   };
   let mockLinearAgentClient: {
     updateIssueState: ReturnType<typeof vi.fn>;
@@ -43,6 +45,13 @@ describe('submitTaskFeedback use case', () => {
   };
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
+  };
+  let mockGitHubPRClient: {
+    getPullRequestStatus: ReturnType<typeof vi.fn>;
+    postPRComment: ReturnType<typeof vi.fn>;
+  };
+  let mockUserServiceClient: {
+    getOAuthToken: ReturnType<typeof vi.fn>;
   };
   let mockLogger: Logger;
   let mockMetricsClient: {
@@ -72,9 +81,11 @@ describe('submitTaskFeedback use case', () => {
     // Mock code task repo
     mockCodeTaskRepo = {
       findByIdForUser: vi.fn(),
+      findById: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       hasActiveTaskForLinearIssue: vi.fn(),
+      findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
     };
 
     // Mock Linear agent client
@@ -97,6 +108,15 @@ describe('submitTaskFeedback use case', () => {
     // Mock worker settings repo
     mockWorkerSettingsRepo = {
       getSettings: vi.fn(),
+    };
+
+    mockGitHubPRClient = {
+      getPullRequestStatus: vi.fn(),
+      postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
+    };
+
+    mockUserServiceClient = {
+      getOAuthToken: vi.fn().mockResolvedValue(ok({ accessToken: 'gh-token' })),
     };
 
     // Mock metrics client
@@ -146,8 +166,11 @@ describe('submitTaskFeedback use case', () => {
       whatsappNotifier: mockWhatsAppNotifier as unknown as SubmitTaskFeedbackDeps['whatsappNotifier'],
       metricsClient: mockMetricsClient as unknown as SubmitTaskFeedbackDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitTaskFeedbackDeps['workerSettingsRepo'],
+      gitHubPRClient: mockGitHubPRClient as unknown as SubmitTaskFeedbackDeps['gitHubPRClient'],
+      userServiceClient: mockUserServiceClient as unknown as SubmitTaskFeedbackDeps['userServiceClient'],
       orchestratorSecret: 'test-orchestrator-secret',
       serviceUrl: 'https://test.example.com',
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     };
   }
 
@@ -172,7 +195,7 @@ describe('submitTaskFeedback use case', () => {
     });
 
     it('should return error when task status is not completed', async () => {
-      const nonCompletedStatuses: TaskStatus[] = ['dispatched', 'running', 'failed', 'interrupted', 'cancelled'];
+      const nonCompletedStatuses: TaskStatus[] = ['queued', 'dispatched', 'running', 'failed', 'interrupted', 'cancelled'];
 
       for (const status of nonCompletedStatuses) {
         vi.clearAllMocks();
@@ -308,7 +331,7 @@ describe('submitTaskFeedback use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
-          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
           parentId: null,
@@ -374,7 +397,7 @@ describe('submitTaskFeedback use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
-          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
           parentId: null,
@@ -406,7 +429,7 @@ describe('submitTaskFeedback use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
-          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
           parentId: null,
@@ -438,7 +461,7 @@ describe('submitTaskFeedback use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
-          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
           parentId: null,
@@ -468,6 +491,51 @@ describe('submitTaskFeedback use case', () => {
       );
     });
 
+    it('should infer pull_request agentType from pr-comment-auto on legacy tasks', async () => {
+      const mockTask = createMockTask({ systemPromptHash: 'pr-comment-auto' });
+      const taskRecord = mockTask as unknown as Record<string, unknown>;
+      delete taskRecord['agentType'];
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
+          labels: ['bug'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      let createInputAgentType: unknown;
+      let dispatchLabels: unknown;
+      mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        return ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+          agentType: 'pull_request',
+        });
+      });
+      mockTaskDispatcher.dispatch.mockImplementation(async (input: Record<string, unknown>) => {
+        dispatchLabels = input['linearIssueLabels'];
+        return ok({ dispatched: true, workerLocation: 'home-mac' });
+      });
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
+
+      expect(result.ok).toBe(true);
+      expect(createInputAgentType).toBe('pull_request');
+      expect(dispatchLabels).toEqual(['bug', 'pr-comment']);
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'pull_request' })
+      );
+    });
+
     it('should fall back to label-based routing when original task is not pull_request', async () => {
       // agentType is undefined (legacy task) — should use labels to decide
       const mockTask = createMockTask();
@@ -479,7 +547,7 @@ describe('submitTaskFeedback use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
-          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
           labels: ['code-task'],
           childCount: 0,
           parentId: null,
@@ -767,7 +835,7 @@ describe('submitTaskFeedback use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
-          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
           parentId: null,
@@ -839,7 +907,7 @@ describe('submitTaskFeedback use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
-          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
           parentId: null,
@@ -911,7 +979,7 @@ describe('submitTaskFeedback use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
-          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
           parentId: null,
@@ -981,7 +1049,7 @@ describe('submitTaskFeedback use case', () => {
           id: linearIssueId,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
-          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
           labels: ['feature', 'backend'],
           childCount: 0,
           parentId: null,

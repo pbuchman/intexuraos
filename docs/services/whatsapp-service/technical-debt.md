@@ -1,7 +1,7 @@
 # WhatsApp Service — Technical Debt
 
-**Last Updated:** 2026-03-07
-**Analysis Run:** v3.1.0
+**Last Updated:** 2026-03-15
+**Analysis Run:** v3.3.0 full documentation refresh
 
 ---
 
@@ -168,6 +168,9 @@ No deprecated APIs or dependencies in use. Speechmatics direct dependency was re
 
 | Date       | Issue                                                             | Resolution                                                                  |
 | ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 2026-03-15 | v8 ignore blocks in sender and pubsub/webhook routes              | Replaced with real tests (INT-858, INT-860)                                 |
+| 2026-03-10 | v8 ignore blocks in sender, repository, routes                    | Replaced with real tests across 5 files (INT-799)                           |
+| 2026-03-10 | Silent dispatch failures swallowed by Pub/Sub publish             | Fixed dispatch error surfacing and nested transaction issue (INT-810/811)   |
 | 2026-03-06 | Speechmatics direct dependency creates tight coupling             | INT-684: Migrated to event-driven transcription via srt-service             |
 | 2026-03-06 | PR notifications lacked actionable links                          | Added CTA URL message support for deep links to PRs and dashboards          |
 | 2026-02-15 | SPEECHMATICS_API_KEY non-standard naming                          | Renamed to SPEECHMATICS_APP_API_KEY convention (later removed entirely)     |

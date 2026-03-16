@@ -1,4 +1,4 @@
-# Notion Service -- Technical Reference
+# Notion Service — Technical Reference
 
 ## Overview
 
@@ -72,6 +72,9 @@ sequenceDiagram
 
 | Commit     | Description                                        | Date       |
 | ---------- | -------------------------------------------------- | ---------- |
+| `a7f5fa98` | INT-794: Write tests for v8-ignore blocks          | 2026-03-13 |
+| `c4e3a13c` | Release v3.3.0                                     | 2026-03-15 |
+| `44ea683a` | Release v3.2.0                                     | 2026-03-07 |
 | `b3f34d85` | Release v3.1.0                                     | 2026-02-22 |
 | `c8a42105` | Release v3.0.0                                     | 2026-02-19 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability    | 2026-02-16 |
@@ -255,7 +258,7 @@ sequenceDiagram
 ### connectNotion
 
 1. Validate token against Notion API (`validateToken`)
-2. Map Notion error codes to domain errors (UNAUTHORIZED -> INVALID_TOKEN, others -> DOWNSTREAM_ERROR)
+2. Map Notion error codes to domain errors (`UNAUTHORIZED` → `INVALID_TOKEN`, others → `DOWNSTREAM_ERROR`)
 3. Save connection to Firestore via `connectionRepository.saveConnection`
 4. Return public connection data
 
@@ -317,13 +320,13 @@ sequenceDiagram
 
 ## Gotchas
 
-- **Token validation is eager** -- `POST /notion/connect` calls the Notion API before saving. If Notion is down, the connection fails even though the token may be valid.
-- **One connection per user** -- Reconnecting with a new token replaces the existing connection. The old token is overwritten.
-- **Disconnect does not delete** -- `DELETE /notion/disconnect` sets `connected: false` but keeps the Firestore document. The token remains in storage but is inaccessible via the `getToken` path (returns `null` when `connected === false`).
-- **createdAt fallback** -- When disconnecting, if the existing document somehow lacks `createdAt`, the service falls back to the current timestamp (backward compatibility for early connections).
-- **Page preview requires active connection** -- The internal page preview endpoint checks `connected === true` and a non-null token before querying Notion. Disconnected users get a 404.
-- **Webhook is a stub** -- `POST /notion-webhooks` accepts any JSON, logs it, and returns `{ received: true }`. No event processing occurs. Validation uses `z.record(z.unknown())`.
-- **Disconnect returns empty data** -- `DELETE /notion/disconnect` returns `reply.ok({})`, not connection state.
+- **Token validation is eager** — `POST /notion/connect` calls the Notion API before saving. If Notion is down, the connection fails even though the token may be valid.
+- **One connection per user** — Reconnecting with a new token replaces the existing connection. The old token is overwritten.
+- **Disconnect does not delete** — `DELETE /notion/disconnect` sets `connected: false` but keeps the Firestore document. The token remains in storage but is inaccessible via the `getToken` path (returns `null` when `connected === false`).
+- **createdAt fallback** — When disconnecting, if the existing document somehow lacks `createdAt`, the service falls back to the current timestamp (backward compatibility for early connections).
+- **Page preview requires active connection** — The internal page preview endpoint checks `connected === true` and a non-null token before querying Notion. Disconnected users get a 404.
+- **Webhook is a stub** — `POST /notion-webhooks` accepts any JSON, logs it, and returns `{ received: true }`. No event processing occurs. Validation uses `z.record(z.unknown())`.
+- **Disconnect returns empty data** — `DELETE /notion/disconnect` returns `reply.ok({})`, not connection state.
 
 ## File Structure
 
@@ -331,9 +334,9 @@ sequenceDiagram
 apps/notion-service/src/
   domain/integration/
     usecases/
-      connectNotion.ts       # 145 lines -- token validation + save
-      disconnectNotion.ts    #  81 lines -- mark inactive
-      getNotionStatus.ts     #  89 lines -- check connection state
+      connectNotion.ts       # token validation + save
+      disconnectNotion.ts    # mark inactive
+      getNotionStatus.ts     # check connection state
       index.ts               # Re-exports
     ports/
       ConnectionRepository.ts  # Domain interfaces (ConnectionRepository, NotionApi)
@@ -341,18 +344,18 @@ apps/notion-service/src/
     index.ts                 # Re-exports ports + use cases
   infra/
     firestore/
-      notionConnectionRepository.ts  # 157 lines -- CRUD on notion_connections
+      notionConnectionRepository.ts  # CRUD on notion_connections
       index.ts                       # Re-exports
     notion/
       index.ts               # Re-exports from @intexuraos/infra-notion
   routes/
-    integrationRoutes.ts     # 269 lines -- connect/status/disconnect
-    internalRoutes.ts        # 232 lines -- context + page preview
-    webhookRoutes.ts         #  71 lines -- webhook stub
+    integrationRoutes.ts     # connect/status/disconnect
+    internalRoutes.ts        # context + page preview
+    webhookRoutes.ts         # webhook stub
     schemas.ts               # Zod request schemas
     routes.ts                # Route URL -> file mapping docs
     index.ts                 # Plugin aggregator
-  services.ts               # 132 lines -- DI container
-  server.ts                 # 374 lines -- Fastify setup, OpenAPI, health
+  services.ts               # DI container
+  server.ts                 # Fastify setup, OpenAPI, health
   index.ts                  # Entry point, env validation, Sentry init
 ```

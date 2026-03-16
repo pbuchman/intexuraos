@@ -1,7 +1,7 @@
-# Linear Agent Tutorial
+# Linear Agent — Tutorial
 
 > **Time:** 40–50 minutes
-> **Prerequisites:** Node.js 22+, Linear account with API key, IntexuraOS running locally
+> **Prerequisites:** Node.js 20+, Linear account with API key, IntexuraOS running locally
 > **You'll learn:** How to connect Linear, create issues via AI, view issues with parent-child support, read comments, configure webhooks, sync issues, use the internal API, and observe auto-triggered code tasks
 
 ---
@@ -132,6 +132,8 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
 }
 ```
 
+Note: Both success and failure return HTTP 200 — this is the `ServiceFeedback` contract. Check `status` to determine the outcome.
+
 ### Step 2.2: What the AI Extracts
 
 | Field                       | Extracted Value                                        |
@@ -179,7 +181,11 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
 
 Result: Priority 4 (Low)
 
-**Checkpoint:** All three issues should appear in your Linear workspace with correct priorities.
+### Step 2.4: Verify Idempotency
+
+Re-send `test-action-001` with the same `id` — the service returns the existing result without creating a duplicate issue.
+
+**Checkpoint:** All three issues should appear in your Linear workspace with correct priorities. Duplicate sends are harmless.
 
 ---
 
@@ -212,14 +218,14 @@ curl -X POST http://localhost:3000/linear/sync \
 
 ### Step 3.2: List Grouped Issues
 
-Fetch issues grouped by dashboard column (from Firestore).
+Fetch issues grouped by dashboard column (from Firestore — no Linear API call).
 
 ```bash
 curl http://localhost:3000/linear/issues \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
-Note how parent issues have their `children` array populated — sub-issues are nested under their parent.
+Note how parent issues have their `children` array populated — sub-issues are nested under their parent. Issues sort by most recently updated within each column.
 
 ### Step 3.3: Get Issue Detail
 
@@ -239,9 +245,13 @@ curl "http://localhost:3000/linear/issues/ENG-123/comments?limit=10&offset=0" \
 
 Returns paginated comments with author names, markdown body, and timestamps.
 
+**Checkpoint:** Issues load instantly from Firestore. Parent-child hierarchy is preserved. Comments are paginated.
+
 ---
 
 ## Part 4: Configure Webhooks (5 minutes)
+
+Real-time sync: when something changes in Linear, the webhook fans out to all connected users for that team.
 
 ### Step 4.1: Get Webhook Configuration
 
@@ -252,7 +262,7 @@ curl http://localhost:3000/linear/webhook-config \
 
 ### Step 4.2: Set Up in Linear
 
-1. Go to Linear Settings > API > Webhooks
+1. Go to Linear Settings → API → Webhooks
 2. Create a new webhook with the URL from step 4.1
 3. Select "Issues" and "Comments" as resource types
 4. Copy the webhook signing secret
@@ -268,7 +278,7 @@ curl -X POST http://localhost:3000/linear/webhook-config \
 
 ### Step 4.4: Verify Webhook is Active
 
-Create or update an issue in Linear. The webhook fans out to ALL connected users for that team — each user's local Firestore store gets updated.
+Create or update an issue in Linear. The webhook fans out to all connected users for that team — each user's local Firestore store gets updated concurrently.
 
 **Checkpoint:** After configuring the webhook, changes in Linear should appear in the local issue repository for all connected team members automatically.
 
@@ -276,14 +286,18 @@ Create or update an issue in Linear. The webhook fans out to ALL connected users
 
 ## Part 5: Internal API for Code Agents (10 minutes)
 
-Code agents use internal endpoints to manage issues programmatically.
+Code agents use internal endpoints to manage issues programmatically. All internal endpoints require both `X-Internal-Auth` and `X-User-Id` headers.
 
 ### Step 5.1: Validate a Parent Issue
+
+Confirm an issue exists and belongs to the user's connected team.
 
 ```bash
 curl "http://localhost:3000/internal/linear/issues/ENG-100/validate?userId=YOUR_USER_ID" \
   -H "X-Internal-Auth: your-internal-secret"
 ```
+
+Returns issue `id`, `identifier`, `title`, `url`, `labels` (names only), `childCount`, and `parentId`.
 
 ### Step 5.2: Generate an Issue Title
 
@@ -296,6 +310,20 @@ curl -X POST http://localhost:3000/internal/linear/issues/generate-title \
     "userId": "YOUR_USER_ID"
   }'
 ```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "title": "Sidebar crashes on settings click in iOS 17",
+    "issueType": "bug"
+  }
+}
+```
+
+The `issueType` is one of: `feature`, `bug`, `refactor`, `research`. Title generation retries once on failure — if both attempts fail, it returns an error rather than degrading silently.
 
 ### Step 5.3: Create an Issue
 
@@ -310,6 +338,20 @@ curl -X POST http://localhost:3000/internal/issues \
   }'
 ```
 
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-...",
+    "identifier": "ENG-44",
+    "title": "Implement pagination for user list",
+    "url": "https://linear.app/engineering/issue/ENG-44"
+  }
+}
+```
+
 ### Step 5.4: Update Issue State
 
 ```bash
@@ -320,7 +362,7 @@ curl -X PATCH http://localhost:3000/internal/issues/ISSUE_ID/state \
   -d '{"state": "in_progress"}'
 ```
 
-Available states: `backlog`, `todo`, `in_progress`, `in_review`, `qa`.
+Available states: `backlog`, `todo`, `in_progress`, `in_review`, `qa`, `done`. The endpoint maps these to Linear workflow state names and resolves the state ID before updating.
 
 ### Step 5.5: Add a Comment
 
@@ -345,17 +387,11 @@ curl -X PATCH http://localhost:3000/internal/linear/issues/ISSUE_ID/metadata \
   }'
 ```
 
-### Step 5.7: Get Issue Tree
+Labels are resolved by name. Unknown label names are silently dropped — verify labels exist in your Linear workspace.
 
-Fetch an issue and all its recursive descendants.
+### Step 5.7: Batch Fetch Issues for Display
 
-```bash
-curl http://localhost:3000/internal/issues/ISSUE_ID/tree \
-  -H "X-Internal-Auth: your-internal-secret" \
-  -H "X-User-Id: YOUR_USER_ID"
-```
-
-### Step 5.8: Batch Fetch Issues for Display
+Retrieve multiple issues with their comment counts in a single request.
 
 ```bash
 curl -X POST http://localhost:3000/internal/linear/issues/display-batch \
@@ -365,13 +401,25 @@ curl -X POST http://localhost:3000/internal/linear/issues/display-batch \
   -d '{"identifiers": ["ENG-100", "ENG-101", "ENG-102"]}'
 ```
 
-Returns display data for each found issue (missing identifiers are omitted).
+Missing identifiers are omitted from the response. Results preserve the input order.
+
+### Step 5.8: Get Issue Tree
+
+Fetch an issue and all its recursive descendants from local Firestore data — no Linear API call.
+
+```bash
+curl http://localhost:3000/internal/issues/ISSUE_ID/tree \
+  -H "X-Internal-Auth: your-internal-secret" \
+  -H "X-User-Id: YOUR_USER_ID"
+```
+
+**Checkpoint:** You can create issues, generate titles, validate identifiers, move through the workflow, add comments, update metadata, fetch batches, and traverse trees using the internal API.
 
 ---
 
 ## Part 6: Auto-Trigger Code Tasks (3 minutes)
 
-When an issue is assigned in Linear for the first time, Linear Agent automatically triggers a code task.
+When an issue with a "planning-task" or "code-task" label is assigned for the first time, the Linear Agent automatically triggers a code task.
 
 ### How It Works
 
@@ -381,19 +429,22 @@ The auto-trigger fires when all of these conditions are met:
 2. The issue had no previous assignee (`updatedFrom.assigneeId` is null)
 3. The issue now has an assignee
 4. The issue is in a `backlog` or `unstarted` state
+5. The issue has a `planning-task` or `code-task` label
 
-The prompt depends on the issue's labels:
+The prompt depends on the label:
 
-- **With `code-task` label:** EXECUTION_PROMPT — implement requirements, write code, run CI, create PR
-- **Without `code-task` label:** ASSIGNMENT_PROMPT — analyze issue, enrich description, add acceptance criteria
+- **`code-task` label:** Execution prompt — implement requirements, write code, run CI, create PR
+- **`planning-task` label:** Assignment prompt — analyze issue, enrich description with requirements and acceptance criteria, mark ready for execution
+
+Both prompts instruct the code agent to read the full issue and all its comments (newest-first) before starting work.
 
 ### Test the Auto-Trigger
 
-1. Create a new issue in Linear (status: Todo, no assignee)
+1. Create a new issue in Linear (status: Todo, no assignee, add a "planning-task" label)
 2. Assign yourself to the issue
 3. Check the linear-agent logs for: `Code task triggered from assignment`
 
-**Checkpoint:** The code agent should start working on the issue within seconds.
+**Checkpoint:** The code agent starts working on the issue within seconds. The trigger is fire-and-forget — failures appear in logs, not in the webhook response.
 
 ---
 
@@ -434,17 +485,18 @@ curl -X DELETE http://localhost:3000/linear/failed-issues/FAILED_ID \
 
 ## Troubleshooting
 
-| Symptom                       | Likely Cause                 | Solution                                      |
-| ----------------------------- | ---------------------------- | --------------------------------------------- |
-| "Linear not connected"        | No saved connection for user | POST `/linear/connection` with credentials    |
-| "Invalid API key"             | Expired or revoked key       | Generate new key in Linear settings           |
-| Extraction returns null title | Input too vague              | Provide more specific issue description       |
-| Webhook not syncing           | Missing webhook secret       | POST `/linear/webhook-config` with secret     |
-| Webhook 401 errors            | Wrong secret                 | Reconfigure secret in Linear and IntexuraOS   |
-| Dashboard shows stale data    | Firestore not populated      | POST `/linear/sync` to run full sync          |
-| Title generation returns 500  | LLM failed after 2 attempts  | Retry request or use a manual title           |
-| No child issues on dashboard  | Not synced yet               | Run full sync to populate parent-child data   |
-| Other user missing updates    | Old single-user routing      | Ensure webhook configured; fan-out is default |
+| Symptom                       | Likely Cause                 | Solution                                                            |
+| ----------------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| "Linear not connected"        | No saved connection for user | POST `/linear/connection` with credentials                          |
+| "Invalid API key"             | Expired or revoked key       | Generate new key in Linear settings                                 |
+| Extraction returns null title | Input too vague              | Provide more specific issue description                             |
+| Webhook not syncing           | Missing webhook secret       | POST `/linear/webhook-config` with secret                           |
+| Webhook 401 errors            | Wrong secret                 | Reconfigure secret in Linear and IntexuraOS                         |
+| Dashboard shows stale data    | Firestore not populated      | POST `/linear/sync` to run full sync                                |
+| Title generation returns 500  | LLM failed after 2 attempts  | Retry request or use a manual title                                 |
+| No child issues on dashboard  | Not synced yet               | Run full sync to populate parent-child data                         |
+| Other user missing updates    | Old single-user routing      | Ensure webhook configured; fan-out is default                       |
+| Internal endpoint returns 401 | Missing header               | Both `X-Internal-Auth` and `X-User-Id` required for issue endpoints |
 
 ---
 
@@ -452,24 +504,22 @@ curl -X DELETE http://localhost:3000/linear/failed-issues/FAILED_ID \
 
 ### Easy
 
-1. Connect your Linear account using the validation and connection endpoints.
-2. Create an issue with "normal" priority (no urgency keywords).
-3. Verify the issue appears in the correct dashboard column after a full sync.
+1. Connect your Linear account and verify `connected: true`.
+2. Create an issue with no urgency keywords — confirm it defaults to Normal (priority 3).
+3. Trigger a full sync and verify the created/updated counts.
 
 ### Medium
 
-4. Create issues with all 4 priority levels (urgent, high, normal, low).
-5. Configure a webhook and verify real-time sync by creating an issue in Linear.
-6. Send vague text ("fix bug") and retrieve it from failed issues.
-7. Fetch issue detail and comments for an issue with existing comments.
-8. Use the internal API to create an issue, add a comment, and update its labels.
+4. Create issues with all four priority levels (urgent, high, normal, low) and verify them in Linear.
+5. Configure a webhook and verify real-time sync by updating an issue in Linear.
+6. Send vague input ("fix bug") — find it in the failed-issues queue, then delete it.
+7. Use the batch display endpoint to fetch three issues with their comment counts in one call.
 
 ### Hard
 
-9. Set up the full pipeline: Send a WhatsApp message and trace it through to Linear issue creation.
-10. Use the internal API to validate a parent issue, generate a title, create a subtask, update its state through the workflow, add comments, and fetch the issue tree.
-11. Create a custom Linear workflow with "QA" and "Code Review" states and verify correct column mapping.
-12. Test multi-user webhook fan-out: connect two users to the same team and verify both receive issue updates.
+8. Simulate the full code-agent workflow: create an issue with `POST /internal/issues`, move it to `in_progress`, add a comment, update a label, then move it to `done`.
+9. Create a parent issue in Linear, create two sub-issues, run a full sync, then verify the tree structure with `GET /internal/issues/:issueId/tree`.
+10. Test the auto-trigger: create an issue with a `planning-task` label, assign it, and trace the log output to confirm the code agent receives the task.
 
 <details>
 <summary>Solutions</summary>
@@ -489,7 +539,7 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
   -H "X-Internal-Auth: your-internal-secret" \
   -d '{"action": {"id": "ex4-2", "userId": "USER", "text": "High priority: Fix security vulnerability"}}'
 
-# Normal (3) -- no keywords
+# Normal (3) — no keywords
 curl -X POST http://localhost:3000/internal/linear/process-action \
   -H "Content-Type: application/json" \
   -H "X-Internal-Auth: your-internal-secret" \
@@ -502,44 +552,44 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
   -d '{"action": {"id": "ex4-4", "userId": "USER", "text": "When you have time, update the footer copyright"}}'
 ```
 
-### Exercise 10: Full Internal API Workflow
+### Exercise 8: Full Code-Agent Workflow
 
 ```bash
-# 1. Validate parent issue
-curl "http://localhost:3000/internal/linear/issues/ENG-100/validate?userId=USER" \
-  -H "X-Internal-Auth: your-internal-secret"
-
-# 2. Generate title
-curl -X POST http://localhost:3000/internal/linear/issues/generate-title \
-  -H "Content-Type: application/json" \
-  -H "X-Internal-Auth: your-internal-secret" \
-  -d '{"description": "Add cursor-based pagination to user list API", "userId": "USER"}'
-
-# 3. Create subtask
-curl -X POST http://localhost:3000/internal/issues \
+# 1. Create issue
+ISSUE=$(curl -s -X POST http://localhost:3000/internal/issues \
   -H "Content-Type: application/json" \
   -H "X-Internal-Auth: your-internal-secret" \
   -H "X-User-Id: USER" \
-  -d '{"title": "Add pagination to user list", "description": "Implement cursor-based pagination."}'
+  -d '{"title": "Fix login on iOS", "description": "Users cannot sign in on iOS."}')
+ISSUE_ID=$(echo $ISSUE | jq -r '.data.id')
 
-# 4. Move to In Progress (use issue ID from step 3)
-curl -X PATCH http://localhost:3000/internal/issues/ISSUE_ID/state \
+# 2. Move to in_progress
+curl -X PATCH "http://localhost:3000/internal/issues/$ISSUE_ID/state" \
   -H "Content-Type: application/json" \
   -H "X-Internal-Auth: your-internal-secret" \
   -H "X-User-Id: USER" \
   -d '{"state": "in_progress"}'
 
-# 5. Add a comment
-curl -X POST http://localhost:3000/internal/linear/issues/ISSUE_ID/comments \
+# 3. Add comment
+curl -X POST "http://localhost:3000/internal/linear/issues/$ISSUE_ID/comments" \
   -H "Content-Type: application/json" \
   -H "X-Internal-Auth: your-internal-secret" \
   -H "X-User-Id: USER" \
-  -d '{"body": "Started implementation."}'
+  -d '{"body": "Root cause identified: token handler rejects the auth flow on Safari."}'
 
-# 6. Get issue tree
-curl http://localhost:3000/internal/issues/PARENT_ISSUE_ID/tree \
+# 4. Add label
+curl -X PATCH "http://localhost:3000/internal/linear/issues/$ISSUE_ID/metadata" \
+  -H "Content-Type: application/json" \
   -H "X-Internal-Auth: your-internal-secret" \
-  -H "X-User-Id: USER"
+  -H "X-User-Id: USER" \
+  -d '{"addLabels": ["bug"]}'
+
+# 5. Mark done
+curl -X PATCH "http://localhost:3000/internal/issues/$ISSUE_ID/state" \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Auth: your-internal-secret" \
+  -H "X-User-Id: USER" \
+  -d '{"state": "done"}'
 ```
 
 </details>
@@ -550,10 +600,10 @@ curl http://localhost:3000/internal/issues/PARENT_ISSUE_ID/tree \
 
 Now that you understand the basics:
 
-1. Explore the [Technical Reference](technical.md) for API details and architecture
-2. Learn about [Actions Agent](../actions-agent/tutorial.md) for action routing
-3. Check out [Commands Agent](../commands-agent/tutorial.md) for intent classification
+1. Explore the [Technical Reference](technical.md) for API details, domain models, and Firestore collection schemas
+2. Check the [Features](features.md) page for the product-level overview
+3. Review [Technical Debt](technical-debt.md) for known limitations and future plans
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-15

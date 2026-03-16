@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Logger } from '@intexuraos/common-core';
+import { withTimeout } from '../../with-timeout.js';
 import type {
   DiscoveredContainer,
   IsolationProvider,
@@ -64,6 +65,12 @@ interface PreservedWorkerEntry {
 
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
 const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
+const PERIODIC_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+const HEALTH_CHECK_INTERVAL_MS = 30_000;
+const DOCKER_PING_TIMEOUT_MS = 5_000;
+const MIN_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024;
+const MIN_DISK_SPACE_GB = MIN_DISK_SPACE_BYTES / (1024 * 1024 * 1024);
+const PRESERVED_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 
 // Container must run as the host user so bind-mounted files (worktrees, secrets,
 // pnpm store) are accessible without permission hacks.
@@ -92,13 +99,74 @@ export class DockerProvider implements IsolationProvider {
   private readonly logger: Logger;
   private readonly workers: Map<string, WorkerEntry>;
   private readonly preservedWorkers = new Map<string, PreservedWorkerEntry>();
+  private cleanupIntervalId: NodeJS.Timeout | null = null;
   private lastResolvedDigest: string | null = null;
+  private dockerHealthy = true;
+  private diskHealthy = true;
+  private healthMonitorIntervalId: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<DockerProviderConfig>, logger: Logger) {
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.logger = logger;
     this.workers = new Map();
+  }
+
+  async assertDockerAvailable(): Promise<void> {
+    await this.docker.listContainers({ all: false, limit: 1 });
+  }
+
+  private extractTaskIdFromContainerName(rawName: string): string | null {
+    const taskId = rawName.replace(/^\/claude-worker-/, '');
+    return taskId === '' ? null : taskId;
+  }
+
+  private async removeTaskSecretsDirectory(taskId: string): Promise<void> {
+    const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
+    try {
+      await fs.promises.rm(taskSecretsPath, { recursive: true, force: true });
+    } catch (err: unknown) {
+      this.logger.error(
+        { taskId, error: err, path: taskSecretsPath },
+        'Failed to remove task secrets directory'
+      );
+    }
+  }
+
+  private async removeDetachedContainer(
+    taskId: string,
+    containerId: string,
+    state: string
+  ): Promise<void> {
+    const container = this.docker.getContainer(containerId);
+    const shouldStopFirst = ['running', 'created', 'paused', 'restarting'].includes(state);
+
+    if (shouldStopFirst) {
+      try {
+        await container.stop({ t: 5 });
+      } catch (err: unknown) {
+        const isAlreadyStopped =
+          err instanceof Error &&
+          (err.message.includes('No such container') ||
+            err.message.includes('is not running') ||
+            err.message.includes('already stopped'));
+
+        if (!isAlreadyStopped) {
+          this.logger.warn({ taskId, containerId, error: err }, 'Failed to stop stale container');
+        }
+      }
+    }
+
+    try {
+      await container.remove({ force: true });
+    } catch (err: unknown) {
+      this.logger.warn({ taskId, containerId, error: err }, 'Failed to remove stale container');
+    }
+
+    this.preservedWorkers.delete(taskId);
+    await this.removeTaskSecretsDirectory(taskId);
+    await this.cleanupTaskSession(taskId);
+    this.logger.info({ taskId, containerId, state }, 'Removed stale worker container');
   }
 
   private getTaskForensicsPath(taskId: string): string | null {
@@ -129,11 +197,9 @@ export class DockerProvider implements IsolationProvider {
     ];
 
     for (const candidate of candidates) {
-      /* v8 ignore start -- test-infra: profile path resolution branches vary by cwd/runtime packaging @preserve */
       if (fs.existsSync(candidate)) {
         return candidate;
       }
-      /* v8 ignore stop @preserve */
     }
 
     this.logger.warn(
@@ -145,17 +211,14 @@ export class DockerProvider implements IsolationProvider {
 
   private resolveForensicsSeccompSecurityOpt(): string | null {
     const profilePath = this.resolveForensicsSeccompProfilePath();
-    /* v8 ignore start -- test-infra: profile may be absent in runtime packaging variants, fallback intentionally uses default seccomp @preserve */
     if (profilePath === null) {
       return null;
     }
-    /* v8 ignore stop @preserve */
 
     try {
       const profileRaw = fs.readFileSync(profilePath, 'utf-8');
       const profileJson: unknown = JSON.parse(profileRaw);
       return `seccomp=${JSON.stringify(profileJson)}`;
-      /* v8 ignore start -- test-infra: invalid/missing seccomp profile requires filesystem fault injection @preserve */
     } catch (error) {
       this.logger.warn(
         { profilePath, error },
@@ -163,7 +226,6 @@ export class DockerProvider implements IsolationProvider {
       );
       return null;
     }
-    /* v8 ignore stop @preserve */
   }
 
   private async writeJsonArtifact(filePath: string, value: unknown): Promise<void> {
@@ -312,63 +374,6 @@ export class DockerProvider implements IsolationProvider {
   }
 
   /**
-   * Clean up orphaned worker containers from previous orchestrator runs.
-   * Should be called on startup to prevent name collisions.
-   */
-  async cleanupOrphanedContainers(): Promise<void> {
-    const MAX_AGE_MS = 24 * 60 * 60 * 1000;
-    const now = Date.now();
-
-    try {
-      const containers = await this.docker.listContainers({
-        all: true,
-        filters: { name: ['claude-worker-'] },
-      });
-
-      for (const containerInfo of containers) {
-        const createdAt = containerInfo.Created * 1000;
-        const ageMs = now - createdAt;
-
-        if (ageMs < MAX_AGE_MS) {
-          this.logger.debug(
-            { name: containerInfo.Names[0], ageHours: Math.round(ageMs / 3_600_000) },
-            'Skipping recent container'
-          );
-          continue;
-        }
-
-        const container = this.docker.getContainer(containerInfo.Id);
-        this.logger.info(
-          {
-            containerId: containerInfo.Id,
-            name: containerInfo.Names[0],
-            ageHours: Math.round(ageMs / 3_600_000),
-          },
-          'Cleaning up old container'
-        );
-
-        try {
-          if (containerInfo.State === 'running') {
-            await container.stop({ t: 5 });
-          }
-          await container.remove({ force: true });
-        } catch (err: unknown) {
-          this.logger.error(
-            {
-              containerId: containerInfo.Id,
-              name: containerInfo.Names[0],
-              error: err,
-            },
-            'Failed to remove old container'
-          );
-        }
-      }
-    } catch (error) {
-      this.logger.warn({ error }, 'Failed to list containers for cleanup');
-    }
-  }
-
-  /**
    * Discover all worker containers currently known to Docker.
    * Used during startup to find containers from previous orchestrator runs.
    * Returns empty array (does not throw) if Docker is unreachable.
@@ -383,8 +388,8 @@ export class DockerProvider implements IsolationProvider {
       return containers
         .map((c) => {
           const rawName = c.Names[0] ?? '';
-          const taskId = rawName.replace(/^\/claude-worker-/, '');
-          if (taskId === '') {
+          const taskId = this.extractTaskIdFromContainerName(rawName);
+          if (taskId === null) {
             this.logger.warn({ containerId: c.Id }, 'Container has no recognizable name, skipping');
             return null;
           }
@@ -402,11 +407,9 @@ export class DockerProvider implements IsolationProvider {
 
     const existingWorker = this.workers.get(taskId);
     if (existingWorker !== undefined) {
-      /* v8 ignore start -- test-infra: orchestrator only re-enters createWorker with continueSession=true for existing workers @preserve */
       if (config.continueSession !== true) {
         throw new Error(`Worker already exists for task ${taskId}`);
       }
-      /* v8 ignore stop @preserve */
 
       await this.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
       this.ensureTaskForensicsPath(taskId);
@@ -849,15 +852,7 @@ export class DockerProvider implements IsolationProvider {
         }
       }
 
-      const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
-      try {
-        await fs.promises.rm(taskSecretsPath, { recursive: true, force: true });
-      } catch (err: unknown) {
-        this.logger.error(
-          { taskId, error: err, path: taskSecretsPath },
-          'Failed to remove task secrets directory'
-        );
-      }
+      await this.removeTaskSecretsDirectory(taskId);
     } finally {
       this.workers.delete(taskId);
     }
@@ -1049,6 +1044,185 @@ export class DockerProvider implements IsolationProvider {
     { containerId: string; taskId: string; preservedAt: string }[]
   > {
     return Array.from(this.preservedWorkers.values());
+  }
+
+  async runCleanupCycle(): Promise<void> {
+    if (this.config.keepContainersAlive) {
+      return;
+    }
+
+    const now = Date.now();
+
+    try {
+      const containers = await this.docker.listContainers({
+        all: true,
+        filters: { name: ['claude-worker-'] },
+      });
+
+      const containerMap = new Map<
+        string,
+        { containerId: string; state: string; createdAtMs: number }
+      >();
+
+      for (const container of containers) {
+        const taskId = this.extractTaskIdFromContainerName(container.Names[0] ?? '');
+        if (taskId === null) {
+          this.logger.warn(
+            { containerId: container.Id },
+            'Container has no recognizable name, skipping'
+          );
+          continue;
+        }
+
+        containerMap.set(taskId, {
+          containerId: container.Id,
+          state: container.State,
+          createdAtMs: container.Created * 1000,
+        });
+      }
+
+      for (const [taskId, preserved] of Array.from(this.preservedWorkers.entries())) {
+        const preservedAtMs = Date.parse(preserved.preservedAt);
+        const isStale = Number.isNaN(preservedAtMs) || now - preservedAtMs > PRESERVED_MAX_AGE_MS;
+
+        if (!isStale) {
+          continue;
+        }
+
+        const containerInfo = containerMap.get(taskId);
+        this.preservedWorkers.delete(taskId);
+
+        if (containerInfo === undefined) {
+          await this.removeTaskSecretsDirectory(taskId);
+          await this.cleanupTaskSession(taskId);
+          this.logger.info(
+            { taskId, containerId: preserved.containerId },
+            'Removed stale preserved worker metadata'
+          );
+          continue;
+        }
+
+        await this.removeDetachedContainer(taskId, containerInfo.containerId, containerInfo.state);
+        containerMap.delete(taskId);
+      }
+
+      for (const [taskId, containerInfo] of containerMap) {
+        if (this.workers.has(taskId) || this.preservedWorkers.has(taskId)) {
+          continue;
+        }
+
+        if (now - containerInfo.createdAtMs <= PRESERVED_MAX_AGE_MS) {
+          continue;
+        }
+
+        await this.removeDetachedContainer(taskId, containerInfo.containerId, containerInfo.state);
+      }
+    } catch (error) {
+      this.logger.warn({ error }, 'Failed to clean up stale worker containers');
+    }
+  }
+
+  startPeriodicCleanup(): void {
+    if (this.config.keepContainersAlive) {
+      this.logger.info(
+        { keepContainersAlive: true },
+        'Periodic container cleanup disabled because keepContainersAlive is enabled'
+      );
+      return;
+    }
+
+    if (this.cleanupIntervalId !== null) {
+      return;
+    }
+
+    this.logger.info(
+      { intervalMs: PERIODIC_CLEANUP_INTERVAL_MS, maxAgeMs: PRESERVED_MAX_AGE_MS },
+      'Starting periodic container cleanup'
+    );
+    this.cleanupIntervalId = setInterval(() => {
+      void this.runCleanupCycle();
+    }, PERIODIC_CLEANUP_INTERVAL_MS);
+  }
+
+  stopPeriodicCleanup(): void {
+    if (this.cleanupIntervalId === null) {
+      return;
+    }
+
+    clearInterval(this.cleanupIntervalId);
+    this.cleanupIntervalId = null;
+    this.logger.info({ message: 'Stopped periodic container cleanup' });
+  }
+
+  async checkHealth(): Promise<{ docker: boolean; disk: boolean }> {
+    const prevDockerHealthy = this.dockerHealthy;
+    const prevDiskHealthy = this.diskHealthy;
+
+    try {
+      await withTimeout(this.docker.ping(), DOCKER_PING_TIMEOUT_MS, 'Docker ping timeout');
+      this.dockerHealthy = true;
+    } catch {
+      this.dockerHealthy = false;
+    }
+
+    try {
+      const stats = await fs.promises.statfs('/');
+      const availableBytes = stats.bavail * stats.bsize;
+      this.diskHealthy = availableBytes >= MIN_DISK_SPACE_BYTES;
+    } catch {
+      this.diskHealthy = false;
+    }
+
+    if (prevDockerHealthy && !this.dockerHealthy) {
+      this.logger.warn(
+        { component: 'health-monitor' },
+        'Docker daemon became unhealthy — ping failed or timed out'
+      );
+    }
+    if (!prevDockerHealthy && this.dockerHealthy) {
+      this.logger.info({ component: 'health-monitor' }, 'Docker daemon is healthy again');
+    }
+    if (prevDiskHealthy && !this.diskHealthy) {
+      this.logger.warn(
+        { component: 'health-monitor' },
+        `Disk space critically low — below ${String(MIN_DISK_SPACE_GB)}GB available`
+      );
+    }
+    if (!prevDiskHealthy && this.diskHealthy) {
+      this.logger.info({ component: 'health-monitor' }, 'Disk space is healthy again');
+    }
+
+    return {
+      docker: this.dockerHealthy,
+      disk: this.diskHealthy,
+    };
+  }
+
+  startHealthMonitor(): void {
+    if (this.healthMonitorIntervalId !== null) {
+      return;
+    }
+
+    this.healthMonitorIntervalId = setInterval(() => {
+      void this.checkHealth();
+    }, HEALTH_CHECK_INTERVAL_MS);
+  }
+
+  stopHealthMonitor(): void {
+    if (this.healthMonitorIntervalId === null) {
+      return;
+    }
+
+    clearInterval(this.healthMonitorIntervalId);
+    this.healthMonitorIntervalId = null;
+  }
+
+  isHealthy(): boolean {
+    return this.dockerHealthy && this.diskHealthy;
+  }
+
+  getHealthDetails(): { docker: boolean; disk: boolean } {
+    return { docker: this.dockerHealthy, disk: this.diskHealthy };
   }
 
   getImageInfo(): {

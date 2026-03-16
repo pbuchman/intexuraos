@@ -24,7 +24,11 @@ import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import { ActionableEventRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService } from '../../../domain/services/gitHubWebhookRules.js';
-import { ALLOWED_BOTS } from '../../../routes/webhooks/github.js';
+import { ALLOWED_BOTS, type GitHubWebhookBody } from '../../../routes/webhooks/github.js';
+import type { GitHubWebhookAuditEventRepository } from '../../../domain/repositories/gitHubWebhookAuditEventRepository.js';
+import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
+import type { EventDecisionRepository } from '../../../domain/repositories/eventDecisionRepository.js';
+import { waitForDetachedAsync, waitForSettlement } from '../../helpers/waitForDetachedAsync.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
@@ -33,6 +37,10 @@ describe('POST /webhooks/github', () => {
   let testSecret: string;
   let mockEventRepo: GitHubPREventRepository;
   let mockSummaryRepo: GitHubPRSummaryRepository;
+  let mockAuditRepo: GitHubWebhookAuditEventRepository;
+  let mockEventLogEntryRepo: GitHubEventLogEntryRepository;
+  let mockEventDecisionRepo: EventDecisionRepository;
+  let mockServices: ServiceContainer;
 
   beforeEach(async () => {
     testSecret = 'test-webhook-secret';
@@ -70,6 +78,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'testuser',
         senderId: 999,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'Test description',
         state: 'open',
@@ -98,20 +107,83 @@ describe('POST /webhooks/github', () => {
       findArchivableTasks: vi.fn().mockResolvedValue(ok([])),
       archiveTaskLogs: vi.fn().mockResolvedValue(ok(undefined)),
       findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       findOldestQueued: vi.fn().mockResolvedValue(ok(null)),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
+      findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
+      findLatestNonReviewTaskByPR: vi.fn().mockResolvedValue(ok(null)),
     };
 
     // Create mock PR summary repo
     mockSummaryRepo = {
       upsert: vi.fn().mockResolvedValue(ok(undefined)),
       findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
+      findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
+      findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+    };
+
+    mockAuditRepo = {
+      save: vi.fn().mockImplementation(async (input) => ok({
+        id: 'audit-1',
+        ...input,
+      })),
+      updateNormalizationStatus: vi.fn().mockImplementation(async ({ id, normalizationStatus }) => ok({
+        id,
+        deliveryId: 'delivery-1',
+        githubEventName: 'pull_request',
+        eventType: 'pull_request',
+        action: 'opened',
+        repository: 'intexuraos/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 123,
+        pullRequestId: 101,
+        senderLogin: 'testuser',
+        senderId: 999,
+        senderType: 'User',
+        authPassedAt: new Date('2026-03-12T10:00:00.000Z'),
+        receivedAt: new Date('2026-03-12T10:00:00.000Z'),
+        normalizationStatus,
+        payload: {},
+      })),
+      findByIds: vi.fn().mockResolvedValue(ok([])),
+    };
+
+    mockEventLogEntryRepo = {
+      createPending: vi.fn().mockImplementation(async (input) => ok({
+        ...input,
+        decisionId: null,
+      })),
+      complete: vi.fn().mockImplementation(async (input) => ok({
+        id: input.id,
+        githubEventName: 'ping',
+        eventType: 'ping',
+        action: null,
+        repository: null,
+        pullRequestNumber: null,
+        authPassedAt: new Date('2026-03-12T10:00:00.000Z'),
+        updatedAt: input.updatedAt,
+        decisionState: input.decisionState,
+        decisionOutcome: input.decisionOutcome,
+        decisionId: input.decisionId,
+        rowVersion: input.rowVersion,
+      })),
+      listRecent: vi.fn(),
+      findByIds: vi.fn().mockResolvedValue(ok([])),
+    };
+
+    mockEventDecisionRepo = {
+      save: vi.fn().mockImplementation(async (input) => ok({
+        id: `ed_${input.eventId}`,
+        ...input,
+        createdAt: new Date('2026-03-12T10:00:01.000Z'),
+      })),
+      findByEventIds: vi.fn().mockResolvedValue(ok([])),
     };
 
     // Setup services with all required fields
-    const mockServices: ServiceContainer = {
+    mockServices = {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo: mockCodeTaskRepo,
@@ -132,6 +204,8 @@ describe('POST /webhooks/github', () => {
       workerHealthProbe: {} as never,
       gitHubPREventRepo: mockEventRepo,
       gitHubPRSummaryRepo: mockSummaryRepo,
+      gitHubWebhookAuditEventRepo: mockAuditRepo,
+      gitHubEventLogEntryRepo: mockEventLogEntryRepo,
       turnMetricsRepo: {} as never,
       userServiceClient: {
         getApiKeys: vi.fn(),
@@ -148,8 +222,10 @@ describe('POST /webhooks/github', () => {
       ]),
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
       toolCallingClient: undefined,
-      eventDecisionRepo: { save: vi.fn().mockResolvedValue({ ok: true, value: {} }) },
+      eventDecisionRepo: mockEventDecisionRepo,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     };
 
     setServices(mockServices);
@@ -174,6 +250,35 @@ describe('POST /webhooks/github', () => {
     hmac.update(payloadBuffer);
     const signature = `sha256=${hmac.digest('hex')}`;
     return { payload: payloadStr, signature };
+  }
+
+  function createPullRequestPayload(overrides: Partial<GitHubWebhookBody> = {}): GitHubWebhookBody {
+    return {
+      action: 'opened',
+      repository: {
+        id: 456,
+        name: 'intexuraos',
+        full_name: 'pbuchman/intexuraos',
+        owner: {
+          login: 'pbuchman',
+          id: 789,
+        },
+      },
+      pull_request: {
+        id: 101,
+        number: 123,
+        title: 'Test PR',
+        body: 'Test description',
+        state: 'open',
+        merged_at: null,
+      },
+      sender: {
+        login: 'testuser',
+        id: 999,
+        type: 'User',
+      },
+      ...overrides,
+    };
   }
 
   describe('signature verification', () => {
@@ -245,6 +350,33 @@ describe('POST /webhooks/github', () => {
     });
   });
 
+  describe('audit persistence failures', () => {
+    it('returns 500 when the auth-passed audit event cannot be persisted', async () => {
+      mockAuditRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
+      );
+
+      const { payload, signature } = signPayload({ zen: 'keep it real' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'ping',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(mockEventLogEntryRepo.createPending).not.toHaveBeenCalled();
+    });
+  });
+
   describe('ping event', () => {
     it('should respond to ping event with pong', async () => {
       const { payload, signature } = signPayload({ zen: 'keep it real' });
@@ -264,6 +396,38 @@ describe('POST /webhooks/github', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.message).toBe('pong');
+      expect(mockAuditRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          githubEventName: 'ping',
+          eventType: 'ping',
+        })
+      );
+      expect(mockEventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 'audit-1',
+          decidedBy: 'webhook_route',
+          decision: 'skip',
+          reason: 'ping_event',
+        })
+      );
+      expect(mockEventLogEntryRepo.createPending).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'audit-1',
+          decisionState: 'pending',
+        })
+      );
+      expect(mockEventLogEntryRepo.complete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'audit-1',
+          decisionState: 'completed',
+          decisionOutcome: 'skip',
+          decisionId: 'ed_audit-1',
+        })
+      );
+      expect(mockAuditRepo.updateNormalizationStatus).toHaveBeenCalledWith({
+        id: 'audit-1',
+        normalizationStatus: 'ignored',
+      });
     });
   });
 
@@ -354,8 +518,8 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Give the fire-and-forget evaluate a tick to start
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      // Wait for the fire-and-forget evaluate to complete
+      await waitForDetachedAsync(() => mockEvaluate.mock.calls.length >= 1);
 
       // The unified evaluator should have been called
       expect(mockEvaluate).toHaveBeenCalled();
@@ -379,6 +543,14 @@ describe('POST /webhooks/github', () => {
           id: 999,
           type: 'User',
         },
+        pull_request: {
+          id: 101,
+          number: 123,
+          title: 'Out of scope PR',
+          body: 'This repo should be ignored after auth passes.',
+          state: 'open',
+          merged_at: null,
+        },
       };
 
       const { payload, signature } = signPayload(prPayload);
@@ -398,6 +570,147 @@ describe('POST /webhooks/github', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.message).toBe('ignored');
+      expect(mockAuditRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          githubEventName: 'pull_request',
+          eventType: 'pull_request',
+          repository: 'someone/other-repo',
+        })
+      );
+      expect(mockEventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 'audit-1',
+          decidedBy: 'webhook_route',
+          decision: 'skip',
+          reason: 'repository_out_of_scope',
+        })
+      );
+      expect(mockEventLogEntryRepo.complete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'audit-1',
+          decisionOutcome: 'skip',
+        })
+      );
+      expect(mockAuditRepo.updateNormalizationStatus).toHaveBeenCalledWith({
+        id: 'audit-1',
+        normalizationStatus: 'ignored',
+      });
+    });
+  });
+
+  describe('invalid payload handling', () => {
+    it('records a route-level decision for malformed payloads after auth passes', async () => {
+      const invalidPayload = {
+        action: 'opened',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        // sender and pull_request intentionally omitted so parsing fails
+      };
+
+      const { payload, signature } = signPayload(invalidPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'invalid-delivery-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('acknowledged');
+      expect(mockEventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 'audit-1',
+          decidedBy: 'webhook_route',
+          decision: 'skip',
+          reason: 'invalid_payload',
+        })
+      );
+      expect(mockEventLogEntryRepo.complete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'audit-1',
+          decisionOutcome: 'skip',
+        })
+      );
+      expect(mockAuditRepo.updateNormalizationStatus).toHaveBeenCalledWith({
+        id: 'audit-1',
+        normalizationStatus: 'invalid',
+      });
+    });
+  });
+
+  describe('unsupported event handling', () => {
+    it('records a route-level decision for unsupported auth-passed events', async () => {
+      const unsupportedPayload = {
+        action: 'queued',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'octocat',
+          id: 1,
+          type: 'User',
+        },
+      };
+
+      const { payload, signature } = signPayload(unsupportedPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'workflow_job',
+          'x-github-delivery': 'unsupported-delivery-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('acknowledged');
+      expect(mockEventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 'audit-1',
+          decidedBy: 'webhook_route',
+          decision: 'skip',
+          reason: 'unsupported_event',
+          eventType: 'unknown',
+          eventAction: 'unknown',
+        })
+      );
+      expect(mockEventLogEntryRepo.complete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'audit-1',
+          decisionOutcome: 'skip',
+        })
+      );
+      expect(mockAuditRepo.updateNormalizationStatus).toHaveBeenCalledWith({
+        id: 'audit-1',
+        normalizationStatus: 'unsupported',
+      });
     });
   });
 
@@ -488,6 +801,74 @@ describe('POST /webhooks/github', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
     });
+
+    it('triggers merge-conflict detection for push events when detector is configured', async () => {
+      const { getServices } = await import('../../../services.js');
+      const currentServices = getServices();
+      const mockDetectOnPush = vi.fn().mockResolvedValue(undefined);
+      currentServices.mergeConflictDetector = { detectOnPush: mockDetectOnPush };
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'push-event-id',
+        githubEventId: 999,
+        deliveryId: 'delivery-123',
+        repository: 'intexuraos/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 0,
+        pullRequestId: 0,
+        eventType: 'push',
+        action: null,
+        senderLogin: 'pusher',
+        senderId: 222,
+        senderType: 'User',
+        prAuthorLogin: null,
+        title: 'Push to development',
+        body: null,
+        state: null,
+        baseBranch: null,
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: { ref: 'refs/heads/development' },
+      }));
+
+      const pushPayload = {
+        ref: 'refs/heads/development',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'pusher',
+          id: 222,
+          type: 'User',
+        },
+      };
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => mockDetectOnPush.mock.calls.length >= 1);
+
+      expect(mockDetectOnPush).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('PR comment dispatch events', () => {
@@ -547,6 +928,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'reviewer',
         senderId: 222,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'please fix the linting errors',
         state: 'open',
@@ -631,6 +1013,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'reviewer',
         senderId: 222,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'please fix the linting errors',
         state: 'open',
@@ -709,6 +1092,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'reviewer',
         senderId: 333,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Refactor utils',
         body: 'this variable naming is confusing',
         state: 'open',
@@ -736,6 +1120,10 @@ describe('POST /webhooks/github', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.message).toBe('processed');
+      expect(mockAuditRepo.updateNormalizationStatus).toHaveBeenCalledWith({
+        id: 'audit-1',
+        normalizationStatus: 'normalized',
+      });
     });
 
     it('dispatches pull_request_review submitted event', async () => {
@@ -781,6 +1169,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'reviewer',
         senderId: 444,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Add feature',
         body: 'please address these issues',
         state: 'open',
@@ -853,6 +1242,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'reviewer',
         senderId: 444,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Add feature',
         body: 'Dismissing stale review',
         state: 'open',
@@ -926,6 +1316,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'intexuraos-code-worker[bot]',
         senderId: 888,
         senderType: 'Bot',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'I have addressed the review comments.',
         state: 'open',
@@ -953,7 +1344,7 @@ describe('POST /webhooks/github', () => {
 
       // Non-whitelisted bot should NOT dispatch
       // Wait a tick to let the async dispatch settle
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1002,6 +1393,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'reviewer',
         senderId: 222,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: '@claude review completeness of the design',
         state: 'open',
@@ -1028,7 +1420,7 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       // Non-owner sender should NOT dispatch (regardless of body content)
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1077,6 +1469,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'reviewer',
         senderId: 222,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: '@codex fix this lint error',
         state: 'open',
@@ -1102,7 +1495,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1151,6 +1544,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'codecov[bot]',
         senderId: 777,
         senderType: 'Bot',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'Coverage: 94.2%',
         state: 'open',
@@ -1177,7 +1571,7 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
 
       // Non-whitelisted bot should NOT dispatch
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
@@ -1227,6 +1621,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'pbuchman',
         senderId: 368465,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'please fix the linting errors',
         state: 'open',
@@ -1252,7 +1647,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       // issue_comment events now return needs_triage (INT-744), not dispatched directly
       expect(mockDispatch).not.toHaveBeenCalled();
     });
@@ -1303,6 +1698,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'chatgpt-codex-connector[bot]',
         senderId: 555,
         senderType: 'Bot',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'Codex Review: Found 2 issues.',
         state: 'open',
@@ -1328,7 +1724,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       // issue_comment events now return needs_triage (INT-744), not dispatched directly
       expect(mockDispatch).not.toHaveBeenCalled();
     });
@@ -1378,6 +1774,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'randomuser',
         senderId: 444,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'some comment',
         state: 'open',
@@ -1403,7 +1800,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockDispatch).not.toHaveBeenCalled();
     });
 
@@ -1453,6 +1850,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'claude[bot]',
         senderId: 999,
         senderType: 'Bot',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'Finalized implementation plan for the task.',
         state: 'open',
@@ -1478,7 +1876,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       // issue_comment events now return needs_triage (INT-744), not dispatched directly
       expect(mockDispatch).not.toHaveBeenCalled();
     });
@@ -1529,6 +1927,7 @@ describe('POST /webhooks/github', () => {
         senderLogin: 'reviewer',
         senderId: 222,
         senderType: 'User',
+        prAuthorLogin: null,
         title: 'Test PR',
         body: 'Updated my review comment with more details.',
         state: 'open',
@@ -1554,7 +1953,7 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      await waitForSettlement();
       expect(mockDispatch).not.toHaveBeenCalled();
     });
   });
@@ -1611,6 +2010,24 @@ describe('POST /webhooks/github', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.message).toBe('duplicate');
+      expect(mockEventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 'audit-1',
+          decidedBy: 'webhook_route',
+          decision: 'skip',
+          reason: 'duplicate_delivery',
+        })
+      );
+      expect(mockEventLogEntryRepo.complete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'audit-1',
+          decisionOutcome: 'skip',
+        })
+      );
+      expect(mockAuditRepo.updateNormalizationStatus).toHaveBeenCalledWith({
+        id: 'audit-1',
+        normalizationStatus: 'duplicate',
+      });
 
       // Verify evaluator was NOT called
       const services = (await import('../../../services.js')).getServices();
@@ -1668,7 +2085,873 @@ describe('POST /webhooks/github', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.message).toBe('acknowledged');
+      expect(mockEventDecisionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 'audit-1',
+          decidedBy: 'webhook_route',
+          decision: 'skip',
+          reason: 'normalized_event_save_failed',
+        })
+      );
+      expect(mockEventLogEntryRepo.complete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'audit-1',
+          decisionOutcome: 'skip',
+        })
+      );
+      expect(mockAuditRepo.updateNormalizationStatus).toHaveBeenCalledWith({
+        id: 'audit-1',
+        normalizationStatus: 'failed',
+      });
+    });
+  });
+
+  describe('branch coverage for audit and route fallbacks', () => {
+    it('records unknown event names and null sender types when auth passes without a typed event header', async () => {
+      const payloadWithUntypedSender = {
+        zen: 'hi',
+        sender: {
+          login: 'testuser',
+          id: 999,
+        },
+      };
+      const { payload, signature } = signPayload(payloadWithUntypedSender);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockAuditRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        githubEventName: 'unknown',
+        eventType: 'unknown',
+        senderType: null,
+      }));
+      expect(mockEventLogEntryRepo.createPending).toHaveBeenCalledWith(expect.objectContaining({
+        githubEventName: 'unknown',
+        eventType: 'unknown',
+      }));
+    });
+
+    it('returns 500 when ping route-level decision persistence fails before completion', async () => {
+      mockEventDecisionRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'decision failed',
+      }));
+      setServices({
+        ...mockServices,
+        eventDecisionRepo: mockEventDecisionRepo,
+      });
+
+      const { payload, signature } = signPayload({ action: 'opened' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'ping',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 500 when the event log repo disappears before ping decision completion', async () => {
+      mockEventLogEntryRepo.createPending = vi.fn().mockImplementation(async (input) => {
+        const { gitHubEventLogEntryRepo: _ignoredEventLogRepo, ...servicesWithoutEventLogRepo } = mockServices;
+        setServices({
+          ...servicesWithoutEventLogRepo,
+        } as ServiceContainer);
+
+        return ok({
+          ...input,
+          decisionId: null,
+        });
+      });
+      setServices({
+        ...mockServices,
+        gitHubEventLogEntryRepo: mockEventLogEntryRepo,
+      });
+
+      const { payload, signature } = signPayload({ action: 'opened' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'ping',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 500 when ping decision completion fails', async () => {
+      mockEventLogEntryRepo.complete = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'completion failed',
+      }));
+      setServices({
+        ...mockServices,
+        gitHubEventLogEntryRepo: mockEventLogEntryRepo,
+      });
+
+      const { payload, signature } = signPayload({ action: 'opened' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'ping',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('acknowledges ping events even when audit normalization update fails', async () => {
+      mockAuditRepo.updateNormalizationStatus = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'audit status failed',
+      }));
+      setServices({
+        ...mockServices,
+        gitHubWebhookAuditEventRepo: mockAuditRepo,
+      });
+
+      const { payload, signature } = signPayload({ action: 'opened' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'ping',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('acknowledges ping events when the audit repo is no longer configured during route-level persistence', async () => {
+      mockEventLogEntryRepo.createPending = vi.fn().mockImplementation(async (input) => {
+        const { gitHubWebhookAuditEventRepo: _ignoredAuditRepo, ...servicesWithoutAuditRepo } = mockServices;
+        setServices({
+          ...servicesWithoutAuditRepo,
+        } as ServiceContainer);
+
+        return ok({
+          ...input,
+          decisionId: null,
+        });
+      });
+      setServices({
+        ...mockServices,
+        gitHubEventLogEntryRepo: mockEventLogEntryRepo,
+      });
+
+      const { payload, signature } = signPayload({ action: 'opened' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'ping',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockAuditRepo.updateNormalizationStatus).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 when auth-passed logging repositories are not configured', async () => {
+      const {
+        gitHubWebhookAuditEventRepo: _ignoredAuditRepo,
+        gitHubEventLogEntryRepo: _ignoredEventLogRepo,
+        ...servicesWithoutAuditAndLogRepos
+      } = mockServices;
+      setServices({
+        ...servicesWithoutAuditAndLogRepos,
+      } as ServiceContainer);
+
+      const { payload, signature } = signPayload({ action: 'opened' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'ping',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 500 when the pending live-log row cannot be created', async () => {
+      mockEventLogEntryRepo.createPending = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'create pending failed',
+      }));
+      setServices({
+        ...mockServices,
+        gitHubEventLogEntryRepo: mockEventLogEntryRepo,
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 500 when out-of-scope events cannot persist their route-level decision', async () => {
+      mockEventDecisionRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'decision failed',
+      }));
+      setServices({
+        ...mockServices,
+        eventDecisionRepo: mockEventDecisionRepo,
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload({
+        repository: {
+          id: 456,
+          name: 'external-repo',
+          full_name: 'someone/external-repo',
+          owner: {
+            login: 'someone',
+            id: 789,
+          },
+        },
+      }));
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 500 when duplicate deliveries cannot persist their skip decision', async () => {
+      mockEventRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'DUPLICATE_EVENT',
+        message: 'duplicate delivery',
+      }));
+      mockEventDecisionRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'decision failed',
+      }));
+      setServices({
+        ...mockServices,
+        gitHubPREventRepo: mockEventRepo,
+        eventDecisionRepo: mockEventDecisionRepo,
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'dup-500',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 500 when normalized save failures cannot persist their skip decision', async () => {
+      mockEventRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'save failed',
+      }));
+      mockEventDecisionRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'decision failed',
+      }));
+      setServices({
+        ...mockServices,
+        gitHubPREventRepo: mockEventRepo,
+        eventDecisionRepo: mockEventDecisionRepo,
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'save-500',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('skips best-effort audit normalization updates when the audit repo is no longer configured', async () => {
+      mockEventRepo.save = vi.fn().mockImplementation(async (input) => {
+        const { gitHubWebhookAuditEventRepo: _ignoredAuditRepo, ...servicesWithoutAuditRepo } = mockServices;
+        setServices({
+          ...servicesWithoutAuditRepo,
+        } as ServiceContainer);
+
+        return ok({
+          id: 'saved-event-1',
+          ...input,
+          processedAt: new Date('2026-03-12T10:00:01.000Z'),
+        });
+      });
+      setServices({
+        ...mockServices,
+        gitHubPREventRepo: mockEventRepo,
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'normalized-no-audit',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('acknowledges processed events when audit normalization update returns an error', async () => {
+      mockAuditRepo.updateNormalizationStatus = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'audit update failed',
+      }));
+      setServices({
+        ...mockServices,
+        gitHubWebhookAuditEventRepo: mockAuditRepo,
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'normalized-warn',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('does not create a fallback route decision when evaluator failure finds an existing decision', async () => {
+      mockEventDecisionRepo.findByEventIds = vi.fn().mockResolvedValue(ok([{
+        id: 'ed_audit-1',
+        eventId: 'audit-1',
+        repository: 'pbuchman/intexuraos',
+        pullRequestNumber: 123,
+        eventType: 'pull_request',
+        eventAction: 'opened',
+        senderLogin: 'testuser',
+        decidedBy: 'github_agent',
+        decision: 'dispatch',
+        reason: 'already saved',
+        createdAt: new Date('2026-03-12T10:00:01.000Z'),
+        decisionLatencyMs: 5,
+      }]));
+      setServices({
+        ...mockServices,
+        eventDecisionRepo: mockEventDecisionRepo,
+        unifiedEvaluator: {
+          evaluate: vi.fn().mockRejectedValue(new Error('evaluation crashed')),
+        },
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'eval-existing',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await vi.waitFor(() => {
+        expect(mockEventDecisionRepo.findByEventIds).toHaveBeenCalledWith(['audit-1']);
+      });
+      expect(mockEventDecisionRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('v8 ignore block coverage', () => {
+    it('acknowledges event when gitHubPREventRepo.save() returns FIRESTORE_ERROR', async () => {
+      mockEventRepo.save = (): Promise<ReturnType<typeof err<{ code: 'FIRESTORE_ERROR'; message: string }>>> =>
+        Promise.resolve(err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' }));
+
+      setServices({
+        ...mockServices,
+        gitHubPREventRepo: mockEventRepo,
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'save-error',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('acknowledged');
+    });
+
+    it('processes event but warns when gitHubPRSummaryRepo.upsert() fails', async () => {
+      const upsertMock = vi.fn().mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Summary upsert failed' })
+      );
+
+      setServices({
+        ...mockServices,
+        gitHubPRSummaryRepo: {
+          ...mockSummaryRepo,
+          upsert: upsertMock,
+        },
+      });
+
+      const { payload, signature } = signPayload(createPullRequestPayload());
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'upsert-error',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('processed');
+      expect(upsertMock).toHaveBeenCalled();
+    });
+
+    it('returns 500 when persistRouteDecision fails for invalid payload', async () => {
+      // Mock eventDecisionRepo.save to return an error to trigger the !saved branch
+      mockEventDecisionRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR' as const,
+        message: 'Database unavailable'
+      }));
+
+      setServices({
+        ...mockServices,
+        eventDecisionRepo: mockEventDecisionRepo,
+      });
+
+      const invalidPayload = {
+        action: 'opened',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        // sender and pull_request intentionally omitted so parsing fails
+      };
+
+      const { payload, signature } = signPayload(invalidPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'persist-error-invalid',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when persistRouteDecision fails for unsupported event', async () => {
+      // Mock eventDecisionRepo.save to return an error to trigger the !saved branch
+      mockEventDecisionRepo.save = vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR' as const,
+        message: 'Database unavailable'
+      }));
+
+      setServices({
+        ...mockServices,
+        eventDecisionRepo: mockEventDecisionRepo,
+      });
+
+      const unsupportedPayload = {
+        action: 'queued',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'octocat',
+          id: 1,
+          type: 'User',
+        },
+      };
+
+      const { payload, signature } = signPayload(unsupportedPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'workflow_run',
+          'x-github-delivery': 'persist-error-unsupported',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('automation log recording', () => {
+    it('records webhook_received for pull_request events with PR context', async () => {
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-wh-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      expect(mockServices.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        {
+          type: 'webhook_received',
+          eventType: 'pull_request',
+          action: 'opened',
+          sender: 'testuser',
+          deliveryId: 'delivery-wh-1',
+          summary: 'Test PR',
+        },
+      );
+    });
+
+    it('does not record webhook_received for ping events (no PR context)', async () => {
+      const { payload, signature } = signPayload({ zen: 'keep it real' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'ping',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockServices.automationLog.record).not.toHaveBeenCalled();
+    });
+
+    it('does not record webhook_received for push events (pullRequestNumber is 0)', async () => {
+      const pushPayload = {
+        ref: 'refs/heads/main',
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: { login: 'intexuraos', id: 789 },
+        },
+        sender: { login: 'pusher', id: 222, type: 'User' },
+      };
+
+      const { payload, signature } = signPayload(pushPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'push',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockServices.automationLog.record).not.toHaveBeenCalled();
+    });
+
+    it('records skipped event for repository_out_of_scope with PR context', async () => {
+      const prPayload = createPullRequestPayload({
+        repository: {
+          id: 456,
+          name: 'other-repo',
+          full_name: 'someone/other-repo',
+          owner: { login: 'someone', id: 789 },
+        },
+      });
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-oos-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.message).toBe('ignored');
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 2);
+
+      // Should have recorded webhook_received first, then skipped
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      expect(recordCalls.length).toBe(2);
+      expect(recordCalls[0]).toEqual([
+        { repository: 'someone/other-repo', prNumber: 123 },
+        {
+          type: 'webhook_received',
+          eventType: 'pull_request',
+          action: 'opened',
+          sender: 'testuser',
+          deliveryId: 'delivery-oos-1',
+          summary: 'Test PR',
+        },
+      ]);
+      expect(recordCalls[1]).toEqual([
+        { repository: 'someone/other-repo', prNumber: 123 },
+        { type: 'skipped', decidedBy: 'webhook_route', reason: 'repository_out_of_scope' },
+      ]);
+    });
+
+    it('records skipped event for duplicate_delivery with PR context', async () => {
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'DUPLICATE_EVENT' as const, message: 'Duplicate delivery' })
+      );
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-dup-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.message).toBe('duplicate');
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 2);
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      expect(recordCalls.length).toBe(2);
+      expect(recordCalls[0]).toEqual([
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        {
+          type: 'webhook_received',
+          eventType: 'pull_request',
+          action: 'opened',
+          sender: 'testuser',
+          deliveryId: 'delivery-dup-1',
+          summary: 'Test PR',
+        },
+      ]);
+      expect(recordCalls[1]).toEqual([
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        { type: 'skipped', decidedBy: 'webhook_route', reason: 'duplicate_delivery' },
+      ]);
+    });
+
+    it('does not break webhook processing when automationLog.record() rejects', async () => {
+      vi.mocked(mockServices.automationLog.record).mockRejectedValue(new Error('log service down'));
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-err-1',
+        },
+        body: payload,
+      });
+
+      // Webhook should still succeed even though automation log failed
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('processed');
+    });
+
+    it('records webhook_received with fallback values when headers are missing', async () => {
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          // No x-github-delivery header
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      expect(mockServices.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        expect.objectContaining({
+          type: 'webhook_received',
+          deliveryId: 'unknown',
+        }),
+      );
+    });
+
+    it('records skipped event for normalized_event_save_failed with PR context', async () => {
+      mockEventRepo.save = vi.fn().mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
+      );
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-save-fail-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.message).toBe('acknowledged');
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 2);
+
+      const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
+      expect(recordCalls.length).toBe(2);
+      expect(recordCalls[1]).toEqual([
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        { type: 'skipped', decidedBy: 'webhook_route', reason: 'normalized_event_save_failed' },
+      ]);
     });
   });
 });
-

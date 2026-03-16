@@ -32,6 +32,16 @@ function createUpsertInput(overrides: Partial<UpsertGitHubPRSummaryInput> = {}):
     title: 'Test PR',
     state: 'open',
     mergedAt: null,
+    baseBranch: 'development',
+    authorLogin: 'alice',
+    headBranch: 'feature/alice',
+    mergeConflictStatus: 'clean',
+    lastConflictCheckedAt: new Date('2024-01-10T12:05:00Z'),
+    conflictEpisodeStartedAt: null,
+    conflictResolvedAt: null,
+    managedConflictCommentId: null,
+    managedConflictTaskId: null,
+    managedConflictTaskOwnerUserId: null,
     ...overrides,
   };
 }
@@ -69,6 +79,10 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
           title: 'Test PR',
           state: 'open',
           mergedAt: null,
+          baseBranch: 'development',
+          authorLogin: 'alice',
+          headBranch: 'feature/alice',
+          mergeConflictStatus: 'clean',
         }),
         { merge: true }
       );
@@ -115,6 +129,40 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
       expect(calledData).not.toHaveProperty('title');
       expect(calledData).not.toHaveProperty('state');
       expect(calledData).not.toHaveProperty('mergedAt');
+    });
+
+    it('should include conflict-tracking fields when explicitly provided', async () => {
+      const mockDocRef = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => mockDocRef),
+        })),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const input = createUpsertInput({
+        mergeConflictStatus: 'conflicting',
+        conflictEpisodeStartedAt: new Date('2024-01-10T12:10:00Z'),
+        managedConflictCommentId: 12345,
+        managedConflictTaskId: 'task_123',
+        managedConflictTaskOwnerUserId: 'user-123',
+      });
+
+      const result = await repo.upsert(input);
+
+      expect(result.ok).toBe(true);
+      expect(mockDocRef.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mergeConflictStatus: 'conflicting',
+          managedConflictCommentId: 12345,
+          managedConflictTaskId: 'task_123',
+          managedConflictTaskOwnerUserId: 'user-123',
+        }),
+        { merge: true }
+      );
     });
 
     it('should handle Firestore errors', async () => {
@@ -282,6 +330,152 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
 
       const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
       const result = await repo.findRecentlyActive(30);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+        expect(mockLogger.error).toHaveBeenCalled();
+      }
+    });
+  });
+
+  describe('findByPullRequest()', () => {
+    it('returns the stored summary when it exists', async () => {
+      const summaryData = {
+        repository: 'intexuraos/test-repo',
+        pullRequestNumber: 42,
+        title: 'Active PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'development',
+        authorLogin: 'alice',
+        headBranch: 'feature/alice',
+        mergeConflictStatus: 'conflicting',
+        lastConflictCheckedAt: new Date('2024-01-10T12:05:00Z'),
+        conflictEpisodeStartedAt: new Date('2024-01-10T12:10:00Z'),
+        conflictResolvedAt: null,
+        managedConflictCommentId: 12345,
+        managedConflictTaskId: 'task_123',
+        managedConflictTaskOwnerUserId: 'user-123',
+        lastActivityAt: new Date('2024-01-10T12:00:00Z'),
+        firstSeenAt: new Date('2024-01-01T00:00:00Z'),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => ({
+            get: vi.fn().mockResolvedValue({
+              exists: true,
+              data: (): unknown => summaryData,
+            }),
+          })),
+        })),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findByPullRequest('intexuraos/test-repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toMatchObject({
+          repository: 'intexuraos/test-repo',
+          pullRequestNumber: 42,
+          baseBranch: 'development',
+          authorLogin: 'alice',
+          headBranch: 'feature/alice',
+          mergeConflictStatus: 'conflicting',
+          managedConflictCommentId: 12345,
+          managedConflictTaskId: 'task_123',
+          managedConflictTaskOwnerUserId: 'user-123',
+        });
+      }
+    });
+
+    it('returns null when the summary does not exist', async () => {
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => ({
+            get: vi.fn().mockResolvedValue({
+              exists: false,
+            }),
+          })),
+        })),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findByPullRequest('intexuraos/test-repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+  });
+
+  describe('findOpenByBaseBranch()', () => {
+    it('returns only open summaries for the requested repository and base branch', async () => {
+      const summaryData = {
+        repository: 'intexuraos/test-repo',
+        pullRequestNumber: 42,
+        title: 'Active PR',
+        state: 'open',
+        mergedAt: null,
+        baseBranch: 'release/2026.03',
+        authorLogin: 'alice',
+        headBranch: 'feature/alice',
+        mergeConflictStatus: 'conflicting',
+        lastConflictCheckedAt: new Date('2024-01-10T12:05:00Z'),
+        conflictEpisodeStartedAt: new Date('2024-01-10T12:10:00Z'),
+        conflictResolvedAt: null,
+        managedConflictCommentId: 12345,
+        managedConflictTaskId: 'task_123',
+        managedConflictTaskOwnerUserId: 'user-123',
+        lastActivityAt: new Date('2024-01-10T12:00:00Z'),
+        firstSeenAt: new Date('2024-01-01T00:00:00Z'),
+      };
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(
+          createMockQuerySnapshot([createMockDocSnapshot(summaryData)])
+        ),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findOpenByBaseBranch('intexuraos/test-repo', 'release/2026.03');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]).toMatchObject({
+          repository: 'intexuraos/test-repo',
+          pullRequestNumber: 42,
+          state: 'open',
+          baseBranch: 'release/2026.03',
+        });
+      }
+
+      expect(mockQuery.where).toHaveBeenNthCalledWith(1, 'repository', '==', 'intexuraos/test-repo');
+      expect(mockQuery.where).toHaveBeenNthCalledWith(2, 'state', '==', 'open');
+      expect(mockQuery.where).toHaveBeenNthCalledWith(3, 'baseBranch', '==', 'release/2026.03');
+    });
+
+    it('handles Firestore errors', async () => {
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockRejectedValue(new Error('Query failed')),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findOpenByBaseBranch('intexuraos/test-repo', 'release/2026.03');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

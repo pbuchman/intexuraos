@@ -45,6 +45,7 @@ export interface PlanningAgentData {
 
 export interface ExecutionAgentData {
   agentType: 'execution';
+  outcome: 'implemented' | 'already_completed';
   superpowers_executing_plans: 'used' | 'not used';
   superpowers_requesting_code_review: 'used' | 'not used';
   gh_pr_url: string;
@@ -55,6 +56,7 @@ export interface PullRequestAgentData {
   agentType: 'pull_request';
   gh_pr_url: string;
   comments_replied: 'yes' | 'no';
+  tracking_comment_id: string;
   summary: string;
 }
 
@@ -90,6 +92,7 @@ export const PLANNING_SCHEMA = z.object({
 });
 
 export const EXECUTION_SCHEMA = z.object({
+  outcome: z.enum(['implemented', 'already_completed']),
   superpowers_executing_plans: z.enum(['used', 'not used']),
   superpowers_requesting_code_review: z.enum(['used', 'not used']),
   gh_pr_url: z.string(),
@@ -99,13 +102,16 @@ export const EXECUTION_SCHEMA = z.object({
 export const PULL_REQUEST_SCHEMA = z.object({
   gh_pr_url: z.string(),
   comments_replied: z.enum(['yes', 'no']),
+  tracking_comment_id: z.string().min(1),
   summary: z.string(),
 });
 
 export const REVIEW_SCHEMA = z.object({
   gh_pr_url: z.string(),
-  review_comments_posted: z.string(),
-  review_types: z.string(),
+  review_comments_posted: z
+    .string()
+    .regex(/^\d+$/, 'review_comments_posted must be a numeric string'),
+  review_types: z.string().trim().min(1, 'review_types must not be empty'),
   summary: z.string(),
 });
 
@@ -120,6 +126,16 @@ const VERIFIER_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
     groundingCostPerRequest: 0,
   },
 };
+
+const FATAL_EXIT_CODE_PATTERN = /\[entrypoint\] Claude attempt finished with exit code: (137|139)/;
+
+export function detectFatalExitCode(rawLogs: string): number | undefined {
+  const match = FATAL_EXIT_CODE_PATTERN.exec(rawLogs);
+  if (match?.[1] !== undefined) {
+    return Number(match[1]);
+  }
+  return undefined;
+}
 
 export function getLast50Lines(rawLogs: string): string {
   return stripDockerHeaders(rawLogs).split('\n').slice(-50).join('\n');
@@ -174,13 +190,15 @@ export function buildExecutionPrompt(transcript: string): string {
     '',
     ...sharedPreamble(),
     'Fields:',
+    '- outcome: "implemented" if the agent created a PR with new code, "already_completed" if the agent determined the work was already done/merged',
     '- superpowers_executing_plans: "used" if the agent invoked the executing-plans skill, "not used" otherwise',
     '- superpowers_requesting_code_review: "used" if the agent invoked the requesting-code-review skill, "not used" otherwise',
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
     '- summary: 3-5 sentence summary of what was implemented — the LLM agent typically states this clearly as a summary block in its final output',
     '',
-    'Example valid response:',
-    '{"superpowers_executing_plans":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","summary":"The execution agent implemented the feature as planned, adding 3 new API endpoints and updating the database schema. CI passed on the first attempt. A PR was created targeting the development branch."}',
+    'Example valid responses:',
+    '{"outcome":"implemented","superpowers_executing_plans":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","summary":"The execution agent implemented the feature as planned, adding 3 new API endpoints and updating the database schema. CI passed on the first attempt. A PR was created targeting the development branch."}',
+    '{"outcome":"already_completed","superpowers_executing_plans":"used","superpowers_requesting_code_review":"not used","gh_pr_url":"","summary":"The agent discovered that the requested work was already implemented and merged into the development branch. All tests pass and the feature is present in the codebase. No PR was needed."}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -197,10 +215,11 @@ export function buildPullRequestPrompt(transcript: string): string {
     'Fields:',
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
     '- comments_replied: "yes" if the agent replied to PR comments, "no" otherwise',
+    '- tracking_comment_id: the numeric GitHub comment ID from the tracking comment POST response (string, must not be empty)',
     '- summary: 3-5 sentence summary of what was done — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid response:',
-    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","comments_replied":"yes","summary":"The pull request agent addressed 3 review comments on PR #901. Code changes were pushed and CI passed. All reviewer feedback was resolved."}',
+    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","comments_replied":"yes","tracking_comment_id":"2345678","summary":"The pull request agent addressed 3 review comments on PR #901. Code changes were pushed and CI passed. All reviewer feedback was resolved."}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -333,6 +352,26 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
 
   async verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
     const transcript = getLast50Lines(input.rawLogs);
+
+    const fatalExitCode = detectFatalExitCode(input.rawLogs);
+    if (fatalExitCode !== undefined) {
+      this.logger.warn(
+        {
+          taskId: input.taskId,
+          attempt: input.attempt,
+          agentType: input.agentType,
+          exitCode: fatalExitCode,
+        },
+        'Fatal exit code detected — skipping Gemini verification'
+      );
+      return {
+        passed: false,
+        missingFields: [`fatal_exit_code_${String(fatalExitCode)}`],
+        verifierFailure: false,
+        trace: { transcript, prompt: '', response: '' },
+      };
+    }
+
     const { schema, prompt } = selectSchemaAndPrompt(input.agentType, transcript);
 
     this.logger.info(

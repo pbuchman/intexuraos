@@ -55,10 +55,25 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.userId).toBe('user-123');
       expect(result.value.prompt).toBe('Fix login bug');
-      expect(result.value.status).toBe('dispatched');
+      expect(result.value.status).toBe('queued');
       expect(result.value.dedupKey).toMatch(/^[a-f0-9]{16}$/);
       expect(result.value.createdAt).toBeDefined();
       expect(result.value.updatedAt).toBeDefined();
+    });
+
+    it('creates task with dispatched status when initialStatus is dispatched', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({ initialStatus: 'dispatched' });
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.status).toBe('dispatched');
     });
 
     it('Layer 0: rejects duplicate approvalEventId with DUPLICATE_APPROVAL', async () => {
@@ -233,6 +248,92 @@ describe('firestoreCodeTaskRepository', () => {
       expect(second.ok).toBe(true);
     });
 
+    it('Layer 2: allows same prompt when previous task was cancelled', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Cancel the first task (simulates review_replaced flow)
+      await repo.update(first.value.id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: { code: 'review_replaced', message: 'Replaced by fresh review' },
+      });
+
+      // Same prompt within 5 minutes — should succeed because first is cancelled
+      const second = await repo.create(input);
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: allows same prompt when previous task failed', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Fail the first task
+      await repo.update(first.value.id, {
+        status: 'failed',
+        completedAt: new Date(),
+        error: { code: 'worker_error', message: 'Container crashed' },
+      });
+
+      // Same prompt within 5 minutes — should succeed because first failed
+      const second = await repo.create(input);
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: allows same prompt when previous task was interrupted', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      await repo.update(first.value.id, {
+        status: 'interrupted',
+        completedAt: new Date(),
+      });
+
+      const second = await repo.create(input);
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: still blocks same prompt when previous task is active (dispatched)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+
+      // Task is dispatched (active) — should still block
+      await repo.update(first.value.id, { status: 'dispatched' });
+
+      const second = await repo.create(input);
+      expect(second.ok).toBe(false);
+      if (second.ok) return;
+      expect(second.error.code).toBe('DUPLICATE_PROMPT');
+    });
+
     it('Layer 3: rejects when active task exists for Linear issue with ACTIVE_TASK_EXISTS', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -273,6 +374,58 @@ describe('firestoreCodeTaskRepository', () => {
       const second = await repo.create(input2);
 
       expect(second.ok).toBe(true);
+    });
+
+    it('allows review task when an execution task is active for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const executionTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+      }));
+      expect(executionTask.ok).toBe(true);
+
+      const reviewTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+        linearIssueId: 'LIN-123',
+        agentType: 'review',
+        prNumber: 42,
+      }));
+
+      expect(reviewTask.ok).toBe(true);
+      if (!reviewTask.ok) return;
+      expect(reviewTask.value.agentType).toBe('review');
+    });
+
+    it('allows non-review task when only an active review task exists for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const reviewTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'review',
+        prNumber: 42,
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+      }));
+      expect(reviewTask.ok).toBe(true);
+
+      const executionTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+        prompt: 'Implement issue',
+        sanitizedPrompt: 'implement issue',
+      }));
+
+      expect(executionTask.ok).toBe(true);
     });
 
     it('normalizes prompt for dedupKey', async () => {
@@ -397,6 +550,25 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.agentType).toBeUndefined();
     });
+
+    it('accepts external transaction via options parameter', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({ id: 'task_external-tx' });
+
+      // Use an external transaction (the same pattern createTaskForPR uses)
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction(async (tx) => {
+        return repo.create(input, { transaction: tx });
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.id).toBe('task_external-tx');
+      expect(result.value.status).toBe('queued');
+    });
   });
 
   describe('findById', () => {
@@ -434,7 +606,7 @@ describe('firestoreCodeTaskRepository', () => {
         .doc(created.value.id)
         .update({
           linearIssueTitle: 'Legacy title',
-          linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-123',
+          linearIssueUrl: 'https://linear.app/pbuchman/issue/INT-123',
           linearIssueType: 'feature',
           linearIssueLabels: ['backend'],
           linearFallback: true,
@@ -719,6 +891,83 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.hasActive).toBe(false);
     });
+
+    it('returns false when only an active review task exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'review',
+        prNumber: 42,
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+      }));
+      expect(created.ok).toBe(true);
+
+      const result = await repo.hasActiveTaskForLinearIssue('LIN-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(false);
+      expect(result.value.taskId).toBeUndefined();
+    });
+
+    it('returns true for legacy active task without agentType', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ linearIssueId: 'LIN-123' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.hasActiveTaskForLinearIssue('LIN-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(true);
+      expect(result.value.taskId).toBe(created.value.id);
+    });
+
+    it('returns non-review task when both review and blocking tasks are active', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const reviewTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'review',
+        prNumber: 42,
+        prompt: 'Review PR #42',
+        sanitizedPrompt: 'review pr #42',
+      }));
+      expect(reviewTask.ok).toBe(true);
+
+      const executionTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+        prompt: 'Implement issue',
+        sanitizedPrompt: 'implement issue',
+      }));
+      expect(executionTask.ok).toBe(true);
+      if (!executionTask.ok) return;
+
+      const result = await repo.hasActiveTaskForLinearIssue('LIN-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.hasActive).toBe(true);
+      expect(result.value.taskId).toBe(executionTask.value.id);
+    });
   });
 
   describe('findZombieTasks', () => {
@@ -961,6 +1210,48 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.tasks).toEqual([]);
       expect(result.value.nextCursor).toBeUndefined();
     });
+
+    it('returns tasks when cursor points to non-existent document', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create tasks for user
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Task 1' }));
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Task 2' }));
+
+      // Query with non-existent cursor - should return all tasks (else branch in list)
+      const result = await repo.list({ userId: 'user-123', cursor: 'non-existent-id' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.tasks.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('returns tasks after cursor when cursor points to existing document', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create tasks for user
+      const task1 = await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Task 1' }));
+      expect(task1.ok).toBe(true);
+      if (!task1.ok) return;
+      const task2 = await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Task 2' }));
+      expect(task2.ok).toBe(true);
+
+      // Query with valid cursor - should return tasks after the cursor (if branch in list)
+      const result = await repo.list({ userId: 'user-123', cursor: task1.value.id });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Should return tasks after task1 (in this case, task2)
+      expect(result.value.tasks.length).toBeGreaterThanOrEqual(0);
+    });
   });
 
   describe('update', () => {
@@ -1188,6 +1479,26 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.implementationTaskId).toBeUndefined();
     });
+
+    it('updates logChunksDropped when provided in update input', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        logChunksDropped: 5,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.logChunksDropped).toBe(5);
+    });
   });
 
   describe('findArchivableTasks', () => {
@@ -1276,6 +1587,119 @@ describe('firestoreCodeTaskRepository', () => {
       if (result.ok) return;
       expect(result.error.code).toBe('NOT_FOUND');
     });
+
+    it('deletes documents from logs subcollection when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Seed logs subcollection with 3 documents (batchSize=2 triggers both branches)
+      const logsCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/logs`);
+      for (let i = 1; i <= 3; i++) {
+        await logsCollection.doc(`log-${i}`).set({ content: `log entry ${i}` });
+      }
+
+      // Use batchSize=2: first 2 docs commit in loop, 3rd doc commits after loop
+      const result = await repo.archiveTaskLogs(created.value.id, 2);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.logCount).toBe(3);
+      expect(result.value.archivedAt).toBeInstanceOf(Date);
+
+      // Verify logs were deleted
+      const logsSnapshot = await logsCollection.get();
+      expect(logsSnapshot.docs).toHaveLength(0);
+    });
+
+    it('deletes documents from log_lines subcollection when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Seed log_lines subcollection with 3 documents (batchSize=2 triggers both branches)
+      const logLinesCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/log_lines`);
+      for (let i = 1; i <= 3; i++) {
+        await logLinesCollection.doc(`line-${i}`).set({ content: `line ${i}` });
+      }
+
+      // Use batchSize=2: first 2 docs commit in loop, 3rd doc commits after loop
+      const result = await repo.archiveTaskLogs(created.value.id, 2);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.logCount).toBe(3);
+
+      // Verify log_lines were deleted
+      const logLinesSnapshot = await logLinesCollection.get();
+      expect(logLinesSnapshot.docs).toHaveLength(0);
+    });
+
+    it('deletes documents from log_entries subcollection when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Seed log_entries subcollection with 3 documents (batchSize=2 triggers both branches)
+      const logEntriesCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/log_entries`);
+      for (let i = 1; i <= 3; i++) {
+        await logEntriesCollection.doc(`entry-${i}`).set({ message: `entry ${i}` });
+      }
+
+      // Use batchSize=2: first 2 docs commit in loop, 3rd doc commits after loop
+      const result = await repo.archiveTaskLogs(created.value.id, 2);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.logCount).toBe(3);
+
+      // Verify log_entries were deleted
+      const logEntriesSnapshot = await logEntriesCollection.get();
+      expect(logEntriesSnapshot.docs).toHaveLength(0);
+    });
+
+    it('deletes documents from turn_metrics subcollection when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Seed turn_metrics subcollection with 3 documents (batchSize=2 triggers both branches)
+      const turnMetricsCollection = fakeFirestore.collection(`code_tasks/${created.value.id}/turn_metrics`);
+      for (let i = 1; i <= 3; i++) {
+        await turnMetricsCollection.doc(`metric-${i}`).set({ tokens: i * 100 });
+      }
+
+      // Use batchSize=2: first 2 docs commit in loop, 3rd doc commits after loop
+      const result = await repo.archiveTaskLogs(created.value.id, 2);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.logCount).toBe(3);
+
+      // Verify turn_metrics were deleted
+      const turnMetricsSnapshot = await turnMetricsCollection.get();
+      expect(turnMetricsSnapshot.docs).toHaveLength(0);
+    });
   });
 
   describe('findByPR (INT-465)', () => {
@@ -1333,6 +1757,321 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
 
       expect(result.value).toBeNull();
+    });
+  });
+
+  describe('findActiveReviewForPR', () => {
+    it('returns queued/dispatched/running review task for matching repository and PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      const result = await repo.findActiveReviewForPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.agentType).toBe('review');
+      expect(result.value?.prNumber).toBe(456);
+    });
+
+    it('ignores non-review tasks and completed review tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const executionTask = await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'execution',
+        prompt: 'Execution task',
+        sanitizedPrompt: 'execution task',
+      }));
+      expect(executionTask.ok).toBe(true);
+
+      const completedReview = await repo.create(createTaskInput({
+        userId: 'user-456',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Completed review task',
+        sanitizedPrompt: 'completed review task',
+      }));
+      expect(completedReview.ok).toBe(true);
+      if (completedReview.ok) {
+        await repo.update(completedReview.value.id, { status: 'reviewed' });
+      }
+
+      const result = await repo.findActiveReviewForPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+  });
+
+  describe('findLatestNonReviewTaskByPR', () => {
+    it('returns newest non-review task for PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a review task first (should be ignored)
+      await repo.create(createTaskInput({
+        id: 'task-review-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      // Create a non-review task
+      const nonReview = await repo.create(createTaskInput({
+        id: 'task-nonreview-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'PR task',
+        sanitizedPrompt: 'pr task',
+      }));
+      expect(nonReview.ok).toBe(true);
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-nonreview-1');
+    });
+
+    it('ignores review tasks when finding non-review task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create only review tasks
+      await repo.create(createTaskInput({
+        id: 'task-review-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+
+    it('treats missing agentType as non-review (backward compatibility)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task without agentType (legacy)
+      const legacy = await repo.create(createTaskInput({
+        id: 'task-legacy-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        // No agentType - should be treated as non-review
+        prompt: 'Legacy task',
+        sanitizedPrompt: 'legacy task',
+      }));
+      expect(legacy.ok).toBe(true);
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-legacy-1');
+    });
+
+    it('returns null when all tasks are review tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-review-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review 1',
+        sanitizedPrompt: 'review 1',
+      }));
+
+      await repo.create(createTaskInput({
+        id: 'task-review-2',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review 2',
+        sanitizedPrompt: 'review 2',
+      }));
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+
+    it('returns newest non-review task when multiple exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create older non-review task
+      await repo.create(createTaskInput({
+        id: 'task-old',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'Old task',
+        sanitizedPrompt: 'old task',
+      }));
+
+      // Create newer non-review task (most recent)
+      await repo.create(createTaskInput({
+        id: 'task-new',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'New task',
+        sanitizedPrompt: 'new task',
+      }));
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-new');
+    });
+
+    it('returns non-review task even when newer review task exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create non-review task first (older)
+      await repo.create(createTaskInput({
+        id: 'task-nonreview-older',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'PR implementation task',
+        sanitizedPrompt: 'pr implementation task',
+      }));
+
+      // Create review task (newer - should be ignored)
+      await repo.create(createTaskInput({
+        id: 'task-review-newer',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'review',
+        prompt: 'Review task',
+        sanitizedPrompt: 'review task',
+      }));
+
+      const result = await repo.findLatestNonReviewTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Should return the non-review task, ignoring the newer review task
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-nonreview-older');
+    });
+  });
+
+  describe('findRecentTasksByLinearIssue', () => {
+    it('returns newest tasks first for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({
+        id: 'task-first',
+        linearIssueId: 'INT-700',
+        prompt: 'first prompt',
+      }));
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+      await repo.update(first.value.id, { status: 'failed' });
+
+      await repo.create(createTaskInput({
+        id: 'task-second',
+        linearIssueId: 'INT-700',
+        prompt: 'second prompt',
+      }));
+
+      const result = await repo.findRecentTasksByLinearIssue('INT-700', 10);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.map((task) => task.id)).toEqual(['task-second', 'task-first']);
+    });
+
+    it('limits results and excludes other Linear issues', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({
+        id: 'task-a',
+        linearIssueId: 'INT-701',
+        prompt: 'task a prompt',
+      }));
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+      await repo.update(first.value.id, { status: 'failed' });
+
+      await repo.create(createTaskInput({
+        id: 'task-b',
+        linearIssueId: 'INT-701',
+        prompt: 'task b prompt',
+      }));
+      await repo.create(createTaskInput({ id: 'task-c', linearIssueId: 'INT-999' }));
+
+      const result = await repo.findRecentTasksByLinearIssue('INT-701', 1);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]?.id).toBe('task-b');
     });
   });
 

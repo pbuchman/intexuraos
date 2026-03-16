@@ -12,7 +12,7 @@
  * - Builds task prompt with PR context and resume-style preamble
  */
 
-import { err, ok, getErrorMessage, type Result, type Logger } from '@intexuraos/common-core';
+import { err, ok, getErrorMessage, serializeError, type Result, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTaskRepository.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
@@ -20,11 +20,20 @@ import type { TaskDispatcherService, DispatchWorkerCredentials } from '../servic
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import type { CodeTask } from '../models/codeTask.js';
-import { createHmac } from 'node:crypto';
+import type { CodeTask, WorkerType } from '../models/codeTask.js';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import { loadConfig } from '../../config.js';
 import { buildLockDocPath, deletePRTaskLock } from '../utils/prTaskLock.js';
+import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
+
+import { sanitizePrompt } from '../utils/promptSanitization.js';
+import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
+import { isRetryableErrorCode } from '../utils/retryableErrors.js';
+import { generateWebhookSecret } from '../utils/secrets.js';
+import type { AutomationLog } from '../ports/automationLog.js';
+import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
+
+const DEFAULT_LINEAR_FALLBACK_ERROR = 'Linear unavailable';
 
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
@@ -40,6 +49,8 @@ export interface CreateTaskForPRRequest {
   /** GitHub webhook event ID for deduplication */
   eventId: string;
   baseBranch?: string;
+  /** Worker type extracted from @worker/@model directive (optional) */
+  workerType?: WorkerType;
 }
 
 export type CreateTaskForPRErrorCode =
@@ -67,6 +78,8 @@ export interface CreateTaskForPRDeps {
   serviceUrl: string;
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
+  dispatchRetryRepo?: DispatchRetryRepository;
+  automationLog: AutomationLog;
   firestore: {
     runTransaction: <T>(fn: (transaction: FirebaseFirestore.Transaction) => Promise<T>) => Promise<T>;
     doc: (path: string) => FirebaseFirestore.DocumentReference;
@@ -114,35 +127,6 @@ function buildTaskPrompt(request: CreateTaskForPRRequest): string {
     `8. Reply to the comment: gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
   );
   return lines.join('\n');
-}
-
-/**
- * Generate HMAC-SHA256 webhook secret for task.
- */
-function generateWebhookSecret(sharedSecret: string, taskId: string): string {
-  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
-}
-
-/**
- * Fetch per-user GitHub OAuth token for PR title update.
- * Returns null if token is not available (best-effort).
- */
-async function fetchGitHubToken(
-  userServiceClient: UserServiceClient,
-  userId: string,
-  logger: Logger
-): Promise<string | null> {
-  const tokenResult = await userServiceClient.getOAuthToken(userId, 'github');
-
-  if (!tokenResult.ok) {
-    logger.debug(
-      { userId, errorCode: tokenResult.error.code },
-      'GitHub OAuth token not available for user (best-effort)'
-    );
-    return null;
-  }
-
-  return tokenResult.value.accessToken; // @allow-result-access -- narrowed by !tokenResult.ok above
 }
 
 /**
@@ -215,7 +199,7 @@ export async function createTaskForPR(
   const lockDocPath = buildLockDocPath(repository, prNumber);
   const lockRef = firestore.doc(lockDocPath);
 
-  type TransactionResult = { taskId: string; isNew: false } | { taskId: string; isNew: true; webhookSecret: string; linearResult: Awaited<ReturnType<LinearIssueService['ensureIssueExists']>> };
+  type TransactionResult = { taskId: string; isNew: false } | { taskId: string; isNew: true; webhookSecret: string };
   let transactionResult: Result<TransactionResult, CreateTaskForPRError>;
 
   // Extract Linear issue ID from PR title BEFORE transaction
@@ -223,6 +207,49 @@ export async function createTaskForPR(
   const existingLinearIssueId = linearIssueMatch !== null && linearIssueMatch !== undefined
     ? `INT-${String(linearIssueMatch[1])}`
     : undefined;
+
+  // Build instruction-style context for Linear issue creation
+  const taskContext = [
+    `Investigate and address a comment on PR #${String(prNumber)} in ${repository}.`,
+    '',
+    request.prTitle !== undefined ? `PR title: "${request.prTitle}"` : '',
+    `Comment by @${senderLogin}:`,
+    request.comment.slice(0, 500),
+  ].filter((line) => line !== '').join('\n');
+
+  // Create or validate Linear issue BEFORE the transaction
+  // (HTTP call to Linear must not be inside a Firestore transaction — retries would replay it)
+  let linearResult: Awaited<ReturnType<LinearIssueService['ensureIssueExists']>>;
+  try {
+    linearResult = await linearIssueService.ensureIssueExists({
+      userId,
+      ...(existingLinearIssueId !== undefined
+        ? { linearIssueId: existingLinearIssueId }
+        : {}),
+      taskPrompt: taskContext,
+    });
+  } catch (error) {
+    const message = getErrorMessage(error, 'Unknown error');
+    logger.error({ error: serializeError(error), repository, prNumber }, 'Linear issue creation failed');
+    return err({
+      code: 'linear_issue_failed',
+      message,
+    });
+  }
+
+  if (linearResult.linearFallback) {
+    logger.warn(
+      { userId },
+      'Linear issue creation failed, using fallback mode'
+    );
+    deps.automationLog.record(
+      { repository, prNumber },
+      { type: 'linear_issue_failed', error: linearResult.linearFallbackError ?? DEFAULT_LINEAR_FALLBACK_ERROR },
+      userId,
+    ).catch((logError: unknown) => {
+      logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
+    });
+  }
 
   try {
     transactionResult = await firestore.runTransaction(async (transaction) => {
@@ -244,42 +271,18 @@ export async function createTaskForPR(
         return ok({ taskId: existingTaskId, isNew: false });
       }
 
-      // Build instruction-style context for Linear issue creation
-      const taskContext = [
-        `Investigate and address a comment on PR #${String(prNumber)} in ${repository}.`,
-        '',
-        request.prTitle !== undefined ? `PR title: "${request.prTitle}"` : '',
-        `Comment by @${senderLogin}:`,
-        request.comment.slice(0, 500),
-      ].filter((line) => line !== '').join('\n');
-
-      // Create or validate Linear issue
-      const linearResult = await linearIssueService.ensureIssueExists({
-        userId,
-        ...(existingLinearIssueId !== undefined
-          ? { linearIssueId: existingLinearIssueId }
-          : {}),
-        taskPrompt: taskContext,
-      });
-
-      if (linearResult.linearFallback) {
-        logger.warn(
-          { userId },
-          'Linear issue creation failed, using fallback mode'
-        );
-      }
-
       // Step 4: Create the task
       const taskId = `task_${crypto.randomUUID()}`;
       const webhookSecret = generateWebhookSecret(orchestratorSecret, taskId);
+      const taskPrompt = buildTaskPrompt(request);
 
       const createInput: CreateTaskInput = {
         id: taskId,
         userId,
-        prompt: buildTaskPrompt(request),
-        sanitizedPrompt: request.comment.slice(0, 1000),
+        prompt: taskPrompt,
+        sanitizedPrompt: sanitizePrompt(taskPrompt),
         systemPromptHash: 'pr-comment-auto',
-        workerType: 'auto',
+        workerType: request.workerType ?? 'auto',
         workerLocation: worker.name,
         repository,
         baseBranch: resolvedBaseBranch ?? 'main',
@@ -288,12 +291,14 @@ export async function createTaskForPR(
         approvalEventId: eventId,
         prNumber,
         webhookSecret,
+        agentType: 'pull_request',
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
         /* v8 ignore stop @preserve */
       };
 
-      const createResult = await codeTaskRepo.create(createInput);
+      // Pass the outer transaction to avoid nested transactions
+      const createResult = await codeTaskRepo.create(createInput, { transaction });
 
       if (!createResult.ok) {
         logger.error(
@@ -315,11 +320,11 @@ export async function createTaskForPR(
         'Created new task from PR comment'
       );
 
-      return ok({ taskId, isNew: true, webhookSecret, linearResult });
+      return ok({ taskId, isNew: true, webhookSecret });
     });
   } catch (error) {
     const message = getErrorMessage(error, 'Unknown error');
-    logger.error({ error, repository, prNumber }, 'Transaction failed');
+    logger.error({ error: serializeError(error), repository, prNumber }, 'Transaction failed');
     return err({
       code: 'internal_error',
       message,
@@ -338,32 +343,8 @@ export async function createTaskForPR(
     return ok({ taskId: txValue.taskId });
   }
 
-  // For new tasks, we have webhookSecret and linearResult
-  const { taskId, webhookSecret, linearResult } = txValue;
-
-  // Best-effort: prepend [INT-XXX] to PR title for Linear auto-linking
-  // Uses per-user GitHub OAuth token instead of static API token
-  if (
-    existingLinearIssueId === undefined &&
-    linearResult.linearIssueId !== undefined &&
-    request.prTitle !== undefined
-  ) {
-    const [owner, repo] = repository.split('/');
-    if (owner !== undefined && repo !== undefined) {
-      const githubToken = await fetchGitHubToken(deps.userServiceClient, userId, logger);
-      if (githubToken !== null) {
-        const newTitle = `[${linearResult.linearIssueId}] ${request.prTitle}`;
-        const titleResult = await deps.gitHubPRClient.updatePRTitle(githubToken, owner, repo, prNumber, newTitle);
-        if (!titleResult.ok) {
-          logger.warn(
-            { error: titleResult.error, prNumber, linearIssueId: linearResult.linearIssueId },
-            'Failed to update PR title with Linear issue ID (best-effort)'
-          );
-        }
-      }
-    }
-  }
-
+  // For new tasks, we have webhookSecret; linearResult is already in outer scope
+  const { taskId, webhookSecret } = txValue;
   // Always include pr-comment for PR-comment-originated tasks so the orchestrator
   // routes to buildPRCommentPrompt. When INT-XXX exists, merge the issue's real
   // labels with pr-comment; when creating new, use code-task + pr-comment.
@@ -393,13 +374,14 @@ export async function createTaskForPR(
     systemPromptHash: 'pr-comment-auto',
     repository,
     baseBranch: resolvedBaseBranch ?? 'main',
-    workerType: 'auto',
+    workerType: request.workerType ?? 'auto',
     webhookUrl,
     webhookSecret,
     traceId: eventId,
     workerCredentials,
     linearIssueLabels: dispatchLabels,
     hasChildren: linearResult.hasChildren,
+    agentType: 'pull_request',
     ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
   });
 
@@ -412,9 +394,9 @@ export async function createTaskForPR(
       if (!queueCountResult.ok) {
         logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
       }
-      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize;
+      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
 
-      if (queueCount >= config.queue.maxSize) {
+      if (queueCount > config.queue.maxSize) {
         await codeTaskRepo.update(taskId, {
           status: 'failed',
           error: {
@@ -429,20 +411,8 @@ export async function createTaskForPR(
         });
       }
 
-      const queueUpdateResult = await codeTaskRepo.update(taskId, {
-        status: 'queued',
-        queuedAt: new Date(),
-      });
-
-      if (!queueUpdateResult.ok) {
-        logger.error({ taskId, error: queueUpdateResult.error }, 'Failed to persist queued status');
-        return err({
-          code: 'internal_error',
-          message: 'Failed to queue task',
-        });
-      }
-
-      const queuePosition = queueCount + 1;
+      // Task is already in 'queued' status from creation — no status update needed
+      const queuePosition = queueCount;
       const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
       const queuedTask = {
         id: taskId,
@@ -450,17 +420,76 @@ export async function createTaskForPR(
         prompt: buildTaskPrompt(request),
         traceId: eventId,
       } as CodeTask;
+      // Best-effort: update PR title with Linear issue tag
+      await updatePRTitleWithLinearTag(deps, {
+        repository, prNumber, userId,
+        ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
+        ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+        titleAlreadyTagged: existingLinearIssueId !== undefined,
+      });
+
+      deps.automationLog.record(
+        { repository, prNumber },
+        {
+          type: 'task_dispatched',
+          taskId,
+          workerType: request.workerType ?? 'auto',
+          agentType: 'pull_request',
+          ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
+        },
+        userId,
+      ).catch((error: unknown) => {
+        logger.warn({ error, taskId }, 'Failed to record automation log for queued task dispatch');
+      });
+
       await deps.whatsappNotifier.notifyTaskQueued(userId, queuedTask, queuePosition, estimatedWaitMinutes);
 
       logger.info({ taskId, queuePosition }, 'PR comment task queued due to worker capacity');
       return ok({ taskId });
     }
 
+    // Retryable errors: queue for retry, keep task queued, keep PR lock
+    if (isRetryableErrorCode(dispatchError.code) && deps.dispatchRetryRepo !== undefined) {
+      const retryConfig = loadConfig();
+      await codeTaskRepo.update(taskId, { status: 'queued', queuedAt: new Date() });
+      await deps.dispatchRetryRepo.create({
+        type: 'new_task',
+        eventId,
+        repository,
+        pullRequestNumber: prNumber,
+        senderLogin,
+        taskId,
+        comment: request.comment,
+        ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+        ...(resolvedBaseBranch !== undefined && { baseBranch: resolvedBaseBranch }),
+        attempts: 0,
+        maxAttempts: retryConfig.retryQueue.maxAttempts,
+        lastError: dispatchError.message,
+        ttlMinutes: retryConfig.retryQueue.ttlMinutes,
+      });
+      logger.info({ taskId }, 'Dispatch failed with retryable error, queued for retry');
+      return ok({ taskId });
+    }
+
+    // Non-retryable: existing behavior (mark failed, delete lock)
     logger.error({ taskId, error: dispatchError }, 'Failed to dispatch PR comment task');
     await codeTaskRepo.update(taskId, {
       status: 'failed',
       error: { code: dispatchError.code, message: dispatchError.message },
     });
+
+    deps.automationLog.record(
+      { repository, prNumber },
+      {
+        type: 'task_dispatch_failed',
+        error: dispatchError.message,
+        errorCode: dispatchError.code,
+      },
+      userId,
+    ).catch((error: unknown) => {
+      logger.warn({ error, taskId }, 'Failed to record automation log for dispatch failure');
+    });
+
     await deletePRTaskLock(firestore, repository, prNumber, logger);
     return err({
       code: 'task_creation_failed' as CreateTaskForPRErrorCode,
@@ -468,9 +497,33 @@ export async function createTaskForPR(
     });
   }
 
-  // Update task with worker location
+  // Update task with dispatched status and worker location
   await codeTaskRepo.update(taskId, {
+    status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchResult.value.workerLocation, // @allow-result-access -- narrowed by !dispatchResult.ok above
+  });
+
+  // Best-effort: update PR title with Linear issue tag
+  await updatePRTitleWithLinearTag(deps, {
+    repository, prNumber, userId,
+    ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
+    ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
+    titleAlreadyTagged: existingLinearIssueId !== undefined,
+  });
+
+  deps.automationLog.record(
+    { repository, prNumber },
+    {
+      type: 'task_dispatched',
+      taskId,
+      workerType: request.workerType ?? 'auto',
+      agentType: 'pull_request',
+      ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
+    },
+    userId,
+  ).catch((error: unknown) => {
+    logger.warn({ error, taskId }, 'Failed to record automation log for dispatched task');
   });
 
   logger.info(
@@ -480,3 +533,4 @@ export async function createTaskForPR(
 
   return ok({ taskId });
 }
+

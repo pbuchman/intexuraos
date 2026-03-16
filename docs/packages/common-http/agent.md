@@ -1,4 +1,4 @@
-# @intexuraos/common-http - Agent Reference
+# @intexuraos/common-http — Agent Reference
 
 Machine-readable export map and interface definitions for automated tooling.
 
@@ -6,16 +6,15 @@ Machine-readable export map and interface definitions for automated tooling.
 
 ```
 name: @intexuraos/common-http
-version: 2.1.0
 type: module
 leaf: false
 dependencies:
   - @intexuraos/common-core (workspace)
   - @intexuraos/llm-utils (workspace)
-  - fastify ^5.1.0
-  - fastify-plugin ^5.0.1
-  - jose ^5.9.6
-  - zod ^3.24.1
+  - fastify ^5.x
+  - fastify-plugin ^5.x
+  - jose ^5.x
+  - zod ^3.x
 entry_points:
   - ".": ./src/index.ts
 ```
@@ -198,7 +197,7 @@ common-core -> common-http -> http-server -> all apps
 
 ```typescript
 await app.register(intexuraFastifyPlugin); // 1. reply.ok/fail + requestId
-await app.register(fastifyAuthPlugin); // 2. JWT config (depends on intexura-plugin)
-registerQuietHealthCheckLogging(app); // 3. Suppress /health logs
+await app.register(fastifyAuthPlugin);     // 2. JWT config (depends on intexura-plugin)
+registerQuietHealthCheckLogging(app);      // 3. Suppress /health logs
 app.setErrorHandler(createValidationErrorHandler()); // 4. (from http-server)
 ```

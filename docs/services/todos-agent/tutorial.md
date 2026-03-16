@@ -1,8 +1,8 @@
 # Todos Agent — Tutorial
 
 > **Time:** 20–30 minutes
-> **Prerequisites:** Node.js 22+, GCP project access, Auth0 access token
-> **You'll learn:** How to create todos, manage items, and integrate with the AI item extraction feature
+> **Prerequisites:** Node.js 20+, GCP project access, valid Auth0 token
+> **You'll learn:** How to create and manage todos, add items, use AI extraction, and handle common errors
 
 ---
 
@@ -10,10 +10,10 @@
 
 A working integration that:
 
-- Creates todos with sub-items
-- Filters and searches todos
-- Manages todo lifecycle (archive, cancel)
-- Updates and reorders todo items
+- Creates todos via the public API and via the internal (agent-to-agent) endpoint
+- Manages items within a todo (add, update, reorder, delete)
+- Filters and retrieves todo lists by status, priority, and tags
+- Handles lifecycle transitions (archive, cancel) correctly
 
 ---
 
@@ -22,279 +22,231 @@ A working integration that:
 Before starting, ensure you have:
 
 - [ ] Access to the IntexuraOS project
-- [ ] Auth0 device code flow for access token
+- [ ] A valid Auth0 Bearer token (for public endpoints)
+- [ ] The internal auth token (for internal endpoints)
 - [ ] Basic understanding of TypeScript/Node.js
-- [ ] todos-agent service running locally (port 8123) or deployed
 
 ---
 
-## Part 1: Create Your First Todo (5 minutes)
+## Part 1: Your First Todo (5 minutes)
 
-Let's start with the simplest possible interaction.
+Start with the simplest interaction: create a todo and read it back.
 
-### Step 1.1: Make Your First Request
+### Step 1.1: Create a Todo
 
 ```bash
-curl -X POST http://localhost:8123/todos \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "Complete project documentation",
-    "description": "Write technical docs for all services",
-    "tags": ["work", "documentation"],
-    "priority": "high",
+    "title": "Prepare weekly review",
+    "tags": ["work"],
     "source": "manual",
-    "sourceId": "local-1"
+    "sourceId": "tutorial-001"
   }'
 ```
 
-**Expected response:**
+**Expected response (201):**
 
 ```json
 {
   "success": true,
   "data": {
-    "id": "todo_abc123",
-    "userId": "user_123",
-    "title": "Complete project documentation",
-    "description": "Write technical docs for all services",
-    "tags": ["work", "documentation"],
-    "priority": "high",
+    "id": "abc123",
+    "userId": "user-xyz",
+    "title": "Prepare weekly review",
+    "description": null,
+    "tags": ["work"],
+    "priority": "medium",
     "status": "pending",
     "archived": false,
     "items": [],
-    "source": "manual",
-    "sourceId": "local-1",
-    "createdAt": "2026-01-25T10:00:00Z",
-    "updatedAt": "2026-01-25T10:00:00Z"
+    "dueDate": null,
+    "completedAt": null,
+    "createdAt": "2026-03-15T10:00:00.000Z",
+    "updatedAt": "2026-03-15T10:00:00.000Z"
   }
 }
 ```
 
 ### What Just Happened?
 
-You created a todo. The service assigned a unique ID, set the status to `pending`, and initialized an empty items array. The `source` and `sourceId` fields track where the todo originated. Priority defaults to `medium` if not specified.
+The service created a todo owned by your user account. Because this came via the public endpoint with no description, the todo starts as `pending` immediately — no AI extraction step. The `source` and `sourceId` fields track where this todo originated.
+
+### Step 1.2: Retrieve It
+
+```bash
+curl https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/abc123 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Checkpoint:** You should see the same todo with all fields populated.
 
 ---
 
-## Part 2: List and Filter Todos (5 minutes)
+## Part 2: Working with Items (10 minutes)
 
-### Step 2.1: List All Your Todos
+Now add structure to a todo using items.
 
-```bash
-curl "http://localhost:8123/todos" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-### Step 2.2: Filter by Status
+### Step 2.1: Create a Todo with Initial Items
 
 ```bash
-curl "http://localhost:8123/todos?status=pending" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-### Step 2.3: Filter by Priority
-
-```bash
-curl "http://localhost:8123/todos?priority=high" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-### Step 2.4: Filter by Tags
-
-```bash
-curl "http://localhost:8123/todos?tags=work,urgent" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-### Step 2.5: Filter by Archived Status
-
-```bash
-curl "http://localhost:8123/todos?archived=false" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-**Checkpoint:** You should see only todos matching your filters. Tags use OR logic (todos matching ANY provided tag are returned).
-
----
-
-## Part 3: Create Todo with Items (10 minutes)
-
-Now let's create a todo with sub-items.
-
-### Step 3.1: Create with Pre-defined Items
-
-```bash
-curl -X POST http://localhost:8123/todos \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "Q4 Planning",
-    "description": "Prepare for Q4",
-    "tags": ["planning"],
+    "title": "Launch prep",
+    "tags": ["launch", "work"],
     "priority": "high",
     "source": "manual",
-    "sourceId": "q4-plan",
+    "sourceId": "tutorial-002",
     "items": [
-      { "title": "Review Q3 results", "priority": "high" },
-      { "title": "Set Q4 objectives", "priority": "medium" },
-      { "title": "Schedule team meetings", "priority": "low" }
+      { "title": "Finalize pricing page copy", "dueDate": "2026-03-20T17:00:00.000Z" },
+      { "title": "Send beta invites to waitlist" },
+      { "title": "Order branded swag", "priority": "low" }
     ]
   }'
 ```
 
-**Expected response:** The todo includes an `items` array with three items, each with a position (0, 1, 2) and status `pending`.
+Items are assigned `position` values starting from 0. The todo starts as `pending` because items were provided at creation.
 
-### Step 3.2: Add an Item to Existing Todo
+### Step 2.2: Add an Item Later
 
 ```bash
-curl -X POST http://localhost:8123/todos/TODO_ID/items \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/items \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "New subtask",
-    "priority": "medium"
+    "title": "Schedule demo walkthrough",
+    "priority": "high",
+    "dueDate": "2026-03-17T09:00:00.000Z"
   }'
 ```
 
-**Checkpoint:** The new item appears at the end of the items list with the next position number.
+The response is the full updated todo including all items.
+
+### Step 2.3: Complete an Item
+
+```bash
+curl -X PATCH https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/items/$ITEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "status": "completed" }'
+```
+
+**Checkpoint:** Watch the todo's `status` field change automatically. Complete one of four items and the todo transitions to `in_progress`. Complete all four and it transitions to `completed`.
+
+### Step 2.4: Reorder Items
+
+```bash
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/items/reorder \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "itemIds": ["item-id-3", "item-id-1", "item-id-2", "item-id-4"]
+  }'
+```
+
+**Important:** `itemIds` must contain every item ID exactly once. Partial lists are rejected with `400 INVALID_REQUEST`.
 
 ---
 
-## Part 4: Manage Todo Items (5 minutes)
+## Part 3: AI-Powered Extraction (10 minutes)
 
-### Step 4.1: Update an Item's Status
+The real power of todos-agent is creating todos from natural language via the internal endpoint — this is how other agents in the platform call it.
+
+### Step 3.1: Create a Todo with a Description (Internal Endpoint)
 
 ```bash
-curl -X PATCH http://localhost:8123/todos/TODO_ID/items/ITEM_ID \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/internal/todos \
+  -H "X-Internal-Auth: $INTERNAL_AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "status": "completed"
+    "userId": "user-xyz",
+    "title": "Board deck preparation",
+    "description": "Pull Q3 revenue numbers from the dashboard, draft the narrative section covering growth trends, get design to polish the slides by Friday, and schedule a dry run with the team for next Wednesday.",
+    "tags": ["work", "presentation"],
+    "source": "actions-agent",
+    "sourceId": "action-789"
   }'
 ```
 
-**Note:** When all items in a todo are marked completed, the todo automatically transitions to `completed` status and `completedAt` is set. When some items are completed but not all, the todo transitions to `in_progress`.
+**Expected response (201):**
 
-### Step 4.2: Reorder Items
-
-```bash
-curl -X POST http://localhost:8123/todos/TODO_ID/items/reorder \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "itemIds": ["ITEM_3", "ITEM_1", "ITEM_2"]
-  }'
+```json
+{
+  "success": true,
+  "data": {
+    "status": "completed",
+    "message": "Todo \"Board deck preparation\" created successfully",
+    "resourceUrl": "/#/todos/def456"
+  }
+}
 ```
 
-**Note:** Reordering requires ALL item IDs. Provide them in the new order you want. Partial reorders are rejected.
+### What Just Happened?
 
-### Step 4.3: Delete an Item
+The todo was created with `status: processing` and a Pub/Sub event was fired. Behind the scenes, the Pub/Sub handler picks up the event, calls the user's LLM (Gemini 2.5 Flash) via user-service, and extracts structured items from the description. The todo transitions to `pending` with the extracted items once processing completes.
+
+### Step 3.2: Poll for the Processed Result
 
 ```bash
-curl -X DELETE http://localhost:8123/todos/TODO_ID/items/ITEM_ID \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+curl https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/def456 \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-**Checkpoint:** The item is removed and remaining items keep their positions.
+Wait a few seconds and retry until `status` changes from `processing` to `pending`. The `items` array will contain the LLM-extracted items — each with a title, and a due date where one was implied.
+
+**Checkpoint:** You should see four items extracted from the description, with "Polish slides" having a Friday due date.
 
 ---
 
-## Part 5: Todo Lifecycle (5 minutes)
+## Part 4: Filtering and Lifecycle (5 minutes)
 
-### Step 5.1: Update a Todo
-
-```bash
-curl -X PATCH http://localhost:8123/todos/TODO_ID \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "priority": "urgent",
-    "tags": ["work", "urgent"]
-  }'
-```
-
-### Step 5.2: Cancel a Todo
+### Step 4.1: Filter Your Todo List
 
 ```bash
-curl -X POST http://localhost:8123/todos/TODO_ID/cancel \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+# Active high-priority work todos
+curl "https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos?status=in_progress&priority=high&tags=work" \
+  -H "Authorization: Bearer $TOKEN"
+
+# All archived todos
+curl "https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos?archived=true" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-**Note:** Cannot cancel already completed todos. Already-cancelled todos return success without changes.
+Tag filtering uses OR logic — passing `tags=work` returns todos tagged with "work".
 
-### Step 5.3: Archive a Completed or Cancelled Todo
+### Step 4.2: Archive a Completed Todo
 
 ```bash
-curl -X POST http://localhost:8123/todos/TODO_ID/archive \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/archive \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-**Note:** Only completed or cancelled todos can be archived.
+Only `completed` or `cancelled` todos can be archived. Attempting to archive a `pending` todo returns `400 INVALID_REQUEST`.
 
-### Step 5.4: Unarchive a Todo
+### Step 4.3: Cancel a Todo
 
 ```bash
-curl -X POST http://localhost:8123/todos/TODO_ID/unarchive \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos/$TODO_ID/cancel \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-**Checkpoint:** The todo returns to your active list with its previous status.
-
----
-
-## Part 6: AI Item Extraction (Real-World Scenario)
-
-### Scenario: Natural Language to Structured Items
-
-When a todo is created via the internal endpoint with a detailed description, the AI extracts actionable items automatically.
-
-```bash
-curl -X POST http://localhost:8123/internal/todos \
-  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "YOUR_USER_ID",
-    "title": "Weekly Planning",
-    "description": "Plan my week: finish sales presentation by Wednesday, call dentist on Tuesday afternoon, review team updates on Friday morning",
-    "tags": ["planning"],
-    "priority": "medium",
-    "source": "manual",
-    "sourceId": "week-plan"
-  }'
-```
-
-**What happens:**
-
-1. Todo created with `status: processing`
-2. Pub/Sub event triggers the AI extraction
-3. Your LLM (Gemini 2.5 Flash or GLM-4.7) parses the description
-4. Items extracted: "Finish sales presentation", "Call dentist", "Review team updates"
-5. Due dates and priorities inferred from context
-6. Status changes to `pending`
-
-**Result:** Poll the todo after a few seconds to see the extracted items.
-
-```bash
-# Wait 2-3 seconds, then:
-curl "http://localhost:8123/todos/TODO_ID" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
+Cancelling a `completed` todo returns `400 INVALID_REQUEST`. Already-cancelled todos return success.
 
 ---
 
 ## Troubleshooting
 
-| Issue             | Symptom          | Solution                                                     |
-| ----------------- | ---------------- | ------------------------------------------------------------ |
-| Auth failed       | 401 Unauthorized | Check your access token is valid and not expired             |
-| Todo not found    | 404 error        | Verify the todo ID and that it belongs to your user          |
-| Access denied     | 403 error        | You can only access your own todos                           |
-| Invalid request   | 400 error        | Check required fields: `title`, `tags`, `source`, `sourceId` |
-| Invalid operation | 400 error        | Check status restrictions (archive, cancel)                  |
-| Archive failed    | 400 error        | Only completed/cancelled todos can be archived               |
-| Cancel failed     | 400 error        | Cannot cancel already completed todos                        |
-| No extraction     | Items not added  | Check if user has LLM API key configured                     |
+| Problem                    | Solution                                                              |
+| -------------------------- | --------------------------------------------------------------------- |
+| `401 Unauthorized`         | Check your Bearer token is valid and not expired                      |
+| `403 Forbidden`            | You are trying to access a todo owned by a different user             |
+| `404 Not Found`            | Verify the todo ID exists and belongs to your account                 |
+| `400 INVALID_REQUEST`      | Check status restrictions (archive/cancel rules) or reorder item IDs  |
+| Todo stuck in `processing` | LLM extraction may have failed; check for a warning item in the todo  |
+| Items not extracted        | User account may have no LLM API key configured in user-service       |
 
 ---
 
@@ -302,10 +254,9 @@ curl "http://localhost:8123/todos/TODO_ID" \
 
 Now that you understand the basics:
 
-1. Explore the [Technical Reference](technical.md) for full API details and Mermaid diagrams
-2. Learn about the [AI item extraction](technical.md#ai-item-extraction) pipeline
-3. Check out [commands-agent](../commands-agent/features.md) for creating todos from natural language via WhatsApp
-4. Review the [Agent Interface](agent.md) for machine-readable integration patterns
+1. Explore `PATCH /todos/:id` to update title, description, tags, priority, or due date
+2. Read the [Technical Reference](technical.md) for the full domain model and AI extraction details
+3. Check out [actions-agent](../actions-agent/features.md) to see how voice commands create todos automatically
 
 ---
 
@@ -313,99 +264,107 @@ Now that you understand the basics:
 
 Test your understanding:
 
-1. **Easy:** Create a todo with 3 items and mark one as completed. Verify the todo transitions to `in_progress`.
-2. **Medium:** Create a todo, filter it by tag, update its priority, then cancel and archive it.
-3. **Hard:** Create a todo via the internal endpoint with a complex description, wait for AI extraction, verify items were created with priorities and due dates.
+1. **Easy:** Create a todo with all optional fields — description, tags, priority, dueDate, and initial items
+2. **Medium:** Create a todo via the internal endpoint with a description, poll until processing completes, then complete all items and verify the status becomes `completed`
+3. **Hard:** Write a TypeScript function that creates a todo via the internal endpoint, polls `GET /todos/:id` until status is no longer `processing`, and returns the final list of extracted item titles
 
 <details>
 <summary>Solutions</summary>
 
-### Exercise 1: Create with Items and Complete
+### Exercise 1: All Optional Fields
 
 ```bash
-# Create todo with items
-curl -X POST http://localhost:8123/todos \
+curl -X POST https://intexuraos-todos-agent-cj44trunra-lm.a.run.app/todos \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "Shopping",
-    "tags": ["personal"],
-    "priority": "medium",
+    "title": "Full example todo",
+    "description": "A todo with everything set",
+    "tags": ["example", "tutorial"],
+    "priority": "urgent",
+    "dueDate": "2026-04-01T09:00:00.000Z",
     "source": "manual",
-    "sourceId": "shop-1",
+    "sourceId": "exercise-1",
     "items": [
-      {"title": "Buy groceries"},
-      {"title": "Pick up dry cleaning"},
-      {"title": "Return library books"}
+      { "title": "First item", "priority": "high" },
+      { "title": "Second item", "dueDate": "2026-03-25T17:00:00.000Z" }
     ]
   }'
-
-# Mark first item completed (use returned todo and item IDs)
-curl -X PATCH http://localhost:8123/todos/TODO_ID/items/ITEM_ID \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "completed"}'
-
-# Verify: todo.status should now be "in_progress"
-curl "http://localhost:8123/todos/TODO_ID" \
-  -H "Authorization: Bearer $TOKEN"
 ```
 
-### Exercise 2: Filter, Update, Cancel, Archive
+### Exercise 2: Create, Wait, Complete
 
 ```bash
-# Create with specific tag
-curl -X POST http://localhost:8123/todos \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Team meeting prep",
-    "tags": ["work"],
-    "priority": "high",
-    "source": "manual",
-    "sourceId": "meeting-1"
-  }'
-
-# Filter by tag
-curl "http://localhost:8123/todos?tags=work" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Update priority
-curl -X PATCH http://localhost:8123/todos/TODO_ID \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"priority": "urgent"}'
-
-# Cancel the todo
-curl -X POST http://localhost:8123/todos/TODO_ID/cancel \
-  -H "Authorization: Bearer $TOKEN"
-
-# Archive (now allowed since it is cancelled)
-curl -X POST http://localhost:8123/todos/TODO_ID/archive \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Exercise 3: AI Extraction
-
-```bash
-# Create with complex description via internal endpoint
-curl -X POST http://localhost:8123/internal/todos \
+# 1. Create via internal endpoint — capture todo ID from resourceUrl
+RESOURCE_URL=$(curl -s -X POST .../internal/todos \
   -H "X-Internal-Auth: $INTERNAL_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "userId": "YOUR_USER_ID",
-    "title": "Project Launch",
-    "description": "Prepare for product launch next month: finalize marketing copy by end of week, schedule press release for Monday, coordinate with sales team on pricing, prepare demo video for launch day",
-    "tags": ["work", "launch"],
-    "priority": "high",
-    "source": "manual",
-    "sourceId": "launch-1"
-  }'
+  -d '{"userId":"user-xyz","title":"Test","description":"Write unit tests and review the PR","tags":[],"source":"manual","sourceId":"ex2"}' \
+  | jq -r '.data.resourceUrl')
+TODO_ID="${RESOURCE_URL##*/}"
 
-# Wait 3-5 seconds, then retrieve to see extracted items
-sleep 5
-curl "http://localhost:8123/todos/TODO_ID" \
-  -H "Authorization: Bearer $TOKEN"
+# 2. Poll until status is no longer processing
+STATUS="processing"
+while [ "$STATUS" = "processing" ]; do
+  sleep 2
+  STATUS=$(curl -s .../todos/$TODO_ID -H "Authorization: Bearer $TOKEN" | jq -r '.data.status')
+done
+
+# 3. Complete all items
+curl -s .../todos/$TODO_ID -H "Authorization: Bearer $TOKEN" \
+  | jq -r '.data.items[].id' \
+  | while read ITEM_ID; do
+      curl -s -X PATCH .../todos/$TODO_ID/items/$ITEM_ID \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"status":"completed"}'
+    done
+```
+
+### Exercise 3: TypeScript Polling Function
+
+```typescript
+async function createAndWaitForExtraction(
+  description: string,
+  userId: string,
+  bearerToken: string,
+  internalAuthToken: string
+): Promise<string[]> {
+  const baseUrl = 'https://intexuraos-todos-agent-cj44trunra-lm.a.run.app';
+
+  // Create via internal endpoint
+  const createRes = await fetch(`${baseUrl}/internal/todos`, {
+    method: 'POST',
+    headers: {
+      'X-Internal-Auth': internalAuthToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      userId,
+      title: 'Extracted todo',
+      description,
+      tags: [],
+      source: 'tutorial',
+      sourceId: `ex3-${String(Date.now())}`,
+    }),
+  });
+
+  const created = (await createRes.json()) as { data: { resourceUrl: string } };
+  const todoId = created.data.resourceUrl.split('/').pop() ?? '';
+
+  // Poll until no longer processing
+  let todo: { status: string; items: Array<{ title: string }> };
+  do {
+    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+    const getRes = await fetch(`${baseUrl}/todos/${todoId}`, {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    });
+    const body = (await getRes.json()) as { data: typeof todo };
+    todo = body.data;
+  } while (todo.status === 'processing');
+
+  return todo.items.map((item) => item.title);
+}
 ```
 
 </details>

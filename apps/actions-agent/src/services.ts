@@ -76,6 +76,10 @@ import {
   type ChangeActionTypeUseCase,
 } from './domain/usecases/changeActionType.js';
 import {
+  createUpdateActionUseCase,
+  type UpdateActionUseCase,
+} from './domain/usecases/updateAction.js';
+import {
   createHandleApprovalReplyUseCase,
   type HandleApprovalReplyUseCase,
 } from './domain/usecases/handleApprovalReply.js';
@@ -136,6 +140,7 @@ export interface Services {
   executeCodeActionUseCase: ExecuteCodeActionUseCase;
   retryPendingActionsUseCase: RetryPendingActionsUseCase;
   changeActionTypeUseCase: ChangeActionTypeUseCase;
+  updateActionUseCase: UpdateActionUseCase;
   handleApprovalReplyUseCase: HandleApprovalReplyUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
@@ -183,8 +188,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     LlmModels.Gemini25Pro,
     LlmModels.ClaudeSonnet45,
     LlmModels.GPT52,
-    LlmModels.Glm47,
-    LlmModels.Glm47Flash,
     LlmModels.SonarPro,
   ]);
 
@@ -200,7 +203,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger: createAppLogger({ name: 'userServiceClient' }),
-    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
@@ -416,6 +418,12 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     logger: createAppLogger({ name: 'changeActionType' }),
   });
 
+  const updateActionUseCase = createUpdateActionUseCase({
+    actionRepository,
+    changeActionTypeUseCase,
+    logger: createAppLogger({ name: 'updateAction' }),
+  });
+
   const handleApprovalReplyUseCase = createHandleApprovalReplyUseCase({
     actionRepository,
     approvalMessageRepository,
@@ -430,7 +438,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     executeLinearAction: executeLinearActionUseCase,
     executeCodeAction: executeCodeActionUseCase,
     codeAgentClient,
-    webAppUrl: config.webAppUrl,
   });
 
   container = {
@@ -466,6 +473,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     executeCodeActionUseCase,
     retryPendingActionsUseCase,
     changeActionTypeUseCase,
+    updateActionUseCase,
     handleApprovalReplyUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,

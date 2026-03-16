@@ -3,7 +3,7 @@
  *
  * Test Requirements:
  * 1. Returns task_not_found when task doesn't exist
- * 2. Returns invalid_status for queued task
+ * 2. Queues message locally for queued task
  * 3. Queues message locally for dispatched task (stores in pendingUserMessages, no worker contact)
  * 4. Queues message for running task (writes log line, forwards to worker, returns { action: 'queued' })
  * 5. Resumes completed task with message (writes log line, forwards to worker, returns { action: 'resumed' })
@@ -175,19 +175,23 @@ describe('sendTaskMessage', () => {
       );
     });
 
-    it('should return invalid_status for queued task', async () => {
+    it('should queue message locally for queued task without contacting worker', async () => {
       const queuedTask = createMockTask({ status: 'queued' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(queuedTask));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
 
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('invalid_status');
-        expect(result.error.message).toContain('queued');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('queued');
       }
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId, status: 'queued' }),
+
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { pendingUserMessages: [message] });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId, action: 'queued', status: 'queued' }),
         expect.any(String)
       );
     });
@@ -417,6 +421,27 @@ describe('sendTaskMessage', () => {
   });
 
   describe('worker configuration errors', () => {
+    it('should return internal_error when worker settings fetch fails', async () => {
+      const task = createMockTask({ status: 'running' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'Connection failed' })
+      );
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('Failed to fetch worker settings');
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ userId }),
+        expect.stringContaining('Failed to fetch worker settings')
+      );
+    });
+
     it('should return worker_not_configured when no workers are configured', async () => {
       const task = createMockTask({ status: 'running' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
@@ -495,6 +520,28 @@ describe('sendTaskMessage', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('worker_error');
         expect(result.error.message).toBe('Worker returned 500');
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId }),
+        expect.any(String)
+      );
+    });
+
+    it('should return worker_unavailable when worker reports unavailable error code', async () => {
+      const task = createMockTask({ status: 'running' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      setupWorkerSettings();
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'worker_unavailable', message: 'Worker is offline' })
+      );
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_unavailable');
+        expect(result.error.message).toBe('Worker is offline');
       }
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ taskId }),

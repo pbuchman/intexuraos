@@ -1,6 +1,6 @@
 # Technical Debt: @intexuraos/infra-gpt
 
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-03-15
 
 ---
 
@@ -22,7 +22,7 @@
 - Add `AbortController` timeout to image URL fetch (currently no timeout — can hang indefinitely)
 - Add streaming support for long-running requests
 - Make `maxTokens` configurable via `GptConfig` (some GPT models support 128k output tokens)
-- Add injectable `auditSink` / `usageSink` to match the API surface of `infra-gemini` and `infra-glm`
+- Add injectable `auditSink` / `usageSink` to match the API surface of `infra-gemini`
 - Extract `createRequestContext` / `trackUsage` boilerplate into `@intexuraos/llm-client-base`
 
 ---
@@ -36,7 +36,7 @@
 | `src/client.ts` | Image URL fetch has no timeout: `const imageResponse = await fetch(imageUrl)` — can hang indefinitely | Production risk if image CDN is slow or unresponsive |
 | `src/client.ts` | Dual API pattern (Responses + Chat Completions) requires two usage extraction code paths              | Complexity; must be maintained separately            |
 | `src/client.ts` | `MAX_TOKENS` constant (8192) hardcoded — incompatible with 128k output models                         | Cannot use full output capacity of GPT-4o            |
-| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients                     | Maintenance overhead                                 |
+| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across LLM clients                       | Maintenance overhead                                 |
 
 ---
 

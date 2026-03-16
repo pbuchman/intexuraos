@@ -7,64 +7,43 @@ import {
   type ModelPricing,
 } from '@intexuraos/llm-contract';
 import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
-import { z } from 'zod';
 import { execFile } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { ExecutionAgentData } from './completion-verifier.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
 const execFileAsync = promisify(execFile);
 
-// --- Constants ---
+export const DEEP_VALIDATION_PROMPT_VERSION = '5.1.0';
 
-export const DEEP_VALIDATION_PROMPT_VERSION = '2.1.0';
-
-/** Maximum transcript characters to send to LLM. Gemini 2.5 Flash supports ~1M tokens
- *  but we cap to keep cost/latency reasonable for deep validation. */
 const MAX_TRANSCRIPT_CHARS = 200_000;
+const GITHUB_COMMENT_MAX_CHARS = 65_536;
+const GITHUB_COMMENT_SAFETY_MARGIN_CHARS = 512;
+const SAFE_GITHUB_COMMENT_MAX_CHARS = GITHUB_COMMENT_MAX_CHARS - GITHUB_COMMENT_SAFETY_MARGIN_CHARS;
+const TEMP_COMMENT_DIR_PREFIX = 'orchestrator-deep-validation-';
+const SEVERITY_SCALE = [
+  '🔴 Critical — Blocking issue, fabricated evidence, or complete contract violation',
+  '🟠 Warning — Partial compliance, missed requirement, or ignored error',
+  '🟡 Minor — Non-blocking observation, minor deviation, or style concern',
+  '🟢 Pass — Verified, compliant, no issues found',
+] as const;
 
-// --- Zod Schema ---
-
-const claimVerificationItem = z.object({
-  claim: z.string(),
-  verdict: z.enum(['verified', 'contradicted', 'unverifiable']),
-  evidence: z.string(),
-});
-
-const contractVerificationItem = z.object({
-  obligation: z.string(),
-  verdict: z.enum(['fulfilled', 'violated', 'not_applicable']),
-  evidence: z.string(),
-});
-
-const requirementItem = z.object({
-  requirement: z.string(),
-  verdict: z.enum(['implemented', 'partially', 'missing']),
-  evidence: z.string(),
-});
-
-const anomalyItem = z.object({
-  type: z.enum(['fabrication', 'ignored_error', 'laziness', 'skipped_step']),
-  severity: z.enum(['critical', 'warning', 'info']),
-  evidence: z.string(),
-  detail: z.string(),
-});
-
-export const DEEP_VALIDATION_SCHEMA = z.object({
-  claimVerification: z.array(claimVerificationItem),
-  contractVerification: z.array(contractVerificationItem),
-  planVsReality: z.object({
-    planFound: z.boolean(),
-    requirements: z.array(requirementItem),
-  }),
-  anomalies: z.array(anomalyItem),
-});
-
-export type DeepValidationResult = z.infer<typeof DEEP_VALIDATION_SCHEMA>;
+const REQUIRED_SECTION_HEADINGS = [
+  '#### Overall',
+  '#### Claim Verification',
+  '#### Contract Verification',
+  '#### Plan vs Reality',
+  '#### Anomalies',
+] as const;
+const LIST_LINE_REGEX = /^\s*(?:[-*+]\s+|\d+\.\s+)/mu;
+const MARKDOWN_TABLE_SEPARATOR_REGEX = /^\|\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$/u;
 
 export type ExecutionAgentClaims = Omit<ExecutionAgentData, 'agentType'>;
-
-// --- Prompt Builder ---
+type RequiredSectionHeading = (typeof REQUIRED_SECTION_HEADINGS)[number];
+type NonEmptyArray<T> = [T, ...T[]];
 
 export interface DeepValidationPromptInput {
   formattedTranscript: string;
@@ -77,10 +56,9 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
   const claimsJson = JSON.stringify(input.agentClaims, null, 2);
   const planSection =
     input.planContent !== undefined
-      ? `Plan file content:\n${input.planContent}`
-      : 'No plan file found on branch.';
+      ? `Plan document content:\n${input.planContent}`
+      : 'No plan document referenced in Linear issue.';
 
-  // Cap transcript to avoid exceeding LLM context / cost limits
   const transcript =
     input.formattedTranscript.length > MAX_TRANSCRIPT_CHARS
       ? input.formattedTranscript.slice(0, MAX_TRANSCRIPT_CHARS) +
@@ -89,15 +67,29 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
 
   return [
     `[deep-validation-prompt v${DEEP_VALIDATION_PROMPT_VERSION}]`,
-    'You are a post-execution validator for an autonomous coding agent.',
-    'Analyze the full session transcript below and answer three groups of questions.',
-    'Return ONLY a JSON object matching the schema described. No markdown fences.',
+    'You are a post-execution validator for the IntexuraOS Agent-Based Code Task Execution Flow.',
+    'Analyze the full session transcript below and write a concise Deep Validation Report for human review on the PR.',
+    'Return ONLY markdown.',
+    'Return the report explicitly as markdown tables.',
+    'Do not return bullet lists, numbered lists, JSON, or code fences.',
+    'Do not return a list anywhere in the response.',
+    'Use these headings exactly and in this order:',
+    ...REQUIRED_SECTION_HEADINGS,
+    'Under each heading, include exactly one markdown table.',
+    'If a section has nothing noteworthy, include a single table row that says None.',
+    'Be concise. Preserve all warnings, failures, contradictions, and anomalies, but summarize what went well instead of exhaustively listing positive details.',
+    'Keep each section compact enough to fit in a GitHub PR comment as a complete table.',
+    '',
+    '=== Severity Scale ===',
+    'Use ONLY these severity levels in the Result or Severity column of every table row.',
+    'Do not invent your own severity levels. Use the emoji prefix exactly as shown:',
+    ...SEVERITY_SCALE,
     '',
     '=== Section 1: Claim Verification ===',
     'The agent made these claims in its final report:',
     claimsJson,
     '',
-    'For EACH claim, find supporting or contradicting evidence in the transcript.',
+    'For each claim, confirm or contradict it with transcript evidence.',
     'Specifically check:',
     '- Was pnpm run ci:tracked called? What was the exit code in the tool_result?',
     '- Was the Skill tool called with superpowers:requesting-code-review? After loading, was an Agent or Task tool dispatched as a subagent?',
@@ -113,7 +105,7 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
     '',
     'Check:',
     '- Was each mandatory skill loaded? In what order?',
-    '- For requesting-code-review: was the core instruction (dispatch subagent) actually followed through?',
+    '- For requesting-code-review: was the core instruction actually followed through?',
     '- Were there any skills loaded whose instructions were not followed?',
     '',
     '=== Section 3: Plan vs Reality ===',
@@ -121,128 +113,22 @@ export function buildDeepValidationPrompt(input: DeepValidationPromptInput): str
     '',
     planSection,
     '',
-    'Map each requirement from the Linear issue (and plan if present) to evidence in the transcript.',
-    'Which requirements were addressed by tool calls (file edits, tests written)?',
-    'Which were missed or only partially addressed?',
+    'Map each requirement from the Linear issue and plan to transcript evidence.',
+    'Call out anything missed or only partially addressed.',
     '',
-    '=== Anomalies ===',
-    'Additionally, report any anomalies you notice:',
-    '- Errors that were encountered then silently ignored (tool_result with error, agent proceeds as if success)',
-    '- Laziness patterns (skipping steps, simplifying instead of following instructions)',
-    '- Fabrication (agent claims something happened that transcript contradicts)',
-    '- Any tool call that returned an error and the agent drew wrong conclusions from it',
+    '=== Section 4: Anomalies ===',
+    'Report anomalies such as:',
+    '- Errors encountered then ignored',
+    '- Laziness patterns',
+    '- Fabrication',
+    '- Any wrong conclusion drawn from a failed tool call',
     '',
-    'For EVERY finding, include the specific MSG-NNN reference from the transcript.',
-    '',
-    '=== Response Schema ===',
-    '{',
-    '  "claimVerification": [{ "claim": "string", "verdict": "verified|contradicted|unverifiable", "evidence": "MSG-NNN: detail" }],',
-    '  "contractVerification": [{ "obligation": "string", "verdict": "fulfilled|violated|not_applicable", "evidence": "MSG-NNN: detail" }],',
-    '  "planVsReality": {',
-    '    "planFound": true|false,',
-    '    "requirements": [{ "requirement": "string", "verdict": "implemented|partially|missing", "evidence": "MSG-NNN: detail" }]',
-    '  },',
-    '  "anomalies": [{ "type": "fabrication|ignored_error|laziness|skipped_step", "severity": "critical|warning|info", "evidence": "MSG-NNN: detail", "detail": "explanation" }]',
-    '}',
+    'For every finding, include the specific MSG-NNN reference from the transcript.',
     '',
     '=== Full Session Transcript ===',
     transcript,
   ].join('\n');
 }
-
-// --- PR Comment Formatter ---
-
-function verdictEmoji(
-  verdict:
-    | 'verified'
-    | 'contradicted'
-    | 'unverifiable'
-    | 'fulfilled'
-    | 'violated'
-    | 'not_applicable'
-    | 'implemented'
-    | 'partially'
-    | 'missing'
-): string {
-  if (verdict === 'verified' || verdict === 'fulfilled' || verdict === 'implemented') return '✅';
-  if (verdict === 'contradicted' || verdict === 'violated' || verdict === 'missing') return '❌';
-  if (verdict === 'partially') return '⚠️';
-  return '❓';
-}
-
-function severityEmoji(severity: 'critical' | 'warning' | 'info'): string {
-  if (severity === 'critical') return '🔴';
-  if (severity === 'warning') return '🟡';
-  return '🔵';
-}
-
-export function formatPrComment(result: DeepValidationResult): string {
-  const lines: string[] = ['### Deep Validation Report', ''];
-
-  // Section 1
-  lines.push('#### Claim Verification');
-  if (result.claimVerification.length === 0) {
-    lines.push('No claims verified.');
-  } else {
-    lines.push('| Claim | Verdict | Evidence |');
-    lines.push('|-------|---------|----------|');
-    for (const item of result.claimVerification) {
-      lines.push(
-        `| ${item.claim} | ${verdictEmoji(item.verdict)} ${item.verdict} | ${item.evidence} |`
-      );
-    }
-  }
-  lines.push('');
-
-  // Section 2
-  lines.push('#### Contract Verification');
-  if (result.contractVerification.length === 0) {
-    lines.push('No contracts verified.');
-  } else {
-    lines.push('| Obligation | Verdict | Evidence |');
-    lines.push('|------------|---------|----------|');
-    for (const item of result.contractVerification) {
-      lines.push(
-        `| ${item.obligation} | ${verdictEmoji(item.verdict)} ${item.verdict} | ${item.evidence} |`
-      );
-    }
-  }
-  lines.push('');
-
-  // Section 3
-  lines.push('#### Plan vs Reality');
-  lines.push(
-    `Plan found: ${result.planVsReality.planFound ? '✅' : '❌ No plan file found on branch'}`
-  );
-  if (result.planVsReality.requirements.length > 0) {
-    lines.push('');
-    lines.push('| Requirement | Verdict | Evidence |');
-    lines.push('|-------------|---------|----------|');
-    for (const item of result.planVsReality.requirements) {
-      lines.push(
-        `| ${item.requirement} | ${verdictEmoji(item.verdict)} ${item.verdict} | ${item.evidence} |`
-      );
-    }
-  }
-  lines.push('');
-
-  // Anomalies
-  if (result.anomalies.length > 0) {
-    lines.push('#### Anomalies');
-    lines.push('| Type | Severity | Evidence | Detail |');
-    lines.push('|------|----------|----------|--------|');
-    for (const item of result.anomalies) {
-      lines.push(
-        `| ${item.type} | ${severityEmoji(item.severity)} ${item.severity} | ${item.evidence} | ${item.detail} |`
-      );
-    }
-    lines.push('');
-  }
-
-  return lines.join('\n');
-}
-
-// --- Main Service ---
 
 const DEEP_VALIDATOR_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
   [LlmModels.Gemini25Flash]: {
@@ -269,7 +155,7 @@ export interface DeepValidationInput {
 }
 
 export interface ExecutionDeepValidator {
-  validate(input: DeepValidationInput): Promise<DeepValidationResult | undefined>;
+  validate(input: DeepValidationInput, onProgress?: (message: string) => void): Promise<boolean>;
 }
 
 export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidator {
@@ -284,7 +170,10 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
     this.llmClient = this.createLlmClient(config);
   }
 
-  async validate(input: DeepValidationInput): Promise<DeepValidationResult | undefined> {
+  async validate(
+    input: DeepValidationInput,
+    onProgress?: (message: string) => void
+  ): Promise<boolean> {
     const prompt = buildDeepValidationPrompt({
       formattedTranscript: input.formattedTranscript,
       agentClaims: input.agentClaims,
@@ -297,6 +186,8 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       'Deep validation LLM request'
     );
 
+    onProgress?.('calling Gemini for analysis...');
+
     const generated = await this.llmClient.generate(prompt);
     if (!generated.ok) {
       this.logger.error(
@@ -307,7 +198,8 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         },
         'Deep validation LLM call failed'
       );
-      return undefined;
+      onProgress?.(`LLM call failed: ${generated.error.message}`);
+      return false;
     }
 
     this.logger.info(
@@ -315,51 +207,72 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
       'Deep validation LLM response received'
     );
 
-    let rawJson: unknown;
-    try {
-      rawJson = extractJson(generated.value.content);
-    } catch (error) {
-      this.logger.error(
-        { taskId: input.taskId, error: getErrorMessage(error), response: generated.value.content },
-        'Deep validation JSON parse failed'
-      );
-      return undefined;
-    }
+    onProgress?.('validation response received');
 
-    const parseResult = DEEP_VALIDATION_SCHEMA.safeParse(rawJson);
-    if (!parseResult.success) {
+    const sanitized = sanitizeMarkdownResponse(generated.value.content);
+    if (sanitized === '') {
       this.logger.warn(
-        { taskId: input.taskId, zodErrors: parseResult.error.issues },
-        'Deep validation Zod validation failed — posting raw response as fallback'
+        { taskId: input.taskId },
+        'Deep validation response empty after sanitization'
       );
-      // Fallback: post raw LLM response when schema parse fails
-      await this.postRawComment(input, generated.value.content);
-      return undefined;
+      onProgress?.('response empty after sanitization, skipping PR comment');
+      return false;
     }
 
-    const result = parseResult.data;
+    const reportSections = parseMarkdownReport(sanitized);
+    if (!reportSections.ok) {
+      this.logger.warn(
+        { taskId: input.taskId, reason: reportSections.reason },
+        'Deep validation response rejected'
+      );
+      onProgress?.('response rejected, skipping PR comment');
+      return false;
+    }
 
-    // Post PR comment
-    await this.postPrComment(input, result);
+    const commentBodies = buildCommentBodies(reportSections.value, generated.value.usage.costUsd);
+    if (!commentBodies.ok) {
+      this.logger.warn(
+        { taskId: input.taskId, reason: commentBodies.reason },
+        'Deep validation response rejected'
+      );
+      onProgress?.('response rejected, skipping PR comment');
+      return false;
+    }
 
-    return result;
+    onProgress?.('posting PR comment...');
+    const posted = await this.postPrComments(input, commentBodies.value);
+    onProgress?.(posted ? 'PR comment posted' : 'PR comment failed (see server logs)');
+    return posted;
   }
 
-  private async postPrComment(
+  private async postPrComments(
     input: DeepValidationInput,
-    result: DeepValidationResult
-  ): Promise<void> {
-    const comment = formatPrComment(result);
+    commentBodies: readonly string[]
+  ): Promise<boolean> {
+    const tempDirectory = await mkdtemp(join(tmpdir(), TEMP_COMMENT_DIR_PREFIX));
     try {
-      await execFileAsync(
-        'gh',
-        ['pr', 'comment', String(input.prNumber), '--repo', input.repository, '--body', comment],
-        {}
-      );
+      for (const [index, body] of commentBodies.entries()) {
+        const bodyFilePath = join(tempDirectory, `comment-${String(index + 1)}.md`);
+        await writeFile(bodyFilePath, body, 'utf8');
+        await execFileAsync(
+          'gh',
+          [
+            'pr',
+            'comment',
+            String(input.prNumber),
+            '--repo',
+            input.repository,
+            '--body-file',
+            bodyFilePath,
+          ],
+          {}
+        );
+      }
       this.logger.info(
-        { taskId: input.taskId, prNumber: input.prNumber },
+        { taskId: input.taskId, prNumber: input.prNumber, commentCount: commentBodies.length },
         'Deep validation PR comment posted'
       );
+      return true;
     } catch (error) {
       /* v8 ignore start -- upstream: stderr property only exists on execFile errors, not testable with promisify mock @preserve */
       const stderr =
@@ -371,34 +284,9 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
         { taskId: input.taskId, error: getErrorMessage(error), stderr },
         'Failed to post deep validation PR comment'
       );
-    }
-  }
-
-  private async postRawComment(input: DeepValidationInput, rawResponse: string): Promise<void> {
-    const comment = [
-      '### Deep Validation Report (raw — schema parse failed)',
-      '',
-      '```json',
-      rawResponse.slice(0, 3000),
-      '```',
-    ].join('\n');
-    try {
-      await execFileAsync(
-        'gh',
-        ['pr', 'comment', String(input.prNumber), '--repo', input.repository, '--body', comment],
-        {}
-      );
-    } catch (error) {
-      /* v8 ignore start -- upstream: stderr property only exists on execFile errors, not testable with promisify mock @preserve */
-      const stderr =
-        error instanceof Error && 'stderr' in error
-          ? String((error as Record<string, unknown>)['stderr'])
-          : undefined;
-      /* v8 ignore stop @preserve */
-      this.logger.error(
-        { taskId: input.taskId, error: getErrorMessage(error), stderr },
-        'Failed to post raw deep validation PR comment'
-      );
+      return false;
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
     }
   }
 
@@ -434,15 +322,206 @@ export class OrchestratorExecutionDeepValidator implements ExecutionDeepValidato
   }
 }
 
-function extractJson(content: string): unknown {
+function buildPrComment(
+  sectionBlocks: readonly string[],
+  costUsd: number,
+  partNumber: number,
+  totalParts: number
+): string {
+  const title =
+    totalParts === 1
+      ? '### Deep Validation Report — IntexuraOS Agent-Based Code Task Execution Flow'
+      : `### Deep Validation Report (Part ${String(partNumber)}/${String(totalParts)}) — IntexuraOS Agent-Based Code Task Execution Flow`;
+  const lines = ['@ignore', '', title, ''];
+
+  if (partNumber === 1) {
+    lines.push(`**Cost:** $${String(costUsd)}`, '');
+  }
+
+  lines.push(sectionBlocks.join('\n\n'));
+  return lines.join('\n');
+}
+
+function sanitizeMarkdownResponse(content: string): string {
+  return unwrapCodeFence(content).trim();
+}
+
+function unwrapCodeFence(content: string): string {
   const trimmed = content.trim();
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    return JSON.parse(trimmed) as unknown;
+  const match = /^```(?:[A-Za-z0-9_-]+)?\s*\n?([\s\S]*?)\n?\s*```$/u.exec(trimmed);
+  return match?.[1] ?? trimmed;
+}
+
+function parseMarkdownReport(
+  markdownBody: string
+): { ok: true; value: NonEmptyArray<string> } | { ok: false; reason: string } {
+  if (LIST_LINE_REGEX.test(markdownBody)) {
+    return {
+      ok: false,
+      reason: 'contains bullet lists or numbered lists; expected markdown tables only',
+    };
   }
-  const firstBrace = trimmed.indexOf('{');
-  const lastBrace = trimmed.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1)) as unknown;
+
+  const sectionBlocks = splitIntoSectionBlocks(markdownBody);
+  if (!sectionBlocks.ok) {
+    return sectionBlocks;
   }
-  throw new Error('Deep validator response is not valid JSON');
+
+  for (const sectionBlock of sectionBlocks.value) {
+    const validation = validateSectionBlock(sectionBlock);
+    if (!validation.ok) {
+      return validation;
+    }
+  }
+
+  return { ok: true, value: sectionBlocks.value };
+}
+
+function splitIntoSectionBlocks(
+  markdownBody: string
+): { ok: true; value: NonEmptyArray<string> } | { ok: false; reason: string } {
+  const lines = markdownBody.split('\n');
+  const sections: string[] = [];
+  let currentSectionStart: number | undefined;
+  let currentHeadingIndex = 0;
+
+  for (const [lineIndex, line] of lines.entries()) {
+    const trimmed = line.trim();
+    const expectedHeading = REQUIRED_SECTION_HEADINGS[currentHeadingIndex];
+
+    if (expectedHeading !== undefined && trimmed === expectedHeading) {
+      if (currentSectionStart !== undefined) {
+        sections.push(trimSectionBlock(lines.slice(currentSectionStart, lineIndex)));
+      } else if (lineIndex > 0) {
+        return {
+          ok: false,
+          reason: 'report must start with the required headings and contain no preamble',
+        };
+      }
+
+      currentSectionStart = lineIndex;
+      currentHeadingIndex += 1;
+      continue;
+    }
+
+    if (isRequiredSectionHeading(trimmed)) {
+      return {
+        ok: false,
+        reason: 'missing required headings or headings are out of order',
+      };
+    }
+  }
+
+  if (
+    currentSectionStart === undefined ||
+    currentHeadingIndex !== REQUIRED_SECTION_HEADINGS.length
+  ) {
+    return {
+      ok: false,
+      reason: 'missing required headings or headings are out of order',
+    };
+  }
+
+  sections.push(trimSectionBlock(lines.slice(currentSectionStart)));
+  return { ok: true, value: sections as NonEmptyArray<string> };
+}
+
+function validateSectionBlock(sectionBlock: string): { ok: true } | { ok: false; reason: string } {
+  const bodyLines = sectionBlock
+    .split('\n')
+    .slice(1)
+    .filter((line) => line.trim() !== '');
+
+  if (bodyLines.length < 3) {
+    return {
+      ok: false,
+      reason: 'each section must contain exactly one markdown table with at least one data row',
+    };
+  }
+
+  const allTableLines = bodyLines.every((line) => line.trim().startsWith('|'));
+  if (!allTableLines) {
+    return {
+      ok: false,
+      reason: 'each section must contain exactly one markdown table and no list or prose lines',
+    };
+  }
+
+  const separatorLine = bodyLines.slice(1, 2).join('').trim();
+  if (!MARKDOWN_TABLE_SEPARATOR_REGEX.test(separatorLine)) {
+    return {
+      ok: false,
+      reason: 'each section must contain exactly one markdown table with a header separator row',
+    };
+  }
+
+  return { ok: true };
+}
+
+function buildCommentBodies(
+  sectionBlocks: NonEmptyArray<string>,
+  costUsd: number
+): { ok: true; value: string[] } | { ok: false; reason: string } {
+  const plannedParts: string[][] = [];
+  let currentPart: string[] = [];
+
+  for (const sectionBlock of sectionBlocks) {
+    const candidatePart = [...currentPart, sectionBlock];
+    const partIndex = plannedParts.length + 1;
+    const candidateComment = buildPrComment(
+      candidatePart,
+      costUsd,
+      partIndex,
+      REQUIRED_SECTION_HEADINGS.length
+    );
+
+    if (candidateComment.length <= SAFE_GITHUB_COMMENT_MAX_CHARS) {
+      currentPart = candidatePart;
+      continue;
+    }
+
+    if (currentPart.length === 0) {
+      return {
+        ok: false,
+        reason: 'single section exceeds GitHub comment limit; Gemini must be more concise',
+      };
+    }
+
+    plannedParts.push(currentPart);
+    currentPart = [sectionBlock];
+
+    const singleSectionComment = buildPrComment(
+      currentPart,
+      costUsd,
+      plannedParts.length + 1,
+      REQUIRED_SECTION_HEADINGS.length
+    );
+    if (singleSectionComment.length > SAFE_GITHUB_COMMENT_MAX_CHARS) {
+      return {
+        ok: false,
+        reason: 'single section exceeds GitHub comment limit; Gemini must be more concise',
+      };
+    }
+  }
+
+  plannedParts.push(currentPart);
+
+  const totalParts = plannedParts.length;
+  const comments = plannedParts.map((sectionGroup, index) =>
+    buildPrComment(sectionGroup, costUsd, index + 1, totalParts)
+  );
+
+  return { ok: true, value: comments };
+}
+
+function trimSectionBlock(lines: readonly string[]): string {
+  let end = lines.length;
+  while (end > 0 && lines[end - 1]?.trim() === '') {
+    end -= 1;
+  }
+  return lines.slice(0, end).join('\n');
+}
+
+function isRequiredSectionHeading(value: string): value is RequiredSectionHeading {
+  return REQUIRED_SECTION_HEADINGS.includes(value as RequiredSectionHeading);
 }

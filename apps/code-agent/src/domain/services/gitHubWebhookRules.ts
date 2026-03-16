@@ -60,6 +60,33 @@ export class RepositoryScopeRule implements WebhookRule {
   }
 }
 
+/**
+ * Rule that gates events from code-worker bots to prevent feedback loops.
+ * Allows pull_request.opened and pull_request.synchronize (so reviews get dispatched),
+ * but blocks comments, reviews, and other events the bot generates as output.
+ */
+export class CodeWorkerOutputRule implements WebhookRule {
+  constructor(
+    private readonly codeWorkerBots: Set<string>
+  ) {}
+
+  evaluate(event: GitHubPREvent): RuleOutcome {
+    if (!this.codeWorkerBots.has(event.senderLogin)) {
+      return { action: 'dispatch', reason: 'NOT_A_CODE_WORKER_BOT' };
+    }
+
+    if (event.eventType === 'pull_request' && (event.action === 'opened' || event.action === 'synchronize')) {
+      return { action: 'dispatch', reason: 'CODE_WORKER_PR_EVENT' };
+    }
+
+    if (event.eventType === 'pull_request_review' && event.action === 'submitted') {
+      return { action: 'dispatch', reason: 'CODE_WORKER_REVIEW' };
+    }
+
+    return { action: 'skip', reason: 'CODE_WORKER_NON_PR_EVENT' };
+  }
+}
+
 export class ActionableEventRule implements WebhookRule {
   constructor(private readonly allowedBots: Set<string>) {}
 
@@ -98,6 +125,30 @@ export class ActionableEventRule implements WebhookRule {
 }
 
 /**
+ * Rule that skips PRs targeting protected base branches (main, master).
+ * These are release merges that have already been reviewed on development.
+ */
+export class ProtectedBaseBranchRule implements WebhookRule {
+  private static readonly PROTECTED_BRANCHES = new Set(['main', 'master']);
+
+  evaluate(event: GitHubPREvent): RuleOutcome {
+    if (event.eventType !== 'pull_request') {
+      return { action: 'dispatch', reason: 'NOT_A_PR_EVENT' };
+    }
+
+    if (event.baseBranch === null) {
+      return { action: 'dispatch', reason: 'BASE_BRANCH_UNKNOWN' };
+    }
+
+    if (ProtectedBaseBranchRule.PROTECTED_BRANCHES.has(event.baseBranch)) {
+      return { action: 'skip', reason: 'PROTECTED_BASE_BRANCH', context: { baseBranch: event.baseBranch } };
+    }
+
+    return { action: 'dispatch', reason: 'BASE_BRANCH_ALLOWED', context: { baseBranch: event.baseBranch } };
+  }
+}
+
+/**
  * Rule that checks if the sender is in the allowed bots list or is the repository owner.
  * Pass-through for pull_request events (sender filtering doesn't apply to PRs).
  */
@@ -110,6 +161,10 @@ export class SenderWhitelistRule implements WebhookRule {
     // Pass-through for pull_request events — sender filtering doesn't apply
     if (event.eventType === 'pull_request') {
       return { action: 'dispatch', reason: 'PR_EVENT_PASS_THROUGH' };
+    }
+
+    if (event.eventType === 'issue_comment' && event.action === 'created') {
+      return { action: 'dispatch', reason: 'ISSUE_COMMENT_CREATED_PASS_THROUGH' };
     }
 
     const sender = event.senderLogin;

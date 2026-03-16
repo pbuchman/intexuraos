@@ -1,7 +1,7 @@
 # User Service - Technical Debt
 
-**Last Updated:** 2026-03-07
-**Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 entry](../../documentation-runs.md)
 
 ---
 
@@ -44,8 +44,7 @@ Currently Google and GitHub OAuth are implemented. Planned additions:
 ### Error Formatting Improvements
 
 1. **Perplexity-specific parsing** - Currently falls through to generic parser
-2. **Zai-specific parsing** - Currently falls through to generic parser
-3. **Structured error responses** - Include error codes alongside messages
+2. **Structured error responses** - Include error codes alongside messages
 
 ### Transcription Expansion
 
@@ -68,7 +67,7 @@ The `llmKeysRoutes.ts` file is large but all routes are cohesive around the LLM 
 
 ### Acknowledged Pattern: LlmValidatorImpl
 
-The `LlmValidatorImpl.ts` (256 lines) contains similar code blocks for each provider (5 providers x 2 methods = 10 similar blocks). This is intentional for:
+The `LlmValidatorImpl.ts` contains similar code blocks for each provider (4 providers x 2 methods = 8 similar blocks). This is intentional for:
 
 - Clear debugging (each provider's logic is isolated)
 - Easy addition of new providers
@@ -126,7 +125,7 @@ Comprehensive test coverage across all layers with 100% branch coverage enforcem
 | `oauthConnectionRepository.test.ts`     | Firestore OAuth storage                       |
 | `googleOAuthClient.test.ts`             | Google OAuth client                           |
 | `gitHubOAuthClient.test.ts`             | GitHub OAuth client                           |
-| `llmValidator.test.ts`                  | LLM key validation (5 providers)              |
+| `llmValidator.test.ts`                  | LLM key validation (4 providers)              |
 | `maskApiKey.test.ts`                    | Key masking utility                           |
 
 ---
@@ -156,6 +155,22 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Recent Changes
+
+### v3.3.0 Release (2026-03-15)
+
+**Change:** Release v3.3.0. No functional changes to user-service code.
+
+---
+
+### INT-797: v8-ignore Replacement with Real Tests (2026-03-10)
+
+**Change:** Replaced v8-ignore blocks in user-service route files with real test coverage. The `isTranscriptionProvider` branch that was previously protected by a schema enum is now covered via runtime type guard testing. Reduced v8-ignore annotation count in route files.
+
+**Files changed:**
+- `apps/user-service/src/__tests__/` (multiple route test files updated)
+- `apps/user-service/src/routes/settingsRoutes.ts`
+
+---
 
 ### GitHub OAuth Integration (2026-03-01)
 
@@ -207,6 +222,13 @@ Release version bump only. No functional changes to user-service code.
 ---
 
 ## Resolved Issues
+
+### 2026-03-10 to 2026-03-15
+
+| Issue   | Description                                                | Resolution                                                                   |
+| ------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| INT-797 | v8-ignore blocks in route files lacked real test coverage  | Replaced v8-ignore annotations with real tests across user-service routes    |
+| -       | isTranscriptionProvider branch uncoverable via schema enum | Removed schema enum constraint; branch now covered by runtime type guard     |
 
 ### 2026-03-01 to 2026-03-07
 

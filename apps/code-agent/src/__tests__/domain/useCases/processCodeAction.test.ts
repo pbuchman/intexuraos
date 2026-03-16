@@ -241,7 +241,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -271,7 +271,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -308,8 +308,10 @@ describe('processCodeAction', () => {
       })
     );
 
-    // Verify worker location and cancel nonce were set
+    // Verify worker location, status, and cancel nonce were set
     expect(codeTaskRepo.update).toHaveBeenCalledWith('new-task-123', {
+      status: 'dispatched',
+      dispatchedAt: expect.any(Date),
       workerLocation: 'mac',
       cancelNonce: expect.any(String),
       cancelNonceExpiresAt: expect.any(String),
@@ -334,7 +336,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -391,7 +393,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -422,7 +424,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -459,7 +461,7 @@ describe('processCodeAction', () => {
       linearIssueLabels: ['code-task'],
       hasChildren: false,
       linearFallback: false,
-      linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-305',
+      linearIssueUrl: 'https://linear.app/pbuchman/issue/INT-305',
     });
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({
@@ -475,7 +477,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -503,7 +505,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -569,7 +571,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -599,7 +601,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -643,7 +645,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -710,7 +712,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -740,7 +742,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -787,7 +789,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -816,7 +818,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -867,7 +869,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -893,7 +895,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -955,7 +957,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -981,7 +983,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1035,7 +1037,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1061,7 +1063,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1115,7 +1117,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1141,7 +1143,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-123',
         approvalEventId: 'approval-456',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1164,7 +1166,7 @@ describe('processCodeAction', () => {
 
     expect(result.ok).toBe(true);
 
-    // Conflicting labels (opus + glm) → fall back to request's 'auto'
+    // Conflicting labels (opus + glm-5) → fall back to request's 'auto'
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         workerType: 'auto',
@@ -1187,7 +1189,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-1',
         approvalEventId: 'approval-new-queue',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1216,61 +1218,7 @@ describe('processCodeAction', () => {
     if (result.ok) {
       expect(result.value.codeTaskId).toBe('new-task-queued');
     }
-    expect(codeTaskRepo.update).toHaveBeenCalledWith(
-      'new-task-queued',
-      expect.objectContaining({ status: 'queued', queuedAt: expect.any(Date) })
-    );
     expect(whatsappNotifier.notifyTaskQueued).toHaveBeenCalled();
-  });
-
-  it('returns internal_error when queue status update fails', async () => {
-    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
-      ok({
-        id: 'new-task-queue-fail',
-        userId: 'user-789',
-        prompt: 'Queue fail test',
-        sanitizedPrompt: 'Queue fail test',
-        systemPromptHash: 'hash-123',
-        workerType: 'opus',
-        workerLocation: 'home-mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace-123',
-        actionId: 'action-1',
-        approvalEventId: 'approval-queue-fail',
-        status: 'dispatched',
-        callbackReceived: false,
-        dedupKey: 'dedup-key-123',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      })
-    );
-
-    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
-      err({ code: 'at_capacity', message: 'All workers busy' })
-    );
-    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(5));
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
-      err({ code: 'FIRESTORE_ERROR', message: 'Firestore write failed' })
-    );
-
-    const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
-      {
-        actionId: 'action-1',
-        approvalEventId: 'approval-queue-fail',
-        userId: 'user-789',
-        prompt: 'Queue fail test',
-        workerType: 'opus',
-      }
-    );
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('internal_error');
-      expect(result.error.message).toBe('Failed to queue task');
-    }
-    expect(whatsappNotifier.notifyTaskQueued).not.toHaveBeenCalled();
   });
 
   it('returns queue_full when dispatch returns at_capacity and queue is full', async () => {
@@ -1288,7 +1236,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-2',
         approvalEventId: 'approval-new-full',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1299,8 +1247,7 @@ describe('processCodeAction', () => {
     vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
       err({ code: 'at_capacity', message: 'All workers busy' })
     );
-    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(10));
-    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok({} as unknown as CodeTask));
+    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(11));
 
     const result = await processCodeAction(
       { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
@@ -1334,7 +1281,7 @@ describe('processCodeAction', () => {
         traceId: 'trace-123',
         actionId: 'action-count-err',
         approvalEventId: 'approval-count-err',
-        status: 'dispatched',
+        status: 'queued',
         callbackReceived: false,
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
@@ -1367,6 +1314,287 @@ describe('processCodeAction', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('queue_full');
     }
+  });
+
+  // ─── Worker Settings Error Path Tests (v8 ignore blocks 1-3) ─────
+  describe('worker settings error paths', () => {
+    it('returns internal_error when getSettings fails', async () => {
+      const failingWorkerSettingsRepo = {
+        getSettings: vi.fn().mockResolvedValue(
+          err({ code: 'internal_error' as const, message: 'Firestore unavailable' })
+        ),
+        getWorkerByName: vi.fn(),
+        addWorker: vi.fn(),
+        updateWorker: vi.fn(),
+        deleteWorker: vi.fn(),
+        reorderWorkers: vi.fn(),
+        updateTestResult: vi.fn(),
+      } as unknown as WorkerSettingsRepository;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: failingWorkerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Failed to fetch worker settings');
+      }
+      expect(logger.error).toHaveBeenCalledWith(
+        { userId: 'user-789', error: { code: 'internal_error', message: 'Firestore unavailable' } },
+        'Failed to fetch worker settings'
+      );
+    });
+
+    it('returns worker_not_configured when settings is null', async () => {
+      const nullSettingsWorkerSettingsRepo = {
+        getSettings: vi.fn().mockResolvedValue(ok(null)),
+        getWorkerByName: vi.fn(),
+        addWorker: vi.fn(),
+        updateWorker: vi.fn(),
+        deleteWorker: vi.fn(),
+        reorderWorkers: vi.fn(),
+        updateTestResult: vi.fn(),
+      } as unknown as WorkerSettingsRepository;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: nullSettingsWorkerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_not_configured');
+        expect(result.error.message).toBe('Please configure your workers in Settings before submitting code tasks');
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        { userId: 'user-789' },
+        'User has no workers configured'
+      );
+    });
+
+    it('returns worker_not_configured when all workers are disabled', async () => {
+      const disabledWorkersRepo = {
+        getSettings: vi.fn().mockResolvedValue(
+          ok({
+            userId: 'user-789',
+            workers: [
+              {
+                name: 'home-mac',
+                url: 'https://cc-mac.intexuraos.cloud',
+                cfAccessClientId: 'test-client-id',
+                cfAccessClientSecret: 'test-client-secret',
+                dispatchSigningSecret: 'test-dispatch-secret',
+                enabled: false, // All workers disabled
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+        ),
+        getWorkerByName: vi.fn(),
+        addWorker: vi.fn(),
+        updateWorker: vi.fn(),
+        deleteWorker: vi.fn(),
+        reorderWorkers: vi.fn(),
+        updateTestResult: vi.fn(),
+      } as unknown as WorkerSettingsRepository;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: disabledWorkersRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_not_configured');
+      }
+      expect(logger.warn).toHaveBeenCalledWith(
+        { userId: 'user-789' },
+        'User has no workers configured'
+      );
+    });
+
+    it('returns worker_not_configured when workers array is empty', async () => {
+      const emptyWorkersRepo = {
+        getSettings: vi.fn().mockResolvedValue(
+          ok({
+            userId: 'user-789',
+            workers: [], // Empty array
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+        ),
+        getWorkerByName: vi.fn(),
+        addWorker: vi.fn(),
+        updateWorker: vi.fn(),
+        deleteWorker: vi.fn(),
+        reorderWorkers: vi.fn(),
+        updateTestResult: vi.fn(),
+      } as unknown as WorkerSettingsRepository;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo: emptyWorkersRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_not_configured');
+      }
+    });
+  });
+
+  // ─── Linear Issue Validation Error Path Tests (v8 ignore block 4) ─
+  describe('linear issue validation error paths', () => {
+    it('returns internal_error when user provides linearIssueId but validation fails (linearFallback: true)', async () => {
+      const failingLinearService = {
+        ensureIssueExists: vi.fn().mockResolvedValue({
+          linearIssueTitle: 'Linked issue INT-100',
+          linearFallback: true, // Validation failed, fallback mode
+          linearIssueLabels: [],
+          hasChildren: false,
+        }),
+        markInProgress: vi.fn(),
+        markInReview: vi.fn(),
+      } as unknown as LinearIssueService;
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService: failingLinearService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          linearIssueId: 'INT-100', // User provided issue ID
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('could not be validated');
+      }
+      expect(logger.error).toHaveBeenCalledWith(
+        { linearIssueId: 'INT-100' },
+        'User-provided Linear issue could not be validated'
+      );
+    });
+  });
+
+  // ─── Final Linear Issue ID Undefined Test (v8 ignore block 5) ──────
+  describe('linear issue id undefined path (v8 ignore block 5)', () => {
+    it('does not include linearIssueId in task when ensureIssueExists returns undefined', async () => {
+      const fallbackLinearService = {
+        ensureIssueExists: vi.fn().mockResolvedValue({
+          // linearIssueId is undefined - fallback mode
+          linearIssueTitle: 'Fallback Task',
+          linearFallback: true,
+          linearIssueLabels: [],
+          hasChildren: false,
+        }),
+        markInProgress: vi.fn(),
+        markInReview: vi.fn(),
+      } as unknown as LinearIssueService;
+
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+        ok({
+          id: 'new-task-no-issue',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          sanitizedPrompt: 'Fix the bug',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          status: 'queued',
+          callbackReceived: false,
+          dedupKey: 'dedup-key-123',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          // linearIssueId NOT set because finalLinearIssueId was undefined
+        })
+      );
+
+      vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+        ok({ dispatched: true, workerLocation: 'mac' })
+      );
+
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({
+          id: 'new-task-no-issue',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          sanitizedPrompt: 'Fix the bug',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          status: 'queued',
+          callbackReceived: false,
+          dedupKey: 'dedup-key-123',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          cancelNonce: 'abcd',
+          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskDispatcher, linearIssueService: fallbackLinearService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Fix the bug',
+          workerType: 'auto',
+          // No linearIssueId provided - should trigger the undefined branch
+        }
+      );
+
+      expect(result.ok).toBe(true);
+
+      // Verify create was called with linearIssueId NOT set (undefined means property is omitted)
+      expect(codeTaskRepo.create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          linearIssueId: expect.anything(),
+        })
+      );
+    });
   });
 
   // ─── Prompt injection sanitization (INT-413) ──────────────────────
@@ -1456,7 +1684,7 @@ describe('processCodeAction', () => {
           traceId: 'trace-123',
           actionId: 'action-123',
           approvalEventId: 'approval-456',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
@@ -1483,7 +1711,7 @@ describe('processCodeAction', () => {
           repository: 'pbuchman/intexuraos',
           baseBranch: 'development',
           traceId: 'trace-123',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
@@ -1616,7 +1844,7 @@ describe('processCodeAction', () => {
           repository: 'pbuchman/intexuraos',
           baseBranch: 'development',
           traceId: 'trace-123',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
@@ -1663,7 +1891,7 @@ describe('processCodeAction', () => {
           traceId: 'trace-123',
           actionId: 'action-123',
           approvalEventId: 'approval-456',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),
@@ -1689,7 +1917,7 @@ describe('processCodeAction', () => {
           repository: 'pbuchman/intexuraos',
           baseBranch: 'development',
           traceId: 'trace-123',
-          status: 'dispatched',
+          status: 'queued',
           callbackReceived: false,
           dedupKey: 'dedup-key-123',
           createdAt: Timestamp.now(),

@@ -44,6 +44,7 @@ export type GitHubPRAction =
 
 export interface GitHubPREvent {
   id: string;
+  auditEventId?: string;
   githubEventId: number;
   deliveryId: string | null;
   repository: string;
@@ -55,6 +56,7 @@ export interface GitHubPREvent {
   senderLogin: string;
   senderId: number;
   senderType: string;
+  prAuthorLogin: string | null;
   title: string | null;
   body: string | null;
   state: string | null;
@@ -69,6 +71,7 @@ export interface GitHubPREvent {
  * Input for creating a new GitHub PR event.
  */
 export interface CreateGitHubPREventInput {
+  auditEventId?: string;
   githubEventId: number;
   deliveryId: string | null;
   repository: string;
@@ -80,6 +83,7 @@ export interface CreateGitHubPREventInput {
   senderLogin: string;
   senderId: number;
   senderType: string;
+  prAuthorLogin: string | null;
   title: string | null;
   body: string | null;
   state: string | null;

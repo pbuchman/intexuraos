@@ -1,6 +1,6 @@
 # Image Service — Technical Debt
 
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-15
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -118,6 +118,15 @@ No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
 
+### 2026-03-12: v3.3.0 ZAI Provider Removal
+
+**Issue:** ZAI provider and GLM-4.7 models were present in the LLM contract and referenced in services across the codebase.
+
+**Resolution:**
+- ZAI pricing fetch removed from `services.ts` (`REQUIRED_MODELS` reduced from 5 to 4 entries)
+- Platform fallback is now exclusively Gemini via `INTEXURAOS_GEMINI_APP_API_KEY`
+- No functional change to image generation flows — ZAI was never an image generation provider
+
 ### 2026-02-27: INT-605 Thumbnail Output Contract Alignment
 
 **Issue:** `ThumbnailPromptParameters` included `aspectRatio`, `textOnImage`, and `logosTrademarks` fields that were produced by the LLM but never consumed by the parser or downstream code.
@@ -151,7 +160,7 @@ No deprecated APIs or dependencies in use.
 
 **Resolution:**
 - `platformGeminiApiKey` added to `createUserServiceClient()` in `internal-clients`
-- `INTEXURAOS_GEMINI_APP_API_KEY` used as primary fallback before ZAI
+- `INTEXURAOS_GEMINI_APP_API_KEY` is the platform fallback (ZAI removed in v3.3.0)
 - Gemini 2.5 Flash is now the default platform model for faster responses
 
 ### 2026-02-15: API Key Naming Standardization
@@ -159,15 +168,14 @@ No deprecated APIs or dependencies in use.
 **Issue:** Platform API key env vars used inconsistent naming (`GUEST_ZAI`, `ZAI`, `OPENAI_API_KEY`).
 
 **Resolution:**
-- `INTEXURAOS_ZAI_APP_API_KEY` consolidates `INTEXURAOS_GUEST_ZAI_API_KEY` + `INTEXURAOS_ZAI_API_KEY`
-- All platform keys now follow `INTEXURAOS_<PROVIDER>_APP_API_KEY` pattern
+- All platform keys now follow `INTEXURAOS_<PROVIDER>_APP_API_KEY` pattern (ZAI key removed in v3.3.0)
 
 ### 2026-02-09: Platform Key Fallback for User Service Client
 
 **Issue:** Users without personal API keys could not generate images.
 
 **Resolution:**
-- `createUserServiceClient()` now accepts `platformZaiApiKey` and `platformGeminiApiKey`
+- `createUserServiceClient()` now accepts `platformGeminiApiKey` (ZAI key removed in v3.3.0)
 - `getApiKeys()` returns platform-owned keys as fallback when user has none configured
 
 ### 2026-02-08: Standardized Response Contract Migration

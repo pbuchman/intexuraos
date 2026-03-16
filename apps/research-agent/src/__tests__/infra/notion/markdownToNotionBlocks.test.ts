@@ -104,6 +104,21 @@ describe('markdownToNotionBlocks', () => {
       expect(paragraph.paragraph.rich_text.some((seg) => seg.text.content.includes('*'))).toBe(true);
     });
 
+    it('handles lone special character at end of text', () => {
+      const blocks = markdownToNotionBlocks('Hello *');
+      expect(blocks).toHaveLength(1);
+      const paragraph = blocks[0] as { paragraph: { rich_text: { type: string; text: { content: string } }[] } };
+      expect(paragraph.paragraph.rich_text).toHaveLength(2);
+      expect(paragraph.paragraph.rich_text[0]).toEqual({
+        type: 'text',
+        text: { content: 'Hello ' },
+      });
+      expect(paragraph.paragraph.rich_text[1]).toEqual({
+        type: 'text',
+        text: { content: '*' },
+      });
+    });
+
     it('converts links', () => {
       const blocks = markdownToNotionBlocks('Check [Google](https://google.com)');
       expect(blocks).toHaveLength(1);
@@ -278,6 +293,44 @@ next paragraph`;
       expect(blocks).toHaveLength(1);
       const code = blocks[0] as { code: { language: string } };
       expect(code.code.language).toBe('plain text');
+    });
+  });
+
+  describe('image blocks', () => {
+    it('parses image with alt text', () => {
+      const blocks = markdownToNotionBlocks('![Alt text](https://example.com/image.png)');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toEqual({
+        object: 'block',
+        type: 'image',
+        image: {
+          type: 'external',
+          external: { url: 'https://example.com/image.png' },
+          caption: [{ type: 'text', text: { content: 'Alt text' } }],
+        },
+      });
+    });
+
+    it('parses image without alt text', () => {
+      const blocks = markdownToNotionBlocks('![](https://example.com/image.png)');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toEqual({
+        object: 'block',
+        type: 'image',
+        image: {
+          type: 'external',
+          external: { url: 'https://example.com/image.png' },
+        },
+      });
+    });
+
+    it('parses image surrounded by other content', () => {
+      const markdown = 'Before\n![diagram](https://example.com/diagram.svg)\nAfter';
+      const blocks = markdownToNotionBlocks(markdown);
+      expect(blocks).toHaveLength(3);
+      expect(blocks[0]?.type).toBe('paragraph');
+      expect(blocks[1]?.type).toBe('image');
+      expect(blocks[2]?.type).toBe('paragraph');
     });
   });
 

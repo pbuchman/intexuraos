@@ -1,4 +1,4 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../../domain/ports.js';
@@ -9,7 +9,7 @@ export interface TriggerCodeTaskRequest {
   userId: string;
   linearIssueId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+  workerType: CodeTaskWorkerType;
   actionId: string;
   approvalEventId: string;
 }
@@ -57,7 +57,6 @@ export function createCodeAgentHttpClient(
           signal: controller.signal,
         });
 
-        /* v8 ignore start -- upstream: error handling for non-OK HTTP responses from code-agent @preserve */
         if (!response.ok) {
           const errorText = await response.text();
           logger.error({ status: response.status, error: errorText }, 'code-agent triggerCodeTask failed');
@@ -67,7 +66,6 @@ export function createCodeAgentHttpClient(
           }
           return err({ code: 'INVALID_REQUEST', message: errorText });
         }
-        /* v8 ignore stop @preserve */
 
         const body = await response.json() as {
           success: boolean;
@@ -76,18 +74,16 @@ export function createCodeAgentHttpClient(
           };
         };
 
-        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
         if (!body.success || body.data === undefined) {
           logger.error({ body }, 'Invalid response from code-agent');
           return err({ code: 'UNKNOWN', message: 'Invalid response from code-agent' });
         }
-        /* v8 ignore stop @preserve */
 
         logger.info({ codeTaskId: body.data.taskId, linearIssueId: request.linearIssueId }, 'Code task triggered');
 
         return ok({ codeTaskId: body.data.taskId });
       } catch (error) {
-        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
+        /* v8 ignore start -- async-timing: AbortError fires in setTimeout callback; clearTimeout in finally cancels it before tests can trigger @preserve */
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error({ timeoutMs }, 'code-agent request timed out');
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });

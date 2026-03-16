@@ -540,6 +540,68 @@ describe('drainTaskQueue', () => {
     });
   });
 
+  it('forwards continuation PR metadata and archives the original task after queued retry dispatch', async () => {
+    const task = createMockTask({
+      prNumber: 1139,
+      prBranch: 'task_existing_pr_branch',
+      retriedFrom: 'task-original-123',
+      agentType: 'execution',
+    });
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update
+      .mockResolvedValueOnce(ok(createMockTask({ status: 'dispatched', workerLocation: 'home-mac' })))
+      .mockResolvedValueOnce(ok(createMockTask({ id: 'task-original-123', status: 'archived' })));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        continuationPrNumber: 1139,
+        continuationPrBranch: 'task_existing_pr_branch',
+        agentType: 'execution',
+      })
+    );
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-original-123', {
+      status: 'archived',
+    });
+  });
+
+  it('logs a warning when archiving the original task after queued retry dispatch fails', async () => {
+    const task = createMockTask({
+      prNumber: 1139,
+      prBranch: 'task_existing_pr_branch',
+      retriedFrom: 'task-original-123',
+      agentType: 'execution',
+    });
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update
+      .mockResolvedValueOnce(ok(createMockTask({ status: 'dispatched', workerLocation: 'home-mac' })))
+      .mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'archive failed' })
+      );
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        originalTaskId: 'task-original-123',
+        retryTaskId: 'task-123',
+      }),
+      'Failed to archive original task after queued retry dispatch'
+    );
+    expect(mockWhatsappNotifier.notifyTaskStarted).toHaveBeenCalled();
+  });
+
   it('dispatches with empty webhookSecret when task has no webhookSecret', async () => {
     const task = createMockTask();
     // Remove webhookSecret to test the ?? '' fallback
@@ -596,6 +658,43 @@ describe('drainTaskQueue', () => {
         linearIssueLabels: ['bug', 'high-priority'],
         hasChildren: true,
         linearIssueId: 'INT-123',
+      })
+    );
+  });
+
+  it('preserves pull_request routing for legacy pr-comment-auto tasks during drain', async () => {
+    const task = createMockTask({
+      linearIssueId: 'INT-123',
+      systemPromptHash: 'pr-comment-auto',
+      sanitizedPrompt: '[PR Comment Task] Comment on PR #42 in pbuchman/intexuraos\nresolve conflicts',
+    });
+    delete (task as unknown as Record<string, unknown>)['agentType'];
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    setupWorkerSettings();
+
+    mockLinearAgentClient.validateIssue.mockResolvedValue(
+      ok({
+        id: 'issue-id',
+        identifier: 'INT-123',
+        title: 'Test issue',
+        url: 'https://linear.app/intexura/issue/INT-123',
+        labels: ['bug'],
+        childCount: 0,
+      })
+    );
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: '[PR Comment Task] Comment on PR #42 in pbuchman/intexuraos\nresolve conflicts',
+        agentType: 'pull_request',
+        linearIssueLabels: ['bug', 'pr-comment'],
       })
     );
   });

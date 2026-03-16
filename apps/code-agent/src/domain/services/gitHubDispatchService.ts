@@ -15,6 +15,12 @@ import type { GitHubPREventRepository } from '../repositories/gitHubPREventRepos
 import type { WebhookMessageBuilder } from './gitHubMessageBuilder.js';
 import { createTaskForPR } from '../usecases/createTaskForPR.js';
 import { sendTaskMessage } from '../usecases/sendTaskMessage.js';
+import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
+import { isRetryableErrorCode } from '../utils/retryableErrors.js';
+import { loadConfig } from '../../config.js';
+
+import { extractDispatchWorkerType } from '../utils/dispatchWorkerTriage.js';
+import type { AutomationLog } from '../ports/automationLog.js';
 
 export interface DispatchContext {
   event: GitHubPREvent;
@@ -53,6 +59,8 @@ export interface WebhookDispatchServiceDeps {
   allowedBots: Set<string>;
   orchestratorSecret: string;
   serviceUrl: string;
+  dispatchRetryRepo?: DispatchRetryRepository;
+  automationLog: AutomationLog;
 }
 
 export function resolveLoginForTaskCreation(senderLogin: string, repository: string, allowedBots: Set<string>): string {
@@ -77,7 +85,8 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           'Starting GitHub dispatch workflow'
         );
 
-        const taskResult = await deps.codeTaskRepo.findByPR(event.repository, event.pullRequestNumber);
+        // Use non-review lookup to avoid routing generic comments into review tasks
+        const taskResult = await deps.codeTaskRepo.findLatestNonReviewTaskByPR(event.repository, event.pullRequestNumber);
 
         if (!taskResult.ok) {
           logger.error(
@@ -135,6 +144,18 @@ async function handleNewTask(
     }
   }
 
+  // Extract @worker/@model directive from comment
+  const workerType = extractDispatchWorkerType(event.body ?? '');
+  if (workerType !== undefined) {
+    logger.info({ workerType, prNumber: event.pullRequestNumber }, 'Extracted worker type from comment');
+  }
+
+  // Use messageBuilder for pull_request_review events to apply template routing
+  // (e.g. code-worker reviews → nitpick-nuker template)
+  const comment = event.eventType === 'pull_request_review'
+    ? deps.messageBuilder.build(event)
+    : event.body ?? '';
+
   const createResult = await createTaskForPR(
     {
       logger,
@@ -148,15 +169,17 @@ async function handleNewTask(
       gitHubPRClient: deps.gitHubPRClient,
       userServiceClient: deps.userServiceClient,
       firestore: deps.firestore,
+      automationLog: deps.automationLog,
     },
     {
       repository: event.repository,
       prNumber: event.pullRequestNumber,
       senderLogin: resolveLoginForTaskCreation(event.senderLogin, event.repository, deps.allowedBots),
-      comment: event.body ?? '',
+      comment,
       eventId: event.id,
       ...(event.title !== null && { prTitle: event.title }),
       ...(resolvedBaseBranch !== null && { baseBranch: resolvedBaseBranch }),
+      ...(workerType !== undefined && { workerType }),
     },
   );
 
@@ -178,7 +201,7 @@ async function handleNewTask(
 async function handleExistingTask(
   deps: WebhookDispatchServiceDeps,
   event: GitHubPREvent,
-  task: { id: string; userId: string },
+  task: { id: string; userId: string; linearIssueId?: string },
   logger: Logger,
 ): Promise<WebhookDispatchResult> {
   const message = deps.messageBuilder.build(event);
@@ -201,12 +224,47 @@ async function handleExistingTask(
   );
 
   if (!sendResult.ok) {
+    // Queue retry for retryable errors
+    if (isRetryableErrorCode(sendResult.error.code) && deps.dispatchRetryRepo !== undefined) {
+      const retryConfig = loadConfig();
+      await deps.dispatchRetryRepo.create({
+        type: 'task_message',
+        eventId: event.id,
+        repository: event.repository,
+        pullRequestNumber: event.pullRequestNumber,
+        senderLogin: event.senderLogin,
+        taskId: task.id,
+        userId: task.userId,
+        message,
+        attempts: 0,
+        maxAttempts: retryConfig.retryQueue.maxAttempts,
+        lastError: sendResult.error.message,
+        ttlMinutes: retryConfig.retryQueue.ttlMinutes,
+      });
+      logger.info({ taskId: task.id }, 'Message delivery failed, queued for retry');
+      return { success: true, dispatched: true, taskId: task.id };
+    }
+    // Non-retryable: existing behavior
     logger.error(
       { taskId: task.id, error: sendResult.error },
       'Failed to send message to task'
     );
     return { success: false, dispatched: false, taskId: task.id, error: sendResult.error.message };
   }
+
+  deps.automationLog.record(
+    { repository: event.repository, prNumber: event.pullRequestNumber },
+    {
+      type: 'task_dispatched',
+      taskId: task.id,
+      workerType: 'auto',
+      agentType: 'pull_request',
+      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+    },
+    task.userId,
+  ).catch((error: unknown) => {
+    logger.warn({ error, taskId: task.id }, 'Failed to record automation log for existing task dispatch');
+  });
 
   logger.info(
     { taskId: task.id, action: sendResult.value.action },

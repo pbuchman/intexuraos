@@ -173,7 +173,7 @@ describe('ExtractLinkPreviewsUseCase', () => {
       const msg = await messageRepo.getMessage(testMessage.id);
       expect(msg.ok && msg.value?.linkPreview?.status).toBe('failed');
       if (msg.ok && msg.value?.linkPreview?.status === 'failed') {
-        expect(msg.value.linkPreview.error?.message).toBe('Unknown error');
+        expect(msg.value.linkPreview.error?.message).toBe('string error, not Error instance');
       }
     });
 

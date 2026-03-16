@@ -177,7 +177,9 @@ describe('GET /code/tasks endpoints', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -206,8 +208,9 @@ describe('GET /code/tasks endpoints', () => {
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
     });
 
     app = await buildServer();

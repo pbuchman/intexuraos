@@ -5,6 +5,7 @@ import { registerRoutes, cleanUpExpiredNonces } from '../routes.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { CredentialMonitor } from '../services/isolation/credential-monitor.js';
+import type { IsolationProvider } from '../services/isolation/types.js';
 import type { Logger } from '@intexuraos/common-core';
 
 describe('Routes', () => {
@@ -12,6 +13,7 @@ describe('Routes', () => {
   let dispatcher: TaskDispatcher;
   let tokenService: GitHubTokenService;
   let credentialMonitor: CredentialMonitor;
+  let isolationProvider: IsolationProvider;
 
   const mockLogger: Logger = {
     info: () => undefined,
@@ -72,6 +74,10 @@ describe('Routes', () => {
       logStartupStatus: vi.fn(),
     } as unknown as CredentialMonitor;
 
+    isolationProvider = {
+      getHealthDetails: vi.fn(() => ({ docker: true, disk: true })),
+    } as unknown as IsolationProvider;
+
     registerRoutes(
       app,
       dispatcher,
@@ -79,7 +85,8 @@ describe('Routes', () => {
       { orchestratorSecret },
       mockLogger,
       undefined,
-      credentialMonitor
+      credentialMonitor,
+      isolationProvider
     );
     await app.ready();
   });
@@ -298,6 +305,31 @@ describe('Routes', () => {
       expect(response.json()).toHaveProperty('error');
     });
 
+    it('should reject an empty continuationPrBranch', async () => {
+      const taskPayload = {
+        taskId: 'test-task',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        continuationPrNumber: 1139,
+        continuationPrBranch: '',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toHaveProperty('error');
+      expect(dispatcher.submitTask).not.toHaveBeenCalled();
+    });
+
     it('should return 400 for service errors (not at_capacity)', async () => {
       vi.mocked(dispatcher.submitTask).mockResolvedValueOnce({
         ok: false,
@@ -351,6 +383,33 @@ describe('Routes', () => {
       });
 
       expect(response.statusCode).toBe(503);
+    });
+
+    it('should return 503 when Docker is unavailable', async () => {
+      vi.mocked(dispatcher.submitTask).mockResolvedValueOnce({
+        ok: false,
+        error: { type: 'docker_unavailable', message: 'Docker daemon is not responding' },
+      });
+
+      const taskPayload = {
+        taskId: 'test-task-docker',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({ error: 'Docker daemon is not responding' });
     });
   });
 
@@ -479,6 +538,36 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json.anthropicOAuth.status).toBe('not_configured');
+    });
+
+    it('should include dockerHealthy and diskHealthy in health response', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.dockerHealthy).toBe(true);
+      expect(json.diskHealthy).toBe(true);
+    });
+
+    it('should reflect unhealthy Docker in health response', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- test mock always has getHealthDetails
+      vi.mocked(isolationProvider.getHealthDetails!).mockReturnValueOnce({
+        docker: false,
+        disk: true,
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.dockerHealthy).toBe(false);
+      expect(json.diskHealthy).toBe(true);
     });
   });
 

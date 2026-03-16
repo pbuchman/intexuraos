@@ -334,6 +334,33 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
     });
+
+    it('returns 502 when generateCalendarPreview returns an error', async () => {
+      fakeCalendarPreviewRepository.setGetByActionIdResult(err({
+        code: 'INTERNAL_ERROR',
+        message: 'Firestore unavailable',
+      }));
+
+      const payload = createPubSubPayload({
+        actionId: 'action-123',
+        userId: 'user-456',
+        text: 'Meeting tomorrow',
+        currentDate: '2025-01-14',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/generate-preview',
+        headers: { from: 'noreply@google.com' },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Firestore unavailable');
+    });
   });
 
   describe('GET /internal/calendar/preview/:actionId', () => {
@@ -482,6 +509,28 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: { preview: { status: string } } };
       expect(body.success).toBe(true);
       expect(body.data.preview.status).toBe('failed');
+    });
+
+    it('returns 502 when generateCalendarPreview returns an error', async () => {
+      fakeCalendarPreviewRepository.setGetByActionIdResult(err({
+        code: 'INTERNAL_ERROR',
+        message: 'Firestore unavailable',
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/preview',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Firestore unavailable');
     });
   });
 });

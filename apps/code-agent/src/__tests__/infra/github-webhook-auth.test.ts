@@ -45,6 +45,13 @@ describe('github-webhook-auth', () => {
       expect(result).toBeNull();
     });
 
+    it('should return null for correct length but invalid hex characters', () => {
+      const signature = `sha256=${'g'.repeat(64)}`;
+      const result = parseGitHubSignature(signature);
+
+      expect(result).toBeNull();
+    });
+
     it('should return null for truncated hex digest', () => {
       const signature = 'sha256=abc123';
       const result = parseGitHubSignature(signature);

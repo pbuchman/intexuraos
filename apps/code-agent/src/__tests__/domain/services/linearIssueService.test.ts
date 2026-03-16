@@ -104,6 +104,7 @@ describe('linearIssueService', () => {
       expect(result.linearFallback).toBe(true);
       expect(result.linearIssueId).toBeUndefined();
       expect(result.linearIssueTitle).toBe('Linked issue INT-999');
+      expect(result.linearFallbackError).toBe('Issue INT-999 not found');
       expect(mockCreateIssue).not.toHaveBeenCalled();
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { linearIssueId: 'INT-999', error: { code: 'NOT_FOUND', message: 'Issue INT-999 not found' } },
@@ -170,7 +171,7 @@ describe('linearIssueService', () => {
           issueId: 'new-456',
           issueIdentifier: 'INT-456',
           issueTitle: 'Fix login authentication for SSO users',
-          issueUrl: 'https://linear.app/intexuraos/issue/INT-456',
+          issueUrl: 'https://linear.app/pbuchman/issue/INT-456',
         })
       );
 
@@ -184,7 +185,7 @@ describe('linearIssueService', () => {
       expect(result).toEqual({
         linearIssueId: 'INT-456',
         linearIssueTitle: 'Fix login authentication for SSO users',
-        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-456',
+        linearIssueUrl: 'https://linear.app/pbuchman/issue/INT-456',
         linearIssueType: 'bug',
         linearFallback: false,
         linearIssueLabels: [],
@@ -415,6 +416,7 @@ describe('linearIssueService', () => {
       expect(result.linearIssueId).toBeUndefined();
       expect(result.linearIssueTitle).toBe('Generated Title');
       expect(result.linearIssueType).toBe('bug');
+      expect(result.linearFallbackError).toBe('Service down');
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { error: { code: 'UNAVAILABLE', message: 'Service down' } },

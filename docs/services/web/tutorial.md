@@ -338,9 +338,10 @@ Now that you understand the basics:
 2. Read [`apiClient.ts`](../../../apps/web/src/services/apiClient.ts) for request handling
 3. Check [`App.tsx`](../../../apps/web/src/App.tsx) for routing structure
 4. Study the [`Chat`](../../../apps/web/src/components/Chat/Chat.tsx) component for the chat assistant architecture
-5. Review [`CodeTaskViewPage.tsx`](../../../apps/web/src/pages/CodeTaskViewPage.tsx) for collapsible tool output, agent-type banners, queued messaging, and LogStream
-6. See [`PREventsPage.tsx`](../../../apps/web/src/pages/PREventsPage.tsx) for lazy-loaded summaries with `useGitHubPRSummaries` + `useGitHubPREvents`
-7. Study [`CodeTasksPage.tsx`](../../../apps/web/src/pages/CodeTasksPage.tsx) for multi-status filtering with persistent state
+5. Review [`CodeTaskViewPageV2.tsx`](../../../apps/web/src/pages/CodeTaskViewPageV2.tsx) and the `components/code-tasks/v2/` sub-components for the current task detail architecture
+6. Study [`CodeTaskViewPage.tsx`](../../../apps/web/src/pages/CodeTaskViewPage.tsx) (v1, legacy) for collapsible tool output, agent-type banners, queued messaging, and LogStream
+7. See [`PREventsPage.tsx`](../../../apps/web/src/pages/PREventsPage.tsx) for the GitHub event decision log with Firestore listener via `useGitHubEventLog`
+8. Study [`CodeTasksPage.tsx`](../../../apps/web/src/pages/CodeTasksPage.tsx) for multi-status filtering with persistent state and the dynamic pipeline display
 
 ---
 

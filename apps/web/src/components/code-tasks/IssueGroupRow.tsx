@@ -1,12 +1,13 @@
 import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, ScrollText, Trash2 } from 'lucide-react';
 import type { IssueGroup, StepState } from '@/utils/issueGroups';
-import { formatElapsedTime, formatRelative } from '@/utils/dateFormat';
+import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
 
 interface IssueGroupRowProps {
   group: IssueGroup;
   onAction: (taskId: string, action: 'delete' | 'retry' | 'implement') => void;
+  onOpenLogs: (taskId: string) => void;
 }
 
 // --- Left border accent color ---
@@ -73,6 +74,10 @@ function PipelineConnector(): React.JSX.Element {
   return <span className="mx-1 h-px w-4 flex-shrink-0 bg-slate-500/40" />;
 }
 
+function PipelineConnectorVertical(): React.JSX.Element {
+  return <span className="ml-2.5 h-2 w-px bg-slate-500/40" />;
+}
+
 interface PipelineStepProps {
   name: string;
   state: StepState;
@@ -91,36 +96,49 @@ function PipelineStep({ name, state }: PipelineStepProps): React.JSX.Element {
 
 function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Element {
   const { pipeline } = group;
-  const steps: React.JSX.Element[] = [];
+  const totalCount = pipeline.steps.length + (pipeline.pr !== null ? 1 : 0);
 
-  // Planning step
-  if (pipeline.planning !== null) {
-    steps.push(<PipelineStep key="planning" name="Planning" state={pipeline.planning} />);
+  if (totalCount === 0) {
+    return <span className="text-xs text-slate-500">--</span>;
   }
 
-  // Execution step
-  if (pipeline.execution !== null) {
-    if (steps.length > 0) {
-      steps.push(<PipelineConnector key="conn-exec" />);
+  const isVertical = totalCount > 4;
+
+  const elements: React.JSX.Element[] = [];
+
+  for (let i = 0; i < pipeline.steps.length; i++) {
+    const step = pipeline.steps[i];
+    if (step === undefined) continue;
+
+    if (i > 0) {
+      elements.push(
+        isVertical
+          ? <PipelineConnectorVertical key={`conn-${String(i)}`} />
+          : <PipelineConnector key={`conn-${String(i)}`} />,
+      );
     }
-    const execLabel = pipeline.execution === 'failed' && pipeline.failedAttempts > 0
-      ? `Execution (${String(pipeline.failedAttempts)})`
-      : 'Execution';
-    steps.push(
+
+    const displayLabel = step.state === 'failed' && step.agentType === 'execution' && pipeline.failedAttempts > 0
+      ? `${step.label} (${String(pipeline.failedAttempts)})`
+      : step.label;
+
+    elements.push(
       <PipelineStep
-        key="execution"
-        name={execLabel}
-        state={pipeline.execution}
+        key={step.agentType}
+        name={displayLabel}
+        state={step.state}
       />,
     );
   }
 
-  // PR step
+  // PR step (always last)
   if (pipeline.pr !== null) {
-    if (steps.length > 0) {
-      steps.push(<PipelineConnector key="conn-pr" />);
-    }
-    steps.push(
+    elements.push(
+      isVertical
+        ? <PipelineConnectorVertical key="conn-pr" />
+        : <PipelineConnector key="conn-pr" />,
+    );
+    elements.push(
       <span key="pr" className="flex items-center gap-1">
         <StepDot state="completed" />
         <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
@@ -130,11 +148,11 @@ function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Elem
     );
   }
 
-  if (steps.length === 0) {
-    return <span className="text-xs text-slate-500">--</span>;
-  }
-
-  return <span className="flex items-center">{steps}</span>;
+  return (
+    <span className={isVertical ? 'flex flex-col' : 'flex items-center'}>
+      {elements}
+    </span>
+  );
 }
 
 // --- Text helpers ---
@@ -146,26 +164,18 @@ function summaryOrPrompt(task: { result?: { summary?: string }; sanitizedPrompt:
   return words.length > 100 ? words.slice(0, 100).join(' ') + '...' : task.sanitizedPrompt;
 }
 
-// --- Duration calculation ---
-
-function computeDurationSeconds(createdAt: string, updatedAt: string, isActive: boolean): number {
-  const start = new Date(createdAt).getTime();
-  const end = isActive ? Date.now() : new Date(updatedAt).getTime();
-  return Math.floor((end - start) / 1000);
-}
-
 // --- Main component ---
 
 const IssueGroupRow = memo(function IssueGroupRow({
   group,
   onAction,
+  onOpenLogs,
 }: IssueGroupRowProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { latestTask, pipeline, aggregateStatus } = group;
-  const isActive = aggregateStatus === 'active';
-  const durationSec = computeDurationSeconds(latestTask.createdAt, latestTask.updatedAt, isActive);
+  const hasActionable = pipeline.steps.some((s) => s.state === 'actionable');
 
   const handleRowClick = (): void => {
     setExpanded((prev) => !prev);
@@ -178,7 +188,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
         className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${getAccentShadow(aggregateStatus)}`}
         onClick={handleRowClick}
       >
-        <div className="hidden grid-cols-[1fr_1fr_140px_120px] items-center gap-2 lg:grid">
+        <div className="hidden grid-cols-[1fr_1fr_140px_120px_36px] items-center gap-2 lg:grid">
           {/* Issue column */}
           <div className="flex items-center gap-2 overflow-hidden">
             <button
@@ -222,16 +232,18 @@ const IssueGroupRow = memo(function IssueGroupRow({
           {/* Time column */}
           <div className="text-xs">
             <p className="text-slate-400 dark:text-slate-500">
-              {formatRelative(latestTask.updatedAt)}
+              <span className="text-slate-500 dark:text-slate-600">Created</span>{' '}
+              {formatRelative(latestTask.createdAt)}
             </p>
-            <p className="text-slate-500 dark:text-slate-600">
-              {formatElapsedTime(durationSec)}
+            <p className="text-slate-400 dark:text-slate-500">
+              <span className="text-slate-500 dark:text-slate-600">Started</span>{' '}
+              {latestTask.dispatchedAt !== undefined ? formatRelative(latestTask.dispatchedAt) : 'Pending'}
             </p>
           </div>
 
           {/* Output column */}
           <div className="flex items-center justify-end gap-2">
-            {pipeline.execution === 'actionable' ? (
+            {hasActionable ? (
               <button
                 onClick={(e): void => {
                   e.stopPropagation();
@@ -265,7 +277,9 @@ const IssueGroupRow = memo(function IssueGroupRow({
                 Retry
               </button>
             ) : aggregateStatus === 'active' ? (
-              <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+              <span className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
+                <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+              </span>
             ) : null}
             <button
               onClick={(e): void => {
@@ -276,6 +290,21 @@ const IssueGroupRow = memo(function IssueGroupRow({
               title="Delete"
             >
               <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Transcript column */}
+          <div className="flex items-center justify-end">
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                onOpenLogs(latestTask.id);
+              }}
+              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+              title="Preview logs"
+              aria-label={`Preview logs for ${latestTask.id}`}
+            >
+              <ScrollText className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -310,7 +339,18 @@ const IssueGroupRow = memo(function IssueGroupRow({
               )}
             </div>
             <div className="flex items-center gap-2">
-              {pipeline.execution === 'actionable' ? (
+              <button
+                onClick={(e): void => {
+                  e.stopPropagation();
+                  onOpenLogs(latestTask.id);
+                }}
+                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                title="Preview logs"
+                aria-label={`Preview logs for ${latestTask.id}`}
+              >
+                <ScrollText className="h-3.5 w-3.5" />
+              </button>
+              {hasActionable ? (
                 <button
                   onClick={(e): void => {
                     e.stopPropagation();
@@ -321,8 +361,21 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   <Play className="h-3 w-3" />
                   Implement
                 </button>
+              ) : pipeline.pr !== null ? (
+                <a
+                  href={pipeline.pr.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e): void => { e.stopPropagation(); }}
+                  className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  #{pipeline.pr.number}
+                </a>
               ) : aggregateStatus === 'active' ? (
-                <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                <span className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+                </span>
               ) : null}
               <button
                 onClick={(e): void => {
@@ -338,7 +391,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
           </div>
           <div className="flex items-center gap-3 pl-6 text-xs text-slate-500 dark:text-slate-400">
             <PipelineVisualization group={group} />
-            <span>{formatRelative(latestTask.updatedAt)}</span>
+            <span>{formatRelative(latestTask.createdAt)}</span>
           </div>
         </div>
 
@@ -394,11 +447,15 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.group.aggregateStatus === next.group.aggregateStatus &&
   prev.group.latestTask.updatedAt === next.group.latestTask.updatedAt &&
   prev.group.tasks.length === next.group.tasks.length &&
-  prev.group.pipeline.planning === next.group.pipeline.planning &&
-  prev.group.pipeline.execution === next.group.pipeline.execution &&
+  prev.group.pipeline.steps.length === next.group.pipeline.steps.length &&
+  prev.group.pipeline.steps.every((s, i) => {
+    const n = next.group.pipeline.steps[i];
+    return s.state === n?.state && s.agentType === n.agentType;
+  }) &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
-  prev.onAction === next.onAction,
+  prev.onAction === next.onAction &&
+  prev.onOpenLogs === next.onOpenLogs,
 );
 
 export { IssueGroupRow };

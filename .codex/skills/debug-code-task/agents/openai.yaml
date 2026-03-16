@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Debug Code Task'
+  short_description: 'Investigate IntexuraOS code tasks'
+  default_prompt: 'Use $debug-code-task to inspect a code-task URL or task ID and summarize the task document plus log evidence.'

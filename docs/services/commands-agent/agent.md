@@ -1,34 +1,92 @@
-# commands-agent - Agent Interface
+# Commands Agent — Agent Interface
 
-> Machine-readable interface definition for AI agents interacting with commands-agent.
-
----
+> **Machine-readable specification for AI agent integration**
 
 ## Identity
 
-| Field    | Value                                                                                        |
-| -------- | -------------------------------------------------------------------------------------------- |
-| **Name** | commands-agent                                                                               |
-| **Role** | AI Intent Classifier                                                                         |
-| **Goal** | Classify natural language input into action types using structured 5-step LLM classification |
-
----
+| Attribute | Value                                                                                                     |
+| --------- | --------------------------------------------------------------------------------------------------------- |
+| Name      | commands-agent                                                                                            |
+| Role      | Classify natural language input into typed actions using a structured 5-step LLM prompt                   |
+| Goal      | Transform unstructured user messages into typed, actionable commands routed to the right downstream agent |
 
 ## Capabilities
 
-### Create Command
+### Ingest Command (Pub/Sub path)
 
-**Endpoint:** `POST /commands`
+**Endpoint:** `POST /internal/commands`
 
-**When to use:** When a user submits text or a shared link from the PWA and you need it classified into an action type.
+**When to use:** When delivering a `command.ingest` event from Pub/Sub push (primary production path from whatsapp-service)
+
+**Auth:** Pub/Sub OIDC token (validated by Cloud Run) or `X-Internal-Auth` header for direct calls
 
 **Input Schema:**
 
 ```typescript
-interface CreateCommandInput {
-  text: string;           // The command text to classify (min 1 char)
-  source: 'pwa-shared';  // Source identifier
-  externalId?: string;    // Optional dedup key (auto-generated if omitted)
+interface PubSubPushBody {
+  message: {
+    data: string;       // base64-encoded CommandEvent JSON
+    messageId: string;
+    publishTime?: string;
+  };
+  subscription?: string;
+}
+
+interface CommandEvent {
+  type: 'command.ingest';
+  userId: string;
+  sourceType: 'whatsapp_text' | 'whatsapp_voice' | 'pwa-shared';
+  externalId: string;
+  text: string;
+  summary?: string;    // for voice transcriptions
+  timestamp: string;   // ISO 8601
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface IngestCommandOutput {
+  success: true;
+  data: {
+    commandId: string;  // "{sourceType}:{externalId}"
+    isNew: boolean;     // false if command already existed (idempotent)
+  };
+}
+```
+
+**Example:**
+
+```json
+// message.data is base64 of: {"type":"command.ingest","userId":"auth0|123","sourceType":"whatsapp_text","externalId":"wamid.abc","text":"investigate competitor pricing","timestamp":"2026-03-15T10:00:00Z"}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "commandId": "whatsapp_text:wamid.abc",
+    "isNew": true
+  }
+}
+```
+
+---
+
+### Create Command (PWA path)
+
+**Endpoint:** `POST /commands`
+
+**When to use:** When the PWA user shares text or a link directly from the web app
+
+**Auth:** `Authorization: Bearer <token>` (Auth0 JWT)
+
+**Input Schema:**
+
+```typescript
+interface CreateCommandBody {
+  text: string;           // minLength: 1
+  source: 'pwa-shared';
+  externalId?: string;    // auto-generated if omitted
 }
 ```
 
@@ -36,285 +94,236 @@ interface CreateCommandInput {
 
 ```typescript
 interface CreateCommandOutput {
-  command: Command;
+  success: true;
+  data: {
+    command: Command;
+  };
+}
+
+interface Command {
+  id: string;             // "{sourceType}:{externalId}"
+  userId: string;
+  sourceType: 'whatsapp_text' | 'whatsapp_voice' | 'pwa-shared';
+  externalId: string;
+  text: string;
+  summary?: string;
+  timestamp: string;
+  status: 'received' | 'classified' | 'pending_classification' | 'failed' | 'archived';
+  classification?: CommandClassification;
+  actionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CommandClassification {
+  type: 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code';
+  confidence: number;     // 0–1
+  reasoning: string;
+  promptVersion: string;  // semver
+  classifiedAt: string;
 }
 ```
 
-**Example:**
-
-```json
-// Request
-{
-  "text": "Fix the login bug in auth module",
-  "source": "pwa-shared"
-}
-
-// Response
-{
-  "success": true,
-  "data": {
-    "command": {
-      "id": "pwa-shared:1706097600000-abc123",
-      "userId": "user-123",
-      "sourceType": "pwa-shared",
-      "status": "classified",
-      "classification": {
-        "type": "code",
-        "confidence": 0.92,
-        "reasoning": "Programming-related command: fix bug",
-        "promptVersion": "2.0.0",
-        "classifiedAt": "2026-02-22T10:00:00.000Z"
-      },
-      "actionId": "action-uuid"
-    }
-  }
-}
-```
+---
 
 ### List Commands
 
 **Endpoint:** `GET /commands`
 
-**When to use:** When you need to retrieve all commands for the authenticated user (ordered by creation time, descending, max 100).
+**When to use:** To retrieve all commands for the authenticated user
 
-**Input Schema:** None (uses Bearer token for user identification)
+**Auth:** `Authorization: Bearer <token>` (Auth0 JWT)
 
 **Output Schema:**
 
 ```typescript
 interface ListCommandsOutput {
-  commands: Command[];
+  success: true;
+  data: {
+    commands: Command[];  // ordered by createdAt desc, limit 100
+  };
 }
 ```
 
-### Delete Command
+---
 
-**Endpoint:** `DELETE /commands/:commandId`
+### Get Command (internal)
 
-**When to use:** When removing a command that has not been classified yet (status: received, pending_classification, or failed).
+**Endpoint:** `GET /internal/commands/:commandId`
 
-**Input Schema:** Command ID in URL path
+**When to use:** When another service needs to look up a command by its composite ID
+
+**Auth:** `X-Internal-Auth` header
 
 **Output Schema:**
 
 ```typescript
-interface DeleteCommandOutput {} // Empty object on success
+interface GetCommandInternalOutput {
+  success: true;
+  data: {
+    command: {
+      id: string;
+      text: string;
+      sourceType: string;
+    };
+  };
+}
 ```
+
+---
+
+### Retry Pending Classifications
+
+**Endpoint:** `POST /internal/retry-pending`
+
+**When to use:** Triggered by Cloud Scheduler to flush commands stuck in `pending_classification`. Can also be called manually after configuring a user's LLM API key.
+
+**Auth:** OIDC token (Cloud Scheduler) or `X-Internal-Auth` header
+
+**Output Schema:**
+
+```typescript
+interface RetryPendingOutput {
+  success: true;
+  data: {
+    processed: number;  // successfully classified
+    skipped: number;    // LLM client still unavailable
+    failed: number;     // classification or action creation errored
+    total: number;      // total pending commands found
+  };
+}
+```
+
+---
 
 ### Archive Command
 
 **Endpoint:** `PATCH /commands/:commandId`
 
-**When to use:** When soft-deleting a classified command. Only works for commands with status `classified`.
+**When to use:** To mark a classified command as archived after the user has acted on it
+
+**Auth:** `Authorization: Bearer <token>` (Auth0 JWT)
 
 **Input Schema:**
 
 ```typescript
-interface ArchiveCommandInput {
+interface ArchiveCommandBody {
   status: 'archived';
 }
 ```
 
-**Output Schema:**
-
-```typescript
-interface ArchiveCommandOutput {
-  command: Command;
-}
-```
+**Constraint:** Command must be in `classified` status. Returns 400 otherwise.
 
 ---
 
-## Types
+### Delete Command
 
-```typescript
-type SourceType = 'whatsapp_text' | 'whatsapp_voice' | 'pwa-shared';
+**Endpoint:** `DELETE /commands/:commandId`
 
-type CommandStatus = 'received' | 'classified' | 'pending_classification' | 'failed' | 'archived';
+**When to use:** To permanently remove a command that is unclassified or failed
 
-type ClassificationType =
-  | 'todo'
-  | 'research'
-  | 'note'
-  | 'link'
-  | 'calendar'
-  | 'reminder'
-  | 'linear'
-  | 'code';
+**Auth:** `Authorization: Bearer <token>` (Auth0 JWT)
 
-interface Classification {
-  type: ClassificationType;
-  confidence: number;      // 0.0-1.0
-  reasoning: string;
-  promptVersion: string;   // semver of the prompt that produced this result
-  classifiedAt: string;    // ISO 8601
-}
-
-interface Command {
-  id: string;              // {sourceType}:{externalId}
-  userId: string;
-  sourceType: SourceType;
-  externalId: string;
-  text: string;
-  summary?: string;        // For voice transcriptions
-  timestamp: string;
-  status: CommandStatus;
-  classification?: Classification;
-  actionId?: string;
-  failureReason?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-```
+**Constraint:** Command must be in `received`, `pending_classification`, or `failed` status. Returns 400 for `classified` commands — use archive instead.
 
 ---
 
 ## Constraints
 
-| Rule                    | Description                                                                       |
-| ----------------------- | --------------------------------------------------------------------------------- |
-| **Delete Restriction**  | Can only delete commands with status: received, pending_classification, or failed |
-| **Archive Restriction** | Can only archive commands with status: classified                                 |
-| **Source Types**        | Create endpoint only supports 'pwa-shared' source; WhatsApp uses Pub/Sub          |
-| **Classification**      | Automatic via Gemini 2.5 Flash (default), GLM-4.7, or GLM-4.7-Flash               |
-| **Idempotency**         | Commands keyed by {sourceType}:{externalId}; duplicates return existing command   |
-| **Title Limit**         | Classification titles are capped at 200 characters by Zod schema validation       |
+**Do NOT:**
 
----
+- Call `DELETE /commands/:commandId` on classified commands — use `PATCH` with `status: "archived"` instead
+- Submit the same `externalId` expecting re-classification — deduplication is by composite key `{sourceType}:{externalId}`; a duplicate returns the existing command with `isNew: false`
+- Expect synchronous classification always — if LLM API key is unavailable, the command returns with `status: "pending_classification"` and will be classified on the next retry cycle
+- Use fabricated `externalId` values for WhatsApp messages — use the actual WhatsApp message ID to ensure idempotency
 
-## Classification Pipeline (v2.0.0+)
+**Requires:**
 
-The LLM prompt executes a 5-step decision tree in strict order:
-
-```
-Step 1: Explicit Prefix Override
-  "linear: buy groceries" -> linear (user override)
-  "do lineara: fix bug" -> linear (Polish)
-        | (no match)
-Step 2: Explicit Intent Detection (HIGH PRIORITY)
-  "save bookmark https://research-world.com" -> link
-  "research this https://example.com" -> research
-  "create issue for auth bug" -> linear (explicit "create issue")
-  "fix the login bug" -> code (engineering task, not explicit tracking)
-  "zbadaj" (Polish) -> research
-  NOTE: linear requires explicit "linear"/"issue"/"track" language;
-        code is the default for all other engineering tasks
-        | (no match)
-Step 3: Code Detection (Engineering Task Fallback)
-  "implement dark mode" -> code (engineering task, no explicit intent)
-  "refactor auth module" -> code
-        | (no match)
-Step 4: URL Presence Check
-  "https://research-tools.com" -> link
-  (keywords in URLs IGNORED)
-        | (no URL)
-Step 5: Category Detection (Fallback)
-  "meeting tomorrow at 3pm" -> calendar
-  "remind me about X" -> reminder
-  "how does OAuth work?" -> research
-  "meeting notes: discussed X" -> note
-  "fix the login bug" -> code
-  "buy groceries" -> todo (default)
-```
-
----
-
-## Confidence Semantics
-
-| Range     | Meaning                                         | Example                |
-| --------- | ----------------------------------------------- | ---------------------- |
-| 0.90+     | Clear match (explicit prefix, multiple signals) | "linear: fix auth bug" |
-| 0.70-0.90 | Strong match (single clear signal)              | "bug in mobile menu"   |
-| 0.50-0.70 | Choosing between 2-3 plausible categories       | "remember the meeting" |
-| <0.50     | Genuinely uncertain, defaults to note           | "abc123"               |
-
----
+- The `command.ingest` Pub/Sub event must have `type: "command.ingest"` — any other type is rejected with 400
+- Bearer tokens must be valid Auth0 JWTs for public endpoints
+- Internal calls must include the `X-Internal-Auth` header (unless coming from Pub/Sub or Cloud Scheduler via OIDC)
+- `text` field must have at least 1 character
 
 ## Usage Patterns
 
-### Create command from PWA share
-
-```typescript
-const { command } = await createCommand({
-  text: 'Check out https://example.com/article',
-  source: 'pwa-shared',
-});
-// -> type: link, confidence: 0.90+
-```
-
-### Override classification with explicit intent
-
-```typescript
-const { command } = await createCommand({
-  text: 'research this https://competitor.io',
-  source: 'pwa-shared',
-});
-// -> type: research (Step 2 explicit intent overrides Step 4 URL presence)
-```
-
-### Use Polish command phrases
-
-```typescript
-const { command } = await createCommand({
-  text: 'zapisz link https://example.com',
-  source: 'pwa-shared',
-});
-// -> type: link, confidence: 0.90+
-```
-
-### List and filter commands
-
-```typescript
-const { commands } = await listCommands();
-const pendingCommands = commands.filter((c) => c.status === 'pending_classification');
-```
-
----
-
-## Internal Endpoints
-
-| Method | Path                            | Purpose                                   | Auth                           |
-| ------ | ------------------------------- | ----------------------------------------- | ------------------------------ |
-| POST   | `/internal/commands`            | Ingest command from Pub/Sub (WhatsApp)    | Pub/Sub OIDC or internal token |
-| POST   | `/internal/retry-pending`       | Retry pending classifications (Scheduler) | OIDC or internal token         |
-| GET    | `/internal/commands/:commandId` | Get command for internal processing       | Internal token                 |
-
----
-
-## Event Flow
+### Pattern 1: WhatsApp Message → Classify → Action
 
 ```
-whatsapp-service -> Pub/Sub (command.ingest) -> /internal/commands -> commands-agent
-                                                                        |
-                                                              5-step LLM Classification
-                                                                        |
-                                                              actions-agent (create action)
-                                                                        |
-                                                              Pub/Sub (action.created)
-                                                                        |
-                                                              Agent handlers (research, todos, etc.)
+1. whatsapp-service receives a WhatsApp message
+2. whatsapp-service publishes command.ingest event to Pub/Sub
+3. Pub/Sub pushes to POST /internal/commands
+4. commands-agent deduplicates by {sourceType}:{externalId}
+5. commands-agent classifies via Gemini 2.5 Flash (5-step prompt)
+6. commands-agent calls POST /internal/actions on actions-agent
+7. commands-agent publishes action.created to INTEXURAOS_PUBSUB_ACTIONS_QUEUE
+8. Response: {commandId, isNew: true}
 ```
 
----
+### Pattern 2: PWA Share → Classify → Display
+
+```
+1. User shares text or link from PWA web app
+2. PWA calls POST /commands with source: "pwa-shared"
+3. commands-agent classifies and creates action synchronously
+4. Response includes fully-populated command with classification
+5. PWA displays classification type and confidence to user
+```
+
+### Pattern 3: Pending Retry Cycle
+
+```
+1. Command arrives but user has no LLM API key configured
+2. Command saved with status: "pending_classification"
+3. Cloud Scheduler triggers POST /internal/retry-pending
+4. retry-pending fetches all pending_classification commands (limit 100)
+5. For each: attempt getLlmClient → classify → createAction
+6. Success: status → "classified"
+   Still no key: skipped (counted in response)
+   Error: status → "failed"
+```
+
+### Pattern 4: Service Lookup
+
+```
+1. Another service needs command text by ID
+2. Call GET /internal/commands/{commandId} with X-Internal-Auth
+3. Returns {id, text, sourceType} — minimal projection only
+```
 
 ## Error Handling
 
-| Error Code | Meaning                    | Recovery Action                              |
-| ---------- | -------------------------- | -------------------------------------------- |
-| 400        | Invalid input / bad state  | Fix request payload or check command status  |
-| 401        | Unauthorized               | Refresh Bearer token or fix internal auth    |
-| 404        | Command not found          | Verify command ID and user ownership         |
-| 500        | Server error               | Retry with backoff; check service logs       |
+| Error Code | Meaning                                | Recovery Action                                                    |
+| ---------- | -------------------------------------- | ------------------------------------------------------------------ |
+| 400        | Invalid input or lifecycle violation   | Check constraint (e.g., cannot delete classified command)          |
+| 401        | Auth failed                            | Refresh bearer token or verify X-Internal-Auth header              |
+| 404        | Command not found or not owned by user | Verify commandId format `{sourceType}:{externalId}` and ownership  |
+| 500        | Server error                           | Retry with backoff; check Sentry for details                       |
 
----
+## Classification Types
 
-## Supported Languages
+| Type       | When assigned                                                                             |
+| ---------- | ----------------------------------------------------------------------------------------- |
+| `todo`     | Explicit task creation instruction, or actionable request                                 |
+| `research` | Investigation intent ("investigate", "zbadaj", "how does X work")                         |
+| `note`     | Note-taking intent, or fallback when confidence < 0.50                                    |
+| `link`     | URL present and no explicit override intent; pwa-shared source gets +0.1 confidence boost |
+| `calendar` | Scheduling intent with time reference                                                     |
+| `reminder` | Reminder intent ("remind me", "przypomnij mi")                                            |
+| `linear`   | Explicit Linear issue tracking intent ("create issue", "report bug")                      |
+| `code`     | Engineering task (fix, implement, refactor) not explicitly routing to linear              |
 
-| Language | Explicit Prefix       | Explicit Intent Phrases              |
-| -------- | --------------------- | ------------------------------------ |
-| English  | linear:, todo:, note: | save bookmark, create todo, research |
-| Polish   | do lineara, zadanie   | zapisz link, stworz zadanie, zbadaj  |
+## Events Published
 
----
+| Event            | Topic env var                     | When                                                | Payload Schema                                                                                               |
+| ---------------- | --------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `action.created` | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` | After successful classification and action creation | `{type, actionId, userId, commandId, actionType, title, payload: {prompt, confidence, summary?}, timestamp}` |
 
-**Last updated:** 2026-03-07
+## Dependencies
+
+| Service                | Why Needed                                | Failure Behavior                                        |
+| ---------------------- | ----------------------------------------- | ------------------------------------------------------- |
+| `user-service`         | Fetch LLM client (API key + model config) | Command set to `pending_classification`; retried later  |
+| `actions-agent`        | Create action from classification result  | Command set to `failed` with `failureReason`            |
+| `app-settings-service` | LLM pricing data at startup               | Service fails to initialize entirely                    |
+| Firestore              | Persist commands                          | Request fails with 500                                  |
+| Pub/Sub                | Publish `action.created` event            | Logged as error; command is still marked `classified`   |

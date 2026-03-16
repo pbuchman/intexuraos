@@ -7,25 +7,19 @@
     <a href="https://github.com/pbuchman/intexuraos/actions"><img src="https://img.shields.io/github/actions/workflow/status/pbuchman/intexuraos/ci.yml?branch=main&label=Build&style=flat-square&logo=github" alt="Build Status"></a>
     <img src="https://img.shields.io/badge/Coverage-100%25-success?style=flat-square&logo=codecov" alt="Coverage">
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-    <img src="https://img.shields.io/badge/AI_Models-19-purple?style=flat-square" alt="AI Models">
-    <img src="https://img.shields.io/badge/Components-47-orange?style=flat-square" alt="Components">
+    <img src="https://img.shields.io/badge/AI_Models-16-purple?style=flat-square" alt="AI Models">
+    <img src="https://img.shields.io/badge/Components-48-orange?style=flat-square" alt="Components">
     <img src="https://img.shields.io/badge/Infrastructure-Terraform-623CE4?style=flat-square&logo=terraform&logoColor=white" alt="Terraform">
   </p>
 </div>
 
 > Most productivity tools ask you to have the idea _and_ organize it at the same time. IntexuraOS removes the organizing step. Say what you need — while walking, while commuting, while thinking of something else — and a system of specialized agents handles the rest.
 
-This is not one AI that tries to do everything. It is 25 services — 20 apps, 5 workers, and 22 shared packages — each built for a single domain, communicating through a shared platform. One agent classifies your intent. Another dispatches it. A third executes it. Your dentist appointment lands on Google Calendar. Your research question goes to five AI models simultaneously. Your bug report becomes finished, tested code — written by an autonomous coding agent on your own machine, inside isolated containers, under your own AI subscription. Code never leaves your network.
+Your bug report becomes finished, tested code — written by an autonomous coding agent on your own machine, verified by an independent AI, and delivered as a code change for review. This is not one AI that tries to do everything. It is 48 components — 20 apps, 6 workers, and 22 shared packages — each built for a single domain, communicating through a shared platform. One agent classifies your intent. Another dispatches it. A third writes the code inside an isolated container, runs the tests, and opens a code change. A separate model verifies the result. Your dentist appointment lands on Google Calendar. Your research question goes to multiple AI models simultaneously. Code never leaves your network.
 
 IntexuraOS does not use AI as a feature. It deploys AI agents that use software as a tool. The platform researches, schedules, manages tasks, and **writes and ships its own code**.
 
 ---
-
-## Ambient Task Submission
-
-You submit tasks while walking, while commuting, while thinking of something else. The primary interface is WhatsApp — an app already on your phone, already open, always available. This is not a convenience shortcut to a desktop workflow. It is a fundamentally different interaction model: ambient task submission that fits into the gaps of a working day.
-
-Speak to WhatsApp. IntexuraOS classifies your intent, routes to the right agent, and executes. A voice note about a bug becomes a code task. A question about solid-state batteries becomes a five-model research report. A mention of lunch Friday becomes a calendar event you approve with one tap.
 
 ## The Self-Building System
 
@@ -83,6 +77,8 @@ The same path works for every domain. A voice note about a bug becomes a code ta
 
 **Verification.** After each attempt, a completion verifier checks the work against a checklist: Are the right files modified? Do tests pass? Is the code change created? If not, the system resumes with preserved context and tries again. Per-user limits on concurrency, hourly rate, and daily spend keep costs predictable — the estimated cost per task is about $1.17.
 
+**Cross-LLM verification.** The verifier is not the same AI that wrote the code. Claude (Anthropic) executes the task inside the container. Gemini 2.5 Flash (Google) independently extracts structured completion data from the last 50 lines of logs and validates it against agent-type-specific schemas. For execution tasks, a second Gemini pass performs deep semantic validation — reading up to 200,000 characters of the full session transcript, cross-referencing the Linear issue requirements, and posting a [detailed validation report](docs/architecture/webhook-verification-pipeline.md) directly to the GitHub PR. Neither model evaluates its own work.
+
 ### Isolation and Security
 
 Every task runs in its own world:
@@ -96,11 +92,19 @@ Every task runs in its own world:
 
 ---
 
+## Ambient Task Submission
+
+You submit tasks while walking, while commuting, while thinking of something else. The primary interface is WhatsApp — an app already on your phone, already open, always available. This is not a convenience shortcut to a desktop workflow. It is a fundamentally different interaction model: ambient task submission that fits into the gaps of a working day.
+
+Speak to WhatsApp. IntexuraOS classifies your intent, routes to the right agent, and executes. A voice note about a bug becomes a code task. A question about solid-state batteries becomes a five-model research report. A mention of lunch Friday becomes a calendar event you approve with one tap.
+
+---
+
 ## The Council of AI
 
-When IntexuraOS needs to research a topic, it does not ask one model and hope for the best. It asks five.
+When IntexuraOS needs to research a topic, it does not ask one model and hope for the best. It asks multiple models.
 
-**19 models across 7 providers** — Google, OpenAI, Anthropic, Perplexity, Zai, MiniMax, and Alibaba Cloud — each queried in parallel, each reasoning independently, then synthesized into a single report with source attribution and confidence scoring.
+**9 research models across 4 providers** — Google, OpenAI, Anthropic, and Perplexity — each queried in parallel, each reasoning independently, then synthesized into a single report with source attribution and confidence scoring.
 
 ```mermaid
 graph TB
@@ -110,9 +114,8 @@ graph TB
     P --> Claude[Claude Opus 4.5]
     P --> GPT[GPT-5.2]
     P --> Sonar[Perplexity Sonar Pro]
-    P --> GLM[GLM-4.7]
 
-    Gemini & Claude & GPT & Sonar & GLM --> S[Synthesis Engine]
+    Gemini & Claude & GPT & Sonar --> S[Synthesis Engine]
     S --> R[Research Report with Citations]
     R --> Share[Public URL]
     R --> WA2[WhatsApp Delivery]
@@ -149,7 +152,7 @@ _This section is for developers and builders evaluating the system internals. As
 
 ### From Voice to Merged Code
 
-46 components — 20 services, 4 workers, and 22 shared packages — all in a single repository with strict TypeScript. 24 of these operate as autonomous agents. The architecture exists because one person needed leverage: each agent handles one domain, so research output can feed a code task, a code task result can be pushed to project tracking and WhatsApp simultaneously, and the full loop closes without a human switching tools. No single-domain tool — coding assistant, research chatbot, or project tracker — can replicate this chain.
+48 components — 20 services, 6 workers, and 22 shared packages — all in a single repository with strict TypeScript. 24 of these operate as autonomous agents. The architecture exists because one person needed leverage: each agent handles one domain, so research output can feed a code task, a code task result can be pushed to project tracking and WhatsApp simultaneously, and the full loop closes without a human switching tools. No single-domain tool — coding assistant, research chatbot, or project tracker — can replicate this chain.
 
 ```mermaid
 graph TD
@@ -196,7 +199,7 @@ graph TD
 | ------------------ | ---------------------------------------------------------------------------- |
 | **Runtime**        | Node.js 22, TypeScript 5.7 (strict mode)                                     |
 | **Framework**      | Fastify (web framework)                                                      |
-| **AI Providers**   | Anthropic, OpenAI, Google AI, Perplexity, Zai                                |
+| **AI Providers**   | Anthropic, OpenAI, Google AI, Perplexity                                     |
 | **AI Tooling**     | Claude Code (autonomous worker), OpenAI (semantic document search)           |
 | **Data**           | Firestore, Google Cloud Storage                                              |
 | **Messaging**      | Cloud Pub/Sub (real-time message delivery)                                   |
@@ -213,7 +216,6 @@ graph TD
 | **OpenAI**     | GPT-5.2, O4 Mini Deep Research, GPT-4o Mini, GPT Image 1 | Deep research, synthesis, fast classification, document matching |
 | **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5                   | Analysis, validation, autonomous coding                          |
 | **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research                    | Real-time web search with citations                              |
-| **Zai**        | GLM-4.7, GLM-4.7-Flash                                   | Multilingual, cost-efficient, guest access                       |
 
 ---
 
@@ -227,7 +229,7 @@ Not a target. A gate. Every branch in every service is either tested or explicit
 
 ### Strict TypeScript
 
-The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 46 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
+The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 48 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
 
 ### Automated Cross-Linking
 
@@ -239,21 +241,34 @@ Everything in Terraform. No manual cloud console changes. Reproducible, auditabl
 
 ---
 
-## What's New in v3.2.0
+## What's New in v3.3.0
 
-| Improvement                 | Impact                                                                                  |
-| --------------------------- | --------------------------------------------------------------------------------------- |
-| **Agent-Based Routing**     | Requests automatically routed to the right specialist based on issue labels             |
-| **One-Click Implement**     | Planned tasks go from design to pull request with a single button press                 |
-| **Task Queueing**           | New requests wait in line when workers are busy instead of being dropped                |
-| **PR Comment Tasks**        | Leave a comment on a pull request and a code task is created automatically              |
-| **More AI Models**          | Qwen, Sonnet, and MiniMax worker types join the coding agent lineup                     |
-| **WhatsApp Deep Links**     | Tap CTA buttons to navigate directly to tasks and dashboards                            |
-| **Auto-Trigger Code Tasks** | Assign a project issue and the coding agent starts designing immediately                |
-| **Smarter Code Execution**  | The agent now plans before writing, reviews its own code twice, and summarizes progress |
-| **Secret Stripping**        | API keys and tokens are automatically removed before reaching the coding agent          |
-| **Faster Verification**     | Full test and check pipeline runs in 3m43s, down from 5 minutes                         |
-| **Collapsible Log Output**  | Expand and collapse individual tool outputs when watching code tasks live               |
+> See [CHANGELOG.md](CHANGELOG.md) for the complete history.
+
+| Improvement                      | Impact                                                                                                                       |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **GitHub Agent**                 | A new agent evaluates pull requests using tool calling, with a unified webhook evaluator routing GitHub events automatically |
+| **Alibaba Cloud Model Studio**   | Unified integration for Chinese LLMs — Qwen, Kimi, and GLM-5 — via Alibaba Cloud Model Studio, replacing the ZAI provider    |
+| **Code Task Detail V2**          | Completely redesigned code task experience with a modern detail page and issue-centric grouped list view                     |
+| **Unified PR Automation Log**    | Every action taken on a pull request is now visible in a single, auditable automation log                                    |
+| **Structured Output Validation** | GitHub Agent triage produces reliable results with automatic repair prompts when structured output is malformed              |
+| **Gemini Tool-Call Mode**        | PR triage enforces Gemini tool-call mode with retry on failure and live pipeline progress display                            |
+| **Review Dispatch Overhaul**     | Fresh-start retry logic, notification deduplication, queue support, and per-user default worker type                         |
+| **PR Branch Inheritance**        | Code task retries inherit open PR branches so work-in-progress is never lost                                                 |
+| **Orchestrator Reliability**     | Deep validation plans from Linear issues, fatal exit code handling, and resume result preservation                           |
+| **Mandatory /simplify**          | Every orchestrator workflow now includes a mandatory code simplification step                                                |
+| **Planning-Task Gate**           | Autonomous planning only runs on issues explicitly tagged for planning                                                       |
+| **Agent-Based Routing**          | Requests automatically routed to the right specialist based on issue labels                                                  |
+| **One-Click Implement**          | Planned tasks go from design to pull request with a single button press                                                      |
+| **Task Queueing**                | New requests wait in line when workers are busy instead of being dropped                                                     |
+| **PR Comment Tasks**             | Leave a comment on a pull request and a code task is created automatically                                                   |
+| **More AI Models**               | Qwen, Sonnet, and MiniMax worker types join the coding agent lineup                                                          |
+| **WhatsApp Deep Links**          | Tap CTA buttons to navigate directly to tasks and dashboards                                                                 |
+| **Auto-Trigger Code Tasks**      | Assign a project issue and the coding agent starts designing immediately                                                     |
+| **Smarter Code Execution**       | The agent now plans before writing, reviews its own code twice, and summarizes progress                                      |
+| **Secret Stripping**             | API keys and tokens are automatically removed before reaching the coding agent                                               |
+| **Faster Verification**          | Full test and check pipeline runs in 3m43s, down from 5 minutes                                                              |
+| **Collapsible Log Output**       | Expand and collapse individual tool outputs when watching code tasks live                                                    |
 
 ---
 
@@ -296,7 +311,7 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 | Document                                                    | Description                                                         |
 | ----------------------------------------------------------- | ------------------------------------------------------------------- |
 | **[Platform Overview](docs/overview.md)**                   | What IntexuraOS does — 24 agents, from voice notes to finished code |
-| **[Services Catalog](docs/services/index.md)**              | All 20 apps + 4 workers + 22 packages with technical details        |
+| **[Services Catalog](docs/services/index.md)**              | All 20 apps + 6 workers + 22 packages with technical details        |
 | **[AI Architecture](docs/architecture/ai-architecture.md)** | Deep dive into 16 models across 5 providers                         |
 | **[Setup Guide](docs/setup/01-gcp-project.md)**             | Step-by-step cloud and local environment setup                      |
 
@@ -360,5 +375,5 @@ IntexuraOS is what happens when a single engineer builds agents that work for hi
 ---
 
 <div align="center">
-  <sub>20 apps. 4 workers. 22 packages. 16 AI models. 100% branch coverage. One developer.</sub>
+  <sub>20 apps. 6 workers. 22 packages. 16 AI models. 100% branch coverage. One developer.</sub>
 </div>

@@ -3,7 +3,7 @@
 ## Identity
 
 - **Package:** `@intexuraos/infra-perplexity`
-- **Version:** 2.1.0
+- **Version:** 3.3.0
 - **Purpose:** Perplexity AI API wrapper implementing `research` and `generate` from `LLMClient`
 - **Provider constant:** `LlmProviders.Perplexity`
 - **External SDK:** None (raw `fetch` with SSE streaming)

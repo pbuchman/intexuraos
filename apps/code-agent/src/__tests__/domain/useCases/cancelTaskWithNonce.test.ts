@@ -307,6 +307,97 @@ describe('cancelTaskWithNonce', () => {
     expect(logger.warn).toHaveBeenCalled();
   });
 
+  describe('worker credentials resolution for cancelOnWorker', () => {
+    it('calls cancelOnWorker without credentials when getSettings returns error', async () => {
+      vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'Failed to fetch settings' })
+      );
+      vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({ ...baseTask, status: 'cancelled' as const })
+      );
+
+      const result = await cancelTaskWithNonce(
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
+        { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+    });
+
+    it('calls cancelOnWorker without credentials when getSettings returns null', async () => {
+      vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(ok(null));
+      vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({ ...baseTask, status: 'cancelled' as const })
+      );
+
+      const result = await cancelTaskWithNonce(
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
+        { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+    });
+
+    it('calls cancelOnWorker without credentials when no worker matches task location', async () => {
+      vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+        ok({
+          userId: 'user-789',
+          workers: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({ ...baseTask, status: 'cancelled' as const })
+      );
+
+      const result = await cancelTaskWithNonce(
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
+        { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+    });
+
+    it('calls cancelOnWorker without credentials when matching worker is disabled', async () => {
+      vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+        ok({
+          userId: 'user-789',
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'https://cc-mac.intexuraos.cloud',
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-dispatch-secret',
+              enabled: false,
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        ok({ ...baseTask, status: 'cancelled' as const })
+      );
+
+      const result = await cancelTaskWithNonce(
+        { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
+        { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+    });
+  });
+
   describe('PR task lock cleanup', () => {
     it('returns locksToCleanup after cancellation when task has prNumber', async () => {
       const taskWithPR = { ...baseTask, prNumber: 42 };

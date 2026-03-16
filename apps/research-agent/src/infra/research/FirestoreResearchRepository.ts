@@ -89,7 +89,7 @@ export class FirestoreResearchRepository implements ResearchRepository {
 
         if (favoritesStartAfter !== undefined) {
           const startDoc = await collection.doc(favoritesStartAfter).get();
-          /* v8 ignore start -- test-infra: Firestore document exists check requires emulator setup @preserve */
+          /* v8 ignore start -- upstream: favoritesStartAfter !== undefined guard ensures doc ID is valid; startDoc.exists false branch is defensive @preserve */
           if (startDoc.exists) {
           /* v8 ignore stop @preserve */
             const snapshot = await favoritesQuery.startAfter(startDoc).get();
@@ -122,7 +122,7 @@ export class FirestoreResearchRepository implements ResearchRepository {
       let nonFavorites: Research[] = [];
       if (nonFavoritesStartAfter !== undefined) {
         const startDoc = await collection.doc(nonFavoritesStartAfter).get();
-        /* v8 ignore start -- test-infra: Firestore document exists check requires emulator setup @preserve */
+        /* v8 ignore start -- upstream: nonFavoritesStartAfter !== undefined guard ensures doc ID is valid; startDoc.exists false branch is defensive @preserve */
         if (startDoc.exists) {
         /* v8 ignore stop @preserve */
           const snapshot = await nonFavoritesQuery.startAfter(startDoc).get();

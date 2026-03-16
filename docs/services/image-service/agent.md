@@ -175,7 +175,7 @@ interface DeleteImageOutput {
 **Requires:**
 
 - `X-Internal-Auth` header must be set with valid internal token on all requests
-- User must have the required provider API key configured in user-service, OR platform fallback keys must be set (`INTEXURAOS_GEMINI_APP_API_KEY`, `INTEXURAOS_ZAI_APP_API_KEY`)
+- User must have the required provider API key configured in user-service, OR the platform Gemini fallback key must be set (`INTEXURAOS_GEMINI_APP_API_KEY`). ZAI is no longer a supported fallback provider (removed in v3.3.0)
 - GCS bucket must be accessible for upload/delete operations
 
 ---
@@ -257,4 +257,4 @@ None. Image-service does not publish Pub/Sub events.
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-15

@@ -180,6 +180,77 @@ describe('pubsubRoutes', () => {
 
       expect(response.statusCode).toBe(200);
     });
+
+    it('rejects non-Google from header without internal auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/enrich',
+        headers: {
+          from: 'attacker@evil.com',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from('{}').toString('base64'),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 200 when enrichBookmark use-case fails with storage error', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/page',
+        source: 'test',
+        sourceId: 'test-1',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.bookmarkRepository.simulateMethodError('update', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const event = {
+        type: 'bookmarks.enrich',
+        bookmarkId: createResult.value.id,
+        userId: 'user-1',
+        url: 'https://example.com/page',
+      };
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/enrich',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify(event)).toString('base64'),
+            messageId: 'msg-1',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+
+      const findResult = await ctx.bookmarkRepository.findById(createResult.value.id);
+      expect(findResult.ok).toBe(true);
+      if (!findResult.ok) return;
+      expect(findResult.value).not.toBeNull();
+      if (findResult.value === null) return;
+      expect(findResult.value.ogFetchStatus).toBe('pending');
+    });
   });
 
   describe('POST /internal/bookmarks/pubsub/summarize', () => {
@@ -357,6 +428,59 @@ describe('pubsubRoutes', () => {
       });
 
       expect(response.statusCode).toBe(200);
+    });
+
+    it('rejects non-Google from header without internal auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          from: 'attacker@evil.com',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from('{}').toString('base64'),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 200 when bookmark findById fails with storage error', async () => {
+      ctx.bookmarkRepository.simulateMethodError('findById', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const event = {
+        type: 'bookmarks.summarize',
+        bookmarkId: 'some-bookmark-id',
+        userId: 'user-1',
+      };
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify(event)).toString('base64'),
+            messageId: 'msg-1',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
     });
 
     it('returns HTTP 503 for transient summarization error', async () => {

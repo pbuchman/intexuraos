@@ -21,10 +21,8 @@ export function normalizeUrl(url: string): string {
     parsed.password = '';
     return parsed.toString().toLowerCase();
   } catch {
-    /* v8 ignore start -- upstream: URL parsing fails only for truly malformed non-git input @preserve */
     return httpsUrl.toLowerCase();
   }
-  /* v8 ignore stop @preserve */
 }
 
 /**
@@ -75,9 +73,7 @@ export async function validateRepository(
     const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], { cwd: path });
     actualUrl = stdout.trim();
   } catch (error: unknown) {
-    /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
     const message = error instanceof Error ? error.message : 'Unknown error';
-    /* v8 ignore stop @preserve */
     throw new Error(
       `Failed to get remote origin URL for repository at ${path}: ${message}\n` +
         `Ensure the repository has an 'origin' remote configured.`
@@ -152,9 +148,7 @@ export async function cloneRepository(url: string, path: string, logger: Logger)
       },
       'Failed to clone repository'
     );
-    /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
     const message = execError.message ?? 'Unknown error';
-    /* v8 ignore stop @preserve */
     const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
     throw new Error(`Failed to clone repository: ${message}${stderrInfo}`);
   }
@@ -180,9 +174,7 @@ export async function fetchRemote(path: string, logger: Logger): Promise<void> {
       },
       'Failed to fetch from remote'
     );
-    /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
     const message = execError.message ?? 'Unknown error';
-    /* v8 ignore stop @preserve */
     const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
     throw new Error(`Failed to fetch from remote: ${message}${stderrInfo}`);
   }
@@ -210,11 +202,61 @@ export async function cleanWorktree(path: string, logger: Logger): Promise<void>
       },
       'Failed to clean worktree'
     );
-    /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
     const message = execError.message ?? 'Unknown error';
-    /* v8 ignore stop @preserve */
     const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
     throw new Error(`Failed to clean worktree: ${message}${stderrInfo}`);
+  }
+}
+
+/**
+ * Sanitize the repository's git config by removing stale credentials.
+ *
+ * Checks:
+ * 1. Remote origin URL — if it contains embedded credentials (e.g. ghs_ tokens),
+ *    reset it to the expected clean URL
+ * 2. http.extraheader — if present (e.g. expired Authorization tokens), remove it
+ *
+ * This function never throws. All errors are caught and logged as warnings.
+ */
+export async function sanitizeRepoConfig(
+  path: string,
+  expectedUrl: string,
+  logger: Logger
+): Promise<void> {
+  // 1. Check remote.origin.url for embedded credentials
+  try {
+    const { stdout } = await execFileAsync('git', ['config', '--get', 'remote.origin.url'], {
+      cwd: path,
+    });
+    const currentUrl = stdout.trim();
+    // Same repo but different text = embedded credentials or format difference.
+    // Wrong-repo URLs are already caught by validateRepository() before this runs.
+    if (normalizeUrl(currentUrl) === normalizeUrl(expectedUrl) && currentUrl !== expectedUrl) {
+      logger.warn(
+        { currentUrl, expectedUrl, path },
+        'Remote origin URL differs from expected, resetting'
+      );
+      await execFileAsync('git', ['remote', 'set-url', 'origin', expectedUrl], { cwd: path });
+    }
+  } catch {
+    logger.warn({ path }, 'Failed to check or sanitize remote.origin.url');
+  }
+
+  // 2. Remove http.extraheader if present
+  try {
+    const { stdout } = await execFileAsync('git', ['config', '--get', 'http.extraheader'], {
+      cwd: path,
+    });
+    if (stdout.trim() !== '') {
+      logger.warn({ path }, 'Found http.extraheader in repo git config, removing');
+      try {
+        await execFileAsync('git', ['config', '--unset', 'http.extraheader'], { cwd: path });
+      } catch {
+        logger.warn({ path }, 'Failed to unset http.extraheader');
+      }
+    }
+  } catch {
+    // git config --get exits 1 when key doesn't exist — normal, no action needed
   }
 }
 
@@ -222,17 +264,36 @@ export async function cleanWorktree(path: string, logger: Logger): Promise<void>
  * Ensure the repository exists and is valid.
  *
  * If path doesn't exist: clone the repository
- * If path exists: validate it's the correct repo, clean, and fetch latest
+ * If path exists: validate it's the correct repo, sanitize config, fetch latest, and clean worktree
  */
 export async function ensureRepository(url: string, path: string, logger: Logger): Promise<void> {
   if (existsSync(path)) {
     logger.info({ path }, 'Repository path exists, validating...');
     try {
       await validateRepository(path, url, logger);
+    } catch (error) {
+      logger.error({ error, path, url }, 'Repository validation failed');
+      throw error;
+    }
+
+    await sanitizeRepoConfig(path, url, logger);
+
+    let fetchSucceeded = true;
+    try {
       await fetchRemote(path, logger);
+    } catch (error) {
+      fetchSucceeded = false;
+      logger.warn({ error, path, url }, 'Fetch failed, continuing with existing local state');
+    }
+
+    try {
       await cleanWorktree(path, logger);
     } catch (error) {
-      logger.error({ error, path, url }, 'Repository validation or fetch failed');
+      if (fetchSucceeded) {
+        logger.error({ error, path, url }, 'Clean worktree failed after successful fetch');
+      } else {
+        logger.error({ error, path, url }, 'Both fetch and clean failed — repository is unusable');
+      }
       throw error;
     }
   } else {

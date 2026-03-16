@@ -223,8 +223,8 @@ function checkConfirmation(
   }
 
   const normalizedMessage = message.toLowerCase().trim();
-  /* v8 ignore start -- test-infra: Fallback is impossible to trigger (split always returns array) @preserve */
-  const firstWord = normalizedMessage.split(/\s+/)[0] ?? '';
+  /* v8 ignore start -- ts-type: split() always returns at least one element for non-empty strings @preserve */
+  const firstWord = normalizedMessage.split(/\s+/)[0] ?? ''; // fallback for TypeScript strict null checks
   /* v8 ignore stop @preserve */
 
   if (AFFIRMATIVE_PHRASES.has(firstWord) || AFFIRMATIVE_PHRASES.has(normalizedMessage)) {

@@ -84,21 +84,24 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Hash       | Description                                               | Date       |
-| ---------- | --------------------------------------------------------- | ---------- |
-| `44ea683a` | Release v3.2.0                                            | 2026-03-07 |
-| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks | 2026-03-02 |
-| `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                            | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability           | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                       | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention      | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback  | 2026-02-15 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local    | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform Zai fallback     | 2026-02-09 |
-| `63170e4a` | Remove "free" GLM terminology, use createLlmClient        | 2026-02-07 |
-| `996c4179` | Add chat-agent to Cloud Build pipeline                    | 2026-02-06 |
-| `ea6652f7` | Add guest chat sessions with rate limiting                | 2026-02-06 |
+| Hash       | Description                                                       | Date       |
+| ---------- | ----------------------------------------------------------------- | ---------- |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)  | 2026-03-12 |
+| `78228bcf` | Migrate GLM worker from Z.ai to DashScope                         | 2026-03-12 |
+| `cea26781` | Add tests for v8-ignore blocks in generateResponse and chatClient | 2026-03-13 |
+| `44ea683a` | Release v3.2.0                                                    | 2026-03-07 |
+| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks         | 2026-03-02 |
+| `b3f34d85` | Release v3.1.0                                                    | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                                    | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                   | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                               | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention              | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback          | 2026-02-15 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local            | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform fallback                 | 2026-02-09 |
+| `63170e4a` | Remove "free" GLM terminology, use createLlmClient                | 2026-02-07 |
+| `996c4179` | Add chat-agent to Cloud Build pipeline                            | 2026-02-06 |
+| `ea6652f7` | Add guest chat sessions with rate limiting                        | 2026-02-06 |
 
 ## API Endpoints
 
@@ -161,7 +164,7 @@ sequenceDiagram
 **Authentication modes:**
 
 - **JWT Bearer token**: Authenticated users. LLM client fetched from user-service based on user preferences.
-- **`x-guest-session` header**: Guest users. Uses platform-provided GLM-4.7-Flash model. Rate limited to 100 messages/hour/session.
+- **`x-guest-session` header**: Guest users. Uses platform-provided Gemini 2.5 Flash model. Rate limited to 100 messages/hour/session.
 - **Neither**: Returns 401.
 
 **Error codes:**
@@ -264,8 +267,7 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | URL for user-service                                          |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Token for internal service-to-service calls                   |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | URL for app-settings-service (pricing data)                   |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | Yes      | ZAI API key for guest chat sessions (GLM-4.7-Flash)           |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for authenticated user model fallback |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | Yes      | Platform Gemini API key for guest sessions and user fallback  |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                 |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (defaults to `development`)                  |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for distributed tracing and metrics       |
@@ -280,17 +282,15 @@ The following models are validated at startup for pricing availability:
 
 | Model              | Provider | Role                                        |
 | ------------------ | -------- | ------------------------------------------- |
-| Gemini 2.5 Flash   | Google   | Default for authenticated users             |
-| GLM-4.7            | Zai      | Alternative for authenticated users         |
-| GLM-4.7-Flash      | Zai      | Guest sessions (platform-provided, no cost) |
+| Gemini 2.5 Flash   | Google   | Default for authenticated and guest users   |
 
 ### Terraform
 
-Deployed as `intexuraos-chat-agent` via Cloud Run module. Secrets `INTEXURAOS_OPENAI_APP_API_KEY`, `INTEXURAOS_ZAI_APP_API_KEY`, and `INTEXURAOS_GEMINI_APP_API_KEY` injected from Secret Manager. `INTEXURAOS_DASH0_OTLP_ENDPOINT` injected for Dash0 observability. Common service env vars inherited. Scales from 0 to 1 instance. Dockerfile runs with `--import ./dist/otel-register.js` preload for transparent OpenTelemetry instrumentation.
+Deployed as `intexuraos-chat-agent` via Cloud Run module. Secrets `INTEXURAOS_OPENAI_APP_API_KEY` and `INTEXURAOS_GEMINI_APP_API_KEY` injected from Secret Manager. `INTEXURAOS_DASH0_OTLP_ENDPOINT` injected for Dash0 observability. Common service env vars inherited. Scales from 0 to 1 instance. Dockerfile runs with `--import ./dist/otel-register.js` preload for transparent OpenTelemetry instrumentation.
 
 ### Local Development
 
-Port `8129` in `ecosystem.config.cjs`. Requires `INTEXURAOS_OPENAI_APP_API_KEY` and `INTEXURAOS_ZAI_APP_API_KEY` in `.envrc`.
+Port `8129` in `ecosystem.config.cjs`. Requires `INTEXURAOS_OPENAI_APP_API_KEY` and `INTEXURAOS_GEMINI_APP_API_KEY` in `.envrc`.
 
 ## Gotchas
 

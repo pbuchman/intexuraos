@@ -79,8 +79,16 @@ describe('labelUtils', () => {
       expect(getWorkerTypeFromLabels(['minimax'])).toBe('minimax');
     });
 
-    it('returns glm for single glm label', () => {
+    it('normalizes glm label to glm', () => {
       expect(getWorkerTypeFromLabels(['glm'])).toBe('glm');
+    });
+
+    it('returns kimi for single kimi label', () => {
+      expect(getWorkerTypeFromLabels(['kimi'])).toBe('kimi');
+    });
+
+    it('returns qwen for single qwen label', () => {
+      expect(getWorkerTypeFromLabels(['qwen'])).toBe('qwen');
     });
 
     it('returns worker type when mixed with non-worker labels', () => {

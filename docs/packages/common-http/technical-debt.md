@@ -1,50 +1,69 @@
-# @intexuraos/common-http - Technical Debt
+# @intexuraos/common-http — Technical Debt
 
-## Code Quality
+**Last Updated:** 2026-03-15
 
-The package serves as the HTTP middleware layer for all services. Code quality is high with well-separated concerns across auth, HTTP, and logging modules.
+---
 
-### Current Issues
+## Summary
 
-#### 1. Re-export chain creates implicit coupling
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 5     | Low      |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
+| **Total**   | **5** | Low      |
 
-The package re-exports symbols from both `@intexuraos/common-core` and `@intexuraos/llm-utils`. While convenient, this creates a transitive dependency path where consumers import core types through `common-http` rather than from the source package. Some consumers may not realize they depend on `common-core` indirectly.
-
-**Impact:** Low. Works correctly but obscures the dependency graph.
-**Suggested fix:** Consider deprecating re-exports and requiring consumers to import directly from source packages.
-
-#### 2. Response function naming collision
-
-The package exports both `ok`/`err` from `common-core` and `ok`/`fail` from `response.ts`. The main `ok` is aliased to `apiOk` on export, but the naming overlap can cause confusion.
-
-**Impact:** Low. The aliasing (`ok as apiOk`, `fail as apiFail`) mitigates import conflicts.
-
-#### 3. Fastify module augmentation spread
-
-The package augments the `fastify` module in two separate files (`fastifyPlugin.ts` adds `requestId`/`startTime`/`ok`/`fail`, `fastifyAuthPlugin.ts` adds `user`/`jwtConfig`). These augmentations are scattered and not centralized.
-
-**Impact:** Low. Works correctly but makes it harder to see the full request/reply surface.
-**Suggested fix:** Consider a single `fastify.d.ts` file that centralizes all augmentations.
-
-#### 4. JWKS cache has no eviction strategy
-
-The `jwksCache` in `jwt.ts` grows unbounded. Each unique JWKS URL adds an entry that persists for the process lifetime. In practice this is fine since services use a single JWKS URL, but it lacks a maximum size or TTL.
-
-**Impact:** None in practice. Each service uses one JWKS URL.
-
-#### 5. Zod dependency used only for handleValidationError
-
-The `zod` dependency exists solely for the `handleValidationError` function's `ZodError` type import. The actual validation schemas live in service-level code.
-
-**Impact:** Low. Adds a dependency for a single type import.
-**Suggested fix:** Consider accepting a generic validation error shape instead of coupling to Zod.
-
-## Resolved Debt
-
-None archived yet.
+---
 
 ## Future Plans
 
 - Evaluate centralizing Fastify module augmentations into a single declaration file
 - Consider adding rate limiting middleware as a shared plugin
 - Investigate adding request context propagation (traceId, userId) as first-class Fastify decorators
+
+---
+
+## Code Smells
+
+### Low Priority
+
+| Issue                                                                                                                                                                              | File                                                         | Impact                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------- |
+| Re-export chain creates implicit coupling — consumers import `ErrorCode` and `Result` through `common-http` rather than from `common-core`, obscuring the true dependency graph    | `src/index.ts`                                               | Works correctly but hides that callers depend on `common-core` |
+| Response function naming collision — both `ok`/`err` (from `common-core`) and `ok`/`fail` (from `response.ts`) are exported; the main `ok` is aliased to `apiOk` to avoid conflict | `src/index.ts`, `src/http/response.ts`                       | Aliasing mitigates import conflicts                            |
+| Fastify module augmentations spread across two files — `fastifyPlugin.ts` adds `requestId`/`startTime`/`ok`/`fail` while `fastifyAuthPlugin.ts` adds `user`/`jwtConfig`            | `src/http/fastifyPlugin.ts`, `src/auth/fastifyAuthPlugin.ts` | Harder to see the full request/reply surface at a glance       |
+| JWKS cache in `jwt.ts` grows unbounded with no eviction strategy or maximum size — a new entry is added per unique JWKS URL                                                        | `src/auth/jwt.ts`                                            | No practical impact since each service uses one JWKS URL       |
+| `zod` dependency exists solely for the `ZodError` type import in `handleValidationError` — actual validation schemas live in service-level code                                    | `src/http/validation.ts`                                     | Adds a dependency for a single type import                     |
+
+---
+
+## Test Coverage Gaps
+
+None. All modules have comprehensive test coverage.
+
+---
+
+## TypeScript Issues
+
+None in source files. Test files use `as any` for Fastify mock setup — this is expected test infrastructure pattern.
+
+---
+
+## TODOs / FIXMEs
+
+None found in source files.
+
+---
+
+## Resolved Issues
+
+None archived yet.
+
+---
+
+## Related
+
+- [README](README.md) — API reference
+- [Agent Interface](agent.md)
+- [Documentation Run Log](../../documentation-runs.md)

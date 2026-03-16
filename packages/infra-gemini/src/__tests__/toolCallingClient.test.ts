@@ -18,7 +18,14 @@ vi.mock('@google/genai', () => {
   class MockGoogleGenAI {
     models = { generateContent: mockGenerateContent };
   }
-  return { GoogleGenAI: MockGoogleGenAI };
+  const FunctionCallingConfigMode = {
+    MODE_UNSPECIFIED: 'MODE_UNSPECIFIED',
+    AUTO: 'AUTO',
+    ANY: 'ANY',
+    NONE: 'NONE',
+    VALIDATED: 'VALIDATED',
+  } as const;
+  return { GoogleGenAI: MockGoogleGenAI, FunctionCallingConfigMode };
 });
 
 vi.mock('@intexuraos/llm-audit', () => ({
@@ -871,5 +878,297 @@ describe('createGeminiToolCallingClient', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('CONTENT_FILTERED');
+  });
+
+  it('calls onExhausted when maxIterations exhausted without text', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
+    const onExhausted = vi.fn().mockReturnValue(undefined);
+
+    // All iterations return function calls
+    mockGenerateContent.mockResolvedValue(
+      functionCallResponse('request_review', { review_type: 'frontend' })
+    );
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+      maxIterations: 2,
+      onExhausted,
+    });
+
+    expect(onExhausted).toHaveBeenCalledWith({ iterationCount: 2, toolCallsMade: 2 });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain('maxIterations');
+  });
+
+  it('injects repair message and continues loop', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
+    const onExhausted = vi.fn().mockReturnValue('Please respond with text now.');
+
+    // Iterations 1-2: function calls (exhaust maxIterations=2)
+    mockGenerateContent
+      .mockResolvedValueOnce(functionCallResponse('request_review', { review_type: 'frontend' }))
+      .mockResolvedValueOnce(functionCallResponse('request_review', { review_type: 'backend' }))
+      // After repair injection, LLM returns text
+      .mockResolvedValueOnce(textResponse('Here is my final answer.'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+      maxIterations: 2,
+      onExhausted,
+    });
+
+    expect(onExhausted).toHaveBeenCalledWith({ iterationCount: 2, toolCallsMade: 2 });
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ iteration: 2, totalToolCalls: 2 }),
+      'Tool calling: repair message injected'
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.content).toBe('Here is my final answer.');
+    expect(result.value.iterationCount).toBe(3);
+    expect(result.value.toolCallsMade).toBe(2);
+  });
+
+  it('fails when onExhausted returns undefined', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
+    const onExhausted = vi.fn().mockReturnValue(undefined);
+
+    mockGenerateContent.mockResolvedValue(
+      functionCallResponse('request_review', { review_type: 'frontend' })
+    );
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+      maxIterations: 2,
+      onExhausted,
+    });
+
+    expect(onExhausted).toHaveBeenCalledOnce();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('API_ERROR');
+    expect(result.error.message).toContain('maxIterations');
+  });
+
+  it('fails when repair iterations also exhaust', async () => {
+    const mockRun = vi.fn().mockResolvedValue('{"status":"ok"}');
+    const onExhausted = vi.fn().mockReturnValue('Please respond with text.');
+
+    // All responses are function calls — even after repair
+    mockGenerateContent.mockResolvedValue(
+      functionCallResponse('request_review', { review_type: 'frontend' })
+    );
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: mockRun,
+        },
+      ],
+      maxIterations: 2,
+      repairIterations: 1,
+      onExhausted,
+    });
+
+    expect(onExhausted).toHaveBeenCalledOnce();
+    // 2 initial + 1 repair = 3 total iterations
+    expect(mockGenerateContent).toHaveBeenCalledTimes(3);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('API_ERROR');
+    expect(result.error.message).toContain('maxIterations');
+  });
+
+  it('sends mode ANY on first iteration when tools are provided', async () => {
+    mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'my_tool',
+          description: 'A tool',
+          parameters: {},
+          run: vi.fn().mockResolvedValue('ok'),
+        },
+      ],
+    });
+
+    const config = mockGenerateContent.mock.calls[0]?.[0]?.config as
+      | { toolConfig?: { functionCallingConfig?: { mode?: string } } }
+      | undefined;
+    expect(config?.toolConfig?.functionCallingConfig?.mode).toBe('ANY');
+  });
+
+  it('sends mode AUTO on second iteration after a tool call', async () => {
+    mockGenerateContent.mockResolvedValueOnce(functionCallResponse('my_tool', { a: 1 }));
+    mockGenerateContent.mockResolvedValueOnce(textResponse('done'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'my_tool',
+          description: 'A tool',
+          parameters: {},
+          run: vi.fn().mockResolvedValue('{"ok":true}'),
+        },
+      ],
+    });
+
+    const secondConfig = mockGenerateContent.mock.calls[1]?.[0]?.config as
+      | { toolConfig?: { functionCallingConfig?: { mode?: string } } }
+      | undefined;
+    expect(secondConfig?.toolConfig?.functionCallingConfig?.mode).toBe('AUTO');
+  });
+
+  it('does not include toolConfig when no tools are provided', async () => {
+    mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    const config = mockGenerateContent.mock.calls[0]?.[0]?.config as
+      | { toolConfig?: unknown }
+      | undefined;
+    expect(config?.toolConfig).toBeUndefined();
+  });
+
+  it('does not call onExhausted when text response received', async () => {
+    const onExhausted = vi.fn().mockReturnValue('repair');
+
+    mockGenerateContent.mockResolvedValueOnce(textResponse('All good.'));
+
+    const client = createClient();
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      onExhausted,
+    });
+
+    expect(onExhausted).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.content).toBe('All good.');
+  });
+
+  describe('toolConfig mode enforcement', () => {
+    it('sends mode ANY on first iteration when tools are provided', async () => {
+      mockGenerateContent.mockResolvedValueOnce(textResponse('done'));
+
+      const client = createClient();
+      await client.run({
+        systemPrompt: 'triage agent',
+        messages: [{ role: 'user', content: 'eval PR' }],
+        tools: [
+          {
+            name: 'skip',
+            description: 'Skip this PR',
+            parameters: {
+              type: 'object',
+              properties: { reason: { type: 'string' } },
+              required: ['reason'],
+            },
+            run: async (): Promise<string> => JSON.stringify({ success: true }),
+          },
+        ],
+      });
+
+      const firstCallConfig = mockGenerateContent.mock.calls[0]?.[0]?.config as
+        | { toolConfig?: { functionCallingConfig?: { mode?: string } } }
+        | undefined;
+      expect(firstCallConfig?.toolConfig?.functionCallingConfig?.mode).toBe('ANY');
+    });
+
+    it('sends mode AUTO on second iteration after a tool call', async () => {
+      const skipTool = {
+        name: 'skip',
+        description: 'Skip',
+        parameters: {
+          type: 'object',
+          properties: { reason: { type: 'string' } },
+          required: ['reason'],
+        },
+        run: async (): Promise<string> => JSON.stringify({ success: true }),
+      };
+
+      mockGenerateContent
+        .mockResolvedValueOnce(functionCallResponse('skip', { reason: 'trivial' }))
+        .mockResolvedValueOnce(textResponse('Skipped because trivial.'));
+
+      const client = createClient();
+      await client.run({
+        systemPrompt: 'triage agent',
+        messages: [{ role: 'user', content: 'eval PR' }],
+        tools: [skipTool],
+      });
+
+      const secondCallConfig = mockGenerateContent.mock.calls[1]?.[0]?.config as
+        | { toolConfig?: { functionCallingConfig?: { mode?: string } } }
+        | undefined;
+      expect(secondCallConfig?.toolConfig?.functionCallingConfig?.mode).toBe('AUTO');
+    });
+
+    it('does NOT add toolConfig when no tools are provided', async () => {
+      mockGenerateContent.mockResolvedValueOnce(textResponse('plain text response'));
+
+      const client = createClient();
+      await client.run({
+        systemPrompt: 'simple agent',
+        messages: [{ role: 'user', content: 'hello' }],
+        tools: [],
+      });
+
+      const callConfig = mockGenerateContent.mock.calls[0]?.[0]?.config as
+        | { toolConfig?: unknown }
+        | undefined;
+      expect(callConfig?.toolConfig).toBeUndefined();
+    });
   });
 });

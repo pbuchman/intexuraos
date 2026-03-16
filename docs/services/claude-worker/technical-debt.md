@@ -1,7 +1,7 @@
 # Claude Worker - Technical Debt
 
-**Last Updated:** 2026-03-07
-**Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-15
+**Analysis Run:** v3.3.0 documentation refresh (DashScope worker types, cache busting, orphan cleanup)
 
 ---
 
@@ -121,6 +121,18 @@ No TODO, FIXME, or HACK comments found in the worker codebase.
 ---
 
 ## Resolved Issues
+
+### Orphaned Child Process Cleanup (2026-03-10)
+
+**Issue:** After a Claude attempt exits, lingering child processes (MCP servers, background tools) could hold Docker exec file descriptors open, causing container cleanup issues.
+
+**Resolution:** The entrypoint now sends SIGTERM to all child processes after attempt exit, waits 0.5 seconds, then sends SIGKILL to any survivors. This ensures clean container teardown.
+
+### Docker Cache Busting for Claude CLI (2026-03-15)
+
+**Issue:** Docker layer caching caused stale Claude CLI versions to persist across image rebuilds, missing critical updates.
+
+**Resolution:** Added a `CACHE_BUST` build arg (set to commit SHA) that invalidates the Docker layer cache from the Claude CLI install step onward, ensuring fresh CLI downloads on each rebuild.
 
 ### INT-430: Container Isolation (2026-02-03)
 

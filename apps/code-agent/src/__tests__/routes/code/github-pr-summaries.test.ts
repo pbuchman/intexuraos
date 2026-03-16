@@ -18,9 +18,10 @@ import { resetServices, setServices } from '../../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from 'pino';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../../infra/firestore/gitHubPRSummariesRepository.js';
+import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../../helpers/mockServices.js';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
@@ -177,7 +178,9 @@ describe('GET /code/github-pr-summaries', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -206,8 +209,9 @@ describe('GET /code/github-pr-summaries', () => {
       dispatchService: import('../../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../../domain/ports/automationLog.js').AutomationLog;
     });
 
     server = await buildServer();
@@ -340,5 +344,31 @@ describe('GET /code/github-pr-summaries', () => {
     const prNumbers = (body.data.prs as { pullRequestNumber: number }[]).map((p) => p.pullRequestNumber);
 
     expect(prNumbers).toEqual([15, 10, 5]);
+  });
+
+  it('should return 500 when findRecentlyActive returns an error', async () => {
+    const { getServices } = await import('../../../services.js');
+    const services = getServices();
+
+    const failingRepo: GitHubPRSummaryRepository = {
+      ...services.gitHubPRSummaryRepo,
+      async findRecentlyActive() {
+        return err({ code: 'FIRESTORE_ERROR', message: 'Firestore connection failed' });
+      },
+    };
+
+    services.gitHubPRSummaryRepo = failingRepo;
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-summaries',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+    expect(body.error.message).toBe('Failed to fetch PR summaries');
   });
 });

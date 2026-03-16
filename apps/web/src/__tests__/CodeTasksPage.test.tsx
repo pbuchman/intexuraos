@@ -4,9 +4,9 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import { CodeTasksPage } from '../pages/CodeTasksPage.js';
-import type { CodeTask } from '../types/index.js';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { CodeTasksPage, DEFAULT_VISIBLE_STATUSES } from '../pages/CodeTasksPage.js';
+import type { CodeTask, CodeTaskStatus } from '../types/index.js';
 
 const mockNavigate = vi.fn();
 const mockUseCodeTasks = vi.fn();
@@ -68,6 +68,18 @@ vi.mock('@/components', () => ({
   Layout: ({ children }: { children: React.ReactNode }): React.JSX.Element => (
     <div>{children}</div>
   ),
+  CodeTaskLogsModal: ({
+    taskId,
+    onClose,
+  }: {
+    taskId: string;
+    onClose: () => void;
+  }): React.JSX.Element => (
+    <div>
+      <span>{`Logs modal: ${taskId}`}</span>
+      <button type="button" onClick={onClose}>Close logs</button>
+    </div>
+  ),
 }));
 
 vi.mock('lucide-react', () => {
@@ -76,6 +88,7 @@ vi.mock('lucide-react', () => {
       return <span>{name}</span>;
     };
   return {
+    ArrowUpDown: icon('ArrowUpDown'),
     Check: icon('Check'),
     ChevronDown: icon('ChevronDown'),
     ChevronRight: icon('ChevronRight'),
@@ -87,6 +100,7 @@ vi.mock('lucide-react', () => {
     RotateCcw: icon('RotateCcw'),
     Trash2: icon('Trash2'),
     X: icon('X'),
+    ScrollText: icon('ScrollText'),
   };
 });
 
@@ -131,7 +145,7 @@ describe('CodeTasksPage', () => {
             priority: 1,
             assignee: { id: 'user-1', name: 'Test User' },
             labels: [{ id: 'label-1', name: 'backend' }],
-            url: 'https://linear.app/intexuraos/issue/INT-301',
+            url: 'https://linear.app/pbuchman/issue/INT-301',
             commentCount: 2,
             lastCommentAt: '2026-03-06T12:01:00.000Z',
           },
@@ -153,7 +167,7 @@ describe('CodeTasksPage', () => {
     expect(screen.getByText('Hydrated Linear Issue')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'INT-301' })).toSatisfy((links) =>
       links.every((link) =>
-        link.getAttribute('href') === 'https://linear.app/intexuraos/issue/INT-301'
+        link.getAttribute('href') === 'https://linear.app/pbuchman/issue/INT-301'
       )
     );
   });
@@ -180,5 +194,45 @@ describe('CodeTasksPage', () => {
     render(<CodeTasksPage />);
 
     expect(screen.getAllByText('Prompt only task')).toHaveLength(2);
+  });
+
+  it('includes all non-archived CodeTaskStatus values in DEFAULT_VISIBLE_STATUSES', () => {
+    const allStatuses: CodeTaskStatus[] = [
+      'queued', 'dispatched', 'running', 'planned', 'implemented',
+      'reviewed', 'failed', 'interrupted', 'cancelled',
+    ];
+
+    for (const status of allStatuses) {
+      expect(DEFAULT_VISIBLE_STATUSES, `Missing status: ${status}`).toContain(status);
+    }
+
+    expect(DEFAULT_VISIBLE_STATUSES).not.toContain('archived');
+  });
+
+  it('opens the logs modal for the latest task in a row', () => {
+    mockUseCodeTasks.mockReturnValue({
+      tasks: [
+        createTask({
+          id: 'task-logs-123',
+          prompt: 'Prompt only task',
+          sanitizedPrompt: 'Prompt only task',
+        }),
+      ],
+      loading: false,
+      loadingMore: false,
+      error: null,
+      hasMore: false,
+      loadMore: vi.fn(),
+      deleteTask: vi.fn(),
+    });
+    mockUseWorkersStatus.mockReturnValue({
+      status: { workers: [] },
+    });
+
+    render(<CodeTasksPage />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Preview logs for task-logs-123' })[0]);
+
+    expect(screen.getByText('Logs modal: task-logs-123')).toBeInTheDocument();
   });
 });

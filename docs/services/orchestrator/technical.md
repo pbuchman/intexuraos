@@ -2,7 +2,7 @@
 
 ## Overview
 
-The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running Claude Code in interactive mode, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens and Anthropic OAuth credentials, persists state atomically to disk, and recovers interrupted tasks (including container adoption) on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent.
+The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running Claude Code in interactive mode, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens and Anthropic OAuth credentials, persists state atomically to disk, and recovers interrupted tasks (including container adoption) on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. For execution tasks, a Deep Validator performs post-completion transcript analysis — verifying claims, checking contract compliance, comparing plan to reality, and posting a structured report on the PR. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent.
 
 ## Agent-Based Routing and Contracts
 
@@ -10,14 +10,15 @@ The orchestrator is a Fastify-based HTTP service that runs on local machines beh
 
 1. `agentType` field from code-agent (explicit routing, takes priority)
 2. PR / issue comment / review event (label `pr-comment`) -> `pull_request`
-3. Linear issue without `code-task` label -> `planning`
-4. Linear issue with `code-task` label -> `execution`
+3. `agentType === 'review'` -> `review`
+4. Linear issue without `code-task` label -> `planning`
+5. Linear issue with `code-task` label -> `execution`
 
 ### Prompt markers and final blocks
 
 - Preserved marker: `[WORKER-MODE]`
-- Exactly one injected marker: `[AGENT:PLANNING]` / `[AGENT:EXECUTION]` / `[AGENT:PULL_REQUEST]`
-- Final block names: `PLANNING_AGENT_FINAL`, `EXECUTION_AGENT_FINAL`, `PULL_REQUEST_AGENT_FINAL`
+- Exactly one injected marker: `[AGENT:PLANNING]` / `[AGENT:EXECUTION]` / `[AGENT:PULL_REQUEST]` / `[AGENT:REVIEW]`
+- Final block names: `PLANNING_AGENT_FINAL`, `EXECUTION_AGENT_FINAL`, `PULL_REQUEST_AGENT_FINAL`, `REVIEW_AGENT_FINAL`
 - All prompts follow the versioned `PromptBuilder` pattern (semver versioned, CI-enforced bump-on-change)
 
 ### Planning Agent webhook semantics
@@ -38,17 +39,27 @@ Flattened Planning Agent `result` fields:
 ### Execution Agent webhook semantics
 
 - `implemented` -> webhook `status=completed`
+- `already_completed` -> webhook `status=completed` with `execution_outcome_label: 'already_completed'`
 
 Flattened Execution Agent `result` fields:
 
-- `execution_outcome_label`
+- `execution_outcome_label` (`'implemented'` or `'already_completed'`)
 - `execution_superpowers_executing_plans_used`
 - `execution_superpowers_requesting_code_review_used`
 - `execution_linear_issue_url`
 
+### Review Agent webhook semantics
+
+- Completed review -> webhook `status=completed`
+
+Flattened Review Agent `result` fields:
+
+- `review_comments_posted`
+- `review_types`
+
 ### Ownership split
 
-- Orchestrator: routing, prompts, completion verification, flattened metadata
+- Orchestrator: routing, prompts, completion verification, deep validation, flattened metadata
 - `code-agent`: deterministic Linear issue mutations after webhook receipt
 
 ## Architecture
@@ -75,9 +86,10 @@ graph TB
             TD --> LF[LogForwarder<br/>3s chunked upload]
             TD --> WC[WebhookClient<br/>HMAC-signed callbacks]
             TD --> SP[StatePersistence<br/>atomic JSON file]
-            TD --> SYS[SystemPrompt<br/>Planning / Execution / PR<br/>PromptBuilder versioned]
+            TD --> SYS[SystemPrompt<br/>Planning / Execution / PR / Review<br/>PromptBuilder versioned]
             TD --> TMC[TurnMetricsCollector<br/>cgroup + session JSONL]
             TD --> CV[CompletionVerifier<br/>Gemini 2.5 Flash]
+            TD --> DV[ExecutionDeepValidator<br/>Gemini 2.5 Flash]
 
             GTS[GitHubTokenService<br/>JWT + installation token]
             TR[TokenRefresher<br/>per-container tokens]
@@ -130,54 +142,81 @@ graph TB
 
 ## Recent Changes
 
-### Git Remote URL Credential Stripping (2026-03-07)
+### v3.3.0 Release (2026-03-15)
 
-`normalizeUrl()` in `repo-manager.ts` now strips embedded HTTP credentials (username/password) from git remote URLs before comparison. This prevents authentication tokens from leaking into logs or error messages when validating repository identity.
+Consolidated release including Docker health gate, container creation timeout, unified PR automation log, `already_completed` execution outcome, mandatory model name in PR descriptions, Deep Validation improvements with severity indicators, Review Agent additions, Kimi worker type, and numerous reliability fixes (fatal exit code handling, worktree serialization, resilient repo startup, periodic stale cleanup, Docker exec stream leak fix, resume result preservation, pending resume recovery).
 
-### API Key Validation Error Chain Logging (2026-03-07)
+### Docker Health Gate and Container Creation Timeout (2026-03-15)
 
-Improved error logging in `ApiKeyValidator` to show the full error chain (including nested `cause` properties) when validation requests fail, aiding diagnosis of network connectivity issues.
+The orchestrator now checks Docker daemon health and disk availability before accepting new tasks. Task submission returns `503 docker_unavailable` when the daemon is not responding. Container creation has a 2-minute timeout (`CONTAINER_CREATE_TIMEOUT_MS`) to prevent hung dispatches.
 
-### Versioned PromptBuilder Pattern (2026-03-04)
+### Mandatory Simplification Step (2026-03-14)
 
-Converted all system prompts to use the `PromptBuilder<TInput>` interface with semver `version` fields. CI enforcement validates version bumps on change via `scripts/verify-prompt-versions.mjs`.
+The Execution Agent system prompt now includes a mandatory `/simplify` step: after implementation and before code review, the agent must run `/simplify` on all changed files and re-run CI if changes are made. This reviews code for reuse, quality, and efficiency.
 
-### Multi-Model Worker Support (2026-03-03)
+### Unified PR Automation Log (2026-03-14)
 
-Extended `WorkerType` union from `'opus' | 'auto' | 'glm'` to include `'sonnet'`, `'minimax'`, and `'qwen3.5-plus'`. Each worker type maps to a provider-specific API base URL and key env var via the `WORKER_TYPES` registry. Startup validates all third-party API keys in parallel.
+Task event logging now emits structured automation log entries to code-agent via `POST /internal/webhooks/task-event`, enabling a unified timeline of all automation activity on a PR.
 
-### Claude Worker Forensics Mode (2026-02-26)
+### Already-Completed Execution Outcome (2026-03-14)
 
-Added forensics mode (`INTEXURAOS_CLAUDE_WORKER_FORENSICS=1`) that captures core dumps, exec stream persistence, and crash snapshots for failed containers. Controlled via `forensicsMode` and `forensicsBasePath` in `DockerProviderConfig`.
+The Execution Agent can now report `already_completed` when it discovers that the requested work has already been implemented and merged. The `execution_outcome_label` field supports both `'implemented'` and `'already_completed'` values.
 
-### Container Adoption on Restart (2026-02-26)
+### Review Agent (2026-03-12)
 
-Startup recovery now discovers running Docker containers via `listWorkerContainers()` and attempts to adopt them (re-attach log streams) instead of immediately marking them as interrupted. Stateless orphan containers (in Docker but not in state.json) are cleaned up.
+Added the fourth agent type: `review`. The Review Agent performs automated read-only PR reviews — posting structured inline comments on code quality, security, and architecture — without pushing any code changes. Uses a dedicated `REVIEW_AGENT_FINAL` completion block and `REVIEW_SCHEMA` for verification.
 
-### Send Message / Task Resume (2026-03-03)
+### Execution Deep Validator (2026-03-10)
 
-Added `POST /tasks/:id/message` endpoint. Running tasks queue messages for post-completion delivery. Completed/failed/interrupted tasks are resumed with a new worker session using `continueSession: true`.
+Post-completion transcript analysis for execution tasks. After the Completion Verifier passes, the orchestrator reads the full Claude session transcript from JSONL files, fetches Linear issue context and any referenced plan document, and sends the entire context to Gemini 2.5 Flash. The resulting Deep Validation Report — structured as markdown tables with severity indicators — is posted as a GitHub PR comment. The report covers claim verification, contract compliance, plan-vs-reality comparison, and anomaly detection.
 
-### Planning PR Branch Merging (2026-03-03)
+### Deep Validation Plan Resolution from Linear (2026-03-10)
 
-When a task has `planningPrBranch` set, `WorktreeManager.mergePlanningBranch()` fetches and merges the planning branch into the execution worktree before the worker starts, ensuring the execution agent has access to the planning context.
+The Deep Validator now resolves plan documents by scanning the Linear issue description and comments for `Plan document: docs/plans/<file>.md` references. It reads the plan content from the worktree to include in the validation prompt.
 
-### Multi-Attempt Completion Verification (2026-02-19)
+### Visual Severity Indicators (2026-03-12)
 
-Added `OrchestratorCompletionVerifier` integrated into `TaskDispatcher`:
+Deep Validation Reports now use a four-level severity scale with emoji indicators: Critical (red), Warning (orange), Minor (yellow), Pass (green). The Gemini prompt enforces these exact levels in every table row.
 
-- After each container exit, calls Gemini 2.5 Flash to evaluate completion via agent-specific Zod schemas
-- Failed verifications trigger automatic follow-up attempts with resume prompts
-- Verifier unavailability marks the task `failed` (prevents false-positive completions)
+### Kimi Worker Type (2026-03-12)
 
-### Turn Metrics Collection (2026-02-19)
+Added `kimi` worker type mapping to Kimi K2.5 via DashScope API (`coding-intl.dashscope.aliyuncs.com`). GLM, Qwen, and Kimi all share the same `DASHSCOPE_API_KEY`.
 
-Added `TurnMetricsCollector` for per-task resource and cost metrics:
+### PR Branch Inheritance Across Task Retries (2026-03-11)
 
-- CPU time from Linux cgroup `cpu.stat`, peak memory from `memory.peak`
-- Time classification from Claude session JSONL: API wait, tool execution, background wait, overhead
-- Token aggregation: input, output, cache read, cache creation, API call count
-- Published to `POST /internal/turn-metrics` on code-agent
+New `continuationPrNumber` and `continuationPrBranch` fields on `CreateTaskRequest` allow retried tasks to inherit an existing PR branch instead of creating a fresh one. The Execution Agent system prompt adapts accordingly — using `git push` to the existing branch instead of `gh pr create`.
+
+### Fatal Exit Code Handling (2026-03-10)
+
+The Completion Verifier now detects fatal exit codes 137 (OOM kill) and 139 (segfault) in container logs. When detected, Gemini verification is skipped entirely and the task is immediately retried (or marked failed if at max attempts).
+
+### Resilient Repo Manager Startup (2026-03-10)
+
+`ensureRepository()` now sanitizes the local repository on startup — stripping embedded HTTP credentials from remote URLs and gracefully degrading when fetch operations fail, allowing the orchestrator to start even when the network is temporarily unavailable.
+
+### Worktree Git Operation Serialization (2026-03-09)
+
+Git worktree operations (`create`, `remove`, `mergePlanningBranch`) are now serialized via an `async-mutex` to prevent concurrent git operations from corrupting the repository index.
+
+### Periodic Stale Worker Cleanup (2026-03-11)
+
+The Docker provider now runs periodic cleanup of stale worker containers — containers that exist but are not tracked in state.json and have been idle for a configurable threshold. This replaces manual container cleanup after crashes.
+
+### Docker Exec Stream Leak Fix (2026-03-09)
+
+Fixed a Docker exec stream leak that caused container exits to go undetected until the 2-hour timeout. The attach stream now properly detects disconnection.
+
+### Resume Result Preservation (2026-03-10)
+
+Added `lastSuccessResult` field on tasks. When a completed task is resumed via `sendMessage()` and the resumed attempt completes without producing a new result (e.g., planning tasks with no PR), the orchestrator falls back to the preserved result from the original successful completion.
+
+### Model Name in Review Comments (2026-03-10)
+
+PR descriptions created by workers now include mandatory `Worker Type` and `Model` lines, enforced by the system prompt. This enables tracking which model produced each PR.
+
+### Pending Resume Recovery (2026-03-10)
+
+Added `pendingResumeStart` field on tasks. When a resume request is durably accepted but the worker has not yet started, startup recovery can detect and restart the accepted resume instead of marking it as interrupted.
 
 ## API Endpoints
 
@@ -209,7 +248,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 ```typescript
 {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
   prompt: string;
   repository?: string;
   baseBranch?: string;
@@ -221,9 +260,12 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
   webhookUrl: string;
   webhookSecret: string;
   actionId?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request';
-  planningPrBranch?: string;   // Branch to merge into execution worktree
-  planningPrUrl?: string;      // PR URL to close after successful execution
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  trackingCommentId?: string;           // Existing PR tracking comment to reuse
+  continuationPrNumber?: number;         // Existing PR number to continue
+  continuationPrBranch?: string;         // Existing PR branch to continue
+  planningPrBranch?: string;             // Branch to merge into execution worktree
+  planningPrUrl?: string;               // PR URL to close after successful execution
 }
 ```
 
@@ -281,7 +323,7 @@ interface OrchestratorState {
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
   prompt: string;
   repository: string;
   baseBranch: string;
@@ -294,7 +336,10 @@ interface Task {
   webhookSecret: string;
   actionId?: string;
   retriedFrom?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request';
+  agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  trackingCommentId?: string;
+  continuationPrNumber?: number;
+  continuationPrBranch?: string;
   planningPrBranch?: string;
   planningPrUrl?: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
@@ -307,6 +352,8 @@ interface Task {
   lastExitCode?: number;
   verificationHistory?: TaskVerificationRecord[];
   resumedAfterSuccess?: boolean;
+  lastSuccessResult?: TaskResult;
+  pendingResumeStart?: PendingResumeStart;
 }
 
 interface TaskVerificationRecord {
@@ -315,6 +362,11 @@ interface TaskVerificationRecord {
   missingFields: string[];
   verifierFailure: boolean;
   createdAt: string;
+}
+
+interface PendingResumeStart {
+  prompt: string;
+  acceptedAt: string;
 }
 ```
 
@@ -325,6 +377,7 @@ interface TaskResult {
   prUrl?: string;
   branch?: string;
   commits?: number;
+  commitDetails?: { sha: string; message: string }[];
   summary?: string;
   ciFailed?: boolean;
   comment_replied?: boolean;
@@ -335,10 +388,12 @@ interface TaskResult {
   planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
-  execution_outcome_label?: 'implemented';
+  execution_outcome_label?: 'implemented' | 'already_completed';
   execution_superpowers_executing_plans_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
   execution_linear_issue_url?: string;
+  review_comments_posted?: string;
+  review_types?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;
@@ -353,21 +408,40 @@ interface TaskResult {
 
 The central coordinator. Manages the full task lifecycle:
 
-1. Atomic capacity check via `async-mutex`
-2. Worktree creation via `WorktreeManager`
-3. Planning PR branch merge (if `planningPrBranch` is set)
-4. API key validation via `ApiKeyValidator` (checks OAuth monitor or API endpoint)
-5. System prompt construction via `buildSystemPrompt()` (versioned PromptBuilder)
-6. Container creation via `DockerProvider` (`startWorkerAttempt`)
-7. Token registration via `TokenRefresher`
-8. Log forwarding registration via `LogForwarder`
-9. Completion monitoring (30s polling interval)
-10. Timeout warning at 1h55m, hard kill at 2h
-11. On container exit: result extraction via `gh pr list` + `gh pr checks`, then completion verification via `CompletionVerifier`
-12. If verification fails and `attempt < maxAttempts`: resume the session with a targeted follow-up prompt (auto-continue loop)
-13. If verification passes or max attempts reached: turn metrics collection via `TurnMetricsCollector`, then webhook delivery
-14. Queued messages (from `POST /tasks/:id/message` during execution) are delivered as the next session when verification passes
-15. Exposes `sendMessage()` for mid-task message injection and task resume after completion
+1. Docker health check via `isHealthy()` — rejects with `503 docker_unavailable` if unhealthy
+2. Atomic capacity check via `async-mutex`
+3. Worktree creation via `WorktreeManager` (with optional `continuationPrBranch` checkout)
+4. Planning PR branch merge (if `planningPrBranch` is set)
+5. API key validation via `ApiKeyValidator` (checks OAuth monitor or API endpoint)
+6. System prompt construction via `buildSystemPrompt()` (versioned PromptBuilder)
+7. Container creation via `DockerProvider` (`startWorkerAttempt`) with 2-minute timeout
+8. Token registration via `TokenRefresher`
+9. Log forwarding registration via `LogForwarder`
+10. Completion monitoring (30s polling interval) with activity heartbeat logging
+11. Timeout warning at 1h55m, hard kill at 2h
+12. On container exit: result extraction via `gh pr list` + `gh pr checks`, then completion verification via `CompletionVerifier`
+13. Fatal exit codes (137/139) skip Gemini verification and trigger immediate retry
+14. If verification fails and `attempt < maxAttempts`: resume the session with a targeted follow-up prompt (auto-continue loop)
+15. If verification passes: deep validation for execution tasks (transcript analysis, PR comment), then turn metrics collection via `TurnMetricsCollector`, then webhook delivery
+16. Queued messages (from `POST /tasks/:id/message` during execution) are delivered as the next session when verification passes
+17. Exposes `sendMessage()` for mid-task message injection and task resume after completion
+18. `adoptTask()` for startup recovery re-attachment to running containers
+19. `recoverPendingResumeTask()` for recovering accepted resumes that were interrupted by a restart
+
+### OrchestratorExecutionDeepValidator
+
+Performs post-completion transcript analysis for execution tasks:
+
+- Reads the full Claude session transcript from JSONL files via `readSessionTranscript()`
+- Formats the transcript into a human-readable MSG-NNN numbered format via `formatTranscript()`
+- Fetches Linear issue context via `fetchLinearIssueContext()` (GraphQL API)
+- Resolves plan documents referenced in the Linear issue description or comments
+- Sends the full context (transcript, agent claims, Linear issue, plan) to Gemini 2.5 Flash
+- Validates the response: must contain five required sections as markdown tables, no bullet lists
+- Posts the structured Deep Validation Report as a GitHub PR comment via `gh pr comment`
+- Uses visual severity indicators: Critical (red), Warning (orange), Minor (yellow), Pass (green)
+- Reports split across multiple comments if they exceed the 65KB GitHub comment limit
+- Uses `@intexuraos/llm-factory` for client creation and `OrchestratorFileAuditSink` for audit logging
 
 ### DockerProvider
 
@@ -381,18 +455,23 @@ Manages Docker container lifecycle via `dockerode`:
 - **Mounts:** Worktree at `/repo` (rw), secrets at `/secrets` (ro), main `.git` dir for worktree support (rw), shared OAuth credentials at `/home/claude/.claude` (rw)
 - **Tmpfs:** `/tmp` (2GB, noexec) and `/home/claude` (500MB, noexec, uid=1001)
 - **Interactive mode:** `OpenStdin: true`, `Tty: true`, attach before start to capture all output
+- **Container creation timeout:** 2 minutes
+- **Health gate:** `isHealthy()` checks Docker daemon connectivity and disk availability
 - **Managed attempts:** When enabled, the DockerProvider handles multi-attempt container lifecycle
 - **Forensics mode:** When enabled (`INTEXURAOS_CLAUDE_WORKER_FORENSICS=1`), captures core dumps and crash snapshots to the forensics directory
 - **Container discovery:** `listWorkerContainers()` discovers running `claude-worker-*` containers for startup recovery
+- **Periodic stale cleanup:** Removes orphaned containers not tracked in state.json after a configurable idle threshold
 
 ### WorktreeManager
 
 Creates isolated git worktrees per task:
 
 - `git worktree add -b "{taskId}" "{path}" "origin/{baseBranch}"`
+- Supports `continuationPrBranch` checkout for retried tasks inheriting an existing PR branch
 - Copies `.mcp.json` template with environment variable substitution (Linear API key, Sentry auth token)
 - Copies `.claude/settings.local.json` from `workers/claude-worker/config-defaults/`
 - `mergePlanningBranch()`: fetches and merges a planning PR branch into the execution worktree
+- All git operations serialized via `async-mutex` to prevent index corruption
 - Removes worktrees with `git worktree remove --force`
 
 ### LogForwarder
@@ -504,9 +583,10 @@ Collects per-task resource and cost metrics after container exit:
 Evaluates whether a task attempt met its agent-specific contract:
 
 - Extracts last 50 log lines, strips Docker headers
-- Selects agent-specific prompt and Zod schema (planning, execution, or pull_request)
+- Detects fatal exit codes (137/139) — skips Gemini verification and returns immediate failure
+- Selects agent-specific prompt and Zod schema (planning, execution, pull_request, or review)
 - Sends transcript to Gemini 2.5 Flash for structured JSON extraction
-- Validates response against schema: `PLANNING_SCHEMA`, `EXECUTION_SCHEMA`, or `PULL_REQUEST_SCHEMA`
+- Validates response against schema: `PLANNING_SCHEMA`, `EXECUTION_SCHEMA`, `PULL_REQUEST_SCHEMA`, or `REVIEW_SCHEMA`
 - Returns `CompletionVerifierVerdict` with `passed`, `missingFields`, `verifierFailure`, and typed `agentData`
 - Also provides `extractResumeSummary()` for generating summaries when tasks are resumed via `sendMessage()`
 - Uses `@intexuraos/llm-factory` for client creation and `OrchestratorFileAuditSink` for audit logging
@@ -523,10 +603,11 @@ Prevents accidental secret leaks in commits:
 
 Constructs agent-specific instructions for Claude Code workers using the versioned `PromptBuilder` pattern:
 
-- **Planning Agent:** Mandatory Linear issue reading (including comments), explicit complexity judgment, simple vs. complex task handling, subtask parallel work breakdown, PR title format, `PLANNING_AGENT_FINAL` completion block
-- **Execution Agent:** Mandatory skill order (`executing-plans` then `requesting-code-review`), subagent-first execution, TDD workflow, zero-tolerance code review loop, `EXECUTION_AGENT_FINAL` completion block
-- **Pull Request Agent:** Feedback gathering from three GitHub sources (reviews, PR comments, issue comments), single tracking comment protocol, bot-directed comment filtering, `PULL_REQUEST_AGENT_FINAL` completion block
-- **PR Review Overlay:** Conditional overlay appended to planning and execution prompts for handling mid-task PR review requests
+- **Planning Agent (v2.0.0):** Mandatory Linear issue reading (including comments), explicit complexity judgment, simple vs. complex task handling, subtask parallel work breakdown, PR title format, `PLANNING_AGENT_FINAL` completion block
+- **Execution Agent (v4.0.0):** Mandatory skill order (`executing-plans` then `requesting-code-review`), subagent-first execution, TDD workflow, mandatory `/simplify` step, zero-tolerance code review loop, already-completed detection, PR continuation flow for retried tasks, `EXECUTION_AGENT_FINAL` completion block
+- **Pull Request Agent (v3.0.0):** Feedback gathering from three GitHub sources (reviews, PR comments, issue comments), single tracking comment protocol, bot-directed comment filtering, `PULL_REQUEST_AGENT_FINAL` completion block
+- **Review Agent (v3.0.0):** Read-only PR review, three review scopes (code quality, security, architecture), mandatory review-started comment, single POST /reviews API call, full repository access, `REVIEW_AGENT_FINAL` completion block
+- **PR Review Overlay (v2.0.0):** Conditional overlay appended to planning and execution prompts for handling mid-task PR review requests
 - `buildSystemPrompt()` selects the appropriate prompt based on labels and `agentType`
 
 ### RepoManager
@@ -536,6 +617,22 @@ Ensures the orchestrator has a valid local repository clone:
 - `ensureRepository()`: clone if missing, validate + fetch + clean if present
 - `validateRepository()`: checks `.git` is directory (not worktree file), remote URL matches, `package.json` name matches
 - `normalizeUrl()`: handles SSH vs HTTPS, trailing `.git` suffix, and embedded HTTP credentials (stripped for security)
+- Graceful fetch degradation: warns and continues if fetch fails on startup
+
+### TranscriptReader and TranscriptFormatter
+
+Reads and formats Claude session transcripts for deep validation:
+
+- `readSessionTranscript()`: reads all JSONL files from the session directory, filters to valid `user`/`assistant` entries, sorts by timestamp
+- `formatTranscript()`: converts raw JSONL entries into a numbered `MSG-NNN` format with tool names, truncated inputs/outputs, and error indicators
+
+### DeepValidatorHelpers
+
+Utility functions for the deep validation pipeline:
+
+- `extractPrNumber()`: extracts PR number from a GitHub PR URL
+- `fetchLinearIssueContext()`: fetches issue description and comments via Linear GraphQL API
+- `readPlanReferencedInLinearIssue()`: resolves `Plan document: docs/plans/<file>.md` references in Linear issue content and reads the plan from the worktree
 
 ### OrchestratorFileAuditSink
 
@@ -552,7 +649,7 @@ Appends LLM audit records to a local JSONL file:
 | `fastify`                  | ^5.6.2    | HTTP server                                                |
 | `@fastify/cors`            | ^10.1.0   | CORS support                                               |
 | `dockerode`                | ^4.0.9    | Docker Engine API client                                   |
-| `async-mutex`              | ^0.5.0    | Atomic capacity checking                                   |
+| `async-mutex`              | ^0.5.0    | Atomic capacity checking and worktree serialization        |
 | `jose`                     | ^5.9.6    | JWT signing for TokenRefresher                             |
 | `jsonwebtoken`             | ^9.0.2    | JWT signing for GitHubTokenService                         |
 | `minimatch`                | ^10.1.1   | Glob pattern matching (SensitiveFileGuard)                 |
@@ -573,22 +670,21 @@ Appends LLM audit records to a local JSONL file:
 
 #### Required (startup fails if missing)
 
-| Variable                            | Description                                |
-| ----------------------------------- | ------------------------------------------ |
-| `INTEXURAOS_REPOSITORY_URL`         | GitHub repo URL for clone/fetch            |
-| `INTEXURAOS_CODE_AGENT_URL`         | Webhook callback URL (Cloud Run)           |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`    | HMAC signing secret                        |
-| `INTEXURAOS_PROJECT_ID`             | GCP project for Secret Manager             |
-| `INTEXURAOS_GITHUB_APP_ID`          | GitHub App ID                              |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID` | GitHub App installation ID                 |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Service-to-service auth token              |
-| `INTEXURAOS_LINEAR_API_KEY`         | Linear API key (passed to workers)         |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | Sentry auth token (passed to workers)      |
-| `INTEXURAOS_GEMINI_APP_API_KEY`     | Gemini API key for completion verifier     |
-| `INTEXURAOS_ZAI_APP_API_KEY`        | ZAI API key for GLM workers                |
-| `INTEXURAOS_MINIMAX_APP_API_KEY`    | MiniMax API key for MiniMax workers        |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`  | DashScope API key for qwen3.5-plus workers |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | GCP service account key path               |
+| Variable                            | Description                                             |
+| ----------------------------------- | ------------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL`         | GitHub repo URL for clone/fetch                         |
+| `INTEXURAOS_CODE_AGENT_URL`         | Webhook callback URL (Cloud Run)                        |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`    | HMAC signing secret                                     |
+| `INTEXURAOS_PROJECT_ID`             | GCP project for Secret Manager                          |
+| `INTEXURAOS_GITHUB_APP_ID`          | GitHub App ID                                           |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID` | GitHub App installation ID                              |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Service-to-service auth token                           |
+| `INTEXURAOS_LINEAR_API_KEY`         | Linear API key (passed to workers)                      |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | Sentry auth token (passed to workers)                   |
+| `INTEXURAOS_GEMINI_APP_API_KEY`     | Gemini API key for completion verifier + deep validator |
+| `INTEXURAOS_MINIMAX_APP_API_KEY`    | MiniMax API key for MiniMax workers                     |
+| `INTEXURAOS_DASHSCOPE_APP_API_KEY`  | DashScope API key for GLM, Qwen, and Kimi workers       |
+| `GOOGLE_APPLICATION_CREDENTIALS`    | GCP service account key path                            |
 
 #### Optional
 
@@ -639,13 +735,13 @@ Appends LLM audit records to a local JSONL file:
 ## Gotchas
 
 1. **Not a Cloud Run service.** The orchestrator runs as a native Node.js process, not in a container. It is not managed by Terraform.
-2. **Requires Docker daemon.** The `dockerode` client connects via `/var/run/docker.sock`. No daemon means no workers.
+2. **Requires Docker daemon.** The `dockerode` client connects via `/var/run/docker.sock`. No daemon means no workers. The health gate now returns `503 docker_unavailable` when Docker is unresponsive.
 3. **Cloudflare Tunnel required.** code-agent reaches the orchestrator via `cc-mac.intexuraos.cloud`. Without the tunnel, task dispatch fails.
 4. **HMAC secrets must match.** The `INTEXURAOS_ORCHESTRATOR_SECRET` env var must match the `dispatchSigningSecret` configured in the IntexuraOS UI worker settings. Mismatch causes 401 on every dispatch.
 5. **GitHub private key is fetched from Secret Manager.** The PEM key is multiline and cannot be stored in `.envrc`. The bootstrapper fetches it via `gcloud secrets versions access` and caches it locally for 1 hour.
 6. **Two JWT libraries.** `GitHubTokenService` uses `jsonwebtoken` (RS256 sign). `TokenRefresher` uses `jose` (RS256 sign via Web Crypto). Both produce valid GitHub App JWTs.
 7. **Attach before start.** The Docker provider calls `container.attach()` before `container.start()` to capture all output from startup. Reversing this order causes missed log lines.
-8. **Container name conflicts.** If a previous orchestrator run left orphaned containers, `createWorker` fails with "name already in use". Startup recovery cleans orphans automatically.
+8. **Container name conflicts.** If a previous orchestrator run left orphaned containers, `createWorker` fails with "name already in use". Periodic stale cleanup handles this automatically.
 9. **Worktree `.git` file.** Git worktrees have a `.git` file (not directory) pointing to the main repo's `.git/worktrees/`. The DockerProvider reads this file to determine the main git directory and mounts it into the container.
 10. **State file corruption.** If `state.json` is corrupted (e.g., partial write on crash), `StatePersistence.load()` backs up the file and starts fresh rather than crashing.
 11. **Turn metrics are cgroup-dependent.** `TurnMetricsCollector` reads from `/sys/fs/cgroup/system.slice/docker-{id}.scope` — this path is Linux-specific and will return zero values on macOS. Turn metrics collection is non-fatal.
@@ -658,6 +754,11 @@ Appends LLM audit records to a local JSONL file:
 18. **OAuth credentials are per-session.** Each task gets a copy of OAuth credentials in its session directory. Token refreshes update both the global file and all active task session directories.
 19. **Worker type determines API routing.** The `WORKER_TYPES` registry maps each worker type to a specific API base URL and key env var. Invalid worker types fail at Zod validation.
 20. **Git remote URLs with credentials.** `normalizeUrl()` strips embedded HTTP credentials from remote URLs before comparison or logging to prevent credential leakage.
+21. **Fatal exit codes bypass Gemini.** Exit codes 137 (OOM) and 139 (segfault) are detected from container logs and immediately trigger a retry without calling Gemini, since the agent could not have produced a valid completion block.
+22. **DashScope key shared across three models.** GLM, Qwen, and Kimi all use the same `INTEXURAOS_DASHSCOPE_APP_API_KEY`. Startup validates each model endpoint independently.
+23. **Container creation has a 2-minute timeout.** If Docker takes longer than `CONTAINER_CREATE_TIMEOUT_MS` (120s) to create a container, the task fails with a setup error.
+24. **Worktree operations are serialized.** All git worktree operations use an `async-mutex` to prevent concurrent git operations from corrupting the repository index.
+25. **Deep validation is fire-and-forget.** The Deep Validator runs asynchronously after completion verification passes. Its success or failure does not affect the task outcome or webhook delivery.
 
 ## File Structure
 
@@ -670,6 +771,7 @@ workers/orchestrator/
     routes.ts                         # HTTP endpoints + HMAC verification
     heartbeat.ts                      # HeartbeatManager (code-agent keepalive)
     worktree-cleanup.ts               # Stale worktree removal
+    with-timeout.ts                   # Generic timeout utility
     github/
       octokit-client.ts               # Octokit with retry plugin
       token-service.ts                # GitHub App JWT + installation tokens
@@ -681,17 +783,21 @@ workers/orchestrator/
       log-formatter.ts                # Docker header + ANSI escape + bulk metadata stripping
       sensitive-file-guard.ts         # Secret file detection + revert
       worktree-manager.ts             # Git worktree CRUD + MCP config + planning merge
-      repo-manager.ts                 # Repository clone/validate/fetch
+      repo-manager.ts                 # Repository clone/validate/fetch + URL sanitization
       system-prompt.ts                # Agent-specific prompt builders (versioned)
       prompt-builder.ts               # PromptBuilder<T> interface definition
       turn-metrics-collector.ts       # Per-task cgroup + token metrics
       orchestrator-audit-sink.ts      # LLM audit log file sink
       completion-verifier.ts          # LLM-backed task completion verification (Gemini)
+      execution-deep-validator.ts     # Post-completion transcript analysis (Gemini)
+      deep-validator-helpers.ts       # Linear issue fetching + plan resolution
+      transcript-reader.ts            # Claude session JSONL reader
+      transcript-formatter.ts         # JSONL-to-MSG-NNN transcript formatter
       api-key-validator.ts            # API key validation with cache
       isolation/
         index.ts                      # Factory + re-exports
         types.ts                      # IsolationProvider interface + WorkerType registry
-        docker-provider.ts            # Docker container lifecycle + forensics
+        docker-provider.ts            # Docker container lifecycle + health gate + forensics
         token-refresher.ts            # Per-container GitHub token refresh
         credential-monitor.ts         # Anthropic OAuth credential monitoring
         credential-refresher.ts       # Docker-based OAuth credential refresh

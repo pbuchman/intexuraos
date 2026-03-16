@@ -12,6 +12,18 @@ import {
   createRetryPendingCommandsUseCase,
   type RetryPendingCommandsUseCase,
 } from './domain/usecases/retryPendingCommands.js';
+import {
+  createListCommandsUseCase,
+  type ListCommandsUseCase,
+} from './domain/usecases/listCommands.js';
+import {
+  createDeleteCommandUseCase,
+  type DeleteCommandUseCase,
+} from './domain/usecases/deleteCommand.js';
+import {
+  createArchiveCommandUseCase,
+  type ArchiveCommandUseCase,
+} from './domain/usecases/archiveCommand.js';
 import { createFirestoreCommandRepository } from './infra/firestore/commandRepository.js';
 import { createGeminiClassifier } from './infra/llm/classifier.js';
 import { createActionEventPublisher } from './infra/pubsub/index.js';
@@ -26,6 +38,9 @@ export interface Services {
   eventPublisher: EventPublisherPort;
   processCommandUseCase: ProcessCommandUseCase;
   retryPendingCommandsUseCase: RetryPendingCommandsUseCase;
+  listCommandsUseCase: ListCommandsUseCase;
+  deleteCommandUseCase: DeleteCommandUseCase;
+  archiveCommandUseCase: ArchiveCommandUseCase;
 }
 
 export interface ServiceConfig {
@@ -43,8 +58,6 @@ let container: Services | null = null;
  */
 const CLASSIFIER_MODELS = [
   LlmModels.Gemini25Flash,
-  LlmModels.Glm47,
-  LlmModels.Glm47Flash,
 ] as const;
 
 export async function initServices(config: ServiceConfig): Promise<void> {
@@ -75,7 +88,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger: createAppLogger({ name: 'userServiceClient' }),
-    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
   const eventPublisher = createActionEventPublisher({
@@ -103,6 +115,18 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       classifierFactory,
       userServiceClient,
       eventPublisher,
+      logger,
+    }),
+    listCommandsUseCase: createListCommandsUseCase({
+      commandRepository,
+      logger,
+    }),
+    deleteCommandUseCase: createDeleteCommandUseCase({
+      commandRepository,
+      logger,
+    }),
+    archiveCommandUseCase: createArchiveCommandUseCase({
+      commandRepository,
       logger,
     }),
   };

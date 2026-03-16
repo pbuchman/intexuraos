@@ -1,41 +1,84 @@
-# @intexuraos/llm-audit - Technical Debt
+# @intexuraos/llm-audit — Technical Debt
 
-## Code Quality
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 documentation run](../../documentation-runs.md)
 
-The package is small and focused. The `AuditContext` pattern ensures timing accuracy by capturing the start time at creation. The completed-once guard prevents double-logging. All code paths are tested.
+---
 
-### Current Issues
+## Summary
 
-#### 1. `saveAuditLog` uses `console.error` for failure logging
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 1     | Low      |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
+| **Total**   | **1** | Low      |
 
-The internal `saveAuditLog` function falls back to `console.error` when the Firestore write fails. This bypasses structured logging (pino/Sentry), making audit save failures invisible in production monitoring.
-
-**Impact:** Medium. If Firestore is unavailable, audit failures are only visible in raw stdout, not in Sentry or Cloud Logging structured queries.
-**Suggested fix:** Accept a `Logger` dependency in `AuditContext` (similar to how `UsageLogger` in `llm-pricing` requires one) and log failures through it.
-
-#### 2. No batch writes for high-throughput scenarios
-
-Each audit log is written as a single Firestore `doc.set()`. Under high concurrency, this creates many individual Firestore operations. The `llm-pricing` package uses batch writes for its usage stats, but audit does not.
-
-**Impact:** Low. Audit writes are naturally throttled by LLM response times (seconds per call). Batch writes would only help if multiple LLM calls complete simultaneously.
-
-#### 3. Full prompt and response stored without size limits
-
-The audit log stores the complete prompt and response text. For large prompts (research context with multiple sources) or verbose responses (deep research), this can create very large Firestore documents.
-
-**Impact:** Low. Firestore documents have a 1MB limit, and most LLM interactions are well under this. However, deep research responses approaching the limit could cause write failures.
-**Suggested fix:** Add configurable truncation for prompt and response fields, similar to `llm-utils` truncation utilities.
-
-#### 4. Conditional property assignment is verbose
-
-The `success()` method uses 14 individual `if (result.X !== undefined)` checks to conditionally add properties. This is correct but verbose.
-
-**Impact:** None functionally. It follows the project pattern of never setting `undefined` values on Firestore documents.
-**Suggested fix:** Could use a helper function like `assignDefined(log, result, ['inputTokens', 'outputTokens', ...])` to reduce repetition.
+---
 
 ## Future Plans
 
-- Add `Logger` dependency to `AuditContext` for structured error logging
-- Consider adding configurable prompt/response truncation
-- Evaluate TTL-based automatic cleanup of old audit logs via Firestore TTL policies
-- Consider adding audit log querying utilities for debugging workflows
+- No user-provided future plans recorded for this package.
+- The audit log schema could be extended to track tool-calling session data (iteration counts, tool names invoked) alongside standard token usage, which would add debuggability for agent loop failures.
+
+---
+
+## Code Smells
+
+### Low Priority
+
+| File           | Issue                                                                                                        | Impact                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `src/audit.ts` | Failed sink writes are swallowed with `console.error` rather than propagating via the logger passed to sinks | Audit failures may go unnoticed in production |
+
+---
+
+## Test Coverage Gaps
+
+None identified. The `AuditContext` lifecycle (create → success/error, completed-once guard, disabled-audit short-circuit) is covered. All three sinks are tested.
+
+---
+
+## TypeScript Issues
+
+None identified.
+
+---
+
+## TODOs / FIXMEs
+
+None in source files.
+
+---
+
+## SRP Violations
+
+None. Each file has a single responsibility: `types.ts` defines shapes, `sink.ts` defines persistence strategies, `audit.ts` implements the context lifecycle.
+
+---
+
+## Code Duplicates
+
+The `success()` and `error()` methods share nearly identical boilerplate for building the `LlmAuditLog` object and calling `saveAuditLog`. A private `buildLog(status, extras)` helper could reduce the repetition. Impact is low since the methods rarely change.
+
+---
+
+## Deprecations
+
+None.
+
+---
+
+## Resolved Issues
+
+| Date       | Issue                                              | Resolution                                     |
+| ---------- | -------------------------------------------------- | ---------------------------------------------- |
+| 2025-12-01 | `zai` provider listed in Firestore schema comments | Removed with ZAI/GLM-4.7 deprecation in v3.3.0 |
+
+---
+
+## Related
+
+- [Agent Reference](agent.md)
+- [Documentation Run Log](../../documentation-runs.md)

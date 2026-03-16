@@ -2,10 +2,12 @@
 
 ## Identity
 
-- **Package:** `@intexuraos/infra-notion`
-- **Version:** 2.1.0
-- **Purpose:** Notion API wrapper with logging, error mapping, and page utilities
-- **External SDK:** `@notionhq/client` ^2.2.15
+| Attribute | Value                                                              |
+| --------- | ------------------------------------------------------------------ |
+| Package   | `@intexuraos/infra-notion`                                         |
+| Version   | 3.3.0                                                              |
+| Purpose   | Notion API wrapper with logging, error mapping, and page utilities |
+| SDK       | `@notionhq/client` ^2.2.15                                         |
 
 ## Exports
 
@@ -89,6 +91,7 @@ import { getPageWithPreview } from '@intexuraos/infra-notion';
 const result = await getPageWithPreview(token, pageId, logger);
 if (result.ok) {
   const { id, title, url, blocks } = result.data;
+  // blocks: first 10 blocks only; non-rich_text types have empty content
 }
 ```
 
@@ -106,15 +109,28 @@ const response = await notion.databases.query({ database_id: dbId });
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'UNAUTHORIZED': // invalid token
-    case 'NOT_FOUND': // page/block not found
-    case 'RATE_LIMITED': // API rate limit
-    case 'VALIDATION_ERROR': // bad request
-    case 'INTERNAL_ERROR': // unexpected
+    case 'UNAUTHORIZED':      // invalid token
+    case 'NOT_FOUND':         // page/block not found
+    case 'RATE_LIMITED':      // API rate limit
+    case 'VALIDATION_ERROR':  // bad request
+    case 'INTERNAL_ERROR':    // unexpected
   }
 }
 ```
 
 ## Dependencies
 
-- `@intexuraos/common-core` -- Result types, getErrorMessage
+- `@intexuraos/common-core` — Result types, getErrorMessage
+
+## Constraints
+
+**Do NOT:**
+
+- Call `getPageWithPreview` to retrieve more than 10 blocks — the `page_size` is hardcoded to 10
+- Expect `content` in preview blocks of type `image`, `embed`, `code`, `toggle`, or `callout` — these yield empty strings
+- Reuse a single `Client` instance across calls for different tokens — each call to `createNotionClient` creates a new instance
+
+**Requires:**
+
+- `INTEXURAOS_NOTION_TOKEN` environment variable when used in apps
+- `logger` field on all function calls (mandatory, enforced by ESLint)

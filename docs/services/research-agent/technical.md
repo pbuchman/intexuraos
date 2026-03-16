@@ -2,590 +2,335 @@
 
 ## Overview
 
-Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Runs on Cloud Run with auto-scaling.
+Research-agent orchestrates parallel AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity). It fans out research prompts via Pub/Sub so each model call runs in its own Cloud Run instance, tracks token usage and cost per call, synthesizes results with source attribution, and auto-publishes shareable HTML to GCS. Runs on Cloud Run with auto-scaling.
 
 ## Architecture
 
 ```mermaid
 graph TB
-    subgraph "Research Request Flow"
-        User[User Request] --> Web[Web UI]
-        Web --> AA[Actions Agent]
-        AA -->|draft| RA[Research Agent]
-        AA -->|approve| RA
-
-        RA --> ModelExtract[Model Extraction<br/>extractModelPreferences]
-        ModelExtract --> UserSvc[User Service:<br/>internal-clients]
-
-        RA --> PubSub[PubSub:<br/>llm-call topic]
-        PubSub --> Worker1[Worker: Claude]
-        PubSub --> Worker2[Worker: GPT]
-        PubSub --> Worker3[Worker: Gemini]
-        PubSub --> Worker4[Worker: Perplexity]
-        PubSub --> Worker5[Worker: GLM]
-
-        Worker1 --> RA
-        Worker2 --> RA
-        Worker3 --> RA
-        Worker4 --> RA
-        Worker5 --> RA
-
-        RA --> ContextInfer[Context Inference<br/>Zod Schema Validation]
-        ContextInfer --> Synthesizer[Synthesis LLM]
-        Synthesizer --> RA
-
-        RA --> GCS[GCS:<br/>shared research HTML]
-        RA --> ImageSvc[Image Service:<br/>cover generation]
-        RA --> Notify[WhatsApp Notification]
-        RA --> NotionSvc[Notion Service:<br/>OAuth tokens]
-        RA --> NotionExport[Notion Export:<br/>page creation]
+    subgraph "External"
+        WebApp[Web App]
+        OtherSvc[Other Services\nactions-agent etc.]
     end
 
-    Pricing[Pricing Service] --> RA
-    InternalClients["@intexuraos/internal-clients"] --> UserSvc
-    ExportSettings["Firestore:<br/>research_export_settings"] --> RA
+    subgraph "research-agent"
+        API[Fastify Routes]
+        Domain[Domain Layer\nuse cases]
+        Infra[Infrastructure\nadapters]
+    end
+
+    subgraph "Async Workers"
+        PubSubProcess[Pub/Sub\nresearch.process]
+        PubSubLlm[Pub/Sub\nllm.call]
+    end
+
+    subgraph "Dependencies"
+        Firestore[(Firestore)]
+        GCS[(GCS\nshared HTML)]
+        UserSvc[user-service]
+        ImageSvc[image-service]
+        NotionSvc[notion-service]
+        AppSettings[app-settings-service]
+        WASvc[whatsapp-service\nnotifications]
+    end
+
+    WebApp -->|Bearer JWT| API
+    OtherSvc -->|X-Internal-Auth| API
+    API --> Domain
+    Domain --> Infra
+    Infra --> Firestore
+    Infra -->|publish| PubSubProcess
+    Infra -->|publish| PubSubLlm
+    PubSubProcess -->|POST /internal/llm/pubsub/process-research| API
+    PubSubLlm -->|POST /internal/llm/pubsub/process-llm-call| API
+    Infra --> GCS
+    Infra --> UserSvc
+    Infra --> ImageSvc
+    Infra --> NotionSvc
+    Infra --> AppSettings
+    Infra --> WASvc
+
+    classDef service fill:#e1f5ff
+    classDef storage fill:#fff4e6
+    classDef external fill:#f0f0f0
+
+    class API,Domain,Infra service
+    class Firestore,GCS storage
+    class WebApp,OtherSvc,UserSvc,ImageSvc,NotionSvc,AppSettings,WASvc external
 ```
-
-## Recent Changes
-
-| Commit     | Description                                             | Date       |
-| ---------- | ------------------------------------------------------- | ---------- |
-| `44ea683a` | Release v3.2.0                                          | 2026-03-07 |
-| `99febe66` | Wire GitHub OAuth integration and update mocks          | 2026-03-02 |
-| `e6399f3b` | Apply code review feedback for semantic checks          | 2026-02-27 |
-| `a1a77b95` | Add semantic checks to input improvement validator      | 2026-02-27 |
-| `8fb90669` | Align thumbnail output contract with consumed fields    | 2026-02-27 |
-| `b3f34d85` | Release v3.1.0 (version bump only)                      | 2026-02-22 |
-| `c8a42105` | Release v3.0.0 (version bump only)                      | 2026-02-19 |
-| `f451d51a` | Audit and improve 27 LLM prompts across all domains     | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability         | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                     | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention    | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback       | 2026-02-15 |
-| `d7c6a061` | Add consistent icons to all WhatsApp messages           | 2026-02-10 |
-| `0f69a74b` | Add default model selector with platform Zai fallback   | 2026-02-08 |
 
 ## Data Flow
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Web
-    participant Actions
-    participant Research
+    autonumber
+    participant Client
+    participant ResearchAgent as research-agent
+    participant Firestore
     participant PubSub
-    participant LLMs
-    participant Synthesizer
+    participant LlmProvider as LLM Provider\n(per model)
     participant GCS
-    participant Image
 
-    User->>Web: Submit research query
-    Web->>Actions: Create action
-    Actions->>Research: Create draft research
-    Research->>Research: Extract model preferences
-    Research->>Web: Return draft ID
+    Client->>+ResearchAgent: POST /research
+    ResearchAgent->>Firestore: Save research (status: pending)
+    ResearchAgent->>PubSub: Publish research.process
+    ResearchAgent-->>-Client: 200 { researchId }
 
-    User->>Web: Approve draft
-    Web->>Research: Submit research
-    Research->>PubSub: Publish llm.call events (one per model)
+    PubSub->>+ResearchAgent: POST /internal/llm/pubsub/process-research
+    ResearchAgent->>Firestore: Update status → processing
+    ResearchAgent->>PubSub: Publish llm.call × N models
+    ResearchAgent-->>-PubSub: 200 ack
 
-    par Parallel LLM Calls
-        PubSub->>LLMs: Claude call
-        PubSub->>LLMs: GPT call
-        PubSub->>LLMs: Gemini call
-        PubSub->>LLMs: Perplexity call
-        PubSub->>LLMs: GLM call
+    loop Per model (parallel)
+        PubSub->>+ResearchAgent: POST /internal/llm/pubsub/process-llm-call
+        ResearchAgent->>LlmProvider: research(prompt)
+        LlmProvider-->>ResearchAgent: content + usage
+        ResearchAgent->>Firestore: updateLlmResult (completed)
+        ResearchAgent->>ResearchAgent: checkLlmCompletion
+        alt all_completed
+            ResearchAgent->>ResearchAgent: runSynthesis
+            ResearchAgent->>GCS: Upload shareable HTML
+            ResearchAgent->>Firestore: Update (synthesizedResult, shareInfo)
+        end
+        ResearchAgent-->>-PubSub: 200 ack
     end
-
-    LLMs-->>Research: Results (async)
-    Research->>Research: Check completion
-
-    Note over Research: All models completed
-
-    Research->>Research: Infer ResearchContext (Zod validated)
-    Research->>Synthesizer: Synthesize with context
-    Research->>Research: Infer SynthesisContext (Zod validated)
-    Synthesizer-->>Research: Synthesized content
-
-    Research->>Image: Generate cover image
-    Image-->>Research: Image ID
-
-    Research->>GCS: Upload shared HTML
-    GCS-->>Research: Share URL
-
-    Research->>User: WhatsApp notification
 ```
 
-## Model Extraction Flow
+## Recent Changes
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Actions
-    participant Research
-    participant UserSvc
-    participant LLM
-
-    User->>Actions: "Use Claude and Gemini to research X"
-    Actions->>Research: POST /internal/research/draft
-    Research->>UserSvc: getApiKeys(userId) via internal-clients
-    UserSvc-->>Research: {google: "key1", anthropic: "key2"}
-    Research->>Research: buildAvailableModels(keys)
-    Research->>UserSvc: getLlmClient(userId) via internal-clients
-    UserSvc-->>Research: LlmGenerateClient
-    Research->>LLM: extractModelPreferences(message, availableModels)
-    LLM-->>Research: {selectedModels: ["gemini-2.5-pro", "claude-opus-4.5"], synthesisModel: "gemini-2.5-pro"}
-    Research->>Research: validateSelectedModels (one per provider)
-    Research->>Research: createDraftResearch
-    Research-->>Actions: {researchId, selectedModels}
-```
-
-## Zod Schema Validation
-
-### Parser + Repair Pattern
-
-The `ContextInferenceAdapter` implements a resilient parsing strategy:
-
-```mermaid
-flowchart TD
-    A[LLM Response] --> B[Strip markdown fences]
-    B --> C[JSON.parse]
-    C -->|Success| D[Zod schema.safeParse]
-    C -->|Fail| E[Create detailed error]
-    D -->|Success| F[Return validated data]
-    D -->|Fail| G[Attempt repair]
-    G --> H[Build repair prompt with errors]
-    H --> I[Call LLM again]
-    I --> J[Parse repaired response]
-    J -->|Success| F
-    J -->|Fail| K[Return error with both attempts]
-    E --> K
-```
-
-### ResearchContext Schema
-
-```typescript
-const ResearchContextSchema = z.object({
-  language: z.string(),
-  domain: DomainSchema, // 'technical' | 'legal' | 'medical' | ...
-  mode: ModeSchema, // 'compact' | 'standard' | 'audit'
-  intent_summary: z.string(),
-  defaults_applied: z.array(DefaultAppliedSchema),
-  assumptions: z.array(z.string()),
-  answer_style: z.array(AnswerStyleSchema), // 'practical' | 'evidence_first' | ...
-  time_scope: TimeScopeSchema,
-  locale_scope: LocaleScopeSchema,
-  research_plan: ResearchPlanSchema,
-  output_format: OutputFormatSchema,
-  safety: SafetyInfoSchema,
-  red_flags: z.array(z.string()),
-});
-```
-
-### SynthesisContext Schema
-
-```typescript
-const SynthesisContextSchema = z.object({
-  language: z.string(),
-  domain: DomainSchema,
-  mode: ModeSchema,
-  synthesis_goals: z.array(SynthesisGoalSchema), // 'merge' | 'dedupe' | 'conflict_audit' | ...
-  missing_sections: z.array(z.string()),
-  detected_conflicts: z.array(DetectedConflictSchema),
-  source_preference: SourcePreferenceSchema,
-  defaults_applied: z.array(DefaultAppliedSchema),
-  assumptions: z.array(z.string()),
-  output_format: SynthesisOutputFormatSchema,
-  safety: SafetyInfoSchema,
-  red_flags: z.array(z.string()),
-});
-```
-
-### Input Validation
-
-The `InputValidationAdapter` validates and improves user prompts before research begins. It uses Gemini Flash to assess prompt quality on a 0–2 scale (0 = rejected, 1 = weak but improvable, 2 = good) and can generate improved prompts for weak inputs.
-
-Structural checks on improved prompts include response length validation (1–500 characters), markdown code block removal, unwanted prefix detection ("here is", "the improved", etc.), JSON detection, and explanatory text detection. Failed checks trigger the repair pattern: the LLM receives the validation error and attempts a second generation.
+| Commit      | Description                                                                             | Date       |
+| ----------- | --------------------------------------------------------------------------------------- | ---------- |
+| `c4e3a13c`  | Release v3.3.0                                                                          | 2026-03-15 |
+| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5                                  | 2026-03-12 |
+| `e348b66e`  | Fix silent dispatch failures and nested transaction (INT-810, 811)                      | 2026-03-10 |
+| `7237798d`  | Write tests for v8-ignore blocks                                                        | 2026-03-09 |
+| `99febe66`  | Wire GitHub OAuth integration and update cross-service mocks                            | 2026-03-02 |
+| `e6399f3b`  | Apply code review feedback for semantic checks                                          | 2026-02-28 |
+| `a1a77b95`  | Add semantic checks to input improvement validator                                      | 2026-02-28 |
+| `8fb906699` | Align thumbnail output contract with consumed parser fields (INT-605)                   | 2026-02-26 |
+| `f451d51a`  | Audit and improve 27 prompts across all domains                                         | 2026-02-19 |
+| `c72b7c53`  | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback, increase title gen timeout | 2026-02-13 |
 
 ## API Endpoints
 
-### Public Endpoints
+### Public Endpoints (Bearer JWT required)
 
-| Method | Path                                 | Description                        | Auth         |
-| ------ | ------------------------------------ | ---------------------------------- | ------------ |
-| POST   | `/research`                          | Create new research                | Bearer token |
-| POST   | `/research/draft`                    | Save as draft                      | Bearer token |
-| PATCH  | `/research/:id`                      | Update draft research              | Bearer token |
-| GET    | `/research`                          | List researches for user           | Bearer token |
-| GET    | `/research/:id`                      | Get research by ID                 | Bearer token |
-| DELETE | `/research/:id`                      | Delete research                    | Bearer token |
-| POST   | `/research/:id/approve`              | Approve draft research             | Bearer token |
-| POST   | `/research/:id/enhance`              | Enhance with more models/context   | Bearer token |
-| POST   | `/research/:id/retry`                | Retry failed LLM calls             | Bearer token |
-| POST   | `/research/:id/confirm`              | Confirm partial failure decision   | Bearer token |
-| POST   | `/research/:id/export-notion`        | Manually export to Notion          | Bearer token |
-| DELETE | `/research/:id/share`                | Remove public sharing              | Bearer token |
-| PATCH  | `/research/:id/favourite`            | Toggle favourite status            | Bearer token |
-| POST   | `/research/validate-input`           | Validate input quality             | Bearer token |
-| POST   | `/research/improve-input`            | Improve research prompt            | Bearer token |
-| GET    | `/research/settings/notion`          | Get Notion export settings         | Bearer token |
-| POST   | `/research/settings/notion`          | Save Notion export settings        | Bearer token |
-| POST   | `/research/settings/notion/validate` | Validate Notion page ID            | Bearer token |
+| Method   | Path                                   | Purpose                                       |
+| -------- | -------------------------------------- | --------------------------------------------- |
+| `POST`   | `/research`                            | Submit new research for immediate processing  |
+| `POST`   | `/research/draft`                      | Save research as draft (requires approval)    |
+| `GET`    | `/research`                            | List authenticated user's researches          |
+| `GET`    | `/research/:id`                        | Get single research by ID                     |
+| `POST`   | `/research/:id/approve`                | Approve draft research and trigger processing |
+| `POST`   | `/research/:id/confirm`                | Confirm partial failure decision              |
+| `POST`   | `/research/:id/retry`                  | Retry research from failed status             |
+| `POST`   | `/research/:id/enhance`                | Create enhanced research from a completed one |
+| `POST`   | `/research/:id/export-notion`          | Manually trigger Notion export                |
+| `DELETE` | `/research/:id`                        | Delete research                               |
+| `DELETE` | `/research/:id/share`                  | Remove public share access (unshare)          |
+| `PATCH`  | `/research/:id/favourite`              | Toggle favourite status                       |
+| `GET`    | `/research/settings/notion`            | Get Notion export page configuration          |
+| `POST`   | `/research/settings/notion`            | Save Notion export page configuration         |
+| `POST`   | `/research/settings/notion/validate`   | Validate a Notion page ID before saving       |
 
-### Internal Endpoints
+### Internal Endpoints (X-Internal-Auth or Pub/Sub OIDC)
 
-| Method | Path                                    | Description                           | Auth            |
-| ------ | --------------------------------------- | ------------------------------------- | --------------- |
-| POST   | `/internal/research/draft`              | Create draft research with extraction | Internal header |
-| POST   | `/internal/llm/pubsub/process-research` | Process research from Pub/Sub         | Pub/Sub OIDC    |
-| POST   | `/internal/llm/pubsub/process-llm-call` | Process individual LLM call           | Pub/Sub OIDC    |
-| POST   | `/internal/llm/pubsub/report-analytics` | Report LLM analytics                  | Pub/Sub OIDC    |
+| Method | Path                                         | Purpose                                       | Caller               |
+| ------ | -------------------------------------------- | --------------------------------------------- | -------------------- |
+| `POST` | `/internal/research/draft`                   | Create draft research from another service    | actions-agent        |
+| `POST` | `/internal/llm/pubsub/process-research`      | Receive `research.process` event from Pub/Sub | Cloud Pub/Sub        |
+| `POST` | `/internal/llm/pubsub/process-llm-call`      | Receive `llm.call` event — execute one model  | Cloud Pub/Sub        |
+| `POST` | `/internal/llm/pubsub/report-analytics`      | Receive `llm.report` analytics event          | Cloud Pub/Sub        |
 
-## Domain Models
+## Domain Model
 
 ### Research
 
-| Field               | Type              | Description                          |
-| ------------------- | ----------------- | ------------------------------------ |
-| `id`                | string (UUID)     | Unique research identifier           |
-| `userId`            | string            | User who owns the research           |
-| `title`             | string            | AI-generated title (empty initially) |
-| `prompt`            | string            | Original user query                  |
-| `originalPrompt`    | string            | Pre-improvement prompt (if improved) |
-| `selectedModels`    | ResearchModel[]   | Models to query                      |
-| `synthesisModel`    | ResearchModel     | Model for synthesis                  |
-| `status`            | ResearchStatus    | Current state                        |
-| `llmResults`        | LlmResult[]       | Results from each model              |
-| `inputContexts`     | InputContext[]    | User-provided context                |
-| `synthesizedResult` | string            | Final synthesized content            |
-| `synthesisError`    | string            | Synthesis failure message            |
-| `partialFailure`    | PartialFailure    | Partial failure metadata             |
-| `startedAt`         | string (ISO 8601) | Start timestamp                      |
-| `completedAt`       | string            | Completion timestamp                 |
-| `totalDurationMs`   | number            | Total processing time                |
-| `totalInputTokens`  | number            | Sum of input tokens                  |
-| `totalOutputTokens` | number            | Sum of output tokens                 |
-| `totalCostUsd`      | number            | Total cost                           |
-| `sourceActionId`    | string            | Originating action ID                |
-| `skipSynthesis`     | boolean           | Skip synthesis (raw results only)    |
-| `researchContext`   | ResearchContext   | Inferred context metadata            |
-| `shareInfo`         | ShareInfo         | Public sharing details               |
-| `sourceResearchId`  | string            | Enhanced from this ID                |
-| `attributionStatus` | AttributionStatus | Source attribution state             |
-| `auxiliaryCostUsd`  | number            | Non-LLM costs (images, etc)          |
-| `sourceLlmCostUsd`  | number            | Cost from source research            |
-| `favourite`         | boolean           | User favorited                       |
-| `userName`          | string            | User's name for "Generated by"       |
-| `userEmail`         | string            | User's email for "Generated by"      |
-| `notionExportInfo`  | NotionExportInfo  | Notion export details                |
+| Field                | Type                    | Description                                                  |
+| -------------------- | ----------------------- | ------------------------------------------------------------ |
+| `id`                 | `string`                | Unique identifier                                            |
+| `userId`             | `string`                | Owning user                                                  |
+| `title`              | `string`                | Auto-generated title (via Gemini 2.5 Flash)                  |
+| `prompt`             | `string`                | Research question submitted by user                          |
+| `originalPrompt`     | `string?`               | User's raw prompt before improvement (if accepted)           |
+| `selectedModels`     | `ResearchModel[]`       | Models dispatched for research                               |
+| `synthesisModel`     | `ResearchModel`         | Model used for synthesis step                                |
+| `status`             | `ResearchStatus`        | Current lifecycle state                                      |
+| `llmResults`         | `LlmResult[]`           | Per-model result records                                     |
+| `inputContexts`      | `InputContext[]?`       | User-provided context documents (max 5, max 60k chars each)  |
+| `synthesizedResult`  | `string?`               | Final synthesized markdown output                            |
+| `synthesisError`     | `string?`               | Error message if synthesis failed                            |
+| `partialFailure`     | `PartialFailure?`       | Partial failure state awaiting user decision                 |
+| `shareInfo`          | `ShareInfo?`            | Public share URL and GCS metadata                            |
+| `notionExportInfo`   | `NotionExportInfo?`     | Notion page IDs after export                                 |
+| `attributionStatus`  | `AttributionStatus?`    | Source attribution validation result                         |
+| `totalCostUsd`       | `number?`               | Aggregate cost across all LLM calls                          |
+| `sourceResearchId`   | `string?`               | ID of source research (enhanced research only)               |
+| `favourite`          | `boolean`               | User-starred flag                                            |
 
-### ResearchStatus Enum
+**ResearchStatus values:**
 
-| Value                   | Description                             |
-| ----------------------- | --------------------------------------- |
-| `draft`                 | Awaiting user approval                  |
-| `pending`               | Approved, awaiting processing           |
-| `processing`            | LLMs are being queried                  |
-| `awaiting_confirmation` | Partial failure, awaiting user decision |
-| `retrying`              | Retrying failed LLMs                    |
-| `synthesizing`          | Combining results                       |
-| `completed`             | Successfully completed                  |
-| `failed`                | All LLMs failed                         |
+| Status                  | Meaning                                                 |
+| ----------------------- | ------------------------------------------------------- |
+| `draft`                 | Created by another service, awaiting user approval      |
+| `pending`               | Submitted, awaiting Pub/Sub processing                  |
+| `processing`            | LLM calls being dispatched                              |
+| `awaiting_confirmation` | Partial failure detected, waiting for user decision     |
+| `retrying`              | User-triggered retry of failed LLM calls                |
+| `synthesizing`          | All LLMs done, synthesis model running                  |
+| `completed`             | Synthesis done, result available                        |
+| `failed`                | Terminal failure (all models failed or synthesis error) |
 
 ### LlmResult
 
-| Field              | Type            | Description                             |
-| ------------------ | --------------- | --------------------------------------- |
-| `provider`         | LlmProvider     | claude, openai, google, perplexity, zai |
-| `model`            | string          | Model name                              |
-| `status`           | LlmResultStatus | pending, processing, completed, failed  |
-| `result`           | string          | LLM response content                    |
-| `error`            | string          | Error message if failed                 |
-| `sources`          | string[]        | Source citations (if provided)          |
-| `startedAt`        | string          | Start timestamp                         |
-| `completedAt`      | string          | End timestamp                           |
-| `durationMs`       | number          | Processing duration                     |
-| `inputTokens`      | number          | Tokens consumed                         |
-| `outputTokens`     | number          | Tokens generated                        |
-| `costUsd`          | number          | Cost of this call                       |
-| `copiedFromSource` | boolean         | Copied from enhanced source research    |
+| Field              | Type              | Description                                    |
+| ------------------ | ----------------- | ---------------------------------------------- |
+| `provider`         | `LlmProvider`     | Provider (google, openai, anthropic…)          |
+| `model`            | `string`          | Model name from llm-contract                   |
+| `status`           | `LlmResultStatus` | `pending`, `processing`, `completed`, `failed` |
+| `result`           | `string?`         | Raw markdown from the model                    |
+| `sources`          | `string[]?`       | URLs cited by the model                        |
+| `inputTokens`      | `number?`         | Input token count                              |
+| `outputTokens`     | `number?`         | Output token count                             |
+| `costUsd`          | `number?`         | Cost in USD                                    |
+| `durationMs`       | `number?`         | Wall-clock time for this call                  |
+| `copiedFromSource` | `boolean?`        | True when result reused from source research   |
 
-### ShareInfo
+### InputContext
 
-| Field           | Type   | Description            |
-| --------------- | ------ | ---------------------- |
-| `shareToken`    | string | HMAC-based share token |
-| `slug`          | string | URL-friendly slug      |
-| `shareUrl`      | string | Full shareable URL     |
-| `sharedAt`      | string | Share timestamp        |
-| `gcsPath`       | string | GCS storage path       |
-| `coverImageId`  | string | Cover image identifier |
-| `coverImageUrl` | string | Full-size cover image  |
+| Field     | Type      | Description                              |
+| --------- | --------- | ---------------------------------------- |
+| `id`      | `string`  | `{researchId}-ctx-{index}`               |
+| `content` | `string`  | Document text (max 60,000 chars)         |
+| `label`   | `string?` | Human-readable label                     |
+| `addedAt` | `string`  | ISO 8601 timestamp                       |
 
-### NotionExportInfo
+## Pub/Sub
 
-| Field              | Type                                  | Description                  |
-| ------------------ | ------------------------------------- | ---------------------------- |
-| `mainPageId`       | string                                | Notion main research page ID |
-| `mainPageUrl`      | string                                | Notion main page URL         |
-| `llmReportPageIds` | `{ model: string; pageId: string }[]` | LLM report child page IDs    |
-| `exportedAt`       | string (ISO 8601)                     | Export timestamp             |
+### Published Topics
 
-### ResearchExportSettings
+| Topic env var                              | Event type         | Payload fields                              | Trigger                               |
+| ------------------------------------------ | ------------------ | ------------------------------------------- | ------------------------------------- |
+| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | `research.process` | `researchId`, `userId`, `triggeredBy`       | Research submitted or draft approved  |
+| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | `llm.call`         | `researchId`, `userId`, `model`, `prompt`   | One per model during process-research |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | WhatsApp send      | (notification payload)                      | LLM failure or research completion    |
 
-| Field               | Type              | Description           |
-| ------------------- | ----------------- | --------------------- |
-| `researchPageId`    | string            | Target Notion page ID |
-| `researchPageTitle` | string            | Cached page title     |
-| `researchPageUrl`   | string            | Cached page URL       |
-| `createdAt`         | string (ISO 8601) | Creation timestamp    |
-| `updatedAt`         | string (ISO 8601) | Last update timestamp |
+### Subscribed Topics (HTTP Push)
 
-## Model Filtering Logic
-
-The `extractModelPreferences` use case filters models based on:
-
-1. **API Key Availability** — Only models for which the user has configured API keys
-2. **One Per Provider** — Maximum one model from each provider (first match wins)
-3. **Synthesis Eligibility** — Synthesis model must be in `SYNTHESIS_MODELS` list
-
-```typescript
-// Available research models
-const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
-  LlmModels.Gemini25Pro,
-  LlmModels.Gemini25Flash,
-  LlmModels.ClaudeOpus45,
-  LlmModels.ClaudeSonnet45,
-  LlmModels.O4MiniDeepResearch,
-  LlmModels.GPT52,
-  LlmModels.Sonar,
-  LlmModels.SonarPro,
-  LlmModels.SonarDeepResearch,
-  // Fast model for title generation
-  LlmModels.Gemini20Flash,
-];
-```
-
-## Pub/Sub Events
-
-### Published
-
-| Event Type         | Topic               | Purpose                          |
-| ------------------ | ------------------- | -------------------------------- |
-| `research.process` | `llm-process-queue` | Trigger research processing      |
-| `llm.call`         | `llm-call-queue`    | Execute individual LLM call      |
-| `llm.report`       | `llm-analytics`     | Report LLM success for analytics |
-
-### Subscribed
-
-| Subscription        | Handler                                 |
-| ------------------- | --------------------------------------- |
-| `llm-process-queue` | `/internal/llm/pubsub/process-research` |
-| `llm-call-queue`    | `/internal/llm/pubsub/process-llm-call` |
-| `llm-analytics`     | `/internal/llm/pubsub/report-analytics` |
+| Endpoint                                       | Event type         | Action                                    |
+| ---------------------------------------------- | ------------------ | ----------------------------------------- |
+| `POST /internal/llm/pubsub/process-research`   | `research.process` | Dispatch individual LLM calls             |
+| `POST /internal/llm/pubsub/process-llm-call`   | `llm.call`         | Execute single LLM call, check completion |
+| `POST /internal/llm/pubsub/report-analytics`   | `llm.report`       | Report LLM usage to user-service          |
 
 ## Dependencies
 
 ### Internal Services
 
-| Service          | Purpose                                                             |
-| ---------------- | ------------------------------------------------------------------- |
-| `user-service`   | API keys, LLM usage, LLM client via `@intexuraos/internal-clients`  |
-| `image-service`  | Cover image generation                                              |
-| `notion-service` | Notion OAuth tokens and page previews                               |
+| Service              | Endpoint pattern                       | Purpose                                          |
+| -------------------- | -------------------------------------- | ------------------------------------------------ |
+| user-service         | `/internal/user/api-keys`              | Fetch decrypted API keys per provider            |
+| user-service         | `/internal/user/llm-client`            | Get LLM client for model preference extraction   |
+| user-service         | `/internal/user/report-llm-success`    | Report successful LLM call for analytics         |
+| app-settings-service | `/internal/pricing`                    | Fetch LLM pricing at startup                     |
+| image-service        | `/internal/images/prompts/generate`    | Generate cover image prompt from synthesis       |
+| image-service        | `/internal/images/generate`            | Generate cover image                             |
+| notion-service       | via notionServiceClient                | Validate Notion page ID and export research      |
+| whatsapp-service     | via Pub/Sub                            | Send LLM failure and completion notifications    |
 
-### Infrastructure
+### Firestore Collections (owned)
 
-| Component                                         | Purpose                     |
-| ------------------------------------------------- | --------------------------- |
-| Firestore (`researches` collection)               | Research persistence        |
-| `app-settings-service` (HTTP)                     | LLM pricing configuration   |
-| Firestore (`llm_api_logs` collection)             | API call audit              |
-| Firestore (`research_export_settings` collection) | Notion export configuration |
-| Pub/Sub (`llm-call-queue`)                        | LLM call distribution       |
-| Pub/Sub (`llm-process-queue`)                     | Research processing trigger |
-| Pub/Sub (`whatsapp-send`)                         | Notification delivery       |
-| GCS                                               | Shared research HTML        |
-
-### LLM Providers
-
-| Provider   | Models                                                                     |
-| ---------- | -------------------------------------------------------------------------- |
-| Anthropic  | `claude-opus-4.5`, `claude-sonnet-4.5`                                     |
-| OpenAI     | `gpt-5.2`, `o4-mini-deep-research`                                         |
-| Google     | `gemini-2.5-pro`, `gemini-2.5-flash` (research); `gemini-2.0-flash` (fast) |
-| Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research`                                |
-| Zai        | `glm-4.7`, `glm-4.7-flash`                                                 |
-
-**Fast model** (`gemini-2.0-flash`): Used for title generation, context inference, and input validation via the platform Gemini key. Not available as a user-selectable research model.
-
-### Shared Packages
-
-| Package                        | Purpose                                     |
-| ------------------------------ | ------------------------------------------- |
-| `@intexuraos/internal-clients` | User service client                         |
-| `@intexuraos/infra-notion`     | Notion client and error mapping             |
-| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry preload instrumentation |
-| `@intexuraos/infra-sentry`     | Sentry-enabled logger factory               |
-| `@intexuraos/llm-contract`     | Model types, provider mapping               |
-| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                |
-| `@intexuraos/llm-pricing`      | Pricing context interface                   |
-| `@intexuraos/llm-utils`        | Parse error formatting                      |
-| `@intexuraos/infra-gemini`     | Gemini client wrapper                       |
-| `@intexuraos/common-http`      | HTTP utilities, auth                        |
-| `@intexuraos/common-core`      | Result types, logging                       |
+| Collection                   | Description                                          |
+| ---------------------------- | ---------------------------------------------------- |
+| `researches`                 | LLM research queries, responses, synthesized results |
+| `research_export_settings`   | Notion target page configuration per user            |
+| `llm_api_logs`               | LLM API call audit logs with token usage and cost    |
 
 ## Configuration
 
-| Environment Variable                       | Required | Description                                               |
-| ------------------------------------------ | -------- | --------------------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`                | Yes      | Google Cloud project ID                                   |
-| `INTEXURAOS_AUTH_JWKS_URL`                 | Yes      | Auth0 JWKS URL                                            |
-| `INTEXURAOS_AUTH_ISSUER`                   | Yes      | Auth0 issuer URL                                          |
-| `INTEXURAOS_AUTH_AUDIENCE`                 | Yes      | Auth0 audience                                            |
-| `INTEXURAOS_USER_SERVICE_URL`              | Yes      | User-service base URL                                     |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes      | Shared secret for service-to-service                      |
-| `INTEXURAOS_WEB_APP_URL`                   | Yes      | Web app URL for notifications                             |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`      | Yes      | App settings service for pricing                          |
-| `INTEXURAOS_NOTION_SERVICE_URL`            | Yes      | Notion-service base URL                                   |
-| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Yes      | Public base URL for images                                |
-| `INTEXURAOS_IMAGE_SERVICE_URL`             | Yes      | Image-service base URL                                    |
-| `INTEXURAOS_SHARE_BASE_URL`                | Yes      | Base URL for shared research                              |
-| `INTEXURAOS_SHARED_CONTENT_BUCKET`         | Yes      | GCS bucket for shared research                            |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes      | WhatsApp send topic                                       |
-| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | Yes      | Research process queue topic                              |
-| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Yes      | LLM call queue topic                                      |
-| `INTEXURAOS_GEMINI_APP_API_KEY`            | No       | Platform Gemini key; enables `gemini-2.0-flash` fallback  |
-| `INTEXURAOS_ZAI_APP_API_KEY`               | No       | Platform Zai key; enables `glm-4.7-flash` fallback        |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`           | No       | Dash0 OTLP endpoint; enables distributed tracing          |
-| `INTEXURAOS_SENTRY_DSN`                    | No       | Sentry DSN for error reporting                            |
+| Variable                                   | Purpose                                             | Required |
+| ------------------------------------------ | --------------------------------------------------- | -------- |
+| `INTEXURAOS_GCP_PROJECT_ID`                | GCP project for Firestore and Pub/Sub               | Yes      |
+| `INTEXURAOS_AUTH_JWKS_URL`                 | Auth0 JWKS URL for JWT verification                 | Yes      |
+| `INTEXURAOS_AUTH_ISSUER`                   | Auth0 issuer for JWT verification                   | Yes      |
+| `INTEXURAOS_AUTH_AUDIENCE`                 | Auth0 audience for JWT verification                 | Yes      |
+| `INTEXURAOS_USER_SERVICE_URL`              | Base URL of user-service                            | Yes      |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Shared secret for X-Internal-Auth header            | Yes      |
+| `INTEXURAOS_WEB_APP_URL`                   | Base URL of web app (used in share links)           | Yes      |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`      | Base URL of app-settings-service for pricing fetch  | Yes      |
+| `INTEXURAOS_NOTION_SERVICE_URL`            | Base URL of notion-service                          | Yes      |
+| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Public CDN base URL for generated images            | Yes      |
+| `INTEXURAOS_IMAGE_SERVICE_URL`             | Base URL of image-service                           | Yes      |
+| `INTEXURAOS_SHARE_BASE_URL`                | Base URL for public shareable HTML pages            | Yes      |
+| `INTEXURAOS_SHARED_CONTENT_BUCKET`         | GCS bucket name for shareable HTML uploads          | Yes      |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Pub/Sub topic for WhatsApp notifications            | Yes      |
+| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | Pub/Sub topic for research process events           | Yes      |
+| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Pub/Sub topic for individual LLM call events        | Yes      |
+| `INTEXURAOS_SENTRY_DSN`                    | Sentry DSN (optional, monitoring)                   | No       |
+| `INTEXURAOS_ENVIRONMENT`                   | Environment name for Sentry tagging                 | No       |
+
+## LLM Models
+
+Research Agent loads pricing at startup for all models it uses. Models are split by role:
+
+**Research models** (dispatched per user selection):
+- `Gemini25Pro`, `Gemini25Flash`
+- `ClaudeOpus45`, `ClaudeSonnet45`
+- `O4MiniDeepResearch`, `GPT52`
+- `Sonar`, `SonarPro`, `SonarDeepResearch`
+
+**Fast model** (title generation):
+- `Gemini20Flash`
+
+**Image models** (cover image generation, selected based on available keys):
+- `Gemini25FlashImage` (Google key) — default
+- `GPTImage1` (OpenAI key) — preferred when synthesis uses a GPT model
 
 ## Gotchas
 
-**Platform API key fallbacks**: When a user has no API key for their preferred model's provider, `getLlmClient` in `@intexuraos/internal-clients` tries platform keys in order: Gemini (`gemini-2.0-flash`) then Zai (`glm-4.7-flash`). Both platform keys are optional. If neither is set, the service returns `NO_API_KEY` error.
-
-**Idempotent LLM calls**: The `process-llm-call` endpoint checks if an LLM result is already `completed` or `failed` and skips processing if so. This enables safe retry without duplication.
-
-**Partial failure handling**: When some LLMs fail, research enters `awaiting_confirmation` status. User can choose to proceed with completed results, retry failed models, or cancel.
-
-**Context window limits**: Input contexts are max 60k characters each, max 5 contexts. This prevents exceeding model context windows.
-
-**Perplexity online search**: The Perplexity models (`sonar-*`) perform actual web search during inference, making them slower but more current.
-
-**Share token generation**: Uses HMAC-based token generation for secure, unguessable share URLs.
-
-**Attribution repair**: Synthesized content may have incomplete attribution. A repair process attempts to fix missing attribution lines before marking complete.
-
-**Cost calculation**: Costs are calculated from pricing data fetched via `app-settings-service` HTTP. If pricing is missing, cost is not calculated but result is still saved.
-
-**Image cleanup**: When research is unshared, the cover image is deleted via call to image-service's internal endpoint.
-
-**Draft research flow**: Low-confidence actions create draft research that requires explicit approval before processing.
-
-**Model extraction graceful degradation**: If model extraction fails (LLM error, no API keys), the draft is created with empty `selectedModels` array. User selects models manually in UI.
-
-**Zod repair pattern**: When initial Zod validation fails, a repair prompt is sent to the LLM with the specific validation errors. If repair also fails, both error messages are combined for debugging.
-
-**One model per provider**: The `validateSelectedModels` function enforces maximum one model per provider to prevent duplicate costs and conflicting results.
-
-**Internal-clients flat exports**: The `@intexuraos/internal-clients` package uses flat exports (not subpath exports) to enable proper esbuild bundling for Docker deployment.
-
-**Notion export ordering**: The fire-and-forget Notion export in `runSynthesis` must happen AFTER the database save so the export can read the updated `shareInfo` with `coverImageUrl`. Previously this caused a race condition where cover images were missing.
-
-**Notion 100-block limit**: The Notion API limits `pages.create` to 100 children blocks. The exporter uses `appendBlocksInBatches` to handle larger exports by appending in batches of 100.
-
-**Notion export deduplication**: Both automatic and manual export check `research.notionExportInfo` before exporting. If already set, the export is skipped to prevent duplicate pages.
-
-**Notion page ID normalization**: Page IDs can be either 32 hex characters or UUID format with dashes. The validation endpoint normalizes by removing dashes before passing to notion-service.
-
-**Auth0 namespaced claims**: Auth0 Actions add user claims under `https://intexuraos.cloud/` namespace for API audience tokens. The service tries namespaced keys first, then falls back to bare `name`/`email`.
-
-**Prompt versioning**: All prompts follow semver versioning. The v3.1.0 prompt audit bumped versions for improved prompts with safer fallbacks and XML delimiters.
-
-**Input improvement structural checks**: The `validateImprovedPrompt` method rejects structurally invalid LLM improvements. Responses that are too long, contain markdown fences, unwanted prefixes ("here is", "the improved"), JSON markers, or explanatory text ("explanation:", "reasoning:") trigger the repair pattern automatically.
+- **Pub/Sub ack pattern:** All internal Pub/Sub endpoints always return `200 OK`. Errors are logged but never cause a 4xx/5xx response — otherwise Cloud Pub/Sub would redeliver indefinitely.
+- **LLM call idempotency:** `process-llm-call` checks if the model result is already `completed` or `failed` before re-executing. Safe to redeliver.
+- **Synthesis race guard:** `runSynthesis` checks for `synthesizing` or `completed` status before proceeding, preventing duplicate synthesis from concurrent Pub/Sub deliveries.
+- **Enhanced research cost tracking:** When enhancing a completed research, completed LLM results are copied with `copiedFromSource: true`. Their costs are aggregated into `sourceLlmCostUsd` so `totalCostUsd` reflects only new work.
+- **Notion export is fire-and-forget:** The export runs asynchronously after the database is saved. Failure does not affect the research's `completed` status.
+- **Notion export timing:** The export must happen after the database save so it reads the updated `shareInfo.coverImageUrl`. An earlier race condition (export before save) was fixed.
+- **Attribution repair:** If synthesis output fails attribution validation, the service automatically calls the synthesizer again to repair it. The repair's cost is tracked in `auxiliaryCostUsd`.
+- **Context labels:** If no label is supplied for an input context, `generateContextLabels` assigns one via LLM inference during synthesis.
 
 ## File Structure
 
 ```
 apps/research-agent/src/
-  domain/research/
-    models/
-      Research.ts                   # Core research entity and factories
-    config/
-      synthesisPrompt.ts            # Synthesis prompt template
-    ports/
-      repository.ts                 # Research storage interface
-      llmProvider.ts                # LLM adapter interface
-      contextInference.ts           # Context inference interface
-      modelExtraction.ts            # Model extraction types
-      shareStorage.ts               # Shared HTML storage interface
-      researchExportSettings.ts     # Export settings port interface
-      notification.ts               # Notification sender interface
-    services/
-      contextLabels.ts              # Context labeling utilities
-    usecases/
-      extractModelPreferences.ts    # Model extraction from natural language
-      processResearch.ts            # Main orchestration
-      submitResearch.ts             # Submit for processing
-      enhanceResearch.ts            # Add models/context
-      unshareResearch.ts            # Remove public share
-      runSynthesis.ts               # Combine results + fire-and-forget Notion export
-      retryFromFailed.ts            # Retry failed LLMs
-      retryFailedLlms.ts            # Retry specific models
-      checkLlmCompletion.ts         # Completion status check
-      repairAttribution.ts          # Fix attribution issues
-      toggleResearchFavourite.ts    # Toggle favourite status
-      listResearches.ts             # List user researches
-      getResearch.ts                # Get single research
-      deleteResearch.ts             # Delete research
-    utils/
-      htmlGenerator.ts              # Shared HTML generation
-      slugify.ts                    # URL-friendly IDs
-    formatLlmError.ts               # Error message formatting
-  infra/
-    llm/
-      ClaudeAdapter.ts              # Claude API integration
-      GptAdapter.ts                 # OpenAI API integration
-      GeminiAdapter.ts              # Google API integration
-      PerplexityAdapter.ts          # Perplexity API integration
-      GlmAdapter.ts                 # GLM (Zai) API integration
-      ContextInferenceAdapter.ts    # Zod-validated context inference
-      InputValidationAdapter.ts     # Zod-validated input validation + structural checks
-      LlmAdapterFactory.ts          # Factory pattern
-    research/
-      FirestoreResearchRepository.ts  # Research persistence
-    firestore/
-      researchExportSettingsRepository.ts  # Notion export settings
-    notion/
-      notionServiceClient.ts        # HTTP client for notion-service
-      notionResearchExporter.ts     # Exports research to Notion pages
-      markdownToNotionBlocks.ts     # Markdown to Notion block converter
-      exportResearchToNotionUseCase.ts  # Fire-and-forget export use case
-    pricing/
-      PricingClient.ts              # Fetch pricing from settings
-    pubsub/
-      researchEventPublisher.ts     # Publish research.process events
-      llmCallPublisher.ts           # Publish llm.call events
-      analyticsEventPublisher.ts    # Publish llm.report events
-    gcs/
-      shareStorageAdapter.ts        # Upload shared HTML to GCS
-    image/
-      imageServiceClient.ts         # Generate cover images
-    notification/
-      WhatsAppNotificationSender.ts # Send WhatsApp via Pub/Sub
-      NoopNotificationSender.ts     # No-op for development
-  routes/
-    researchRoutes.ts               # User-facing endpoints
-    researchExportRoutes.ts         # Notion export settings endpoints
-    internalRoutes.ts               # Service-to-service + Pub/Sub
-    helpers/
-      completionHandlers.ts         # Post-LLM completion logic
-      synthesisHelper.ts            # Synthesis provider setup
-    schemas/
-      common.ts                     # Shared schema components
-      researchSchemas.ts            # Request/response schemas
-      validationSchemas.ts          # Input validation schemas
-  services.ts                       # DI container with factories
-  server.ts                         # Fastify server setup
-  index.ts                          # Entry point with env validation
+├── domain/
+│   └── research/
+│       ├── config/          # Synthesis prompts, title prompt
+│       ├── models/          # Research, LlmResult, InputContext types
+│       ├── ports/           # Repository, LLM provider, notification interfaces
+│       ├── services/        # contextLabels helper
+│       └── usecases/        # checkLlmCompletion, deleteResearch, enhanceResearch,
+│                            # getResearch, listResearches, processResearch,
+│                            # repairAttribution, retryFailedLlms, retryFromFailed,
+│                            # runSynthesis, submitResearch, toggleResearchFavourite,
+│                            # unshareResearch
+├── infra/
+│   ├── firestore/           # researchExportSettingsRepository
+│   ├── gcs/                 # shareStorageAdapter (GCS HTML upload)
+│   ├── image/               # imageServiceClient
+│   ├── llm/                 # ClaudeAdapter, GeminiAdapter, GptAdapter,
+│   │                        # PerplexityAdapter, InputValidationAdapter
+│   ├── notification/        # WhatsAppNotificationSender, NoopNotificationSender
+│   ├── notion/              # notionResearchExporter, notionServiceClient
+│   ├── pricing/             # PricingClient
+│   ├── pubsub/              # analyticsEventPublisher, llmCallPublisher,
+│   │                        # researchEventPublisher
+│   └── research/            # FirestoreResearchRepository
+├── routes/
+│   ├── helpers/             # synthesisHelper, completionHandlers
+│   ├── schemas/             # Fastify JSON schemas
+│   ├── internalRoutes.ts    # /internal/* endpoints
+│   ├── researchExportRoutes.ts  # /research/settings/notion endpoints
+│   └── researchRoutes.ts    # All /research/* public endpoints
+├── index.ts                 # Entry point, pricing load, env validation
+├── server.ts                # Fastify server setup
+└── services.ts              # Dependency injection container
 ```

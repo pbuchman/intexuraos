@@ -2,7 +2,7 @@
 
 ## Overview
 
-Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt. It receives commands from WhatsApp (via Pub/Sub) and PWA (via REST), creates actions through actions-agent, and publishes events for downstream processing. Runs on Cloud Run with Fastify, Firestore persistence, and Dash0 OpenTelemetry for distributed tracing.
+Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt backed by Gemini 2.5 Flash. It receives commands from WhatsApp (via Pub/Sub push) and the PWA (via REST), creates actions through actions-agent, and publishes `action.created` events for downstream processing. Runs on Cloud Run with Fastify, Firestore persistence, and Dash0 OpenTelemetry for distributed tracing.
 
 ## Architecture
 
@@ -41,7 +41,7 @@ graph TB
     WhatsApp -->|PubSub push| IngestRoute
     PWA -->|POST /commands| ProcessUC
 
-    ProcessUC -->|getApiKeys| UserClient
+    ProcessUC -->|getLlmClient| UserClient
     ProcessUC -->|classify| Classifier
     Classifier -->|build prompt| Prompt
     ProcessUC -->|createAction| ActionsClient
@@ -100,7 +100,7 @@ When ambiguous, prefer `code`. Engineering tasks default to code execution. Code
 
 ### Step 3: Code Detection (Engineering Task Fallback)
 
-Engineering tasks that didn't match an explicit phrase in Step 2 classify as `code`.
+Engineering tasks that did not match an explicit phrase in Step 2 classify as `code`.
 
 - Action verbs: fix, implement, design, add, remove, refactor, change, update, build
 - Bug descriptions, feature descriptions
@@ -160,6 +160,21 @@ sequenceDiagram
     end
 ```
 
+## Recent Changes
+
+| Commit     | Description                                                          | Date       |
+| ---------- | -------------------------------------------------------------------- | ---------- |
+| `34fde5ee` | Add tests for commandsRoutes.ts owner auth + status (INT-867)        | 2026-03-15 |
+| `a5a59aaf` | Remove override entry and improve test assertions (INT-790)          | 2026-03-13 |
+| `bc4138e7` | Replace v8-ignore blocks with real tests in internalRoutes (INT-790) | 2026-03-13 |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)     | 2026-03-12 |
+| `e348b66e` | Fix silent dispatch failures and nested transaction (INT-810/811)    | 2026-03-10 |
+| `cc52e50d` | Increase classification title limit to 200 chars                     | 2026-03-07 |
+| `99febe66` | Wire GitHub OAuth integration and update cross-service mocks         | 2026-03-02 |
+| `35abc346` | Persist prompt version with command classification                   | 2026-02-19 |
+| `6063175b` | Dev-mode log formatting via createLogStream()                        | 2026-02-16 |
+| `a52a6bbc` | Dash0 OpenTelemetry integration                                      | 2026-02-16 |
+
 ## API Endpoints
 
 ### Public Endpoints
@@ -183,31 +198,31 @@ sequenceDiagram
 
 ### Command
 
-| Field            | Type                  | Description                                                    |
-| ---------------- | --------------------- | -------------------------------------------------------------- |
-| `id`             | string                | `{sourceType}:{externalId}` composite key                      |
-| `userId`         | string                | Owner user ID                                                  |
-| `sourceType`     | CommandSourceType     | whatsapp_text, whatsapp_voice, pwa-shared                      |
-| `externalId`     | string                | Source system identifier (e.g., WhatsApp message ID)           |
-| `text`           | string                | Original command text                                          |
-| `summary`        | string (optional)     | Summary for voice transcriptions                               |
-| `timestamp`      | string                | ISO 8601 timestamp from source                                 |
-| `status`         | CommandStatus         | received, classified, pending_classification, failed, archived |
-| `classification` | CommandClassification | Classification result (null if not classified)                 |
-| `actionId`       | string (optional)     | Created action ID                                              |
-| `failureReason`  | string (optional)     | Error details if failed                                        |
-| `createdAt`      | string                | ISO 8601 creation time                                         |
-| `updatedAt`      | string                | ISO 8601 last update                                           |
+| Field            | Type                      | Description                                                              |
+| ---------------- | ------------------------- | ------------------------------------------------------------------------ |
+| `id`             | `string`                  | `{sourceType}:{externalId}` composite key                                |
+| `userId`         | `string`                  | Owner user ID                                                            |
+| `sourceType`     | `CommandSourceType`       | `whatsapp_text`, `whatsapp_voice`, `pwa-shared`                          |
+| `externalId`     | `string`                  | Source system identifier (e.g., WhatsApp message ID)                     |
+| `text`           | `string`                  | Original command text                                                    |
+| `summary`        | `string` (optional)       | Summary for voice transcriptions                                         |
+| `timestamp`      | `string`                  | ISO 8601 timestamp from source                                           |
+| `status`         | `CommandStatus`           | `received`, `classified`, `pending_classification`, `failed`, `archived` |
+| `classification` | `CommandClassification`   | Classification result (absent if not yet classified)                     |
+| `actionId`       | `string` (optional)       | Created action ID                                                        |
+| `failureReason`  | `string` (optional)       | Error details if failed                                                  |
+| `createdAt`      | `string`                  | ISO 8601 creation time                                                   |
+| `updatedAt`      | `string`                  | ISO 8601 last update                                                     |
 
 ### CommandClassification
 
-| Field           | Type        | Description                                                  |
-| --------------- | ----------- | ------------------------------------------------------------ |
-| `type`          | CommandType | todo, research, note, link, calendar, linear, reminder, code |
-| `confidence`    | number      | 0–1 confidence score                                         |
-| `reasoning`     | string      | LLM explanation for classification                           |
-| `promptVersion` | string      | Semver version of the prompt that produced this result       |
-| `classifiedAt`  | string      | ISO 8601 classification timestamp                            |
+| Field           | Type          | Description                                                                  |
+| --------------- | ------------- | ---------------------------------------------------------------------------- |
+| `type`          | `CommandType` | `todo`, `research`, `note`, `link`, `calendar`, `linear`, `reminder`, `code` |
+| `confidence`    | `number`      | 0–1 confidence score                                                         |
+| `reasoning`     | `string`      | LLM explanation for classification                                           |
+| `promptVersion` | `string`      | Semver version of the prompt that produced this result                       |
+| `classifiedAt`  | `string`      | ISO 8601 classification timestamp                                            |
 
 ### Confidence Semantics
 
@@ -224,61 +239,69 @@ sequenceDiagram
 
 - `received` — Initial state, not yet processed
 - `classified` — Successfully classified with action created
-- `pending_classification` — Waiting for API keys
+- `pending_classification` — Waiting for LLM API keys
 - `failed` — Classification or action creation failed
 - `archived` — Soft deleted by user
+
+**CommandSourceType:**
+
+- `whatsapp_text` — Text message from WhatsApp
+- `whatsapp_voice` — Voice note from WhatsApp (transcribed before classification)
+- `pwa-shared` — Link or text shared via PWA share menu
 
 ## Pub/Sub Events
 
 ### Subscribed
 
-| Event Type       | Topic            | Handler                 |
-| ---------------- | ---------------- | ----------------------- |
-| `command.ingest` | `command-ingest` | POST /internal/commands |
+| Event Type       | Topic env var (inferred) | Handler                   |
+| ---------------- | ------------------------ | ------------------------- |
+| `command.ingest` | (configured externally)  | `POST /internal/commands` |
 
 ### Published
 
-| Event Type       | Topic     | Purpose                 |
-| ---------------- | --------- | ----------------------- |
-| `action.created` | `actions` | Triggers action handler |
+| Event Type       | Topic env var                     | Payload                                                     | Trigger                          |
+| ---------------- | --------------------------------- | ----------------------------------------------------------- | -------------------------------- |
+| `action.created` | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` | `{actionId, userId, commandId, actionType, title, payload}` | After successful classification  |
 
 ## Dependencies
 
 ### Internal Services
 
-| Service                | Purpose                                          |
-| ---------------------- | ------------------------------------------------ |
-| `user-service`         | Fetch LLM client for classification              |
-| `actions-agent`        | Create actions from classified commands          |
-| `app-settings-service` | Fetch LLM pricing data at startup                |
+| Service                | Endpoint                   | Purpose                                        |
+| ---------------------- | -------------------------- | ---------------------------------------------- |
+| `user-service`         | (via internal-clients)     | Fetch LLM client for classification            |
+| `actions-agent`        | `POST /internal/actions`   | Create actions from classified commands        |
+| `app-settings-service` | (via llm-pricing)          | Fetch LLM pricing data at startup              |
 
 ### Packages
 
-| Package            | Purpose                                       |
-| ------------------ | --------------------------------------------- |
-| `llm-prompts`      | Classification prompt builder                 |
-| `llm-factory`      | LLM client abstraction                        |
-| `llm-pricing`      | Fetch and cache LLM pricing from app-settings |
-| `llm-contract`     | Shared `LlmModels` enum and type contracts    |
-| `internal-clients` | Shared user-service HTTP client               |
-| `infra-sentry`     | Sentry-enabled logger factory                 |
-| `infra-otel`       | OpenTelemetry distributed tracing via Dash0   |
+| Package              | Purpose                                                 |
+| -------------------- | ------------------------------------------------------- |
+| `llm-prompts`        | Classification prompt builder                           |
+| `llm-factory`        | LLM client abstraction                                  |
+| `llm-pricing`        | Fetch and cache LLM pricing from app-settings           |
+| `llm-contract`       | Shared `LlmModels` enum and type contracts              |
+| `internal-clients`   | Shared user-service HTTP client                         |
+| `infra-sentry`       | Sentry-enabled logger factory                           |
+| `infra-otel`         | OpenTelemetry distributed tracing via Dash0             |
+| `infra-pubsub`       | `BasePubSubPublisher` base class                        |
+| `common-http`        | `requireAuth`, `validateInternalAuth`, response helpers |
+| `common-core`        | `Result<T>`, `ok()`, `err()`, `getErrorMessage()`       |
 
 ### Infrastructure
 
-| Component                         | Purpose                               |
-| --------------------------------- | ------------------------------------- |
-| Firestore (`commands` collection) | Command persistence                   |
-| Pub/Sub (`command-ingest` topic)  | Command ingestion events              |
-| Pub/Sub (`actions` topic)         | Action creation events                |
-| Cloud Scheduler                   | Retry pending every 5 min             |
-| Dash0 (via OTLP/HTTP)             | Distributed tracing and metrics       |
+| Component                                       | Purpose                                                             |
+| ----------------------------------------------- | ------------------------------------------------------------------- |
+| Firestore (`commands` collection)               | Command persistence                                                 |
+| Pub/Sub (via `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`) | Action creation events                                              |
+| Cloud Scheduler                                 | Triggers `/internal/retry-pending` for pending classification retry |
+| Dash0 (via OTLP/HTTP)                           | Distributed tracing and metrics                                     |
 
 ### External APIs
 
-| Service                                     | Purpose                |
-| ------------------------------------------- | ---------------------- |
-| Gemini 2.5 Flash / GLM-4.7 / GLM-4.7-Flash  | Command classification |
+| Service          | Purpose                | Model              |
+| ---------------- | ---------------------- | ------------------ |
+| Google Gemini    | Command classification | Gemini 2.5 Flash   |
 
 ## Configuration
 
@@ -293,8 +316,7 @@ sequenceDiagram
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL (pricing data fetched at startup)   |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                                   |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                          |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform-level Zai fallback API key for classification            |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key (primary fallback)         |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key for classification         |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                     |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name for Sentry (defaults to "development")           |
 
@@ -304,25 +326,27 @@ sequenceDiagram
 
 **Explicit intent priority** — Step 2 executes BEFORE Step 4. "research this https://example.com" classifies as `research` (explicit intent), not `link` (URL presence).
 
-**PWA-shared confidence boost** — Links from `pwa-shared` source get +0.1 confidence boost (capped at 1.0) because share sheet usage strongly indicates link-saving intent.
+**PWA-shared confidence boost** — Links from `pwa-shared` source get +0.1 confidence boost toward `link` (capped at 1.0) because share sheet usage strongly indicates link-saving intent.
 
-**Idempotency key format** — `{sourceType}:{externalId}` must be unique. WhatsApp message IDs can be reused across different phone numbers.
+**Idempotency key format** — The command ID is `{sourceType}:{externalId}`. If a command with that composite key already exists, `processCommand` returns the existing record with `isNew: false`. WhatsApp message IDs are not globally unique — they can repeat across different phone numbers.
 
-**Default classification model** — Gemini 2.5 Flash is the default (switched from GLM-4.7-Flash due to latency). GLM-4.7 and GLM-4.7-Flash remain as supported alternatives.
+**Default classification model** — Gemini 2.5 Flash is the sole classification model as of v3.3.0. GLM-4.7 and all ZAI/DashScope models have been removed.
 
-**Pub/Sub push authentication** — Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls.
+**Pub/Sub push authentication** — Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls. Pub/Sub requests are authenticated by Cloud Run OIDC validation before reaching the handler; direct calls use `X-Internal-Auth`.
 
-**Archive vs delete** — Classified commands can only be archived, not deleted. Only received/pending/failed can be deleted.
+**Archive vs delete** — Classified commands can only be archived (`PATCH /commands/:commandId` with `status: "archived"`). Only commands with status `received`, `pending_classification`, or `failed` can be deleted.
 
-**Pricing context at startup** — `initServices()` calls `fetchAllPricing()` from `app-settings-service` before accepting any requests. If app-settings-service is unavailable at startup, the service fails to initialize. The pricing context is passed to `createUserServiceClient` so it can select and cost-track LLM models.
+**Pricing context at startup** — `initServices()` calls `fetchAllPricing()` from `app-settings-service` before accepting any requests. If app-settings-service is unavailable at startup, the service fails to initialize entirely.
 
 **Response contract** — All endpoints use `reply.ok(data)` and `reply.fail(code, message)`. Responses wrap data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
 
-**Logging** — All loggers use `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`), which sends errors to Sentry automatically. In development mode, `createLogStream()` provides colorized formatted log output for PM2 readability.
+**Logging** — All loggers use `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`), which sends errors to Sentry automatically.
 
-**OpenTelemetry** — The Dockerfile uses `--import` flag to preload the `@intexuraos/infra-otel` register module. Tracing data is exported to Dash0 via OTLP/HTTP when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is set. No-op when unset.
+**OpenTelemetry** — The Dockerfile uses `--import` flag to preload the `@intexuraos/infra-otel` register module. Tracing exports to Dash0 via OTLP/HTTP when configured. No-op when unset.
 
-**Title length limit** — The Zod schema for classification responses enforces a 200-character maximum on titles. Previously set to 50 characters, this caused valid classifications to be discarded entirely (falling back to `note` with low confidence) when the LLM generated longer titles.
+**Title length limit** — The Zod schema for classification responses enforces a 200-character maximum on titles. Increased from 50 in v3.3.0 to prevent valid classifications from being discarded when the LLM generates descriptive titles.
+
+**Retry pending endpoint** — `POST /internal/retry-pending` is called by Cloud Scheduler. It processes all commands in `pending_classification` status up to a limit of 100 at a time, skipping those for which no LLM client can be retrieved.
 
 ## File Structure
 
@@ -330,59 +354,37 @@ sequenceDiagram
 apps/commands-agent/src/
   domain/
     models/
-      command.ts           # Command entity with factory functions
-      action.ts            # Action entity (forwarded type)
+      command.ts              # Command entity, factory functions, status types
+      action.ts               # Action entity (forwarded type)
     ports/
-      classifier.ts        # Classifier interface
-      commandRepository.ts # Repository interface
-      eventPublisher.ts    # PubSub publisher interface
-      actionsAgentClient.ts
+      classifier.ts           # Classifier interface + ClassificationResult
+      commandRepository.ts    # Repository interface
+      eventPublisher.ts       # PubSub publisher interface
+      actionsAgentClient.ts   # actions-agent HTTP client interface
     usecases/
-      processCommand.ts    # Main command processing logic
-      retryPendingCommands.ts
+      processCommand.ts       # Main command processing pipeline
+      retryPendingCommands.ts # Retry logic for pending_classification commands
     events/
-      actionCreatedEvent.ts
+      actionCreatedEvent.ts   # ActionCreatedEvent type
   infra/
     firestore/
-      commandRepository.ts
+      commandRepository.ts    # Firestore implementation of CommandRepository
     llm/
-      classifier.ts        # LLM classifier implementation
+      classifier.ts           # Gemini classifier implementation
     pubsub/
-      actionEventPublisher.ts
-      config.ts
+      actionEventPublisher.ts # BasePubSubPublisher implementation
+      config.ts               # Topic name helper (INTEXURAOS_PUBSUB_ACTIONS_QUEUE)
+      index.ts
     actionsAgent/
-      client.ts            # actions-agent HTTP client
+      client.ts               # HTTP client for actions-agent
   routes/
-    commandsRoutes.ts      # Public endpoints
-    internalRoutes.ts      # Pub/Sub and internal endpoints
+    commandsRoutes.ts         # Public endpoints (GET/POST/DELETE/PATCH /commands)
+    internalRoutes.ts         # Internal endpoints (/internal/*)
     index.ts
-  services.ts              # DI container
-  server.ts                # Fastify server setup
+  services.ts                 # DI container (initServices, getServices, setServices)
+  server.ts                   # Fastify server setup
 
 packages/llm-prompts/src/
   classification/
-    commandClassifierPrompt.ts  # Multi-step classification prompt
-    index.ts
+    commandClassifierPrompt.ts  # 5-step classification prompt with semver version
 ```
-
----
-
-## Recent Changes
-
-| Commit     | Description                                                     | Date       |
-| ---------- | --------------------------------------------------------------- | ---------- |
-| `cc52e50d` | Increase classification title limit to 200 chars                | 2026-03-07 |
-| `99febe66` | Wire GitHub OAuth integration and update cross-service mocks    | 2026-03-02 |
-| `35abc346` | Persist prompt version with command classification              | 2026-02-19 |
-| `6063175b` | Dev-mode log formatting via createLogStream()                   | 2026-02-16 |
-| `a52a6bbc` | Dash0 OpenTelemetry integration                                 | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention            | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback    | 2026-02-15 |
-| `d5fbb354` | Fix start:local to use tsx instead of node experimental types   | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform Zai fallback           | 2026-02-08 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement                         | 2026-02-01 |
-| `9723dc24` | Standardize DELETE endpoints to consistent response contract    | 2026-02-01 |
-| `02728b75` | Add 'code' type to classification schema                        | 2026-01-25 |
-| `1faa1d3b` | Consolidate user service client architecture                    | 2026-01-25 |
-
-**Last updated:** 2026-03-07
