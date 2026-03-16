@@ -10,7 +10,7 @@
  * - systemPromptHash: 'review-auto'
  */
 
-import { err, ok, type Result, type Logger } from '@intexuraos/common-core';
+import { err, ok, getErrorMessage, type Result, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTaskRepository.js';
 import type { WorkerType } from '../models/codeTask.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
@@ -66,7 +66,7 @@ async function resolveLinearIssueId(
   deps: Pick<CreateReviewTaskDeps, 'logger' | 'codeTaskRepo'> & { linearAgentClient: LinearAgentClient },
   request: CreateReviewTaskRequest,
   userId: string,
-): Promise<string | undefined> {
+): Promise<Result<string | undefined, string>> {
   const { logger, codeTaskRepo, linearAgentClient } = deps;
   const { repository, prNumber, prTitle } = request;
 
@@ -76,7 +76,7 @@ async function resolveLinearIssueId(
     const existingTask = existingResult.value; // @allow-result-access -- narrowed by existingResult.ok
     if (existingTask?.linearIssueId !== undefined) {
       logger.info({ linearIssueId: existingTask.linearIssueId, prNumber }, 'Copied linearIssueId from existing PR task');
-      return existingTask.linearIssueId;
+      return ok(existingTask.linearIssueId);
     }
   } else {
     logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing PR task for Linear linking');
@@ -87,7 +87,7 @@ async function resolveLinearIssueId(
   if (linearIssueMatch !== null && linearIssueMatch !== undefined) {
     const issueId = `INT-${String(linearIssueMatch[1])}`;
     logger.info({ linearIssueId: issueId, prNumber }, 'Extracted linearIssueId from PR title');
-    return issueId;
+    return ok(issueId);
   }
 
   // Tier 3: Create new Linear issue
@@ -99,11 +99,11 @@ async function resolveLinearIssueId(
   if (createResult.ok) {
     const created = createResult.value; // @allow-result-access -- narrowed by createResult.ok
     logger.info({ linearIssueId: created.issueIdentifier, prNumber }, 'Created new Linear issue for review task');
-    return created.issueIdentifier;
+    return ok(created.issueIdentifier);
   }
 
   logger.warn({ error: createResult.error, prNumber }, 'Failed to create Linear issue for review task');
-  return undefined;
+  return err(createResult.error.message);
 }
 
 const PR_BODY_MAX_LENGTH = 500;
@@ -274,9 +274,27 @@ export async function createReviewTask(
   let linearIssueId: string | undefined;
   if (linearAgentClient !== undefined) {
     try {
-      linearIssueId = await resolveLinearIssueId({ logger, codeTaskRepo, linearAgentClient }, request, userId);
+      const linearResult = await resolveLinearIssueId({ logger, codeTaskRepo, linearAgentClient }, request, userId);
+      if (linearResult.ok) {
+        linearIssueId = linearResult.value; // @allow-result-access -- narrowed by linearResult.ok
+      } else {
+        deps.automationLog.record(
+          { repository, prNumber },
+          { type: 'linear_issue_failed', error: linearResult.error },
+          userId,
+        ).catch((logError: unknown) => {
+          logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
+        });
+      }
     } catch (error: unknown) {
       logger.warn({ error, prNumber }, 'Unexpected error resolving Linear issue for review task');
+      deps.automationLog.record(
+        { repository, prNumber },
+        { type: 'linear_issue_failed', error: getErrorMessage(error, 'Unknown error') },
+        userId,
+      ).catch((logError: unknown) => {
+        logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
+      });
     }
   }
 
