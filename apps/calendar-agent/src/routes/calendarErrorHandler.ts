@@ -2,9 +2,10 @@
  * Calendar error handler — maps domain errors to HTTP responses.
  */
 import type { FastifyReply } from 'fastify';
+import type { CalendarDomainError } from './calendarHelpers.js';
 
 export async function handleCalendarError(
-  error: { code: string; message: string },
+  error: CalendarDomainError,
   reply: FastifyReply
 ): Promise<unknown> {
   if (error.code === 'NOT_CONNECTED') {

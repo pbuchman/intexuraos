@@ -49,6 +49,11 @@ export interface FreeBusyBody {
   items?: { id: string }[];
 }
 
+export interface CalendarDomainError {
+  code: string;
+  message: string;
+}
+
 export function buildListEventsOptions(query: ListEventsQuery): ListEventsInput {
   const options: ListEventsInput = {};
   if (query.timeMin !== undefined) options.timeMin = query.timeMin;
