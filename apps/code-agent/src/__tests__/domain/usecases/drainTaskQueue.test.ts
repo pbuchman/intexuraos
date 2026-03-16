@@ -29,7 +29,7 @@ import {
 // Mock config
 vi.mock('../../../config.js', () => ({
   loadConfig: (): { queue: { maxSize: number; ttlMinutes: number }; serviceUrl: string } => ({
-    queue: { maxSize: 10, ttlMinutes: 30 },
+    queue: { maxSize: 10, ttlMinutes: 360 },
     serviceUrl: 'https://code-agent.test',
   }),
 }));
@@ -189,10 +189,10 @@ describe('drainTaskQueue', () => {
   });
 
   it('expires task when TTL exceeded, marks failed, and notifies', async () => {
-    // Create a task queued 31 minutes ago (TTL is 30 minutes)
-    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    // Create a task queued 361 minutes ago (TTL is 360 minutes)
+    const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
     const task = createMockTask({
-      queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      queuedAt: Timestamp.fromDate(beyondTtl),
     });
     mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
     mockCodeTaskRepo.update.mockResolvedValue(ok(task));
@@ -209,7 +209,7 @@ describe('drainTaskQueue', () => {
       status: 'failed',
       error: {
         code: 'queue_timeout',
-        message: 'Task expired in queue after 30 minutes. Workers were still busy.',
+        message: 'Task expired in queue after 360 minutes. Workers were still busy.',
       },
     });
 
@@ -218,9 +218,9 @@ describe('drainTaskQueue', () => {
   });
 
   it('clears parent implementationTaskId when expired task has parentTaskId', async () => {
-    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
     const task = createMockTask({
-      queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      queuedAt: Timestamp.fromDate(beyondTtl),
       parentTaskId: 'parent-task-1',
     });
     const parentTask = createMockTask({
@@ -248,9 +248,9 @@ describe('drainTaskQueue', () => {
   });
 
   it('does not clear parent implementationTaskId when it points to a different task', async () => {
-    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
     const task = createMockTask({
-      queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      queuedAt: Timestamp.fromDate(beyondTtl),
       parentTaskId: 'parent-task-1',
     });
     const parentTask = createMockTask({
@@ -275,9 +275,9 @@ describe('drainTaskQueue', () => {
   });
 
   it('logs warning when clearing parent implementationTaskId fails', async () => {
-    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
     const task = createMockTask({
-      queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      queuedAt: Timestamp.fromDate(beyondTtl),
       parentTaskId: 'parent-task-1',
     });
     const parentTask = createMockTask({
@@ -308,9 +308,9 @@ describe('drainTaskQueue', () => {
   });
 
   it('logs warning when notifyTaskQueueExpired fails', async () => {
-    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
     const task = createMockTask({
-      queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+      queuedAt: Timestamp.fromDate(beyondTtl),
     });
 
     mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
@@ -334,12 +334,12 @@ describe('drainTaskQueue', () => {
   });
 
   it('uses createdAt when queuedAt is not set for TTL check', async () => {
-    // Create a task with createdAt 31 minutes ago and no queuedAt
-    const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+    // Create a task with createdAt 361 minutes ago and no queuedAt
+    const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
     const task = createMockTask();
     // Remove queuedAt to test fallback to createdAt
     delete (task as unknown as Record<string, unknown>)['queuedAt'];
-    (task as unknown as Record<string, unknown>)['createdAt'] = Timestamp.fromDate(thirtyOneMinutesAgo);
+    (task as unknown as Record<string, unknown>)['createdAt'] = Timestamp.fromDate(beyondTtl);
 
     mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
     mockCodeTaskRepo.update.mockResolvedValue(ok(task));
@@ -815,9 +815,9 @@ describe('drainTaskQueue', () => {
 
   describe('PR task lock cleanup', () => {
     it('returns locksToCleanup on TTL expiry (PR task)', async () => {
-      const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
       const task = createMockTask({
-        queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+        queuedAt: Timestamp.fromDate(beyondTtl),
         prNumber: 42,
       });
       mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
@@ -857,9 +857,9 @@ describe('drainTaskQueue', () => {
     });
 
     it('returns empty locksToCleanup on TTL expiry (non-PR task)', async () => {
-      const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
       const task = createMockTask({
-        queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+        queuedAt: Timestamp.fromDate(beyondTtl),
       });
       mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update.mockResolvedValue(ok(task));
@@ -874,9 +874,9 @@ describe('drainTaskQueue', () => {
     });
 
     it('returns empty locksToCleanup on TTL expiry when task is a follow-up (has parentTaskId)', async () => {
-      const thirtyOneMinutesAgo = new Date(Date.now() - 31 * 60 * 1000);
+      const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
       const task = createMockTask({
-        queuedAt: Timestamp.fromDate(thirtyOneMinutesAgo),
+        queuedAt: Timestamp.fromDate(beyondTtl),
         prNumber: 42,
         parentTaskId: 'parent-task-123',
       });

@@ -5,7 +5,7 @@
 export interface QueueConfig {
   /** Maximum number of tasks in queue (default 10) */
   maxSize: number;
-  /** TTL for queued tasks in minutes (default 30) */
+  /** TTL for queued tasks in minutes (default 360) */
   ttlMinutes: number;
 }
 
@@ -82,7 +82,7 @@ export function loadConfig(): Config {
     auth0JwksUri,
     queue: {
       maxSize: parseInt(process.env['INTEXURAOS_QUEUE_MAX_SIZE'] ?? '10', 10),
-      ttlMinutes: parseInt(process.env['INTEXURAOS_QUEUE_TTL_MINUTES'] ?? '30', 10),
+      ttlMinutes: parseInt(process.env['INTEXURAOS_QUEUE_TTL_MINUTES'] ?? '360', 10),
     },
     retryQueue: {
       maxAttempts: parseInt(process.env['INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS'] ?? '3', 10),
