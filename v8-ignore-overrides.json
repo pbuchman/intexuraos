@@ -80,6 +80,10 @@
         "workers/orchestrator/src/start.ts"
       ],
       "description": "Write tests for tightened v8 ignore blocks in workers/orchestrator"
+    },
+    "INT-900": {
+      "files": ["apps/image-service/src/serviceFactory.ts"],
+      "description": "Environment variable fallback branches - testable only via integration tests that control process.env"
     }
   }
 }
