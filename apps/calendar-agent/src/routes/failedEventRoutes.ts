@@ -5,6 +5,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createEvent, type CreateEventInput, type FailedEventFilters } from '../domain/index.js';
+import { handleCalendarError } from './calendarErrorHandler.js';
 
 interface FailedEventsQuery {
   limit?: number;
@@ -101,8 +102,7 @@ export const failedEventRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       const result = await failedEventRepository.list(user.userId, filters);
 
       if (!result.ok) {
-        reply.status(500);
-        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
+        return await handleCalendarError(result.error, reply);
       }
 
       return await reply.ok({ failedEvents: result.value });
@@ -151,8 +151,7 @@ export const failedEventRoutes: FastifyPluginCallback = (fastify, _opts, done) =
 
       const eventResult = await failedEventRepository.get(id);
       if (!eventResult.ok) {
-        reply.status(500);
-        return await reply.fail('DOWNSTREAM_ERROR', eventResult.error.message);
+        return await handleCalendarError(eventResult.error, reply);
       }
 
       if (eventResult.value?.userId !== user.userId) {
@@ -162,8 +161,7 @@ export const failedEventRoutes: FastifyPluginCallback = (fastify, _opts, done) =
 
       const deleteResult = await failedEventRepository.delete(id);
       if (!deleteResult.ok) {
-        reply.status(500);
-        return await reply.fail('DOWNSTREAM_ERROR', deleteResult.error.message);
+        return await handleCalendarError(deleteResult.error, reply);
       }
 
       // @allow-raw-send: 204 No Content response
@@ -236,8 +234,7 @@ export const failedEventRoutes: FastifyPluginCallback = (fastify, _opts, done) =
 
       const eventResult = await failedEventRepository.get(id);
       if (!eventResult.ok) {
-        reply.status(500);
-        return await reply.fail('DOWNSTREAM_ERROR', eventResult.error.message);
+        return await handleCalendarError(eventResult.error, reply);
       }
 
       if (eventResult.value?.userId !== user.userId) {
@@ -270,6 +267,8 @@ export const failedEventRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       );
 
       if (!createResult.ok) {
+        // Use inline 422 handling for createEvent errors to maintain API contract
+        // (retry failure means the event data is unprocessable)
         reply.status(422);
         return await reply.fail('UNPROCESSABLE_ENTITY', createResult.error.message);
       }
