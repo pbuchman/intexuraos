@@ -61,6 +61,7 @@ export function createSyncedIssue(
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
   private connections = new Map<string, LinearConnection>();
   private shouldFailGetFullConnection = false;
+  private shouldReturnNullForGetFullConnection = false;
   private shouldFailGetConnection = false;
   private shouldFailFindWebhookSecret = false;
   private shouldFailSave = false;
@@ -131,6 +132,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
 
   async getFullConnection(userId: string): Promise<Result<LinearConnection | null, LinearError>> {
     if (this.shouldFailGetFullConnection) return err(this.failError);
+    if (this.shouldReturnNullForGetFullConnection) return ok(null);
     const conn = this.connections.get(userId);
     if (!conn || !conn.connected) return ok(null);
     return ok(conn);
@@ -139,6 +141,10 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   setGetFullConnectionFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailGetFullConnection = fail;
     if (error) this.failError = error;
+  }
+
+  setGetFullConnectionReturnsNull(returnsNull: boolean): void {
+    this.shouldReturnNullForGetFullConnection = returnsNull;
   }
 
   setGetConnectionFailure(fail: boolean, error?: LinearError): void {
@@ -250,6 +256,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   reset(): void {
     this.connections.clear();
     this.shouldFailGetFullConnection = false;
+    this.shouldReturnNullForGetFullConnection = false;
     this.shouldFailGetConnection = false;
     this.shouldFailFindWebhookSecret = false;
     this.shouldFailGetApiKey = false;
@@ -562,6 +569,10 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   setCreateFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailCreate = fail;
     if (error) this.failError = error;
+  }
+
+  seedFailedIssue(issue: FailedLinearIssue): void {
+    this.failedIssues.push(issue);
   }
 
   setListByUserFailure(fail: boolean, error?: LinearError): void {
