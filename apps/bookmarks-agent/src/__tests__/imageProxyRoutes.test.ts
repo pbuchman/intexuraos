@@ -141,5 +141,20 @@ describe('Image Proxy Routes', () => {
       expect(body.error.code).toBe('PROXY_ERROR');
     });
 
+    it('defaults to image/jpeg content type', async () => {
+      ctx.imageProxy.setNextResult({
+        buffer: Buffer.from('fake-image-data'),
+        contentType: 'image/jpeg',
+      });
+
+      const encodedUrl = encodeURIComponent('https://example.com/test-image.jpg');
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/images/proxy?url=${encodedUrl}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toBe('image/jpeg');
+    });
   });
 });
