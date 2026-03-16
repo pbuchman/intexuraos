@@ -66,3 +66,11 @@ export {
   triggerCodeTaskFromAssignment,
   type TriggerCodeTaskDeps,
 } from './useCases/triggerCodeTaskFromAssignment.js';
+export { STATE_NAME_MAP, findStateId } from './stateUtils.js';
+export {
+  toCommentSummary,
+  buildIssueDisplayResponse,
+  type IssueDisplayResponse,
+} from './issueDisplayMapper.js';
+export { resolveDesiredLabelIds } from './useCases/resolveLabels.js';
+export { buildIssueTree } from './useCases/buildIssueTree.js';
