@@ -20,7 +20,6 @@ import {
   ApiKeysSettingsPage,
   BookmarksListPage,
   CalendarPage,
-  CodeTaskViewPage,
   CodeTaskViewPageV2,
   CodeTaskNewPage,
   CodeTasksPage,
@@ -124,14 +123,14 @@ function BookmarkDetailRedirect(): React.JSX.Element {
   return <Navigate to={`/my-bookmarks?id=${id ?? ''}`} replace />;
 }
 
-function CodeTaskViewPageKeyed(): React.JSX.Element {
-  const { id } = useParams<{ id: string }>();
-  return <CodeTaskViewPage key={id} />;
-}
-
 function CodeTaskViewPageV2Keyed(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   return <CodeTaskViewPageV2 key={id} />;
+}
+
+function CodeTaskViewRedirect(): React.JSX.Element {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/code-tasks/${id ?? ''}`} replace />;
 }
 
 function AppRoutes(): React.JSX.Element {
@@ -256,7 +255,7 @@ function AppRoutes(): React.JSX.Element {
         path="/code-tasks/:id/view"
         element={
           <ProtectedRoute>
-            <CodeTaskViewPageV2Keyed />
+            <CodeTaskViewRedirect />
           </ProtectedRoute>
         }
       />
@@ -264,7 +263,7 @@ function AppRoutes(): React.JSX.Element {
         path="/code-tasks/:id"
         element={
           <ProtectedRoute>
-            <CodeTaskViewPageKeyed />
+            <CodeTaskViewPageV2Keyed />
           </ProtectedRoute>
         }
       />

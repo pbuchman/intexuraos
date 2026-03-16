@@ -48,7 +48,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     setShowRetryDropdown(false);
     try {
       const newId = await retryTask(selectedWorkerType);
-      void navigate(`/code-tasks/${newId}/view`);
+      void navigate(`/code-tasks/${newId}`);
     } catch {
       // retryTask already sets retryError state
     }
@@ -58,7 +58,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     setShowImplementDropdown(false);
     try {
       const newId = await startImplementation(selectedWorkerType);
-      void navigate(`/code-tasks/${newId}/view`);
+      void navigate(`/code-tasks/${newId}`);
     } catch {
       // startImplementation already sets implementError state
     }
@@ -238,7 +238,7 @@ function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX
     <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
       {'This task implements the IntexuraOS Agent-Based Code Task Execution Flow. '}
       <a
-        href={`/#/code-tasks/${parentTaskId}/view`}
+        href={`/#/code-tasks/${parentTaskId}`}
         className="font-medium underline hover:no-underline"
       >
         {'PLANNING'}
@@ -252,7 +252,7 @@ function ImplementationLinkBanner({ implementationTaskId }: { implementationTask
     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
       {'This task is the planning step of the IntexuraOS Agent-Based Code Task Execution Flow. '}
       <a
-        href={`/#/code-tasks/${implementationTaskId}/view`}
+        href={`/#/code-tasks/${implementationTaskId}`}
         className="font-medium underline hover:no-underline"
       >
         {'IMPLEMENTATION'}
