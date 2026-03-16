@@ -9,6 +9,7 @@ export interface DeleteImageOutput {
   deleted: boolean;
 }
 
+/** Error type is `never` — delete is best-effort; failures are logged but always return success. */
 export type DeleteImageUseCase = (
   input: DeleteImageInput
 ) => Promise<Result<DeleteImageOutput, never>>;

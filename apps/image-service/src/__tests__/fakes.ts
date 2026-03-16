@@ -39,7 +39,7 @@ export class FakeImageStorage implements ImageStorage {
     });
   }
 
-  async delete(id: string): Promise<Result<void, StorageError>> {
+  async delete(id: string, _slug?: string): Promise<Result<void, StorageError>> {
     if (this.shouldFailDelete) {
       this.shouldFailDelete = false;
       return err({ code: 'STORAGE_ERROR', message: 'Simulated delete failure' });
