@@ -139,30 +139,6 @@ When generating documentation:
 3. **Verify Third** - Run tests comparing docs to code
 4. **Review Fourth** - Human review before committing
 
-```bash
-# Proposed workflow
-pnpm run extract:docs <service>    # Extract facts from code
-pnpm run generate:docs <service>   # Generate from extraction
-pnpm run verify:docs <service>     # Test accuracy
-```
-
----
-
-## CI Enforcement
-
-Documentation verification is part of CI:
-
-```bash
-# Runs on all PRs
-pnpm run verify:docs
-
-# Fails if:
-# - Documented endpoints don't exist in routes
-# - Documented models have wrong fields
-# - Documented dependencies not in services.ts
-# - Missing required doc files
-```
-
 ---
 
 ## Change Lockstep
@@ -171,7 +147,7 @@ When modifying service code:
 
 1. Update code
 2. Update affected documentation immediately
-3. Run `pnpm run verify:docs`
+3. Verify docs match code changes
 4. Commit both together
 
 **Exception:** Pure refactorings that don't change contracts may skip doc updates.
@@ -183,7 +159,7 @@ When modifying service code:
 Documentation changes require the same review process as code changes:
 
 - PR must include doc changes
-- Reviewer checks `pnpm run verify:docs` passes
+- Reviewer verifies documentation accuracy against code
 - Major doc changes require explicit approval
 
 ---
