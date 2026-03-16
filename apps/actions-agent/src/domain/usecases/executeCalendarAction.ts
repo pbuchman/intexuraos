@@ -1,11 +1,10 @@
 import type { Result } from '@intexuraos/common-core';
-import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { CalendarServiceClient, CalendarPreview } from '../ports/calendarServiceClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
-import { formatCalendarCompletionMessage } from '../utils/formatCalendarCompletionMessage.js';
 import type { Logger } from 'pino';
+import { formatCalendarCompletionMessage } from '../utils/formatCalendarCompletionMessage.js';
 
 export interface ExecuteCalendarActionDeps {
   actionRepository: ActionRepository;
@@ -37,7 +36,7 @@ export function createExecuteCalendarActionUseCase(
     const action = await actionRepository.getById(actionId);
     if (action === null) {
       logger.error({ actionId }, 'Action not found');
-      return err(new Error('Action not found'));
+      return { ok: false, error: new Error('Action not found') };
     }
 
     logger.info(
@@ -45,26 +44,35 @@ export function createExecuteCalendarActionUseCase(
       'Retrieved action for execution'
     );
 
+    // Idempotency check
     if (action.status === 'completed') {
       const resourceUrl = action.payload['resource_url'] as string | undefined;
       const message = action.payload['message'] as string | undefined;
       logger.info({ actionId, resourceUrl }, 'Action already completed, returning existing result');
-      return ok({
-        status: 'completed' as const,
-        ...(message !== undefined && { message }),
-        ...(resourceUrl !== undefined && { resourceUrl }),
-      });
+      return {
+        ok: true,
+        value: {
+          status: 'completed',
+          ...(message !== undefined && { message }),
+          ...(resourceUrl !== undefined && { resourceUrl }),
+        },
+      };
     }
 
+    // Status validation
     const validStatuses = ['pending', 'awaiting_approval', 'failed'];
     if (!validStatuses.includes(action.status)) {
       logger.error(
         { actionId, status: action.status },
         'Cannot execute action with invalid status'
       );
-      return err(new Error(`Cannot execute action with status: ${action.status}`));
+      return {
+        ok: false,
+        error: new Error(`Cannot execute action with status: ${action.status}`),
+      };
     }
 
+    // Update to processing
     logger.info({ actionId }, 'Setting action to processing');
     const updatedAction: Action = {
       ...action,
@@ -73,13 +81,9 @@ export function createExecuteCalendarActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
+    // Get text for processing
     const text =
       typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
-
-    logger.info(
-      { actionId, userId: action.userId, title: action.title, textLength: text.length },
-      'Processing calendar action via calendar-agent'
-    );
 
     // Fetch preview BEFORE processAction — the real calendar-agent deletes the preview
     // from Firestore after creating the event, so fetching after would always return null.
@@ -94,13 +98,17 @@ export function createExecuteCalendarActionUseCase(
       );
     }
 
+    logger.info(
+      { actionId, userId: action.userId, title: action.title, textLength: text.length },
+      'Processing calendar action via calendar-agent'
+    );
+
+    // Call service
     const result = await calendarServiceClient.processAction({ action, text });
 
+    // Handle service call error
     if (!result.ok) {
-      logger.error(
-        { actionId, error: getErrorMessage(result.error) },
-        'Failed to process calendar action via calendar-agent'
-      );
+      logger.error({ actionId, error: result.error.message }, 'Failed to process calendar action');
       const failedAction: Action = {
         ...action,
         status: 'failed',
@@ -112,14 +120,18 @@ export function createExecuteCalendarActionUseCase(
       };
       await actionRepository.update(failedAction);
       logger.info({ actionId, status: 'failed' }, 'Action marked as failed');
-      return ok({
-        status: 'failed',
-        message: result.error.message,
-      });
+      return {
+        ok: true,
+        value: {
+          status: 'failed',
+          message: result.error.message,
+        },
+      };
     }
 
     const response = result.value; // @allow-result-access -- guarded by !result.ok check above
 
+    // Handle service returned failure status
     if (response.status === 'failed') {
       const errorMessage = response.message;
       logger.info({ actionId, message: errorMessage }, 'Calendar action failed');
@@ -134,13 +146,17 @@ export function createExecuteCalendarActionUseCase(
         updatedAt: new Date().toISOString(),
       };
       await actionRepository.update(failedAction);
-      return ok({
-        status: 'failed',
-        message: errorMessage,
-        ...(response.errorCode !== undefined && { errorCode: response.errorCode }),
-      });
+      return {
+        ok: true,
+        value: {
+          status: 'failed',
+          message: errorMessage,
+          ...(response.errorCode !== undefined && { errorCode: response.errorCode }),
+        },
+      };
     }
 
+    // Handle success
     const { resourceUrl, message } = response;
     logger.info({ actionId, resourceUrl }, 'Calendar action completed successfully');
 
@@ -158,6 +174,7 @@ export function createExecuteCalendarActionUseCase(
 
     logger.info({ actionId, status: 'completed' }, 'Action marked as completed');
 
+    // Send WhatsApp notification with calendar-specific message formatting
     if (resourceUrl !== undefined) {
       const isAbsoluteUrl = resourceUrl.startsWith('http');
       const fullUrl = isAbsoluteUrl ? resourceUrl : `${webAppUrl}${resourceUrl}`;
@@ -191,10 +208,13 @@ export function createExecuteCalendarActionUseCase(
       'Calendar action execution completed successfully'
     );
 
-    return ok({
-      status: 'completed',
-      message,
-      ...(resourceUrl !== undefined && { resourceUrl }),
-    });
+    return {
+      ok: true,
+      value: {
+        status: 'completed',
+        message,
+        ...(resourceUrl !== undefined && { resourceUrl }),
+      },
+    };
   };
 }
