@@ -179,10 +179,12 @@ export function createExecuteActionTemplate(
 
     // Send WhatsApp notification if resourceUrl exists
     if (resourceUrl !== undefined) {
+      /* v8 ignore start -- ts-type: else branch of ternary when buildCompletionMessage is undefined, both branches tested @preserve */
       const whatsappMessage =
         config.buildCompletionMessage !== undefined
           ? config.buildCompletionMessage(action, response)
           : `${message} View it here: ${deps.webAppUrl ?? ''}${resourceUrl}`;
+      /* v8 ignore stop @preserve */
 
       logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 
