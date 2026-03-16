@@ -334,7 +334,7 @@ describe('drainTaskQueue', () => {
   });
 
   it('uses createdAt when queuedAt is not set for TTL check', async () => {
-    // Create a task with createdAt 31 minutes ago and no queuedAt
+    // Create a task with createdAt 361 minutes ago and no queuedAt
     const beyondTtl = new Date(Date.now() - 361 * 60 * 1000);
     const task = createMockTask();
     // Remove queuedAt to test fallback to createdAt
