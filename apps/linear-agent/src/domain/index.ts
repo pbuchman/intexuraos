@@ -74,3 +74,21 @@ export {
 } from './issueDisplayMapper.js';
 export { resolveDesiredLabelIds } from './useCases/resolveLabels.js';
 export { buildIssueTree } from './useCases/buildIssueTree.js';
+export {
+  retryFailedIssue,
+  type RetryFailedIssueDeps,
+  type RetryFailedIssueRequest,
+  type RetryFailedIssueResult,
+} from './useCases/retryFailedIssue.js';
+export {
+  getIssueComments,
+  type GetIssueCommentsDeps,
+  type GetIssueCommentsRequest,
+  type PaginatedComments,
+} from './useCases/getIssueComments.js';
+export {
+  getIssueDetail,
+  type GetIssueDetailDeps,
+  type GetIssueDetailRequest,
+  type IssueDetailResponse,
+} from './useCases/getIssueDetail.js';
