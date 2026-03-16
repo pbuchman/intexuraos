@@ -3,6 +3,10 @@ import { ok, err } from '@intexuraos/common-core';
 import type { HandleApprovalReplyDeps } from '../handleApprovalReply.js';
 import type { ApprovalReplyResult } from './types.js';
 
+/**
+ * Handle proceed-implementation button (INT-628).
+ * Button ID format: "proceed-implementation:{taskId}"
+ */
 export async function handleProceedToImplementationButton(
   taskId: string,
   userId: string,

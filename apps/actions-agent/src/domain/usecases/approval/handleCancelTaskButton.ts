@@ -3,6 +3,10 @@ import { ok, err } from '@intexuraos/common-core';
 import type { HandleApprovalReplyDeps } from '../handleApprovalReply.js';
 import type { ApprovalReplyResult } from './types.js';
 
+/**
+ * Handle cancel-task button (INT-379).
+ * Button ID format: "cancel-task:{taskId}:{nonce}"
+ */
 export async function handleCancelTaskButton(
   taskId: string,
   nonce: string | undefined, // @allow-undefined-type -- function param from array destructure, not an interface property

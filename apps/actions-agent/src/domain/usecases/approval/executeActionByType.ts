@@ -4,6 +4,9 @@ import type { Action } from '../../models/action.js';
 import type { ActionEventPublisher } from '../../ports/actionEventPublisher.js';
 import type { HandleApprovalReplyDeps } from '../handleApprovalReply.js';
 
+/**
+ * Execute action by type (shared between button approval flows).
+ */
 export async function executeActionByType(
   action: Action,
   actionEventPublisher: ActionEventPublisher,

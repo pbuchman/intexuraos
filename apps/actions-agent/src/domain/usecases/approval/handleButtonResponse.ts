@@ -7,6 +7,12 @@ import type { ApprovalReplyResult, ApprovalIntent } from './types.js';
 import { executeActionByType } from './executeActionByType.js';
 import { executeRejection } from './executeRejection.js';
 
+/**
+ * Handle button response — deterministic intent from button ID.
+ *
+ * Button ID formats:
+ * - "approve:{actionId}" | "reject:{actionId}" | "cancel:{actionId}" | "convert:{actionId}"
+ */
 export async function handleButtonResponse(
   buttonId: string,
   action: Action | null,

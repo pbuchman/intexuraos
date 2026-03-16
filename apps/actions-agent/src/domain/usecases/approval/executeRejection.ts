@@ -5,6 +5,9 @@ import type { ActionRepository } from '../../ports/actionRepository.js';
 import type { HandleApprovalReplyDeps } from '../handleApprovalReply.js';
 import type { ApprovalReplyResult, ApprovalIntent } from './types.js';
 
+/**
+ * Execute action rejection (shared between cancel, reject, and convert).
+ */
 export async function executeRejection(
   action: Action,
   actionRepository: ActionRepository,
