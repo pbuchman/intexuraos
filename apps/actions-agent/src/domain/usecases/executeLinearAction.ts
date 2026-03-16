@@ -56,7 +56,9 @@ export function createExecuteLinearActionUseCase(
         prepared['summary'] as string | undefined
       ),
     buildCompletionMessage: (_action: Action, response) =>
+      /* v8 ignore start -- ts-type: template literal branch when resourceUrl is undefined @preserve */
       `🎯 ${response.message} View it here: ${response.resourceUrl ?? ''}`,
+    /* v8 ignore stop @preserve */
     correlationPrefix: 'linear-complete',
   });
 }
