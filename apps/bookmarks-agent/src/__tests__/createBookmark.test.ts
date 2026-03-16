@@ -117,6 +117,9 @@ describe('createBookmark', () => {
     if (!result.ok) return;
     expect(result.value).toBeDefined();
     expect(result.value.url).toBe('https://example.com');
+    // Wait for the fire-and-forget publish to complete and catch the error
+    // Use a small delay to allow the promise to settle
+    await new Promise((resolve) => setTimeout(resolve, 10));
     // The publish error was logged (we can check mockLogger.warn was called)
     expect(mockLogger.warn).toHaveBeenCalled();
   });
