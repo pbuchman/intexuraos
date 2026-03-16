@@ -21,6 +21,9 @@ import type {
 import type { ActionsAgentClient, CreateActionParams } from '../infra/actionsAgent/client.js';
 import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
 import { createRetryPendingCommandsUseCase } from '../domain/usecases/retryPendingCommands.js';
+import { createListCommandsUseCase } from '../domain/usecases/listCommands.js';
+import { createDeleteCommandUseCase } from '../domain/usecases/deleteCommand.js';
+import { createArchiveCommandUseCase } from '../domain/usecases/archiveCommand.js';
 import type { Services } from '../services.js';
 
 export class FakeCommandRepository implements CommandRepository {
@@ -276,6 +279,18 @@ export function createFakeServices(deps: {
       classifierFactory,
       userServiceClient: deps.userServiceClient,
       eventPublisher: deps.eventPublisher,
+      logger,
+    }),
+    listCommandsUseCase: createListCommandsUseCase({
+      commandRepository: deps.commandRepository,
+      logger,
+    }),
+    deleteCommandUseCase: createDeleteCommandUseCase({
+      commandRepository: deps.commandRepository,
+      logger,
+    }),
+    archiveCommandUseCase: createArchiveCommandUseCase({
+      commandRepository: deps.commandRepository,
       logger,
     }),
   };
