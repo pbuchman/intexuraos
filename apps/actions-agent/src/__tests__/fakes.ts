@@ -48,6 +48,10 @@ import {
   createChangeActionTypeUseCase,
   type ChangeActionTypeUseCase,
 } from '../domain/usecases/changeActionType.js';
+import {
+  createUpdateActionUseCase,
+  type UpdateActionUseCase,
+} from '../domain/usecases/updateAction.js';
 import type {
   HandleApprovalReplyUseCase,
   ApprovalReplyInput,
@@ -1335,6 +1339,7 @@ export function createFakeServices(deps: {
   executeCodeActionUseCase?: FakeExecuteCodeActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
+  updateActionUseCase?: UpdateActionUseCase;
   approvalMessageRepository?: FakeApprovalMessageRepository;
   userServiceClient?: FakeUserServiceClient;
   handleApprovalReplyUseCase?: HandleApprovalReplyUseCase;
@@ -1471,6 +1476,13 @@ export function createFakeServices(deps: {
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
+    updateActionUseCase:
+      deps.updateActionUseCase ??
+      createUpdateActionUseCase({
+        actionRepository,
+        changeActionTypeUseCase,
+        logger: createMockLogger(),
+      }),
     approvalMessageRepository,
     userServiceClient,
     handleApprovalReplyUseCase:

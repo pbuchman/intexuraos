@@ -1,11 +1,16 @@
-# Code Agent - Agent Reference
+# Code Agent — Agent Interface
 
-Machine-readable reference for AI agents interacting with the code-agent service.
+> **Machine-readable specification for AI agent integration**
 
 ## Identity
 
+| Attribute | Value                                                                     |
+| --------- | ------------------------------------------------------------------------- |
+| Name      | code-agent                                                                |
+| Role      | Orchestrate autonomous code execution tasks on user-owned worker machines |
+| Goal      | Accept task requests, dispatch to workers, and return pull request URLs   |
+
 ```yaml
-name: code-agent
 version: 3.3.0
 port: 8128
 framework: fastify
@@ -30,28 +35,61 @@ collections:
 
 ### Task Submission
 
+**Endpoint:** `POST /internal/code/process`
+
+**When to use:** When actions-agent needs to dispatch a code task after user approval
+
+**Input Schema:**
+
 ```typescript
-// Internal (from actions-agent)
 interface ProcessCodeActionRequest {
   actionId: string;
   approvalEventId: string;
   userId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
   traceId?: string;
   source?: 'whatsapp' | 'web';
 }
+```
 
-// Public (from web UI)
-interface SubmitCodeTaskRequest {
-  prompt: string; // 1-100000 chars
-  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi'; // default: 'auto'
-  workerLocation?: string; // 1-32 chars
-  linearIssueId?: string;
-  linearIssueTitle?: string;
+**Output Schema:**
+
+```typescript
+interface ProcessCodeActionResponse {
+  success: true;
+  data: {
+    status: 'submitted';
+    codeTaskId: string;
+    resourceUrl: string; // e.g., "/#/code-tasks/uuid"
+  };
+}
+```
+
+**Example:**
+
+```json
+// Request
+{
+  "actionId": "action-uuid",
+  "approvalEventId": "approval-uuid",
+  "userId": "auth0|user-id",
+  "prompt": "Implement cursor-based pagination for bookmarks",
+  "workerType": "auto",
+  "linearIssueId": "INT-500"
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "status": "submitted",
+    "codeTaskId": "task_abc123",
+    "resourceUrl": "/#/code-tasks/task_abc123"
+  }
 }
 ```
 
@@ -64,7 +102,7 @@ All prompts pass through two sanitization layers before reaching the worker:
 
 ```typescript
 // 'planned' = planning agent completed; 'implemented' = execution agent completed; 'reviewed' = review agent completed
-// 'completed' is NOT used -- tasks finish as 'planned', 'implemented', or 'reviewed'
+// 'completed' is NOT used — tasks finish as 'planned', 'implemented', or 'reviewed'
 type TaskStatus =
   | 'dispatched'
   | 'running'
@@ -89,6 +127,25 @@ type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 // queued -> failed (TTL expired or queue full)
 // planned | implemented | failed -> running (on sendTaskMessage with 'resumed' action)
 // failed | cancelled | interrupted -> archived (when task is retried)
+```
+
+### Check Active Task for Linear Issue
+
+**Endpoint:** `GET /internal/code-tasks/linear:linearIssueId/active`
+
+**When to use:** Before creating a new task, check if an active task exists for the same Linear issue
+
+**Output Schema:**
+
+```typescript
+interface ActiveTaskCheckResponse {
+  success: true;
+  data: {
+    hasActiveTask: boolean;
+    taskId?: string;
+    status?: TaskStatus;
+  };
+}
 ```
 
 ### GitHub Agent (PR Triage)
@@ -118,6 +175,7 @@ interface GitHubAgentEvalResult {
 // Triage output is validated against Zod schemas (TriageSkipSchema, TriageReviewSchema).
 // Invalid output triggers automatic repair prompt via buildTriageRepairMessage.
 // LLM retries once with failed response as corrective context.
+// GitHub Agent only activates when INTEXURAOS_GEMINI_APP_API_KEY is set and non-empty.
 ```
 
 ### Automation Log
@@ -232,8 +290,8 @@ interface SendTaskMessageResult {
   action: 'queued' | 'resumed';
 }
 
-// 'queued'  -- task is running; message held in pendingUserMessages, delivered at turn end
-// 'resumed' -- task is in terminal state (planned/implemented/reviewed/failed/cancelled); task re-dispatched via --continue
+// 'queued'  — task is running; message held in pendingUserMessages, delivered at turn end
+// 'resumed' — task is in terminal state (planned/implemented/reviewed/failed/cancelled); task re-dispatched via --continue
 // Constraints:
 // - Task must be owned by userId
 // - Status must NOT be 'queued' (only queued tasks reject messages)
@@ -293,7 +351,7 @@ interface CreateReviewTaskResult {
 // - Active review tasks replaced if newer review requested
 // - Best-effort Linear issue linking for UI grouping
 // - Sets agentType: 'review' on dispatch
-// - Queue support when workers at capacity
+// - Queue support when workers at capacity (v3.3.0)
 ```
 
 ### Worker Settings
@@ -374,7 +432,7 @@ interface TurnMetrics {
 // sanitizePromptForInjection() (layer 2 - injection prevention):
 // Rejects: system override markers, base64 blobs > 3000 chars
 // Strips: control characters (preserves \t, \n, \r)
-// Returns: Result<string, error> -- rejects with 'empty_prompt' or 'base64_blob_detected'
+// Returns: Result<string, error> — rejects with 'empty_prompt' or 'base64_blob_detected'
 ```
 
 ### Cancel via Nonce
@@ -452,10 +510,10 @@ Layer 3: linearIssueId active check (one active task per issue)
 
 ```typescript
 type RateLimitErrorCode =
-  | 'concurrent_limit' // 429 - max 3 concurrent
-  | 'hourly_limit' // 429 - max 10/hour
-  | 'monthly_cost_limit' // 429 - $200/month cap
-  | 'prompt_too_long' // 429 - >10000 chars
+  | 'concurrent_limit'    // 429 - max 3 concurrent
+  | 'hourly_limit'        // 429 - max 10/hour
+  | 'monthly_cost_limit'  // 429 - $200/month cap
+  | 'prompt_too_long'     // 429 - >10000 chars
   | 'service_unavailable'; // 503 - usage DB unreachable
 ```
 

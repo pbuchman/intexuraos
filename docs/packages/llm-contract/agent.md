@@ -1,124 +1,107 @@
-# @intexuraos/llm-contract - Agent Reference
+# @intexuraos/llm-contract — Agent Reference
 
-Machine-readable export map and interface definitions for automated tooling.
+> Machine-readable interface for automated tooling and AI agents.
 
-## Package Metadata
+## Identity
 
-```
-name: @intexuraos/llm-contract
-version: 2.1.0
-type: module
-leaf: false
-dependencies: @intexuraos/common-core
-entry_points:
-  - ".": ./src/index.ts
-```
+| Attribute | Value                                                               |
+| --------- | ------------------------------------------------------------------- |
+| Package   | `@intexuraos/llm-contract`                                          |
+| Role      | Shared type contract for all LLM providers                          |
+| Goal      | Single source of truth for model names, interfaces, and error codes |
+| Type      | Types-only (plus small runtime helpers) — no business logic         |
 
-## Exported Types
+## Exports
+
+### Runtime Constants
+
+| Export                     | Type                                        | Value                                    |
+| -------------------------- | ------------------------------------------- | ---------------------------------------- |
+| `LlmProviders`             | `{ Google, OpenAI, Anthropic, Perplexity }` | Provider string constants                |
+| `LlmModels`                | `Record<string, LLMModel>`                  | All 14 model string constants            |
+| `ALL_LLM_MODELS`           | `LLMModel[]`                                | Array of all 14 models                   |
+| `ALL_FAST_MODELS`          | `FastModel[]`                               | Array of 4 fast models                   |
+| `ALL_TOOL_CALLING_MODELS`  | `ToolCallingModel[]`                        | `['gemini-2.5-flash']`                   |
+| `MODEL_PROVIDER_MAP`       | `Record<LLMModel, LlmProvider>`             | Model → provider lookup                  |
+| `FAST_MODEL_DISPLAY_NAMES` | `Record<FastModel, string>`                 | Human-readable names for fast models     |
+
+### Runtime Functions
+
+| Export                | Signature                                      | Purpose                             |
+| --------------------- | ---------------------------------------------- | ----------------------------------- |
+| `getProviderForModel` | `(model: LLMModel) => LlmProvider`             | Map model to its provider           |
+| `isValidModel`        | `(model: string) => model is LLMModel`         | Runtime type guard for model string |
+| `isFastModel`         | `(model: string) => model is FastModel`        | Runtime guard for fast models       |
+| `isToolCallingModel`  | `(model: string) => model is ToolCallingModel` | Guard for tool calling models       |
+
+### Key Types
 
 ```typescript
-// supportedModels.ts
-type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
-type LLMModel =
-  | 'gemini-2.5-pro' | 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'gemini-2.5-flash-image'
-  | 'o4-mini-deep-research' | 'gpt-5.2' | 'gpt-4o-mini' | 'gpt-image-1'
-  | 'claude-opus-4-5-20251101' | 'claude-sonnet-4-5-20250929' | 'claude-3-5-haiku-20241022'
-  | 'sonar' | 'sonar-pro' | 'sonar-deep-research'
-  | 'glm-4.7' | 'glm-4.7-flash';
-type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
-type ResearchModel = /* all non-image, non-validation-only models */;
-type ValidationModel = 'claude-3-5-haiku-20241022' | 'gemini-2.0-flash' | 'gpt-4o-mini' | 'sonar' | 'glm-4.7' | 'glm-4.7-flash';
-type FastModel = 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'glm-4.7-flash' | 'claude-3-5-haiku-20241022' | 'gpt-4o-mini';
-type GenericModel = 'gemini-2.5-pro' | 'gpt-5.2';
+// Providers
+type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 
-// types.ts
-interface LLMConfig { apiKey: string; model: LLMModel; userId: string; }
-interface TokenUsage { inputTokens: number; outputTokens: number; cacheCreationTokens?: number; cacheReadTokens?: number; cachedTokens?: number; reasoningTokens?: number; webSearchCalls?: number; groundingEnabled?: boolean; providerCost?: number; }
-interface NormalizedUsage { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number; cacheTokens?: number; reasoningTokens?: number; webSearchCalls?: number; groundingEnabled?: boolean; }
-interface GenerateResult { content: string; usage: NormalizedUsage; }
-interface ResearchResult { content: string; sources: string[]; usage: NormalizedUsage; }
-interface ImageGenerationResult { imageData: Buffer; model: string; usage: NormalizedUsage; }
-interface ImageGenerateOptions { size?: '1024x1024' | '1536x1024' | '1024x1536'; slug?: string; }
-interface SynthesisInput { model: string; content: string; }
-type LLMErrorCode = 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED' | 'OVERLOADED' | 'CONTEXT_LENGTH' | 'CONTENT_FILTERED';
-interface LLMError { code: LLMErrorCode; message: string; }
+// All 14 supported models
+type LLMModel = 'gemini-2.5-pro' | 'gemini-2.5-flash' | 'gemini-2.0-flash'
+  | 'gemini-2.5-flash-image' | 'o4-mini-deep-research' | 'gpt-5.2'
+  | 'gpt-4o-mini' | 'gpt-image-1' | 'claude-opus-4-5-20251101'
+  | 'claude-sonnet-4-5-20250929' | 'claude-3-5-haiku-20241022'
+  | 'sonar' | 'sonar-pro' | 'sonar-deep-research';
+
+// Narrowed subsets
+type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
+type FastModel = 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'claude-3-5-haiku-20241022' | 'gpt-4o-mini';
+type ToolCallingModel = 'gemini-2.5-flash';
+
+// Client interface
 interface LLMClient {
   research(prompt: string): Promise<Result<ResearchResult, LLMError>>;
   generate(prompt: string): Promise<Result<GenerateResult, LLMError>>;
   generateImage?(prompt: string, options?: ImageGenerateOptions): Promise<Result<ImageGenerationResult, LLMError>>;
 }
 
-// pricing.ts
-type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
-interface ModelPricing { inputPricePerMillion: number; outputPricePerMillion: number; cacheReadMultiplier?: number; cacheWriteMultiplier?: number; webSearchCostPerCall?: number; groundingCostPerRequest?: number; imagePricing?: Partial<Record<ImageSize, number>>; useProviderCost?: boolean; }
-interface ProviderPricing { provider: LlmProvider; models: Record<string, ModelPricing>; updatedAt: string; }
-interface CostCalculator { calculateTextCost(usage: TokenUsage, pricing: ModelPricing): number; calculateImageCost(size: ImageSize, pricing: ModelPricing): number; }
-```
-
-## Exported Functions
-
-```typescript
-function getProviderForModel(model: LLMModel): LlmProvider;
-function isValidModel(model: string): model is LLMModel;
-function isFastModel(model: string): model is FastModel;
-```
-
-## Exported Constants
-
-```typescript
-const LlmProviders: {
-  Google: 'google';
-  OpenAI: 'openai';
-  Anthropic: 'anthropic';
-  Perplexity: 'perplexity';
-  Zai: 'zai';
-};
-const LlmModels: { Gemini25Pro: 'gemini-2.5-pro' /* ...15 more */ };
-const ALL_LLM_MODELS: LLMModel[]; // 16 entries
-const ALL_FAST_MODELS: FastModel[]; // 5 entries: Gemini25Flash, Gemini20Flash, Glm47Flash, ClaudeHaiku35, GPT4oMini
-const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider>;
-const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string>; // human-readable names for UI dropdowns
-```
-
-## Dependency Graph
-
-```
-common-core
-  <- llm-contract
-       <- llm-factory, llm-pricing, llm-audit, llm-prompts
-       <- infra-claude, infra-gemini, infra-gpt, infra-glm, infra-perplexity
-       <- internal-clients
-       <- 14 apps
-       <- workers/orchestrator
-```
-
-## Usage Patterns
-
-```typescript
-// Check if a string is a valid model
-import { isValidModel, isFastModel, getProviderForModel } from '@intexuraos/llm-contract';
-if (isValidModel(userInput)) {
-  const provider = getProviderForModel(userInput);
+// Tool calling
+interface ToolCallingClient {
+  run(params: {
+    systemPrompt: string;
+    messages: ToolCallingMessage[];
+    tools: ToolDefinition[];
+    maxIterations?: number;
+    onExhausted?: (ctx: { iterationCount: number; toolCallsMade: number }) => string | undefined;
+    repairIterations?: number;
+  }): Promise<Result<ToolCallingResult, LLMError>>;
 }
 
-// Check if a model is fast (for default model selection)
-if (isFastModel(userInput)) {
-  // TypeScript narrows to FastModel
-}
+// Error codes
+type LLMErrorCode = 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED'
+  | 'OVERLOADED' | 'CONTEXT_LENGTH' | 'CONTENT_FILTERED';
 
-// Use typed constants
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-const model = LlmModels.Gemini25Flash;
-const provider = LlmProviders.Google;
+interface LLMError { code: LLMErrorCode; message: string; }
 
-// Implement the LLMClient interface
-import type { LLMClient, GenerateResult, LLMError } from '@intexuraos/llm-contract';
-class MyClient implements LLMClient {
-  async generate(prompt: string): Promise<Result<GenerateResult, LLMError>> {
-    /* ... */
-  }
-  async research(prompt: string): Promise<Result<ResearchResult, LLMError>> {
-    /* ... */
-  }
+// Pricing
+interface ModelPricing {
+  inputPricePerMillion: number;
+  outputPricePerMillion: number;
+  cacheReadMultiplier?: number;
+  cacheWriteMultiplier?: number;
+  webSearchCostPerCall?: number;
+  groundingCostPerRequest?: number;
+  imagePricing?: Partial<Record<'1024x1024' | '1536x1024' | '1024x1536', number>>;
+  useProviderCost?: boolean;
 }
 ```
+
+## Constraints
+
+**Do NOT:**
+- Add business logic to this package — it must remain types + runtime guards only
+- Reference this package from `common-*` packages (would create circular dependency)
+- Add provider-specific implementation details here
+
+**Requires:**
+- Only `@intexuraos/common-core` as a dependency (for `Result` type)
+
+## Dependencies
+
+| Package                   | Why Needed          |
+| ------------------------- | ------------------- |
+| `@intexuraos/common-core` | `Result` type usage |

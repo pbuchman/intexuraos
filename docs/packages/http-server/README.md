@@ -2,7 +2,6 @@
 
 Server setup utilities for IntexuraOS Fastify services. Provides health check infrastructure, environment variable validation, and a standardized validation error handler. Every Cloud Run service uses this package during startup.
 
-**Version:** 2.1.0
 **Node:** >=22.0.0
 **Type:** ESM
 
@@ -119,7 +118,7 @@ import { buildHealthResponse, checkSecrets, checkFirestore } from '@intexuraos/h
 
 app.get('/health', async (_request, reply) => {
   const checks = [checkSecrets(REQUIRED_ENV), await checkFirestore()];
-  const response = buildHealthResponse('my-service', '2.1.0', checks);
+  const response = buildHealthResponse('my-service', '3.3.0', checks);
   return reply.ok(response);
 });
 ```
@@ -158,12 +157,9 @@ app.setErrorHandler(createValidationErrorHandler());
 
 ## Recent Changes
 
-| Commit     | Description                                           | Age    |
-| ---------- | ----------------------------------------------------- | ------ |
-| `929dc714` | Fix JSON body parsing error handling across services  | recent |
-| `51cb268d` | Add tests for http-contracts and http-server packages | recent |
-| `d51755b6` | Migrate promptvault-service to use http-server        | recent |
-| `42d8c8c9` | Create packages/http-server with shared utilities     | recent |
+| Commit      | Description                                            |
+| ----------- | ------------------------------------------------------ |
+| `fc16d26ac` | Tighten test assertion, audit empty JSON body handling |
 
 ## Source Files
 

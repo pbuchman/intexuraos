@@ -2,6 +2,8 @@
 
 WhatsApp Cloud API wrapper providing message sending, media handling, and read receipt operations. Uses native `fetch` with no external SDK dependency.
 
+**Version:** 3.3.0 | **Node:** >=22.0.0 | **Type:** ESM
+
 ## What It Wraps
 
 - **External API:** WhatsApp Business Cloud API via Facebook Graph API (v22.0)
@@ -128,9 +130,9 @@ All methods return `Result<T, WhatsAppError>`. Error codes:
 
 ## Recent Changes
 
-| Commit     | Description                                            | When        |
-| ---------- | ------------------------------------------------------ | ----------- |
-| `37551ab3` | Fix WhatsApp voice note transcription bugs             | 4 weeks ago |
-| `9f6505a7` | Address remaining PR #533 review feedback              | 4 weeks ago |
-| `f7004bdf` | Address PR #533 review issues                          | 4 weeks ago |
-| `16f6d0dc` | Replace 'message saved' confirmation with read receipt | 4 weeks ago |
+| Commit     | Description                                            |
+| ---------- | ------------------------------------------------------ |
+| `37551ab3` | Fix WhatsApp voice note transcription bugs             |
+| `9f6505a7` | Address remaining PR #533 review feedback              |
+| `f7004bdf` | Address PR #533 review issues                          |
+| `16f6d0dc` | Replace 'message saved' confirmation with read receipt |

@@ -92,3 +92,67 @@ All 24 services scored through the full 6-critic panel. Existing drafts presente
 - **Competitor Analyst most variable** — scores ranged from 6 to 9.5, highly dependent on how differentiated the service is.
 - **Commands-agent weakest** — lowest SHIP rate (2/6). Truncated prompt issue in critic batch caused unreliable subjective scores; PA confirmed all claims correct.
 - **5 services scored 6/6 SHIP with no edits needed**: app-settings-service, email-service, notion-service, sentry-service, whatsapp-service.
+
+---
+
+## 2026-03-16 — v4 Flagship Trio Rewrite
+
+Engineering showcase for recruiters. Three flagship services rewritten with the v4 documentation refresh.
+
+### code-agent
+
+| Round | PA  | Dev | Strat | EU  | Build | Comp | Avg  | SHIP | Action         |
+| ----- | --- | --- | ----- | --- | ----- | ---- | ---- | ---- | -------------- |
+| R1    | 8R  | 8R  | 8R    | 6R  | 9     | 8R   | 7.83 | 1/6  | Targeted edits |
+
+**Outcome:** Accepted after targeted edits from 5 REVISE critics.
+
+**Targeted edits applied:**
+- Defined "pull request" on first use (End User: used 14 times without explanation)
+- Replaced "webhook handler swallows exceptions" with plain language (End User: jargon)
+- Renamed "Cross-LLM Verification" → "Independent Verification — Two AIs, Two Providers" (End User: opaque heading)
+- Added IntexuraOS context to subtitle (External Developer: never introduced)
+- Added visceral sentence to Problem section (Product Strategist: emotional punch)
+- Softened worker provider list to remove unverifiable specifics (PA: not in technical.md)
+- Added "Voice note to pull request" as named Key Benefit (Competitor: buried pipeline)
+- Clarified deployment model with concrete examples (External Developer: unclear)
+
+Overview drift: NONE (overview.md restructured in same session)
+
+### orchestrator
+
+| Round | PA  | Dev | Strat | EU  | Build | Comp | Avg  | SHIP | Action         |
+| ----- | --- | --- | ----- | --- | ----- | ---- | ---- | ---- | -------------- |
+| R1    | 9   | 9   | 9     | 7R  | 9     | 8R   | 8.50 | 4/6  | Targeted edits |
+
+**Outcome:** Accepted after targeted edits from 2 REVISE critics.
+
+**Targeted edits applied:**
+- Replaced "HMAC" with plain-language "cryptographically signed" (End User: jargon)
+- Simplified container security spec to outcome language (End User: Linux capabilities jargon)
+- Elevated sensitive file guard with explicit differentiation framing (Competitor: underplayed strength)
+
+Overview drift: NONE (overview.md restructured in same session)
+
+### claude-worker
+
+| Round | PA  | Dev | Strat | EU  | Build | Comp | Avg  | SHIP | Action         |
+| ----- | --- | --- | ----- | --- | ----- | ---- | ---- | ---- | -------------- |
+| R1    | 8R  | 9   | 8.5   | 7R  | 8R    | 6R   | 7.75 | 2/6  | Full rewrite   |
+| R2    | 9   | 9   | 9     | 8R  | 8     | 8    | 8.50 | 5/6  | Targeted edits |
+
+**Outcome:** Accepted after R2 targeted edits from End User.
+
+**Key PA corrections (R1):**
+- "error tracking" is not a Claude Code plugin — the 6th plugin is "superpowers". Sentry is an MCP server.
+- "memory allocation" isolation claim removed — no Docker-level memory limits are set
+- 24-hour auto-removal claim made precise — actual cleanup is periodic garbage collection
+
+**R2 improvements:**
+- "Recovers Instead of Restarting" promoted to capability #1 (Competitor: was buried)
+- "Runs on Your Infrastructure" elevated with competitor naming (Competitor: moat buried)
+- Separation rationale expanded with 3 concrete benefits (Builder: architectural WHY)
+- Jargon reduced throughout (End User)
+- "Security model does not depend on the agent following rules" framing added (Competitor)
+
+Overview drift: NONE (overview.md restructured in same session)

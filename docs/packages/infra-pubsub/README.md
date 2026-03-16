@@ -2,7 +2,7 @@
 
 Cloud Pub/Sub infrastructure adapters for cross-service messaging. Provides a `BasePubSubPublisher` abstract class and concrete publisher implementations for WhatsApp messaging, todo processing, and calendar preview generation.
 
-**Version:** 2.1.0
+**Version:** 3.3.0
 **Node:** >=22.0.0
 **Type:** ESM
 
@@ -83,6 +83,7 @@ interface WhatsAppSendPublisher {
     message: string;
     replyToMessageId?: string;
     buttons?: WhatsAppInteractiveButton[];
+    ctaUrl?: { displayText: string; url: string };
     correlationId?: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -94,6 +95,8 @@ function createWhatsAppSendPublisher(config: WhatsAppSendPublisherConfig): Whats
 
 The publisher constructs a `SendMessageEvent` with auto-generated `correlationId` and `timestamp`. Phone number lookup happens in `whatsapp-service` using the `userId`.
 
+**Constraint:** `buttons` and `ctaUrl` are mutually exclusive — the WhatsApp API does not support both in the same message. The publisher does not enforce this constraint; it is the caller's responsibility.
+
 ```typescript
 interface SendMessageEvent {
   type: 'whatsapp.message.send';
@@ -101,6 +104,7 @@ interface SendMessageEvent {
   message: string;
   replyToMessageId?: string;
   buttons?: WhatsAppInteractiveButton[];
+  ctaUrl?: { displayText: string; url: string };
   correlationId: string;
   timestamp: string;
 }
@@ -221,18 +225,19 @@ if (!result.ok) {
 
 **Apps (7):** `actions-agent`, `bookmarks-agent`, `code-agent`, `commands-agent`, `research-agent`, `todos-agent`, `whatsapp-service`
 
+**Workers (1):** `workers/transcription`
+
 ## Recent Changes
 
-| Commit   | Description                                            | Age    |
-| -------- | ------------------------------------------------------ | ------ |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner       | Recent |
-| dfd702f1 | Add Sentry-enabled logger factory and migrate all apps | Recent |
-| 4404b004 | Add tests to meet coverage threshold                   | Recent |
-| a9847b66 | Add WhatsApp approval buttons with nonces              | Recent |
-| 766ae429 | Add tests for branch coverage gaps in packages         | Recent |
-| 6890b482 | Add tests for calendarPreviewPublisher                 | Recent |
-| 4fa0fed3 | Release v2.0.0                                         | Recent |
-| 60bb9396 | Add Pub/Sub infrastructure for calendar preview        | Recent |
+| Commit     | Description                                                   |
+| ---------- | ------------------------------------------------------------- |
+| `55b959e6` | Add deep link `ctaUrl` to WhatsApp send event (code-agent)    |
+| `a41ca812` | Replace PR URL text with WhatsApp CTA URL buttons             |
+| `d0d38f53` | Address code review feedback for INT-738                      |
+| `44017d5c` | Fix ESLint OOM with batched parallel lint runner              |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps        |
+| `a9847b66` | Add WhatsApp approval buttons with nonces                     |
+| `60bb9396` | Add Pub/Sub infrastructure for calendar preview               |
 
 ## Source Files
 

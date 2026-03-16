@@ -1,7 +1,7 @@
-# Linear Agent - Technical Debt
+# Linear Agent — Technical Debt
 
 **Last Updated:** 2026-03-15
-**Analysis Run:** v3.3.0 documentation refresh (DashScope migration, v8 ignore test replacement, already_completed outcome, planning-task label gating)
+**Analysis Run:** v3.3.0 documentation refresh (already_completed outcome, display-batch batched reads, v8 ignore test replacement, planning-task label gating)
 
 ---
 
@@ -9,9 +9,9 @@
 
 | Category           | Count | Severity |
 | ------------------ | ----- | -------- |
-| TODOs/FIXMEs       | 0     | -        |
-| Test Coverage Gaps | 0     | -        |
-| TypeScript Issues  | 0     | -        |
+| TODOs/FIXMEs       | 0     | —        |
+| Test Coverage Gaps | 0     | —        |
+| TypeScript Issues  | 0     | —        |
 | Code Smells        | 2     | Low      |
 | SRP Violations     | 1     | Low      |
 | **Total**          | **3** | Low      |
@@ -35,7 +35,7 @@ Based on code analysis, git history, and domain patterns:
 5. **Multi-Issue Splitting**: Parse complex descriptions into multiple related issues
 6. **Assignee Suggestion**: Suggest assignee based on historical patterns or explicit mentions
 7. **Label Support in Internal API**: The `POST /internal/issues` endpoint accepts `labels` but does not pass them to the Linear API yet
-8. **completedAt in SyncedLinearIssue**: `SyncedLinearIssue` does not store `completedAt`; `updatedAt` is used as a proxy for the archive cutoff. Adding `completedAt` would improve accuracy for issues completed long after their last update.
+8. **completedAt in SyncedLinearIssue**: `SyncedLinearIssue` does not store `completedAt`; `updatedAt` is used as a proxy for archive cutoff. Adding `completedAt` would improve accuracy for issues completed long after their last update.
 9. **Comment Full Sync**: Comments are only synced via webhooks; a comment full-sync capability for initial setup would be valuable
 
 ---
@@ -59,7 +59,7 @@ Based on code analysis, git history, and domain patterns:
 
 ## Test Coverage Gaps
 
-None identified. Current coverage meets the 100% branch threshold with valid v8 ignore exemptions across 8 files (56 total `v8 ignore` directives, reduced from 92 in v3.2.0 thanks to INT-792 real test replacement). All exemptions use documented categories: `test-infra`, `ts-type`, `async-timing`.
+None identified. Current coverage meets the 100% branch threshold with valid v8 ignore exemptions across 8 files (56 total `v8 ignore` directives, reduced from 92 in v3.2.0 thanks to INT-792 real test replacement). All exemptions use documented categories: `test-infra`, `ts-type`, `async-timing`, `upstream`, `schema`.
 
 ---
 
@@ -69,33 +69,33 @@ None identified. One `@ts-expect-error` exists in test code (`linearActionExtrac
 
 - Linear API types (`LinearIssue`, `LinearIssueWithTeam`, `LinearTeam`, `IssueStateCategory`)
 - Sync types (`SyncedLinearIssue`, `LinearComment`, `WorkflowState`)
-- Webhook types (`LinearWebhookEvent`, `LinearWebhookPayload`, `WebhookAction`)
+- Webhook types (`LinearWebhookEvent`, `LinearCommentWebhookEvent`, `LinearWebhookUpdatedFrom`)
 - Dashboard types (`DashboardColumn`, `GroupedIssues`)
 - Extraction types (`ExtractedIssueData`)
 - Validation types (`ValidatedIssue`, `ValidateIssueError`)
 - Title generation types (`GeneratedTitle`, `GenerateTitleError`)
-- Error types (`LinearError`, `LinearWebhookError`)
+- Error types (`LinearError`)
 - Label types (`LinearLabel` with id, name, color)
-- Display types (`IssueDisplayResponse`, `UpdateIssueMetadataBody`)
+- Display types (`IssueDisplayResponse`, `CommentSummary`, `UpdateIssueMetadataBody`)
 
 ---
 
 ## SRP Violations
 
-| File                      | Lines | Status                                                    |
-| ------------------------- | ----- | --------------------------------------------------------- |
-| `linearRoutes.ts`         | ~993  | Borderline (14 endpoints). Watch closely                  |
-| `internalIssuesRoutes.ts` | ~933  | Borderline (7 endpoints). Growth from new internal API    |
-| `linearApiClient.ts`      | ~636  | Acceptable (includes caching and dedup optimizations)     |
-| `internalRoutes.ts`       | ~596  | OK (5 endpoints)                                          |
-| `linearWebhookRoutes.ts`  | ~446  | OK                                                        |
-| `processLinearAction.ts`  | ~233  | OK                                                        |
-| `listIssues.ts`           | ~208  | OK                                                        |
-| `fullSyncUseCase.ts`      | ~158  | OK                                                        |
-| `generateIssueTitle.ts`   | ~133  | OK                                                        |
-| `validateIssue.ts`        | ~111  | OK                                                        |
+| File                      | Lines | Status                                                 |
+| ------------------------- | ----- | ------------------------------------------------------ |
+| `linearRoutes.ts`         | ~983  | Borderline (14 endpoints). Watch closely               |
+| `internalIssuesRoutes.ts` | ~933  | Borderline (7 endpoints). Growth from new internal API |
+| `linearApiClient.ts`      | ~636  | Acceptable (includes caching and dedup optimizations)  |
+| `internalRoutes.ts`       | ~590  | OK (5 endpoints)                                       |
+| `linearWebhookRoutes.ts`  | ~453  | OK                                                     |
+| `processLinearAction.ts`  | ~233  | OK                                                     |
+| `listIssues.ts`           | ~208  | OK                                                     |
+| `fullSyncUseCase.ts`      | ~151  | OK                                                     |
+| `generateIssueTitle.ts`   | ~134  | OK                                                     |
+| `validateIssue.ts`        | ~111  | OK                                                     |
 
-**Note:** `internalIssuesRoutes.ts` grew from ~563 lines to ~933 lines since the last analysis, adding 4 new endpoints (comments, metadata, display-batch, issue tree). It is now the second-largest route file. Consider splitting into focused modules (e.g., `internalIssueDisplayRoutes.ts`, `internalIssueMutationRoutes.ts`) if further endpoints are added.
+**Note:** `internalIssuesRoutes.ts` grew from ~563 lines to ~933 lines since the v3.1.0 analysis, adding 4 new endpoints (comments, metadata, display-batch, issue tree). It is now the second-largest route file. Consider splitting into focused modules (e.g., `internalIssueDisplayRoutes.ts`, `internalIssueMutationRoutes.ts`) if further endpoints are added.
 
 **Note:** `linearApiClient.ts` grew from ~360 to ~636 lines. The growth is from new API methods (`createComment`, `updateIssue`, `listIssueLabels`, `listTeamMembers`) and remains cohesive since all methods operate on the same Linear SDK client.
 
@@ -120,11 +120,11 @@ None identified. One `@ts-expect-error` exists in test code (`linearActionExtrac
 
 None. The service uses current versions of:
 
-- `@linear/sdk` - Official Linear SDK
-- `@intexuraos/llm-prompts` - Internal prompt library (includes `linearIssueTitlePrompt`)
-- `@intexuraos/llm-utils` - Zod error formatting
-- `@intexuraos/common-core` - Result types
-- `@intexuraos/internal-clients` - UserServiceClient
+- `@linear/sdk` — Official Linear SDK
+- `@intexuraos/llm-prompts` — Internal prompt library (includes `linearIssueTitlePrompt`, `linearActionExtractionPrompt`)
+- `@intexuraos/llm-utils` — Zod error formatting
+- `@intexuraos/common-core` — Result types, label detection helpers
+- `@intexuraos/internal-clients` — UserServiceClient
 
 ---
 
@@ -191,21 +191,22 @@ None. The service uses current versions of:
 13. **Signature Security**: HMAC-SHA256 with timing-safe comparison prevents timing attacks
 14. **Comment Sync**: Comments stored in Firestore and exposed via paginated API
 15. **HTTP Boundary Type Mapping**: `validateIssue` maps `LinearLabel[]` to `string[]` at the route layer — domain types stay clean
-16. **OpenTelemetry**: Distributed tracing and metrics via Dash0 loaded transparently at process start (no-op when unconfigured)
-17. **Auto-Trigger on Assignment**: Webhook-driven code task creation with strict guard conditions
-18. **Assignee Preservation**: Full sync preserves assignee data from the Linear API for dashboard display
-19. **Multi-User Webhook Fan-Out**: Webhooks fan out to all connected users per team via `Promise.allSettled` (INT-623)
-20. **Composite Document Keys**: `userId_issueId` keys prevent cross-user data overwrite in shared Firestore collections
-21. **Dual-Prompt Code Task**: Prompt selection based on `code-task` label — enrichment vs execution
-22. **Display Batch Endpoint**: `POST /internal/linear/issues/display-batch` returns multiple issues in a single call for efficiency
-23. **Issue Tree Traversal**: `GET /internal/issues/:issueId/tree` returns recursive descendants from local sync data without Linear API calls
+16. **Auto-Trigger on Assignment**: Webhook-driven code task creation with strict guard conditions
+17. **Assignee Preservation**: Full sync preserves assignee data from the Linear API for dashboard display
+18. **Multi-User Webhook Fan-Out**: Webhooks fan out to all connected users per team via `Promise.allSettled` (INT-623)
+19. **Composite Document Keys**: `userId_issueId` keys prevent cross-user data overwrite in shared Firestore collections
+20. **Dual-Prompt Code Task**: Prompt selection based on `code-task` label — enrichment vs execution
+21. **Display Batch Endpoint**: `POST /internal/linear/issues/display-batch` returns multiple issues in a single call with batched Firestore reads
+22. **Issue Tree Traversal**: `GET /internal/issues/:issueId/tree` returns recursive descendants from local sync data without Linear API calls
+23. **Already-Completed Flow**: `done` state support enables enforcement pipeline to close issues when work is already merged (INT-773)
+24. **Comments in Agent Prompts**: Both ASSIGNMENT_PROMPT and EXECUTION_PROMPT instruct the code agent to read all issue comments newest-first (INT-715)
 
 ### Areas for Improvement
 
-1. **Label Passthrough**: Internal API accepts labels but does not forward them to Linear
+1. **Label Passthrough**: Internal API accepts labels but does not forward them to Linear on creation
 2. **completedAt Gap**: SyncedLinearIssue uses `updatedAt` as proxy for archive cutoff
 3. **Module-Level State**: Client cache uses global state (isolated but harder to test)
-4. **Route File Size**: `linearRoutes.ts` at ~993 lines and `internalIssuesRoutes.ts` at ~933 lines could benefit from splitting
+4. **Route File Size**: `linearRoutes.ts` at ~983 lines and `internalIssuesRoutes.ts` at ~933 lines could benefit from splitting
 5. **Comment Full Sync**: No bulk comment reconciliation for initial setup
 6. **Fire-and-Forget Auto-Trigger**: `triggerCodeTaskFromAssignment` errors only logged, not surfaced
 7. **v8 Ignore Density**: 56 coverage exemption directives across 8 files (reduced from 92 across 12 files in v3.2.0 via INT-792)
@@ -214,9 +215,9 @@ None. The service uses current versions of:
 
 ## Related
 
-- [Features](features.md) - User-facing documentation
-- [Technical](technical.md) - Developer reference
-- [Tutorial](tutorial.md) - Getting started guide
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
+- [Tutorial](tutorial.md) — Getting started guide
 - [Documentation Run Log](../../documentation-runs.md)
 
 ---

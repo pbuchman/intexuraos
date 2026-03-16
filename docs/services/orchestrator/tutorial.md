@@ -140,7 +140,7 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
-The `workerType` field controls which AI model handles the task. Valid types are `opus`, `auto`, `sonnet`, `minimax`, `glm`, `qwen`, and `kimi`.
+The `workerType` field controls which AI model handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), and `glm`, `qwen`, `kimi` (Alibaba Cloud DashScope).
 
 ```bash
 BODY='{

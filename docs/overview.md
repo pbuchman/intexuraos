@@ -1,6 +1,6 @@
 # IntexuraOS
 
-An AI-native personal operating system — 25 specialized agents that turn your voice notes, messages, and ideas into research, code, calendar events, and organized work, all from WhatsApp and a single web dashboard.
+An AI-native personal operating system — 20 specialized agents that turn your voice notes, messages, and ideas into research, code, calendar events, and organized work, all from WhatsApp and a single web dashboard.
 
 ## The Vision
 
@@ -8,9 +8,19 @@ Most productivity tools ask you to do two things at once: have the idea and orga
 
 IntexuraOS eliminates the gap between thinking and doing. You say what you need — through a WhatsApp voice note, a text message, or a quick entry in the web dashboard — and a system of specialized agents handles the rest. One agent classifies your intent. Another dispatches it to the right specialist. A third executes it. Your dentist appointment lands on your Google Calendar. Your research question goes to five AI models simultaneously. Your bug report becomes a tracked project issue, picked up by an autonomous coding agent that produces finished, tested code while you sleep. You stay in the loop through previews, approval buttons, and notifications — but the work happens without you doing the work.
 
-This is not one AI that tries to do everything. It is 25 services, each built for a single domain, communicating through a shared platform. The commands agent understands what you said. The actions agent decides what to do about it. The research agent queries multiple AI providers and cross-references their answers. The code agent designs a solution, waits for your approval, and writes the code on your own machine — code that never leaves your infrastructure, running inside isolated containers powered by your own AI subscription. The calendar agent puts events on your schedule. Linear (a project tracking tool) structures your board. Because each agent has a single domain, the system can improve any agent independently, add new capabilities without touching existing ones, and route with precision that a general-purpose assistant cannot match by design.
+This is not one AI that tries to do everything. It is a system of services, each built for a single domain, communicating through a shared platform. The commands agent understands what you said. The actions agent decides what to do about it. The research agent queries multiple AI providers and cross-references their answers. The code agent designs a solution, waits for your approval, and writes the code on your own machine — code that never leaves your infrastructure, running inside isolated containers powered by your own AI subscription. The calendar agent puts events on your schedule. Linear (a project tracking tool) structures your board. Because each agent has a single domain, the system can improve any agent independently, add new capabilities without touching existing ones, and route with precision that a general-purpose assistant cannot match by design.
 
 ## What You Can Do
+
+### Build Software Autonomously
+
+Describe what you want built. Walk away. Come back to finished, tested code — with a design review checkpoint in between so the agent never builds the wrong thing. Everything runs on your own hardware, inside isolated containers, using your own AI subscription. Your source code never touches a third-party cloud.
+
+**[Code Agent](services/code-agent/features.md)** is the interface you interact with. Submit a task by WhatsApp voice note, text message, the web dashboard, or a comment on a GitHub pull request — and the agent creates a Linear issue, produces a design document explaining its approach, and stops. You review the design on your own schedule. Press the Implement button, and the agent writes tests, writes code, runs the test suite, and opens a code change for review. Leave a comment on GitHub, and the agent evaluates it using tool calling and a unified webhook evaluator, then picks up your feedback with full context. All PR actions are visible in one place through a unified PR automation log. When all workers are busy, new tasks queue automatically and dispatch in order as capacity opens — no requests are dropped. Behind the scenes, agent-based routing dispatches each task to the right specialist — a planning agent for designs, an execution agent for code — based on Linear issue labels. Triage decisions use structured output with auto-repair to produce reliable results. You can choose from seven worker types across three AI providers: Anthropic (Opus, Sonnet, Auto), MiniMax, and Alibaba Cloud Model Studio (GLM-5, Qwen, Kimi) — or let the agent pick automatically. Per-user limits on concurrency, hourly rate, and daily spend keep costs predictable.
+
+**[Orchestrator](services/orchestrator/features.md)** runs on your own hardware. Your source code never leaves your network. Any Unix machine becomes a worker station, connected to the platform through a single secure outbound connection — no firewall changes, no open ports. Each task gets its own branch, its own container, its own credentials — two concurrent tasks never see each other's files. An independent verifier confirms completion by checklist and AI review, not worker self-reporting. A sensitive file guard scans every commit for passwords and secrets, reverting anything suspicious before it reaches your repository. Automatic Docker container cleanup prevents resource leaks from orphaned or stale containers. Every code task includes a mandatory simplify step before completion to reduce unnecessary complexity.
+
+The system survives reboots, cleans up orphaned work, and notifies the platform without manual intervention. Inside each container, a fully equipped isolated coding environment arrives with every tool a developer would need — all configured automatically before the agent writes its first line of code. Your team's own Anthropic subscription powers the AI compute. When a task finishes, the environment is destroyed. No stale credentials, no leftover files, no cleanup checklists.
 
 ### Talk to the System
 
@@ -39,18 +49,6 @@ Every message you send enters through one front door and reaches the right speci
 **[Bookmarks Agent](services/bookmarks-agent/features.md)** saves links with context. Share a URL, and the agent visits the page, extracts the title, cover image, and site information, then generates an AI summary delivered straight to your WhatsApp. When you come back next week, you remember exactly why you saved it. Duplicate URLs are caught automatically.
 
 **[Linear Agent](services/linear-agent/features.md)** turns voice notes and quick messages into structured, prioritized issues in Linear (a project tracking tool). The AI extracts a title, separates functional requirements from technical details, and reads urgency cues from your words — "ASAP" maps to Urgent, "when you have time" maps to Low. Your board loads instantly in the web dashboard from a local copy updated in real time, with live data hydration that keeps issue details current without manual refresh. The code agent updates your board as it works, closing the loop from thought to finished code to tracked progress.
-
-### Build Software Autonomously
-
-Describe what you want built. Walk away. Come back to finished, tested code — with a design review checkpoint in between so the agent never builds the wrong thing. Everything runs on your own hardware, inside isolated containers, using your own AI subscription. Your source code never touches a third-party cloud.
-
-**[Code Agent](services/code-agent/features.md)** is the interface you interact with. Submit a task by WhatsApp voice note, text message, the web dashboard, or a comment on a GitHub pull request — and the agent creates a Linear issue, produces a design document explaining its approach, and stops. You review the design on your own schedule. Press the Implement button, and the agent writes tests, writes code, runs the test suite, and opens a code change for review. Leave a comment on GitHub, and the agent evaluates it using tool calling and a unified webhook evaluator, then picks up your feedback with full context. All PR actions are visible in one place through a unified PR automation log. When all workers are busy, new tasks queue automatically and dispatch in order as capacity opens — no requests are dropped. Behind the scenes, agent-based routing dispatches each task to the right specialist — a planning agent for designs, an execution agent for code — based on Linear issue labels. Triage decisions use structured output with auto-repair to produce reliable results. You can choose from seven worker types across three AI providers: Anthropic (Opus, Sonnet, Auto), MiniMax, and Alibaba Cloud Model Studio (GLM-5, Qwen, Kimi) — or let the agent pick automatically. Per-user limits on concurrency, hourly rate, and daily spend keep costs predictable.
-
-**[Orchestrator](services/orchestrator/features.md)** runs on your own hardware. Your source code never leaves your network. Any Unix machine becomes a worker station, connected to the platform through a single secure outbound connection — no firewall changes, no open ports. Each task gets its own branch, its own container, its own credentials — two concurrent tasks never see each other's files. An independent verifier confirms completion by checklist and AI review, not worker self-reporting. A sensitive file guard scans every commit for passwords and secrets, reverting anything suspicious before it reaches your repository. Automatic Docker container cleanup prevents resource leaks from orphaned or stale containers. Every code task includes a mandatory simplify step before completion to reduce unnecessary complexity.
-
-The system survives reboots, cleans up orphaned work, and notifies the platform without manual intervention.
-
-**[Claude Worker](services/claude-worker/features.md)** is the isolated coding environment inside each container. It arrives fully equipped with every tool a developer would need — all configured automatically before the agent writes its first line of code. Your team's own Anthropic subscription powers the AI compute. When a task finishes, the environment is destroyed. No stale credentials, no leftover files, no cleanup checklists.
 
 ### Research With Multi-Model Consensus
 
@@ -84,7 +82,7 @@ You review a draft before anything runs — the refined prompt, selected models,
 
 **[Log Cleanup](services/log-cleanup/features.md)** sweeps out old execution logs every night in controlled batches. Database queries stay fast, storage costs stay flat, and no one ever has to think about log retention. If a nightly run fails, the next one catches what was missed.
 
-**[API Docs Hub](services/api-docs-hub/features.md)** collects the technical documentation for all 15 backend services into a single interactive reference. One URL, one dropdown, always current. If you are building on top of IntexuraOS or want to understand how services communicate, this is the starting point.
+**[API Docs Hub](services/api-docs-hub/features.md)** collects the technical documentation for all backend services into a single interactive reference. One URL, one dropdown, always current. If you are building on top of IntexuraOS or want to understand how services communicate, this is the starting point.
 
 ## How It Works
 

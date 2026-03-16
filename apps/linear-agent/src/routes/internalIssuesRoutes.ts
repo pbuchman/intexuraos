@@ -8,6 +8,15 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import type { Logger } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import type { LinearError } from '../domain/errors.js';
+import {
+  STATE_NAME_MAP,
+  findStateId,
+  toCommentSummary,
+  buildIssueDisplayResponse,
+  type IssueDisplayResponse,
+  resolveDesiredLabelIds,
+  buildIssueTree,
+} from '../domain/index.js';
 
 // Request/response types
 interface CreateIssueBody {
@@ -34,73 +43,12 @@ interface UpdateIssueMetadataBody {
   removeLabels?: string[];
 }
 
-// State name mapping for Linear workflow states
-const STATE_NAME_MAP: Record<string, string> = {
-  backlog: 'Backlog',
-  todo: 'Todo',
-  in_progress: 'In Progress',
-  in_review: 'In Review',
-  qa: 'QA',
-  done: 'Done',
-};
-
 // Response shape matching code-agent expectations
 interface IssueResponse {
   id: string;
   identifier: string;
   title: string;
   url: string;
-}
-
-interface IssueDisplayResponse {
-  identifier: string;
-  title: string;
-  state: { name: string; type: string };
-  priority: number;
-  assignee: { id: string; name: string } | null;
-  labels: { id: string; name: string }[];
-  url: string;
-  commentCount: number;
-  lastCommentAt: string | null;
-}
-
-function buildIssueDisplayResponse(
-  issue: {
-    id: string;
-    identifier: string;
-    title: string;
-    state: string;
-    stateType: string;
-    priority: number;
-    assigneeId: string | null;
-    assigneeName: string | null;
-    labels: { id: string; name: string; color: string }[];
-    url: string;
-  },
-  commentSummary: { commentCount: number; lastCommentAt: string | null }
-): IssueDisplayResponse {
-  return {
-    identifier: issue.identifier,
-    title: issue.title,
-    state: { name: issue.state, type: issue.stateType },
-    priority: issue.priority,
-    /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
-    assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
-    /* v8 ignore stop @preserve */
-    labels: issue.labels.map((label) => ({ id: label.id, name: label.name })),
-    url: issue.url,
-    commentCount: commentSummary.commentCount,
-    lastCommentAt: commentSummary.lastCommentAt,
-  };
-}
-
-function toCommentSummary(comments: { createdAt: string }[]): { commentCount: number; lastCommentAt: string | null } {
-  return {
-    commentCount: comments.length,
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes indexed access possibly undefined despite length > 0 guard @preserve */
-    lastCommentAt: comments.length > 0 ? (comments[comments.length - 1]?.createdAt ?? null) : null,
-    /* v8 ignore stop @preserve */
-  };
 }
 
 async function handleLinearError(
@@ -113,20 +61,6 @@ async function handleLinearError(
   }
   reply.status(500);
   return await reply.fail('DOWNSTREAM_ERROR', error.message);
-}
-
-/**
- * Find a workflow state ID by name from the team's states.
- * Returns null if no matching state is found.
- */
-function findStateId(
-  states: { id: string; name: string; type: string }[],
-  stateName: string
-): string | null {
-  const state = states.find(
-    (s) => s.name.toLowerCase() === stateName.toLowerCase()
-  );
-  return state?.id ?? null;
 }
 
 export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -357,15 +291,15 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       const labelsResult = await services.linearApiClient.listIssueLabels(apiKeyResult.value, syncedIssue.teamId); // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
       if (!labelsResult.ok) return await handleLinearError(labelsResult.error, reply);
 
-      const currentLabelNames = new Set(syncedIssue.labels.map((l) => l.name));
+      const availableLabels = labelsResult.value; // @allow-result-access -- guarded by if (!labelsResult.ok) above
       /* v8 ignore start -- schema: Fastify schema validates addLabels/removeLabels as optional arrays; ?? [] fallback unreachable when schema-validated request provides them @preserve */
-      for (const label of request.body.addLabels ?? []) currentLabelNames.add(label);
-      for (const label of request.body.removeLabels ?? []) currentLabelNames.delete(label);
+      const desiredLabelIds = resolveDesiredLabelIds(
+        syncedIssue.labels,
+        request.body.addLabels ?? [],
+        request.body.removeLabels ?? [],
+        availableLabels
+      );
       /* v8 ignore stop @preserve */
-
-      const desiredLabelIds = labelsResult.value // @allow-result-access -- guarded by if (!labelsResult.ok) above
-        .filter((label) => currentLabelNames.has(label.name))
-        .map((label) => label.id);
 
       const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, issueId, { // @allow-result-access -- guarded by if (!apiKeyResult.ok) and null check above
         ...(request.body.assigneeId !== undefined && { assigneeId: request.body.assigneeId }),
@@ -879,44 +813,23 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       const allIssuesResult = await services.issueRepository.listByUserId(userId);
       if (!allIssuesResult.ok) return await handleLinearError(allIssuesResult.error, reply);
 
-      const allIssues = allIssuesResult.value; // @allow-result-access -- guarded by if (!allIssuesResult.ok) above
-      const root = allIssues.find((issue) => issue.id === issueId);
-      if (root === undefined) {
+      const tree = buildIssueTree(allIssuesResult.value, issueId); // @allow-result-access -- guarded by if (!allIssuesResult.ok) above
+      if (tree === null) {
         reply.status(404);
         return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
       }
 
-      const byParent = new Map<string, typeof allIssues>();
-      for (const issue of allIssues) {
-        if (issue.parentId === null) continue;
-        const list = byParent.get(issue.parentId) ?? [];
-        list.push(issue);
-        byParent.set(issue.parentId, list);
-      }
-
-      const descendants: typeof allIssues = [];
-      let queueItem = byParent.get(root.id) ?? [];
-      while (queueItem.length > 0) {
-        const nextBatch = queueItem;
-        queueItem = [];
-        for (const node of nextBatch) {
-          descendants.push(node);
-          const children = byParent.get(node.id);
-          if (children !== undefined) queueItem.push(...children);
-        }
-      }
-
       return await reply.ok({
         root: {
-          id: root.id,
-          identifier: root.identifier,
-          url: root.url,
-          parentId: root.parentId,
-          labels: root.labels.map((l) => l.name),
-          assigneeId: root.assigneeId,
-          state: root.state,
+          id: tree.root.id,
+          identifier: tree.root.identifier,
+          url: tree.root.url,
+          parentId: tree.root.parentId,
+          labels: tree.root.labels.map((l) => l.name),
+          assigneeId: tree.root.assigneeId,
+          state: tree.root.state,
         },
-        descendants: descendants.map((issue) => ({
+        descendants: tree.descendants.map((issue) => ({
           id: issue.id,
           identifier: issue.identifier,
           url: issue.url,

@@ -1,50 +1,44 @@
-# @intexuraos/llm-pricing - Agent Reference
+# @intexuraos/llm-pricing — Agent Reference
 
-Machine-readable export map and interface definitions for automated tooling.
+> Machine-readable interface for automated tooling and AI agents.
 
-## Package Metadata
+## Identity
 
-```
-name: @intexuraos/llm-pricing
-version: 2.1.0
-type: module
-leaf: false
-dependencies: @intexuraos/common-core, @intexuraos/infra-firestore, @intexuraos/llm-contract
-entry_points:
-  - ".": ./src/index.ts
-firestore_collections:
-  - llm_usage_stats (owned)
-env_vars:
-  - INTEXURAOS_LOG_LLM_USAGE (optional, default: true)
-```
+| Attribute | Value                                                              |
+| --------- | ------------------------------------------------------------------ |
+| Package   | `@intexuraos/llm-pricing`                                          |
+| Role      | Pricing lookup and usage tracking for LLM operations               |
+| Goal      | Provide O(1) cost lookup at runtime; aggregate usage to Firestore  |
+| Firestore | `llm_usage_stats` (owner: this package via `FirestoreUsageSink`)   |
 
-## Exported Types
+## Exports
+
+### Functions
+
+| Export                  | Signature                                                                                         | Purpose                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `fetchAllPricing`       | `(baseUrl: string, authToken: string) => Promise<Result<AllPricingResponse, PricingClientError>>` | Fetch pricing from app-settings-service           |
+| `createPricingContext`  | `(allPricing: AllPricingResponse, requiredModels?: LLMModel[]) => PricingContext`                 | Build validated O(1) pricing lookup               |
+| `createUsageLogger`     | `(deps: { logger: Logger; sink?: UsageSink }) => UsageLogger`                                     | Create a usage logger instance                    |
+| `isUsageLoggingEnabled` | `() => boolean`                                                                                   | Check `INTEXURAOS_LOG_LLM_USAGE`                  |
+
+### Classes
+
+| Export                   | Purpose                                                  |
+| ------------------------ | -------------------------------------------------------- |
+| `PricingContext`         | O(1) pricing lookups via internal Map                    |
+| `UsageLogger`            | Logs usage to Firestore with structured logging          |
+| `FirestoreUsageSink`     | Default sink — writes to `llm_usage_stats`               |
+| `StructuredLogUsageSink` | Sink that emits to a Pino logger                         |
+| `NoopUsageSink`          | Sink that discards all events (tests only)               |
+| `FakePricingContext`     | Test double implementing `IPricingContext`               |
+
+### Key Types
 
 ```typescript
-// types.ts
-interface LlmPricing {
-  provider: LlmProvider;
-  model: string;
-  inputPricePerMillion: number;
-  outputPricePerMillion: number;
-  webSearchCostPerCall?: number;
-  groundingCostPerRequest?: number;
-  cacheWriteMultiplier?: number;
-  cacheReadMultiplier?: number;
-  imageCostPerGeneration?: number;
-  updatedAt: string;
-}
-
-// Re-exported
-type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
-
-// usageLogger.ts
 type CallType =
-  | 'research'
-  | 'generate'
-  | 'image_generation'
-  | 'visualization_insights'
-  | 'visualization_vegalite';
+  | 'research' | 'generate' | 'image_generation'
+  | 'visualization_insights' | 'visualization_vegalite' | 'tool_calling';
 
 interface UsageLogParams {
   userId: string;
@@ -57,142 +51,86 @@ interface UsageLogParams {
   logger?: Logger;
 }
 
-// pricingClient.ts
+interface UsageSink {
+  log(params: UsageLogParams): Promise<void>;
+}
+
+interface IPricingContext {
+  getPricing(model: LLMModel): ModelPricing;  // throws if missing
+  hasPricing(model: LLMModel): boolean;
+  validateModels(models: LLMModel[]): void;
+  validateAllModels(): void;
+  getModelsWithPricing(): LLMModel[];
+}
+
 interface AllPricingResponse {
   google: ProviderPricing;
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
-  zai: ProviderPricing;
 }
-interface PricingClientError {
-  code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR';
-  message: string;
-}
-interface IPricingContext {
-  getPricing(model: LLMModel): ModelPricing;
-  hasPricing(model: LLMModel): boolean;
-  validateModels(models: LLMModel[]): void;
-  validateAllModels(): void;
-  getModelsWithPricing(): LLMModel[];
-}
-```
-
-## Exported Functions
-
-```typescript
-function fetchAllPricing(
-  baseUrl: string,
-  authToken: string
-): Promise<Result<AllPricingResponse, PricingClientError>>;
-function createPricingContext(
-  allPricing: AllPricingResponse,
-  requiredModels?: LLMModel[]
-): PricingContext;
-function createUsageLogger(deps: { logger: Logger }): UsageLogger;
-function isUsageLoggingEnabled(): boolean;
-/** @deprecated */ function logUsage(params: UsageLogParams): Promise<void>;
-```
-
-## Exported Classes
-
-```typescript
-class PricingContext implements IPricingContext {
-  readonly pricing: Map<LLMModel, ModelPricing>;
-  constructor(allPricing: AllPricingResponse);
-  getPricing(model: LLMModel): ModelPricing;
-  hasPricing(model: LLMModel): boolean;
-  validateModels(models: LLMModel[]): void;
-  validateAllModels(): void;
-  getModelsWithPricing(): LLMModel[];
-}
-
-class UsageLogger {
-  readonly logger: Logger;
-  readonly sink: UsageSink;
-  constructor(deps: { logger: Logger; sink?: UsageSink });
-  async log(params: UsageLogParams): Promise<void>;
-}
-
-// Sink implementations
-interface UsageSink {
-  log(params: UsageLogParams): Promise<void>;
-}
-class FirestoreUsageSink implements UsageSink {
-  /* writes to llm_usage_stats */
-}
-class StructuredLogUsageSink implements UsageSink {
-  constructor(deps: { logger: Logger });
-}
-class NoopUsageSink implements UsageSink {
-  /* discards all events */
-}
-```
-
-## Exported Test Fixtures
-
-```typescript
-const TEST_PRICING: ModelPricing; // { inputPricePerMillion: 1.0, outputPricePerMillion: 2.0 }
-const TEST_IMAGE_PRICING: ModelPricing; // { imagePricing: { '1024x1024': 0.04, ... } }
-
-class FakePricingContext implements IPricingContext {
-  /* always returns test pricing */
-}
-function createFakePricingContext(
-  pricing?: ModelPricing,
-  imagePricing?: ModelPricing
-): FakePricingContext;
-```
-
-## Dependency Graph
-
-```
-common-core, llm-contract, infra-firestore
-  <- llm-pricing
-       <- llm-factory
-       <- infra-claude, infra-gemini, infra-glm, infra-gpt, infra-perplexity
-       <- internal-clients
-       <- 12 apps
-       <- workers/orchestrator
 ```
 
 ## Usage Patterns
 
+### Pattern 1: Service startup
+
 ```typescript
-// Fetch and create pricing context at startup
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
-const result = await fetchAllPricing(settingsUrl, authToken);
-if (!result.ok) throw new Error(result.error.message);
-const pricingContext = createPricingContext(result.value);
+// Fetch + validate at startup
+const pricingResult = await fetchAllPricing(settingsBaseUrl, authToken);
+if (!pricingResult.ok) throw new Error(`Pricing fetch failed: ${pricingResult.error.message}`);
+const pricingContext = createPricingContext(pricingResult.data, requiredModels);
 
-// Look up pricing for a model
-const pricing = pricingContext.getPricing('gemini-2.5-flash');
+// Store on services container
+services.pricingContext = pricingContext;
+```
 
-// Log usage after LLM call
-import { createUsageLogger } from '@intexuraos/llm-pricing';
+### Pattern 2: Per-request logging
+
+```typescript
 const usageLogger = createUsageLogger({ logger });
+
+// After LLM call completes
 await usageLogger.log({
   userId,
-  provider: 'google',
-  model: 'gemini-2.5-flash',
-  callType: 'generate',
-  usage,
+  provider: getProviderForModel(model),
+  model,
+  callType: 'research',
+  usage: result.data.usage,
   success: true,
 });
-
-// In tests
-import { createFakePricingContext } from '@intexuraos/llm-pricing';
-const fakePricing = createFakePricingContext();
 ```
 
-## Test Mock Pattern
+### Pattern 3: Test setup
 
 ```typescript
-const fakePricingContext: IPricingContext = {
-  getPricing: vi.fn().mockReturnValue({ inputPricePerMillion: 1.0, outputPricePerMillion: 2.0 }),
-  hasPricing: vi.fn().mockReturnValue(true),
-  validateModels: vi.fn(),
-  validateAllModels: vi.fn(),
-  getModelsWithPricing: vi.fn().mockReturnValue([]),
-};
+import { createFakePricingContext } from '@intexuraos/llm-pricing';
+
+const pricingContext = createFakePricingContext();
+// Returns TEST_PRICING (1.0/2.0 per million) for text, TEST_IMAGE_PRICING for images
 ```
+
+## Constraints
+
+**Do NOT:**
+- Call `getPricing()` with a model not in the pricing response (throws)
+- Use `logUsage()` standalone function in new code — it is deprecated; use `UsageLogger.log()` instead
+- Use `FirestoreUsageSink` in tests — use `NoopUsageSink` instead
+
+**Requires:**
+- `fetchAllPricing` must succeed before `createPricingContext` can be called
+- `INTEXURAOS_LOG_LLM_USAGE` defaults to `true`; no config needed to enable
+
+## Environment Variables
+
+| Variable                   | Default | Values                     |
+| -------------------------- | ------- | -------------------------- |
+| `INTEXURAOS_LOG_LLM_USAGE` | `true`  | `true`, `false`, `0`, `no` |
+
+## Dependencies
+
+| Package                       | Why Needed                                                      |
+| ----------------------------- | --------------------------------------------------------------- |
+| `@intexuraos/common-core`     | `Result` type, `getErrorMessage`                                |
+| `@intexuraos/infra-firestore` | Firestore client + `FieldValue`                                 |
+| `@intexuraos/llm-contract`    | `LLMModel`, `ALL_LLM_MODELS`, `ModelPricing`, `ProviderPricing` |

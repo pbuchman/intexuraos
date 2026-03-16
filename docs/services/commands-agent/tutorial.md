@@ -1,8 +1,8 @@
 # Commands Agent — Tutorial
 
-> **Time:** 15–30 minutes
-> **Prerequisites:** Auth0 access token, Google API key configured in user-service, `curl` or HTTP client
-> **You'll learn:** How to classify commands, handle URL isolation, use Polish phrases, and manage command lifecycle
+> **Time:** 20–30 minutes
+> **Prerequisites:** Node.js 20+, access to a running IntexuraOS environment, valid Auth0 bearer token
+> **You'll learn:** How to submit commands, read classification results, archive completed commands, and trigger a retry for pending classifications
 
 ---
 
@@ -10,382 +10,365 @@
 
 A working integration that:
 
-- Classifies natural language into action types (todo, research, link, code, etc.)
-- Handles URL keyword isolation correctly
-- Supports Polish command phrases
-- Manages the full command lifecycle (create, list, archive, delete)
+- Creates a command from the PWA and reads its classification
+- Handles the pending state when no LLM API key is available
+- Archives a classified command after acting on it
+- Calls the retry endpoint to flush stuck commands
 
 ---
 
-## Part 1: Basic Classification (5 minutes)
+## Prerequisites
 
-Create a simple todo command:
+Before starting, ensure you have:
+
+- [ ] Access to the IntexuraOS dev environment (`dev.intexuraos.cloud`)
+- [ ] A valid Auth0 bearer token (obtain from the web app session or Auth0 test client)
+- [ ] `curl` and `jq` installed locally
+- [ ] Basic understanding of how Pub/Sub push endpoints work (optional — the PWA path avoids Pub/Sub entirely)
+
+---
+
+## Part 1: Hello World — Create a Command (5 minutes)
+
+Let's start with the simplest possible interaction: create a command from the PWA and see what classification comes back.
+
+### Step 1.1: Create a command
 
 ```bash
-curl -X POST https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+export TOKEN="your-bearer-token-here"
+export BASE="https://commands-agent.dev.intexuraos.cloud"
+
+curl -s -X POST "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "text": "Buy groceries",
-    "source": "pwa-shared"
-  }'
+  -d '{"text": "Create a todo to review the Q1 report", "source": "pwa-shared"}' \
+  | jq .
 ```
 
-**Response:**
+**Expected response (201):**
 
 ```json
 {
   "success": true,
   "data": {
     "command": {
-      "id": "pwa-shared:1706097600000-abc123",
+      "id": "pwa-shared:1710000000000-abc1234",
+      "userId": "auth0|...",
+      "sourceType": "pwa-shared",
+      "externalId": "1710000000000-abc1234",
+      "text": "Create a todo to review the Q1 report",
+      "timestamp": "2026-03-15T10:00:00.000Z",
       "status": "classified",
       "classification": {
         "type": "todo",
-        "confidence": 0.92,
-        "reasoning": "Clear actionable task with no time specification",
-        "promptVersion": "2.0.0",
-        "classifiedAt": "2026-01-24T12:00:01.000Z"
+        "confidence": 0.95,
+        "reasoning": "Explicit 'create a todo' instruction detected — Step 2 override.",
+        "promptVersion": "2.1.0",
+        "classifiedAt": "2026-03-15T10:00:01.234Z"
       },
-      "actionId": "uuid-here"
+      "actionId": "action-uuid-here",
+      "createdAt": "2026-03-15T10:00:00.123Z",
+      "updatedAt": "2026-03-15T10:00:01.456Z"
     }
   }
 }
 ```
 
-**Checkpoint:** Status is `classified`, type is `todo`, confidence is high (0.90+).
+### What Just Happened?
+
+The service ran the 5-step classification prompt against your text. It detected "Create a todo" in Step 2 (explicit intent override) and assigned type `todo` with high confidence. It then called actions-agent to create the action, stored the action ID on the command, and returned both together.
+
+Note the `id` format: `pwa-shared:{externalId}`. This composite key is the deduplication mechanism — if you post the same `externalId` twice, the second call returns the existing command unchanged.
 
 ---
 
-## Part 2: URL Keyword Isolation (5 minutes)
+## Part 2: Read and Understand Classification Results (5 minutes)
 
-Test that keywords in URLs don't trigger incorrect classification:
+### Step 2.1: List your commands
 
 ```bash
-curl -X POST https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "https://research-world.com/article",
-    "source": "pwa-shared"
-  }'
+curl -s "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.data.commands[] | {id, status, type: .classification.type, confidence: .classification.confidence}'
 ```
 
-**Expected Response:**
+**Expected output:**
+
+```json
+{
+  "id": "pwa-shared:1710000000000-abc1234",
+  "status": "classified",
+  "type": "todo",
+  "confidence": 0.95
+}
+```
+
+### Step 2.2: Try different input types
+
+Test the classification logic with different inputs:
+
+```bash
+# Research task — via explicit intent phrase
+curl -s -X POST "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "investigate competitor pricing trends for Q2", "source": "pwa-shared"}' \
+  | jq '.data.command.classification'
+
+# Link — URL presence triggers link classification
+curl -s -X POST "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "https://example.com/article-about-pricing", "source": "pwa-shared"}' \
+  | jq '.data.command.classification'
+
+# Ambiguous — explicit instruction wins over URL keywords
+curl -s -X POST "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "create a todo to research https://example.com", "source": "pwa-shared"}' \
+  | jq '.data.command.classification.type'
+# Expected: "todo" (not "research", not "link")
+```
+
+**Checkpoint:** The third command should return `"todo"` — the explicit "create a todo" instruction wins over both URL presence and the word "research."
+
+---
+
+## Part 3: Manage Command Lifecycle (10 minutes)
+
+### Step 3.1: Archive a classified command
+
+Once you have acted on a classified command, archive it to keep your list clean:
+
+```bash
+export CMD_ID="pwa-shared:1710000000000-abc1234"
+
+curl -s -X PATCH "$BASE/commands/$CMD_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "archived"}' \
+  | jq '.data.command.status'
+# Expected: "archived"
+```
+
+**Important:** Only commands with status `classified` can be archived. Attempting to archive a `received` or `failed` command returns a 400 error.
+
+### Step 3.2: Delete an unclassified command
+
+Commands that are still in `received`, `pending_classification`, or `failed` state can be deleted:
+
+```bash
+# Provide an explicit externalId to control the command ID
+curl -s -X POST "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "delete me", "source": "pwa-shared", "externalId": "test-delete-1"}' \
+  | jq '.data.command.status'
+
+curl -s -X DELETE "$BASE/commands/pwa-shared:test-delete-1" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.success'
+# Expected: true
+```
+
+### Step 3.3: Understand delete vs archive restrictions
+
+| Status                   | Can Delete? | Can Archive? |
+| ------------------------ | ----------- | ------------ |
+| `received`               | Yes         | No           |
+| `pending_classification` | Yes         | No           |
+| `failed`                 | Yes         | No           |
+| `classified`             | No          | Yes          |
+| `archived`               | No          | No           |
+
+---
+
+## Part 4: Trigger Pending Retry (5 minutes)
+
+Commands enter `pending_classification` status when the LLM API key is not available at processing time. Cloud Scheduler triggers the retry endpoint automatically, but you can also call it manually.
+
+### Step 4.1: Call the retry endpoint
+
+This is an internal endpoint — it requires the `X-Internal-Auth` header, not a bearer token:
+
+```bash
+export INTERNAL_TOKEN="your-internal-auth-token"
+
+curl -s -X POST "$BASE/internal/retry-pending" \
+  -H "X-Internal-Auth: $INTERNAL_TOKEN" \
+  | jq '.data'
+```
+
+**Expected response:**
+
+```json
+{
+  "processed": 3,
+  "skipped": 1,
+  "failed": 0,
+  "total": 4
+}
+```
+
+### What Each Field Means
+
+| Field       | Meaning                                                  |
+| ----------- | -------------------------------------------------------- |
+| `processed` | Commands successfully classified and action created      |
+| `skipped`   | Commands skipped because LLM client fetch still fails    |
+| `failed`    | Commands where classification or action creation errored |
+| `total`     | Total pending commands found before processing           |
+
+---
+
+## Part 5: Real-World Scenario — Ingest via Pub/Sub (10 minutes)
+
+The primary production path is Pub/Sub push from whatsapp-service. Here is how to simulate it directly.
+
+### Step 5.1: Build the event payload
+
+Pub/Sub push delivers a base64-encoded JSON body. Build it:
+
+```typescript
+const event = {
+  type: 'command.ingest',
+  userId: 'auth0|your-user-id',
+  sourceType: 'whatsapp_text',
+  externalId: 'wamid.test-abc123',
+  text: 'zbadaj najnowsze trendy w logistyce ostatniej mili',
+  timestamp: new Date().toISOString(),
+};
+
+const encoded = Buffer.from(JSON.stringify(event)).toString('base64');
+console.log(encoded);
+```
+
+### Step 5.2: Send the simulated Pub/Sub push
+
+```bash
+export ENCODED="<base64 from step above>"
+
+curl -s -X POST "$BASE/internal/commands" \
+  -H "X-Internal-Auth: $INTERNAL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"message\": {
+      \"data\": \"$ENCODED\",
+      \"messageId\": \"test-msg-001\",
+      \"publishTime\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+    },
+    \"subscription\": \"projects/intexuraos-dev/subscriptions/commands-agent\"
+  }" \
+  | jq .
+```
+
+**Expected response:**
 
 ```json
 {
   "success": true,
   "data": {
-    "command": {
-      "classification": {
-        "type": "link",
-        "confidence": 0.95,
-        "reasoning": "URL present, keyword 'research' in URL ignored per isolation rules"
-      }
-    }
+    "commandId": "whatsapp_text:wamid.test-abc123",
+    "isNew": true
   }
 }
 ```
 
-**Key Point:** Despite "research" in the URL, classification is `link` because Step 4 (URL presence) triggers before keyword matching, and the prompt's URL keyword isolation rule prevents the LLM from being misled.
-
----
-
-## Part 3: Explicit Intent Override (5 minutes)
-
-Test that explicit command phrases override URL presence:
+### Step 5.3: Confirm classification via internal lookup
 
 ```bash
-curl -X POST https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "research this https://example.com/competitor",
-    "source": "pwa-shared"
-  }'
+curl -s "$BASE/internal/commands/whatsapp_text:wamid.test-abc123" \
+  -H "X-Internal-Auth: $INTERNAL_TOKEN" \
+  | jq '.data.command'
 ```
 
-**Expected Response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "command": {
-      "classification": {
-        "type": "research",
-        "confidence": 0.92,
-        "reasoning": "Explicit 'research this' intent detected, overrides URL presence"
-      }
-    }
-  }
-}
-```
-
-**Key Point:** Step 2 (explicit intent "research this") executes before Step 4 (URL presence), so the command is queued for research rather than saved as a bookmark.
-
----
-
-## Part 4: Polish Language Support (5 minutes)
-
-Test native Polish command phrases:
-
-```bash
-curl -X POST https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "zapisz link https://example.com",
-    "source": "pwa-shared"
-  }'
-```
-
-**Expected Response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "command": {
-      "classification": {
-        "type": "link",
-        "confidence": 0.92,
-        "reasoning": "Polish explicit intent 'zapisz link' (save link) detected"
-      }
-    }
-  }
-}
-```
-
-More Polish examples:
-
-```bash
-# Create todo in Polish
-curl -X POST https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "stworz zadanie: kupic mleko", "source": "pwa-shared"}'
-# -> type: todo, confidence: 0.90+
-
-# Research in Polish
-curl -X POST https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "zbadaj najnowsze trendy AI", "source": "pwa-shared"}'
-# -> type: research, confidence: 0.90+
-```
-
----
-
-## Part 5: Code Command Classification (5 minutes)
-
-Test that programming-related commands classify as `code`:
-
-```bash
-curl -X POST https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "fix the login bug in the auth module",
-    "source": "pwa-shared"
-  }'
-```
-
-**Expected Response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "command": {
-      "classification": {
-        "type": "code",
-        "confidence": 0.92,
-        "reasoning": "Programming-related command detected: fix bug"
-      }
-    }
-  }
-}
-```
-
-**Key Point:** Commands with programming context (fix, refactor, debug, implement, deploy) classify as `code` rather than generic `todo`.
-
----
-
-## Part 6: Explicit Prefix Override (5 minutes)
-
-Override classification with explicit prefix:
-
-```bash
-curl -X POST https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "linear: buy groceries",
-    "source": "pwa-shared"
-  }'
-```
-
-**Expected Response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "command": {
-      "classification": {
-        "type": "linear",
-        "confidence": 0.95,
-        "reasoning": "Explicit 'linear:' prefix detected, user override"
-      }
-    }
-  }
-}
-```
-
-**Key Point:** Step 1 (explicit prefix) takes absolute priority. Even though "buy groceries" would normally be a todo, the prefix forces Linear classification.
-
----
-
-## Part 7: Graceful Degradation (5 minutes)
-
-When no API key is configured, commands enter pending state:
-
-```bash
-# Assuming user has no Google API key configured
-curl -X POST https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Test command without API key",
-    "source": "pwa-shared"
-  }'
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "command": {
-      "status": "pending_classification",
-      "classification": null
-    }
-  }
-}
-```
-
-**Solution:** Configure API key in user-service. Cloud Scheduler calls `/internal/retry-pending` every 5 minutes to process pending commands.
-
----
-
-## Part 8: Command Lifecycle Management (5 minutes)
-
-### List commands
-
-```bash
-curl https://commands-agent.intexuraos.com/commands \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-### Delete unclassified command
-
-```bash
-curl -X DELETE https://commands-agent.intexuraos.com/commands/pwa-shared:123 \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-Only works for status: `received`, `pending_classification`, or `failed`.
-
-### Archive classified command
-
-```bash
-curl -X PATCH https://commands-agent.intexuraos.com/commands/pwa-shared:456 \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "archived"}'
-```
-
-Only works for status: `classified`.
+The Polish phrase "zbadaj" (investigate) should produce `"type": "research"` — the system recognizes this as an explicit intent phrase in Step 2 without any translation step.
 
 ---
 
 ## Troubleshooting
 
-| Symptom                            | Cause                       | Solution                                                |
-| ---------------------------------- | --------------------------- | ------------------------------------------------------- |
-| Status `pending_classification`    | No LLM API key              | Configure Google API key in user-service                |
-| URL classified as `research`       | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
-| Polish phrases not recognized      | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
-| "Cannot delete classified command" | Wrong operation             | Use PATCH to archive instead                            |
-| Status `failed`                    | LLM error or actions-agent  | Check logs, delete and retry                            |
-| Duplicate command (isNew: false)   | Same externalId reprocessed | Normal idempotency behavior                             |
-| 401 Unauthorized                   | Expired or invalid token    | Refresh Auth0 access token                              |
-| Classification falls back to note  | Title exceeded 200 chars    | Check LLM prompt; long titles are truncated by Zod      |
+| Problem                                           | Solution                                                                                       |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `401 Unauthorized`                                | Check your bearer token is valid and not expired                                               |
+| `400 Cannot delete classified`                    | Use `PATCH` with `status: "archived"` instead of `DELETE` for classified commands              |
+| `400 Can only archive classified`                 | Command is not in `classified` status — check current status first with `GET /commands`        |
+| `404 Command not found`                           | Verify the command ID format: `{sourceType}:{externalId}`                                      |
+| Stuck in `pending_classification`                 | LLM API key not configured for that user — call `/internal/retry-pending` after key is added   |
+| Classification returns `note` with low confidence | LLM response was unparseable — check classifier logs for raw response preview                  |
+| Second POST returns same command                  | Duplicate `externalId` — this is expected idempotent behavior                                  |
 
 ---
 
 ## Next Steps
 
-Now that you understand the basics:
+Now that you understand the command lifecycle:
 
-1. Explore the [Technical Reference](technical.md) for full API details and the classification prompt structure
-2. Review the [Agent Interface](agent.md) for programmatic integration patterns
-3. Check out [actions-agent](../actions-agent/features.md) to understand what happens after classification
+1. Explore the classification prompt logic in `packages/llm-prompts/src/classification/commandClassifierPrompt.ts` — modify Step 5 category signals to add new language support
+2. Read the [Technical Reference](technical.md) for full API details and the confidence semantics table
+3. Check out [actions-agent](../actions-agent/features.md) to understand what happens after a command is classified
 
 ---
 
 ## Exercises
 
-### Easy
+Test your understanding:
 
-1. Create commands for each type: todo, research, note, link, code
-2. Verify confidence scores match the semantics table
-3. Archive a classified command
-
-### Medium
-
-1. Test URL keyword isolation with various misleading URLs
-2. Test Polish commands for all supported categories
-3. Simulate pending_classification and wait for retry
-
-### Hard
-
-1. Publish a `command.ingest` event via Pub/Sub
-2. Test idempotency by sending the same externalId twice
-3. Build a retry loop for failed commands
+1. **Easy:** Create a command with Polish text "stworz zadanie: kupic mleko" and verify it classifies as `todo`
+2. **Medium:** Create a command with text "research this https://example.com/report" and verify it classifies as `research` (not `link`) — explain why based on the 5-step process
+3. **Hard:** Submit the same command twice using the same `externalId` and verify the command ID is identical on both responses
 
 <details>
 <summary>Solutions</summary>
 
-### Exercise 1: Commands for Each Type
+### Exercise 1: Polish todo
 
 ```bash
-# todo
-curl -X POST .../commands -d '{"text": "Buy groceries", "source": "pwa-shared"}'
-# research
-curl -X POST .../commands -d '{"text": "How does OAuth 2.0 work?", "source": "pwa-shared"}'
-# note
-curl -X POST .../commands -d '{"text": "Note: meeting went well, follow up next week", "source": "pwa-shared"}'
-# link
-curl -X POST .../commands -d '{"text": "https://example.com/article", "source": "pwa-shared"}'
-# code
-curl -X POST .../commands -d '{"text": "Fix the login bug in auth module", "source": "pwa-shared"}'
+curl -s -X POST "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "stworz zadanie: kupic mleko", "source": "pwa-shared"}' \
+  | jq '.data.command.classification.type'
+# Expected: "todo"
 ```
 
-### Exercise 2: Idempotency Test
+"stworz zadanie" is a Step 1 explicit prefix match in Polish.
+
+### Exercise 2: Explicit intent overrides URL
 
 ```bash
-# Send the same externalId twice
-curl -X POST .../commands -d '{"text": "Test", "source": "pwa-shared", "externalId": "test-123"}'
-# Second call returns isNew: false
-curl -X POST .../commands -d '{"text": "Test", "source": "pwa-shared", "externalId": "test-123"}'
+curl -s -X POST "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "research this https://example.com/report", "source": "pwa-shared"}' \
+  | jq '.data.command.classification.type'
+# Expected: "research"
 ```
+
+"research this" matches the Step 2 explicit intent phrase list with confidence 0.90+. Step 4 (URL presence) is only reached when no explicit intent was found. Step 2 fires first and wins.
+
+### Exercise 3: Idempotency
+
+```bash
+EXTERNAL_ID="dedup-test-$(date +%s)"
+
+# First call
+curl -s -X POST "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"text\": \"buy milk\", \"source\": \"pwa-shared\", \"externalId\": \"$EXTERNAL_ID\"}" \
+  | jq '.data.command.id'
+
+# Second call — same externalId
+curl -s -X POST "$BASE/commands" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"text\": \"buy milk\", \"source\": \"pwa-shared\", \"externalId\": \"$EXTERNAL_ID\"}" \
+  | jq '.data.command.id'
+# Both calls return the same id: "pwa-shared:<EXTERNAL_ID>"
+```
+
+The `processCommand` use case calls `commandRepository.getById` first. If the composite key already exists, it returns the existing record immediately without re-classifying.
 
 </details>
-
----
-
-**Last updated:** 2026-03-07
