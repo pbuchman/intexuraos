@@ -48,16 +48,29 @@ export function ChatBottomSheet({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading, error, pendingAction]);
 
-  // Close on escape key
+  // Reset dropdown when sheet closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsMenuOpen(false);
+    }
+  }, [isOpen]);
+
+  // Close on escape key (dismiss dropdown first, then sheet)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (isMenuOpen) {
+          setIsMenuOpen(false);
+        } else {
+          onClose();
+        }
+      }
     };
     window.addEventListener('keydown', handleEscape);
     return (): void => {
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [onClose]);
+  }, [onClose, isMenuOpen]);
 
   // Close menu on outside click (only listens when menu is open)
   useEffect(() => {
@@ -191,7 +204,11 @@ export function ChatBottomSheet({
           </h2>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div
+          className="flex items-center gap-1"
+          onMouseDown={(e) => { e.stopPropagation(); }}
+          onTouchStart={(e) => { e.stopPropagation(); }}
+        >
           {/* Dropdown menu */}
           <div ref={menuRef} className="relative">
             <button
