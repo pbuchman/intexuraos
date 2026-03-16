@@ -205,7 +205,9 @@ describe('GET /code/github-pr-events', () => {
       dispatchService: {} as never,
       toolCallingClient: undefined,
       eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      automationLog: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -234,8 +236,9 @@ describe('GET /code/github-pr-events', () => {
       dispatchService: import('../../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
       toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
       eventDecisionRepo: import('../../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
-
+      automationLog: import('../../../domain/ports/automationLog.js').AutomationLog;
     });
 
     server = await buildServer();
@@ -276,6 +279,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'user1',
       senderId: 111,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR in repo A',
       body: 'Body',
       state: 'open',
@@ -297,6 +301,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'user2',
       senderId: 222,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR in repo B',
       body: 'Body',
       state: 'closed',
@@ -368,6 +373,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'testuser',
       senderId: 12345,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'Test PR',
       body: 'Test body',
       state: 'open',
@@ -415,6 +421,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'commenter',
       senderId: 5,
       senderType: 'User',
+      prAuthorLogin: null,
       title: null,
       body: null,
       state: null,
@@ -500,6 +507,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'user1',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR 5',
       body: null,
       state: 'open',
@@ -521,6 +529,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'reviewer',
       senderId: 2,
       senderType: 'User',
+      prAuthorLogin: null,
       title: null,
       body: null,
       state: null,
@@ -574,6 +583,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'author',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR 7',
       body: 'PR description',
       state: 'open',
@@ -596,6 +606,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'reviewer',
       senderId: 2,
       senderType: 'User',
+      prAuthorLogin: null,
       title: null,
       body: 'Original comment text',
       state: null,
@@ -618,6 +629,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'reviewer',
       senderId: 2,
       senderType: 'User',
+      prAuthorLogin: null,
       title: null,
       body: 'Updated comment text',
       state: null,
@@ -640,6 +652,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'author',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'Push to feature-branch',
       body: null,
       state: null,
@@ -692,6 +705,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'reviewer',
       senderId: 2,
       senderType: 'User',
+      prAuthorLogin: null,
       title: null,
       body: 'Original review',
       state: null,
@@ -714,6 +728,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'reviewer',
       senderId: 2,
       senderType: 'User',
+      prAuthorLogin: null,
       title: null,
       body: 'Updated review',
       state: null,
@@ -755,6 +770,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'author',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
@@ -777,6 +793,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'author',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
@@ -799,6 +816,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'author',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
@@ -821,6 +839,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'author',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
@@ -867,6 +886,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'author',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR 11',
       body: 'Version 1 of description',
       state: 'open',
@@ -889,6 +909,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'author',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR 11',
       body: 'Version 2 of description',
       state: 'open',
@@ -931,6 +952,7 @@ describe('GET /code/github-pr-events', () => {
       senderLogin: 'author',
       senderId: 1,
       senderType: 'User',
+      prAuthorLogin: null,
       title: 'PR 12',
       body: 'Single event body',
       state: 'open',
@@ -967,6 +989,30 @@ describe('GET /code/github-pr-events', () => {
     const response = await server.inject({
       method: 'GET',
       url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('should return 500 when findAll (all-repos) fetch fails', async () => {
+    // Mock findAll to return an error (simulating database failure when fetching all repos)
+    setServices({
+      ...getServices(),
+      gitHubPREventRepo: {
+        ...getServices().gitHubPREventRepo,
+        findAll: async () =>
+          err({ code: 'FIRESTORE_ERROR' as const, message: 'Database unavailable' }),
+      },
+    });
+
+    // Request without repository filter triggers findAll()
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events',
       headers: { authorization: 'Bearer fake-token' },
     });
 

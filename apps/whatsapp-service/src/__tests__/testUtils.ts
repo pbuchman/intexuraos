@@ -466,6 +466,8 @@ export interface TestContext {
   whatsappCloudApi: FakeWhatsAppCloudApiPort;
   outboundMessageRepository: FakeOutboundMessageRepository;
   phoneVerificationRepository: FakePhoneVerificationRepository;
+  messageSender: FakeMessageSender;
+  linkPreviewFetcher: FakeLinkPreviewFetcherPort;
 }
 
 /**
@@ -482,6 +484,8 @@ export function setupTestContext(): TestContext {
     whatsappCloudApi: null as unknown as FakeWhatsAppCloudApiPort,
     outboundMessageRepository: null as unknown as FakeOutboundMessageRepository,
     phoneVerificationRepository: null as unknown as FakePhoneVerificationRepository,
+    messageSender: null as unknown as FakeMessageSender,
+    linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcherPort,
   };
 
   beforeAll(async () => {
@@ -501,6 +505,8 @@ export function setupTestContext(): TestContext {
     context.whatsappCloudApi = new FakeWhatsAppCloudApiPort();
     context.outboundMessageRepository = new FakeOutboundMessageRepository();
     context.phoneVerificationRepository = new FakePhoneVerificationRepository();
+    context.messageSender = new FakeMessageSender();
+    context.linkPreviewFetcher = new FakeLinkPreviewFetcherPort();
 
     setServices({
       webhookEventRepository: context.webhookEventRepository,
@@ -508,10 +514,10 @@ export function setupTestContext(): TestContext {
       messageRepository: context.messageRepository,
       mediaStorage: context.mediaStorage,
       eventPublisher: context.eventPublisher,
-      messageSender: new FakeMessageSender(),
+      messageSender: context.messageSender,
       whatsappCloudApi: context.whatsappCloudApi,
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
-      linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
+      linkPreviewFetcher: context.linkPreviewFetcher,
       outboundMessageRepository: context.outboundMessageRepository,
       phoneVerificationRepository: context.phoneVerificationRepository,
     });

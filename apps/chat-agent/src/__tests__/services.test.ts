@@ -3,24 +3,76 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { resetFirestore } from '@intexuraos/infra-firestore';
-import { getServices, setServices, resetServices, type ServiceContainer } from '../services.js';
+import { LlmModels } from '@intexuraos/llm-contract';
+import {
+  getServices,
+  initializeServices,
+  setServices,
+  resetServices,
+  type ServiceContainer,
+} from '../services.js';
 import { ok } from '@intexuraos/common-core';
 
-// Mock llm-pricing to avoid network calls in unit tests
+const {
+  mockCreatePricingContext,
+  mockFetchAllPricing,
+  mockCreateUserServiceClient,
+  mockCreateLlmClient,
+  mockGuestRateLimiter,
+} = vi.hoisted(() => {
+  const mockPricingContext = {
+    getPricing: vi.fn().mockReturnValue({
+      inputPricePerMillion: 0,
+      outputPricePerMillion: 0,
+    }),
+  };
+
+  return {
+    mockCreatePricingContext: vi.fn().mockReturnValue(mockPricingContext),
+    mockFetchAllPricing: vi.fn().mockResolvedValue({ ok: true, value: { models: [] } }),
+    mockCreateUserServiceClient: vi.fn().mockReturnValue({
+      getLlmClient: vi.fn().mockResolvedValue({ ok: true, value: { generate: vi.fn() } }),
+      getApiKeys: vi.fn().mockResolvedValue({ ok: true, value: {} }),
+      reportLlmSuccess: vi.fn(),
+      getOAuthToken: vi.fn(),
+      resolveGitHubUsername: vi.fn().mockResolvedValue({ ok: true, value: null }),
+    }),
+    mockCreateLlmClient: vi.fn().mockReturnValue({ generate: vi.fn() }),
+    mockGuestRateLimiter: {},
+  };
+});
+
 vi.mock('@intexuraos/llm-pricing', () => ({
-  fetchAllPricing: vi.fn().mockResolvedValue({ ok: true, value: { models: [] } }),
-  createPricingContext: vi.fn().mockReturnValue({}),
+  fetchAllPricing: mockFetchAllPricing,
+  createPricingContext: mockCreatePricingContext,
 }));
 
-// Mock internal-clients to avoid network calls in unit tests
-// Note: Cannot use ok() helper here due to vi.mock hoisting - must use raw object
 vi.mock('@intexuraos/internal-clients', () => ({
-  createUserServiceClient: vi.fn().mockReturnValue({
-    getLlmClient: vi.fn().mockResolvedValue({ ok: true, value: { generate: vi.fn() } }),
-    getApiKeys: vi.fn().mockResolvedValue({ ok: true, value: {} }),
-    reportLlmSuccess: vi.fn(),
-    getOAuthToken: vi.fn(),
-  }),
+  createUserServiceClient: mockCreateUserServiceClient,
+}));
+
+vi.mock('@intexuraos/llm-factory', () => ({
+  createLlmClient: mockCreateLlmClient,
+}));
+
+vi.mock('../infra/firestore/embeddingRepository.js', () => ({
+  FirestoreEmbeddingRepository: vi
+    .fn()
+    .mockImplementation(function FirestoreEmbeddingRepository() {
+      return {};
+    }),
+}));
+
+vi.mock('../infra/rateLimit/index.js', () => ({
+  createGuestRateLimiter: vi.fn().mockReturnValue(mockGuestRateLimiter),
+}));
+
+vi.mock('openai', () => ({
+  default: class OpenAI {
+    readonly embeddings = {
+      create: vi.fn(),
+    };
+  },
 }));
 
 describe('chat-agent services', () => {
@@ -30,6 +82,12 @@ describe('chat-agent services', () => {
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://localhost:8080';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-token';
     process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] = 'http://localhost:8081';
+    process.env['INTEXURAOS_GEMINI_APP_API_KEY'] = 'test-gemini-key';
+    process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'] = 'test-dashscope-key';
+    mockCreatePricingContext.mockClear();
+    mockFetchAllPricing.mockClear();
+    mockCreateUserServiceClient.mockClear();
+    mockCreateLlmClient.mockClear();
   });
 
   afterEach(() => {
@@ -40,6 +98,8 @@ describe('chat-agent services', () => {
     delete process.env['INTEXURAOS_USER_SERVICE_URL'];
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
     delete process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
+    delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
+    delete process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'];
   });
 
   describe('getServices', () => {
@@ -130,6 +190,32 @@ describe('chat-agent services', () => {
       expect(() => getServices()).not.toThrow();
       resetServices();
       expect(() => getServices()).toThrow('Service container not initialized');
+    });
+  });
+
+  describe('initializeServices', () => {
+    it('uses the Gemini platform key for guest access and user-service fallbacks', async () => {
+      await initializeServices();
+
+      expect(mockCreateLlmClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'test-gemini-key',
+          model: LlmModels.Gemini25Flash,
+        })
+      );
+      expect(mockCreateUserServiceClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          platformGeminiApiKey: 'test-gemini-key',
+        })
+      );
+    });
+
+    it('fails fast when the Gemini guest key is missing', async () => {
+      delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
+
+      await expect(initializeServices()).rejects.toThrow(
+        'INTEXURAOS_GEMINI_APP_API_KEY environment variable is required for guest access'
+      );
     });
   });
 });

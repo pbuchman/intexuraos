@@ -17,6 +17,17 @@ import { getFirestore } from '@intexuraos/infra-firestore';
 
 const COLLECTION_NAME = 'event_decisions';
 
+function toDate(value: unknown): Date {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (value !== null && typeof value === 'object' && 'toDate' in value) {
+    const timestamp = value as { toDate: () => Date };
+    return timestamp.toDate();
+  }
+  return new Date(String(value));
+}
+
 export function createFirestoreEventDecisionRepository(deps: {
   logger: Logger;
 }): EventDecisionRepository {
@@ -35,6 +46,7 @@ export function createFirestoreEventDecisionRepository(deps: {
 
         const data = {
           eventId: input.eventId,
+          ...(input.normalizedEventId !== undefined && { normalizedEventId: input.normalizedEventId }),
           repository: input.repository,
           pullRequestNumber: input.pullRequestNumber,
           eventType: input.eventType,
@@ -48,6 +60,9 @@ export function createFirestoreEventDecisionRepository(deps: {
           ...(input.llmModel !== undefined && { llmModel: input.llmModel }),
           ...(input.llmCostUsd !== undefined && { llmCostUsd: input.llmCostUsd }),
           ...(input.llmToolCalls !== undefined && { llmToolCalls: input.llmToolCalls }),
+          ...(input.llmReasoning !== undefined && { llmReasoning: input.llmReasoning }),
+          ...(input.dispatchSuccess !== undefined && { dispatchSuccess: input.dispatchSuccess }),
+          ...(input.dispatchError !== undefined && { dispatchError: input.dispatchError }),
           createdAt: now,
           decisionLatencyMs: input.decisionLatencyMs,
         };
@@ -60,6 +75,66 @@ export function createFirestoreEventDecisionRepository(deps: {
         });
       } catch (error) {
         logger.error({ error }, 'Failed to save event decision');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
+    async existsByPRAndReason(
+      repository: string,
+      prNumber: number,
+      reason: string,
+      since: Date
+    ): Promise<Result<boolean, EventDecisionRepositoryError>> {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('pullRequestNumber', '==', prNumber)
+          .where('reason', '==', reason)
+          .where('createdAt', '>', since)
+          .limit(1)
+          .get();
+
+        return ok(!snapshot.empty);
+      } catch (error) {
+        logger.error({ error, repository, prNumber, reason }, 'Failed to check existing enforcement decision');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
+    async findByEventIds(
+      eventIds: string[]
+    ): Promise<Result<EventDecision[], EventDecisionRepositoryError>> {
+      try {
+        const snapshots = await Promise.all(
+          eventIds.map((eventId) => collection.doc(`ed_${eventId}`).get())
+        );
+
+        const decisions: EventDecision[] = [];
+        for (const snapshot of snapshots) {
+          if (!snapshot.exists) {
+            continue;
+          }
+
+          const data = snapshot.data() as Omit<EventDecision, 'id'> & {
+            createdAt: unknown;
+          };
+
+          decisions.push({
+            ...data,
+            id: snapshot.id,
+            createdAt: toDate(data.createdAt),
+          });
+        }
+
+        return ok(decisions);
+      } catch (error) {
+        logger.error({ error, eventIds }, 'Failed to load event decisions by event ids');
         return err({
           code: 'FIRESTORE_ERROR',
           message: getErrorMessage(error, 'Unknown error'),

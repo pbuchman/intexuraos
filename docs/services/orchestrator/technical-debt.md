@@ -1,7 +1,7 @@
-# Orchestrator - Technical Debt
+# Orchestrator — Technical Debt
 
-**Last Updated:** 2026-03-07
-**Analysis Run:** v3.1.0 documentation update (multi-model support, container adoption, forensics mode)
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 — orchestrator v3.3.0 force refresh](../../documentation-runs.md)
 
 ---
 
@@ -17,11 +17,48 @@
 
 ---
 
+## Future Plans
+
+### Multi-Machine Orchestration
+
+Distribute tasks across multiple macOS hosts or dev machines:
+
+1. Central task queue (Pub/Sub) instead of direct HTTP dispatch
+2. Orchestrator instances register with code-agent and pull tasks
+3. Shared state in Firestore instead of local JSON
+
+### Container Image Versioning
+
+Pin claude-worker images to specific versions instead of `:latest`:
+
+1. Tag images with build timestamps or git SHAs
+2. Store preferred image tag per worker type in configuration
+3. Support rolling updates without restarting the orchestrator
+
+### Task Priority Queue
+
+Support priority levels for task scheduling:
+
+1. High-priority tasks preempt lower-priority ones at capacity
+2. Queue depth visibility in the health endpoint
+3. Configurable priority per worker type or Linear issue label
+
+### Metrics and Alerting
+
+Expose operational metrics (extends `TurnMetricsCollector` post-task data):
+
+1. Task completion rate, average duration, failure rate
+2. Real-time container resource usage trends during execution
+3. Token refresh failure rates
+4. Webhook delivery success rates
+
+---
+
 ## TODO/FIXME Comments
 
 ### 1. Default repository hardcoded
 
-**File:** `workers/orchestrator/src/services/task-dispatcher.ts:593`
+**File:** `workers/orchestrator/src/services/task-dispatcher.ts`
 
 ```typescript
 private getDefaultRepository(_request: CreateTaskRequest): string {
@@ -38,7 +75,7 @@ private getDefaultRepository(_request: CreateTaskRequest): string {
 
 ### 2. Graceful shutdown not implemented
 
-**File:** `workers/orchestrator/src/routes.ts:305`
+**File:** `workers/orchestrator/src/routes.ts`
 
 ```typescript
 app.post('/admin/shutdown', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
@@ -127,9 +164,9 @@ The `retriedFrom` field exists on tasks, but retry logic lives entirely in code-
 
 **Severity:** Medium
 
-The `cleanupStaleWorktrees()` function exists but is not wired into the main loop. Worktrees accumulate until manually cleaned or the stale threshold (24h) is exceeded. Completed tasks leave worktrees behind until the next manual cleanup or restart.
+Worktrees accumulate until manually cleaned or the stale threshold is exceeded. Completed tasks leave worktrees behind until the next periodic cleanup or restart.
 
-**Recommended fix:** Call `cleanupStaleWorktrees()` in `handleTaskCompletion()` or schedule it as a periodic background job.
+**Recommended fix:** Call worktree cleanup in `handleTaskCompletion()` or tighten the periodic cleanup interval for completed task worktrees.
 
 ---
 
@@ -153,40 +190,25 @@ Container logs are streamed to code-agent via `LogForwarder` but are not persist
 
 ---
 
-## Future Plans
+## Recent Improvements (v3.3.0)
 
-### Multi-Machine Orchestration
+The following items improved reliability and observability since v3.2.0:
 
-Distribute tasks across multiple macOS hosts or dev machines:
-
-1. Central task queue (Pub/Sub) instead of direct HTTP dispatch
-2. Orchestrator instances register with code-agent and pull tasks
-3. Shared state in Firestore instead of local JSON
-
-### Container Image Versioning
-
-Pin claude-worker images to specific versions instead of `:latest`:
-
-1. Tag images with build timestamps or git SHAs
-2. Store preferred image tag per worker type in configuration
-3. Support rolling updates without restarting the orchestrator
-
-### Task Priority Queue
-
-Support priority levels for task scheduling:
-
-1. High-priority tasks preempt lower-priority ones at capacity
-2. Queue depth visibility in the health endpoint
-3. Configurable priority per worker type or Linear issue label
-
-### Metrics and Alerting
-
-Expose operational metrics (extends `TurnMetricsCollector` post-task data):
-
-1. Task completion rate, average duration, failure rate
-2. Real-time container resource usage trends during execution
-3. Token refresh failure rates
-4. Webhook delivery success rates
+- **Docker health gate** — Task submission now checks Docker daemon availability before accepting work, preventing tasks from failing during container creation when Docker is unresponsive
+- **Container creation timeout** — 2-minute timeout prevents hung dispatches from occupying capacity indefinitely
+- **Unified PR automation log** — Structured task-event logging enables a full timeline of all automation activity on a PR
+- **Already-completed outcome label** — Execution agent can now report `already_completed` when requested work is already merged, preventing redundant re-implementation
+- **Mandatory model name in PR descriptions** — Worker type and model name are now required in every PR description, enabling tracking of which model produced each PR
+- **Fatal exit code handling** — Exit codes 137 (OOM kill) and 139 (segfault) skip Gemini verification and trigger immediate retries
+- **Deep Validation severity indicators** — Reports use a four-level visual scale (Critical/Warning/Minor/Pass) with emoji for faster human triage
+- **Review Agent** — Fourth agent type (`review`) performs automated read-only PR reviews without pushing code changes
+- **Kimi worker type** — Added Kimi K2.5 via DashScope alongside existing GLM and Qwen models
+- **Worktree mutex** — All git worktree operations serialized via `async-mutex` to prevent concurrent index corruption
+- **Resilient repo startup** — Repository manager sanitizes credentials from remote URLs and gracefully degrades when fetch fails
+- **Periodic stale cleanup** — Orphaned containers are automatically removed instead of requiring manual cleanup
+- **Docker exec stream leak fixed** — Resolved a stream leak that caused container exits to go undetected until the 2-hour timeout
+- **Resume result preservation** — `lastSuccessResult` field ensures resumed tasks do not lose their previous successful result
+- **Pending resume recovery** — Startup recovery can now detect and restart accepted resumes that were interrupted by a crash
 
 ---
 
@@ -204,3 +226,11 @@ Expose operational metrics (extends `TurnMetricsCollector` post-task data):
 | 8   | No worktree cleanup on completion | 2026-02-08 | -        | -      |
 | 9   | No resource usage monitoring      | 2026-02-08 | -        | -      |
 | 10  | No local log persistence fallback | 2026-02-08 | -        | -      |
+
+---
+
+## Related
+
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
+- [Documentation Run Log](../../documentation-runs.md)

@@ -76,7 +76,7 @@ interface UserServiceTools {
 ### Types
 
 ```typescript
-type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
+type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 type OAuthProvider = 'google' | 'github';
 type TranscriptionProvider = 'speechmatics';
 
@@ -139,7 +139,6 @@ interface LlmKeysStatus {
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
-  zai: string | null;
   testResults: Record<LlmProvider, LlmTestResult | null>;
 }
 
@@ -159,7 +158,6 @@ interface DecryptedLlmKeys {
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
-  zai: string | null;
 }
 
 interface OAuthConnectionStatus {
@@ -188,7 +186,7 @@ interface GitHubOAuthConnectionStatus {
 | **Self-Access Only**           | Users can only access their own settings                               |
 | **Encrypted Storage**          | API keys encrypted at rest with AES-256-GCM                            |
 | **Key Validation**             | API keys validated with provider before storing                        |
-| **5 Providers**                | Supports Google, OpenAI, Anthropic, Perplexity, Zai                    |
+| **4 Providers**                | Supports Google, OpenAI, Anthropic, Perplexity                         |
 | **Rate Limit Precedence**      | Error parser checks rate limits before API key errors                  |
 | **Internal Auth**              | Service-to-service calls require X-Internal-Auth header                |
 | **Model Validation**           | `defaultModel` must pass `isFastModel()` AND have API key for provider |
@@ -363,7 +361,6 @@ Keys are validated using cheap, fast models to minimize cost:
 | OpenAI     | gpt-4o-mini      |
 | Anthropic  | claude-3.5-haiku |
 | Perplexity | sonar            |
-| Zai        | glm-4.7          |
 
 ---
 
@@ -377,8 +374,8 @@ Keys are validated using cheap, fast models to minimize cost:
 | app-settings-service | LLM pricing at startup     | Service fails to start                  |
 | Firebase Admin SDK   | Custom token generation    | Firebase token endpoint returns 500     |
 | Firestore            | All persistent state       | Endpoints return 500                    |
-| LLM APIs (5)         | Key validation and testing | Validation/test returns formatted error |
+| LLM APIs (4)         | Key validation and testing | Validation/test returns formatted error |
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-15

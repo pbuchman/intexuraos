@@ -20,6 +20,8 @@ Execute the task autonomously. The issue has been prepared (Phase 1) and is read
 🔨 BUILD: Running pnpm build...
 💻 IMPLEMENT: Starting implementation...
 ✅ CI: pnpm run ci:tracked passed
+🧹 SIMPLIFY: Running /simplify on changed files...
+✅ CI: pnpm run ci:tracked passed (post-simplify)
 📦 COMMIT: [INT-123] <description>
 🔀 MERGE: Merging origin/development...
 📤 PUSH: Pushing to origin/fix/INT-123
@@ -109,6 +111,18 @@ pnpm run ci:tracked
 ```
 
 **On failure:** Fix issues, re-run. Stop only after 3 failed attempts.
+
+### 7.5. Simplify (MANDATORY — NON-NEGOTIABLE)
+
+After CI passes and BEFORE committing, run `/simplify` on all changed files. This reviews changed code for reuse opportunities, quality issues, and efficiency improvements.
+
+**This step is mandatory, non-negotiable, and must never be skipped.** It is a quality gate equivalent to CI.
+
+After `/simplify` makes changes, re-run CI:
+
+```bash
+pnpm run ci:tracked
+```
 
 ### 8. Commit and Push
 
@@ -228,7 +242,7 @@ Output ALL of the following:
 PHASE2_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/XXX
 - CI evidence: pnpm run ci:tracked successful
-- Linear issue: https://linear.app/intexuraos/issue/INT-XXX
+- Linear issue: https://linear.app/pbuchman/issue/INT-XXX
 - Review iterations: <number>
 - Turn summary: <line 1> | <line 2> | <line 3> | <line 4> | <line 5>
 - Summary: Implemented requested changes

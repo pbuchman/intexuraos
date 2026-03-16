@@ -2,7 +2,9 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { BookmarkRepository } from './domain/ports/bookmarkRepository.js';
 import type { LinkPreviewFetcherPort } from './domain/ports/linkPreviewFetcher.js';
 import type { BookmarkSummaryService } from './domain/ports/bookmarkSummaryService.js';
+import type { ImageProxyPort } from './domain/ports/imageProxy.js';
 import { FirestoreBookmarkRepository } from './infra/firestore/firestoreBookmarkRepository.js';
+import { createFetchImageProxy } from './infra/imageProxy/fetchImageProxy.js';
 import { createWebAgentClient } from './infra/linkpreview/webAgentClient.js';
 import {
   createEnrichPublisher,
@@ -25,6 +27,7 @@ export interface ServiceContainer {
   summarizePublisher: SummarizePublisher;
   whatsAppSendPublisher: WhatsAppSendPublisher;
   bookmarkSummaryService: BookmarkSummaryService;
+  imageProxy: ImageProxyPort;
 }
 
 export interface ServiceConfig {
@@ -66,6 +69,7 @@ export function initServices(config: ServiceConfig): void {
       internalAuthToken: config.internalAuthToken,
       logger: createAppLogger({ name: 'webAgentSummaryClient' }),
     }),
+    imageProxy: createFetchImageProxy(),
   };
 }
 

@@ -1,10 +1,49 @@
 # Technical Debt: @intexuraos/infra-firestore
 
-## TODOs and FIXMEs
+**Last Updated:** 2026-03-15
 
-No TODO/FIXME markers found in source code.
+---
 
-## Code Quality Observations
+## Summary
+
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 4     | Medium   |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
+| **Total**   | **4** | Medium   |
+
+---
+
+## Future Plans
+
+- Add `collectionGroup()` support to the fake for cross-collection queries
+- Add `onSnapshot()` listener simulation for real-time update testing
+- Consider splitting `firestoreFake.ts` into separate files per class (`FakeQuery`, `FakeTransaction`, `FakeCollectionReference`)
+- Add dot-notation support to `FakeQuery.where()` filter evaluation (currently uses direct property lookup only)
+
+---
+
+## Code Smells
+
+### Medium Priority
+
+| File                           | Issue                                                                                                          | Impact                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `src/testing/firestoreFake.ts` | `FakeQuery.where()` uses direct property lookup — does not support dot-notation field paths                    | Tests requiring nested field queries must restructure data or use flat field names |
+| `src/testing/firestoreFake.ts` | `FakeQuery` sort comparison defaults to numeric (`typeof aVal === 'number' ? aVal : 0`) for all values         | String-based `orderBy` calls return incorrect ordering                             |
+
+### Low Priority
+
+| File                           | Issue                                                                                                          | Impact                                                                               |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `src/testing/firestoreFake.ts` | Module-level `transactionQueue` persists across test cases if `clear()` is not called                          | Potential test interference; mitigated by following `beforeEach`/`afterEach` pattern |
+| `src/testing/firestoreFake.ts` | `FakeBatch.commit()` executes operations via fire-and-forget `void` — not truly atomic                         | Tests relying on batch rollback semantics on failure will not detect that behavior   |
+
+---
+
+## Implementation Notes
 
 ### Global Transaction Queue
 
@@ -14,49 +53,31 @@ No TODO/FIXME markers found in source code.
 let transactionQueue: Promise<unknown> = Promise.resolve();
 ```
 
-The queue is reset in `clear()` but persists across test cases if `clear()` is not called. This is by design but could cause test interference if misused.
-
-**Impact:** Low. The `clear()` method handles it, and all tests follow the `beforeEach/afterEach` pattern.
+The queue is reset in `clear()` but persists across test cases if `clear()` is not called. All tests should follow the `beforeEach`/`afterEach` pattern and call `fakeDb.clear()`.
 
 ### JSON-Based Equality in arrayUnion
 
-`extractArrayUnionElements` deduplication uses `JSON.stringify` for comparison:
+Deduplication in `FieldValue.arrayUnion()` uses `JSON.stringify` for comparison. Works for simple values and objects but is not order-independent for nested objects with different key ordering. Matches Firestore's actual behavior closely enough for testing purposes.
 
-```ts
-if (!currentArray.some((e) => JSON.stringify(e) === JSON.stringify(elem))) {
-```
+---
 
-**Impact:** Low. Works for simple values and objects but is not order-independent for nested objects with different key ordering.
+## TODOs / FIXMEs
 
-**Recommendation:** This matches Firestore's actual behavior closely enough for testing purposes. No action needed unless edge cases are discovered.
+No TODO/FIXME markers found in source code.
 
-### FakeQuery Does Not Support Nested Field Queries
+---
 
-`FakeQuery.where()` accesses fields using direct property lookup (`data[filter.field]`) without dot-notation support. Queries on nested fields like `where('user.name', '==', 'Alice')` will not work.
+## Resolved Issues
 
-**Impact:** Medium. Any test requiring nested field queries must restructure data or use flat fields.
+| Date       | Issue                                               | Resolution                                                       |
+| ---------- | --------------------------------------------------- | ---------------------------------------------------------------- |
+| 2026-02-19 | Subcollection paths not supported                   | Implemented composite path keys in `FakeDocumentReference`       |
+| 2026-02-19 | Transactions lacked isolation                       | Implemented `FakeTransaction` with pending writes buffer         |
 
-**Recommendation:** Add dot-notation support to `FakeQuery` filter evaluation using the existing `getNestedField()` helper.
+---
 
-### Sorting Limited to Numeric Values
+## Related
 
-`FakeQuery` sort comparison defaults to numeric comparison (`typeof aVal === 'number' ? aVal : 0`), which produces incorrect results for string sorting.
-
-**Impact:** Medium. Tests relying on string-based ordering (e.g., alphabetical) will get incorrect results.
-
-**Recommendation:** Add type-aware comparison (string vs number) in the sorting logic.
-
-### FakeBatch Is Not Truly Atomic
-
-`FakeBatch.commit()` executes operations sequentially via fire-and-forget `void` calls. Unlike real Firestore batches, failures in individual operations do not roll back preceding operations.
-
-**Impact:** Low for tests. In production, real Firestore batches are atomic. Tests that rely on batch atomicity semantics (rollback on failure) will not catch that behavior.
-
-**Recommendation:** Acceptable for the test-only use case. Document the limitation in test utilities.
-
-## Future Improvements
-
-- Add `collectionGroup()` support to the fake for cross-collection queries
-- Add `onSnapshot()` listener simulation for real-time update testing
-- Consider splitting `firestoreFake.ts` (~800 lines) into separate files per class (FakeQuery, FakeTransaction, FakeCollectionReference)
-- Add dot-notation support to `FakeQuery.where()` filter evaluation (currently uses direct property lookup only)
+- [README](README.md) — Developer reference
+- [Agent Reference](agent.md) — Machine-readable interface
+- [Documentation Run Log](../../documentation-runs.md)

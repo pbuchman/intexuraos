@@ -5,6 +5,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
   DispatchError,
@@ -48,7 +49,7 @@ interface WorkerTaskRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: WorkerType;
   webhookUrl: string;
   webhookSecret: string;
   /** Labels from the validated Linear issue */
@@ -58,6 +59,9 @@ interface WorkerTaskRequest {
   linearIssueId?: string;
   traceId?: string;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
+  trackingCommentId?: string;
+  continuationPrNumber?: number;
+  continuationPrBranch?: string;
   planningPrBranch?: string;
   planningPrUrl?: string;
 }
@@ -124,6 +128,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
     if (request.agentType !== undefined) {
       taskRequest.agentType = request.agentType;
+    }
+    if (request.trackingCommentId !== undefined) {
+      taskRequest.trackingCommentId = request.trackingCommentId;
+    }
+    if (request.continuationPrNumber !== undefined) {
+      taskRequest.continuationPrNumber = request.continuationPrNumber;
+    }
+    if (request.continuationPrBranch !== undefined) {
+      taskRequest.continuationPrBranch = request.continuationPrBranch;
     }
     if (request.planningPrBranch !== undefined) {
       taskRequest.planningPrBranch = request.planningPrBranch;

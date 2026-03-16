@@ -52,6 +52,7 @@ export function createStatusMirrorService(deps: StatusMirrorServiceDeps): Status
     running: 'running',
     planned: 'completed',
     implemented: 'completed',
+    reviewed: 'completed',
     failed: 'failed',
     cancelled: 'cancelled',
     interrupted: 'interrupted',

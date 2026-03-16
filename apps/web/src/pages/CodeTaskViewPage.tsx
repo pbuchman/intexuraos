@@ -18,27 +18,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
+import { WORKER_TYPES, WORKER_TYPE_LABELS, type WorkerType } from '@/components/code-tasks/v2/shared.js';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PREventsGroup } from '@/components/PREventsGroup';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import type { LogLine, MessageStatus } from '@/hooks';
 import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus, WorkerStatusTag } from '@/types';
-
-// --- Worker type config ---
-
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
-
-const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'];
-
-const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
-  auto: 'Auto',
-  opus: 'Opus',
-  sonnet: 'Sonnet',
-  minimax: 'Minimax',
-  glm: 'GLM',
-  'qwen3.5-plus': 'Qwen 3.5 Plus',
-};
 
 // --- Status badge config ---
 
@@ -55,6 +41,7 @@ const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
   running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running', icon: Loader2 },
   planned: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Planned', icon: CheckCircle2 },
   implemented: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Implemented', icon: CheckCircle2 },
+  reviewed: { bg: 'bg-teal-100 dark:bg-teal-900/50', text: 'text-teal-800 dark:text-teal-300', label: 'Reviewed', icon: CheckCircle2 },
   failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed', icon: XCircle },
   interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted', icon: AlertCircle },
   cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled', icon: XCircle },
@@ -251,7 +238,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
         implementError={implementError}
         {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
         selectedWorkerType={selectedWorkerType}
-        originalWorkerType={task.workerType as WorkerType}
+        originalWorkerType={task.workerType}
         showDropdown={showImplementDropdown}
         onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowImplementDropdown(false); }}
@@ -269,7 +256,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
         retrying={retrying}
         retryError={retryError}
         selectedWorkerType={selectedWorkerType}
-        originalWorkerType={task.workerType as WorkerType}
+        originalWorkerType={task.workerType}
         showDropdown={showRetryDropdown}
         onToggleDropdown={(): void => { setShowRetryDropdown(!showRetryDropdown); }}
         onSelectWorkerType={(type): void => { setSelectedWorkerType(type); setShowRetryDropdown(false); }}

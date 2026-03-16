@@ -23,7 +23,7 @@ graph TB
         PubSub[Pub/Sub<br/>todos-processing]
         UserService[user-service]
         AppSettings[app-settings-service]
-        LLM[LLM Provider<br/>Gemini/GLM]
+        LLM[LLM Provider<br/>Gemini 2.5 Flash]
     end
 
     Client --> API
@@ -93,6 +93,10 @@ sequenceDiagram
 
 | Commit     | Description                                               | Date       |
 | ---------- | --------------------------------------------------------- | ---------- |
+| `c4e3a13c` | Release v3.3.0                                            | 2026-03-15 |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5    | 2026-03-12 |
+| `4ab46156` | Fix v8 ignore comments for test-infra category            | 2026-03-11 |
+| `752fd017` | Add tests for v8-ignore blocks (INT-796)                  | 2026-03-11 |
 | `44ea683a` | Release v3.2.0                                            | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration, update cross-service mocks | 2026-03-02 |
 | `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
@@ -102,8 +106,6 @@ sequenceDiagram
 | `e60eafc1` | Standardize API key secrets to APP naming (#793)          | 2026-02-15 |
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback (#792)  | 2026-02-15 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter (#790)              | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform Zai fallback     | 2026-02-08 |
-| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement          | 2026-01-31 |
 
 ## API Endpoints
 
@@ -235,9 +237,9 @@ When a new item is added to a completed todo, the status reverts to `in_progress
 
 ### External Services
 
-| Service      | Purpose                        | Failure Mode               |
-| ------------ | ------------------------------ | -------------------------- |
-| Gemini / GLM | Extract items from description | Add warning item, continue |
+| Service          | Purpose                        | Failure Mode               |
+| ---------------- | ------------------------------ | -------------------------- |
+| Gemini 2.5 Flash | Extract items from description | Add warning item, continue |
 
 ### Internal Services
 
@@ -267,7 +269,6 @@ When a new item is added to a completed todo, the status reverts to `in_progress
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | App-settings base URL (LLM pricing)    | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Sentry error tracking                  | No       |
 | `INTEXURAOS_ENVIRONMENT`              | Environment name                       | No       |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | Platform Zai API key (LLM fallback)    | No       |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini API key (LLM fallback) | No       |
 
 ## Gotchas
@@ -296,7 +297,7 @@ The service uses the user's configured LLM (via user-service) to extract structu
 
 **Prompt:** `itemExtractionPrompt` from `@intexuraos/llm-prompts`
 
-**Model chain:** Gemini 2.5 Flash (primary), GLM-4.7 (fallback), GLM-4.7-Flash (fallback)
+**Model:** Gemini 2.5 Flash (with platform Gemini fallback via `INTEXURAOS_GEMINI_APP_API_KEY`)
 
 **Fallback behaviors:**
 

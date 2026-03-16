@@ -253,12 +253,10 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
               : await gitHubPREventRepo.findAll(limit);
         }
 
-        /* v8 ignore start -- upstream: error handling for external database failures @preserve */
         if (!result.ok) {
           request.log.error({ error: result.error.message }, 'Failed to fetch GitHub PR events'); // @allow-result-access -- narrowed by !result.ok check
           return await reply.fail('INTERNAL_ERROR', 'Failed to fetch events');
         }
-        /* v8 ignore stop @preserve */
 
         // Deduplicate comment events (created → edited) so each comment appears once
         const dedupedEvents = deduplicateCommentEvents(result.value); // @allow-result-access -- narrowed by !result.ok check above

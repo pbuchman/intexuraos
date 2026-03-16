@@ -92,6 +92,9 @@ sequenceDiagram
 
 | Commit     | Description                                                       | Date       |
 | ---------- | ----------------------------------------------------------------- | ---------- |
+| `c4e3a13c` | Release v3.3.0                                                    | 2026-03-15 |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models (INT-836)                  | 2026-03-12 |
+| `3ec78836` | Add tests for v8-ignore blocks in user-service routes (INT-797)   | 2026-03-10 |
 | `1e742bbc` | Fix: remove schema enum to make isTranscriptionProvider coverable | 2026-03-06 |
 | `ab863ba5` | Refactor: add isTranscriptionProvider type guard                  | 2026-03-06 |
 | `0fff5af7` | Feat: add transcription preferences to user settings              | 2026-03-06 |
@@ -187,7 +190,6 @@ sequenceDiagram
 | `openai`     | EncryptedValue | OpenAI API key (encrypted)     |
 | `anthropic`  | EncryptedValue | Anthropic API key (encrypted)  |
 | `perplexity` | EncryptedValue | Perplexity API key (encrypted) |
-| `zai`        | EncryptedValue | Zai GLM API key (encrypted)    |
 
 ### LlmTestResult
 
@@ -298,7 +300,6 @@ Keys are validated before storage using cheap, fast models:
 | OpenAI     | gpt-4o-mini      |
 | Anthropic  | claude-3.5-haiku |
 | Perplexity | sonar            |
-| Zai        | glm-4.7          |
 
 Validation prompt: `Say "API key validated" in exactly 3 words.`
 
@@ -315,7 +316,7 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 | Auth0         | Identity management, authentication |
 | Google OAuth  | OAuth token management              |
 | GitHub OAuth  | OAuth token management              |
-| LLM APIs      | Key validation (5 providers)        |
+| LLM APIs      | Key validation (4 providers)        |
 
 ### Internal Services
 
@@ -376,7 +377,7 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 
 **Rate limit vs API key errors**: Error parser checks rate limits before API key patterns to avoid misdiagnosis.
 
-**Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`, `zai`) differ from display names.
+**Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`) differ from display names.
 
 **Internal endpoints use response contract**: All internal endpoints return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`. Callers must read from `response.data` instead of the top level.
 
@@ -459,7 +460,7 @@ apps/user-service/src/
     github/
       gitHubOAuthClient.ts     # GitHub OAuth client
     llm/
-      LlmValidatorImpl.ts      # Key validation (5 providers)
+      LlmValidatorImpl.ts      # Key validation (4 providers)
   routes/
     deviceRoutes.ts            # Device code flow
     tokenRoutes.ts             # Token refresh

@@ -150,19 +150,48 @@ describe('Error utilities', () => {
       expect(getErrorMessage(undefined)).toBe('Unknown error');
     });
 
-    it('returns fallback for string', () => {
-      expect(getErrorMessage('error string')).toBe('Unknown error');
+    it('returns string directly when error is a string', () => {
+      expect(getErrorMessage('error string')).toBe('error string');
+    });
+
+    it('returns fallback for empty string', () => {
+      expect(getErrorMessage('')).toBe('Unknown error');
+      expect(getErrorMessage('', 'custom fallback')).toBe('custom fallback');
+    });
+
+    it('returns fallback for object with empty .message', () => {
+      expect(getErrorMessage({ message: '' })).toBe('Unknown error');
+    });
+
+    it('returns fallback for object with empty .details', () => {
+      expect(getErrorMessage({ details: '' })).toBe('Unknown error');
     });
 
     it('returns fallback for number', () => {
       expect(getErrorMessage(42)).toBe('Unknown error');
     });
 
+    it('extracts .message from non-Error object', () => {
+      expect(getErrorMessage({ message: 'gRPC failed' })).toBe('gRPC failed');
+    });
+
+    it('extracts .details from non-Error object when no .message', () => {
+      expect(getErrorMessage({ details: 'connection reset' })).toBe('connection reset');
+    });
+
+    it('prefers .message over .details', () => {
+      expect(getErrorMessage({ code: 13, message: 'Internal', details: 'broke' })).toBe('Internal');
+    });
+
+    it('falls through to fallback when .message is non-string', () => {
+      expect(getErrorMessage({ message: 42 })).toBe('Unknown error');
+    });
+
     it('uses custom fallback when provided', () => {
       expect(getErrorMessage(null, 'Custom fallback')).toBe('Custom fallback');
     });
 
-    it('uses custom fallback for non-Error objects', () => {
+    it('uses custom fallback for non-Error objects without extractable message', () => {
       expect(getErrorMessage({ code: 500 }, 'Server error')).toBe('Server error');
     });
 
@@ -201,11 +230,33 @@ describe('Error utilities', () => {
       expect(result.code).toBe('ECONNREFUSED');
     });
 
-    it('returns fallback message for non-Error values', () => {
+    it('extracts message from non-Error object with .message', () => {
+      const result = serializeError({
+        message: 'gRPC broke',
+        name: 'ServiceError',
+        code: 'INTERNAL',
+      });
+      expect(result.message).toBe('gRPC broke');
+      expect(result.name).toBe('ServiceError');
+      expect(result.code).toBe('INTERNAL');
+    });
+
+    it('extracts details from non-Error object without .message', () => {
+      const result = serializeError({ details: 'connection reset' });
+      expect(result.message).toBe('connection reset');
+    });
+
+    it('returns string directly for string errors', () => {
+      expect(serializeError('string error').message).toBe('string error');
+    });
+
+    it('returns fallback for null/undefined/number', () => {
       expect(serializeError(null).message).toBe('Unknown error');
       expect(serializeError(undefined).message).toBe('Unknown error');
-      expect(serializeError('string error').message).toBe('Unknown error');
       expect(serializeError(42).message).toBe('Unknown error');
+    });
+
+    it('returns fallback for object without message or details', () => {
       expect(serializeError({ foo: 'bar' }).message).toBe('Unknown error');
     });
 
@@ -220,7 +271,28 @@ describe('Error utilities', () => {
       expect(result.code).toBeUndefined();
     });
 
-    it('truncates long stack traces', () => {
+    it('omits stack when error.stack is undefined', () => {
+      const error = new Error('No stack');
+      Object.defineProperty(error, 'stack', { value: undefined });
+      const result = serializeError(error);
+
+      expect(result.stack).toBeUndefined();
+      expect(result.message).toBe('No stack');
+      expect(result.name).toBe('Error');
+    });
+
+    it('truncates stack traces longer than 2000 characters', () => {
+      const error = new Error('Test error');
+      const longStack = 'x'.repeat(3000);
+      Object.defineProperty(error, 'stack', { value: longStack });
+      const result = serializeError(error);
+
+      expect(result.stack).toBeDefined();
+      expect(result.stack?.length).toBe(2000);
+      expect(result.stack).toBe(longStack.substring(0, 2000));
+    });
+
+    it('preserves stack traces shorter than 2000 characters', () => {
       const error = new Error('Test error');
       const result = serializeError(error);
 

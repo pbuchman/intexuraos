@@ -10,6 +10,8 @@ import {
   cancelCodeTask,
   getWorkersStatus,
   deleteCodeTask,
+  getGitHubEventLog,
+  hydrateGitHubEventLogRows,
 } from '../codeAgentApi.js';
 import type { CodeTask, ListCodeTasksResponse, WorkersStatusResponse } from '../../types/index.js';
 
@@ -159,6 +161,55 @@ describe('codeAgentApi', () => {
         mockAccessToken
       );
       expect(result).toEqual(mockTask);
+    });
+  });
+
+  describe('GitHub event log', () => {
+    it('fetches the live event log with pagination params', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = {
+        rows: [],
+        nextCursor: '2026-03-12T10:00:00.000Z',
+      };
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const result = await getGitHubEventLog(mockAccessToken, {
+        limit: 25,
+        cursor: '2026-03-12T09:00:00.000Z',
+      });
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/github-event-log?limit=25&cursor=2026-03-12T09%3A00%3A00.000Z',
+        mockAccessToken
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('hydrates specific event log rows by id', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = {
+        rows: [
+          {
+            id: 'delivery-1',
+            githubEventName: 'pull_request',
+          },
+        ],
+      };
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const result = await hydrateGitHubEventLogRows(mockAccessToken, ['delivery-1', 'delivery-2']);
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/github-event-log/rows',
+        mockAccessToken,
+        {
+          method: 'POST',
+          body: { ids: ['delivery-1', 'delivery-2'] },
+        }
+      );
+      expect(result).toEqual(mockResponse);
     });
   });
 

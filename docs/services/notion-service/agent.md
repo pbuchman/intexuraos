@@ -1,4 +1,4 @@
-# notion-service -- Agent Interface
+# notion-service — Agent Interface
 
 > Machine-readable specification for AI agent integration
 
@@ -199,9 +199,9 @@ interface WebhookOutput {
 
 **Do NOT:**
 
-- Call connect without a valid `secret_*` token -- the service validates eagerly and rejects bad tokens
-- Assume token persistence after disconnect -- disconnected users return `token: null` from the context endpoint
-- Expect webhook side effects -- `POST /notion-webhooks` is a logging stub with no processing
+- Call connect without a valid `secret_*` token — the service validates eagerly and rejects bad tokens
+- Assume token persistence after disconnect — disconnected users return `token: null` from the context endpoint
+- Expect webhook side effects — `POST /notion-webhooks` is a logging stub with no processing
 
 **Requires:**
 
@@ -267,4 +267,4 @@ None. This service does not publish Pub/Sub events.
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-15

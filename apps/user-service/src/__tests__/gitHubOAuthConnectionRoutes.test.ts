@@ -137,6 +137,43 @@ describe('GitHub OAuth Connection Routes', () => {
       expect(body.data.authorizationUrl).toContain('https://github.com/login/oauth/authorize');
     });
 
+    it('uses default protocol and host when forwarded headers are missing', { timeout: 20000 }, async () => {
+      app = await buildServer();
+      const token = await createJwt('auth0|user-123');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/oauth/connections/github/initiate',
+        headers: {
+          authorization: `Bearer ${token}`,
+          host: 'api.example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
+      expect(body.success).toBe(true);
+      expect(body.data.authorizationUrl).toContain('https://github.com/login/oauth/authorize');
+    });
+
+    it('uses fallback localhost when both forwarded headers and host header are missing', { timeout: 20000 }, async () => {
+      app = await buildServer();
+      const token = await createJwt('auth0|user-123');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/oauth/connections/github/initiate',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
+      expect(body.success).toBe(true);
+      expect(body.data.authorizationUrl).toContain('https://github.com/login/oauth/authorize');
+    });
+
     it('returns 503 when GitHub OAuth is not configured', { timeout: 20000 }, async () => {
       setServices({
         authTokenRepository: fakeAuthTokenRepo,
@@ -178,6 +215,20 @@ describe('GitHub OAuth Connection Routes', () => {
       };
       return Buffer.from(JSON.stringify(statePayload)).toString('base64url');
     }
+
+    it('uses localhost:5173 fallback when INTEXURAOS_WEB_APP_URL is not set', async () => {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/oauth/connections/github/callback?error=access_denied',
+      });
+
+      expect(response.statusCode).toBe(302);
+      expect(response.headers.location).toContain('http://localhost:5173');
+      expect(response.headers.location).toContain('/#/settings/github');
+    });
 
     it('redirects with error when error parameter is present', async () => {
       app = await buildServer();

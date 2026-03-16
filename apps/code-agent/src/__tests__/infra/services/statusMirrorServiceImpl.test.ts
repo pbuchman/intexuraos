@@ -240,6 +240,7 @@ describe('statusMirrorService', () => {
       ['queued', 'dispatched'],
       ['planned', 'completed'],
       ['implemented', 'completed'],
+      ['reviewed', 'completed'],
       ['failed', 'failed'],
       ['cancelled', 'cancelled'],
       ['interrupted', 'interrupted'],

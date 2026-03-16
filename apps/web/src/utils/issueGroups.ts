@@ -3,9 +3,14 @@ import type { CodeTask, CodeTaskStatus } from '@/types';
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type StepState = 'completed' | 'running' | 'failed' | 'waiting' | 'actionable';
 
+export interface PipelineStepData {
+  agentType: string;
+  state: StepState;
+  label: string;
+}
+
 export interface PipelineState {
-  planning: StepState | null;
-  execution: StepState | null;
+  steps: PipelineStepData[];
   pr: { url: string; number: string } | null;
   failedAttempts: number;
   archivedCount: number;
@@ -19,6 +24,8 @@ export interface IssueGroup {
   latestTask: CodeTask;
   aggregateStatus: GroupStatus;
 }
+
+export type SortOption = 'linear-id' | 'pr-number' | 'finished-time' | 'started-time' | 'created-time';
 
 const PR_URL_REGEX = /\/pull\/(\d+)/;
 const LINEAR_ID_REGEX = /\w+-(\d+)/;
@@ -41,8 +48,24 @@ const ACTIVE_STATUSES: ReadonlySet<CodeTaskStatus> = new Set<CodeTaskStatus>([
   'queued',
 ]);
 
+const AGENT_TYPE_LABELS: Record<string, string> = {
+  planning: 'Planning',
+  execution: 'Execution',
+  pull_request: 'PR Task',
+  review: 'Review',
+};
+
+function getAgentTypeLabel(agentType: string): string {
+  const label = AGENT_TYPE_LABELS[agentType];
+  if (label !== undefined) {
+    return label;
+  }
+  // Capitalize first letter for unknown agent types
+  return agentType.charAt(0).toUpperCase() + agentType.slice(1);
+}
+
 function deriveStepState(status: CodeTaskStatus): StepState {
-  if (status === 'planned' || status === 'implemented') {
+  if (status === 'planned' || status === 'implemented' || status === 'reviewed') {
     return 'completed';
   }
   if (status === 'running' || status === 'dispatched' || status === 'queued') {
@@ -53,42 +76,64 @@ function deriveStepState(status: CodeTaskStatus): StepState {
 }
 
 function derivePipeline(tasks: CodeTask[]): PipelineState {
-  // Find latest non-archived planning task
-  const planningTask = tasks.find(
-    (t) => t.agentType === 'planning' && t.status !== 'archived',
-  );
+  // Tasks are already sorted by updatedAt desc from the caller.
+  // Group by agentType, keeping only the first non-archived task per type (= latest by updatedAt).
+  const stepMap = new Map<string, { task: CodeTask; step: PipelineStepData }>();
 
-  // Find latest non-archived execution task
-  const executionTask = tasks.find(
-    (t) => t.agentType === 'execution' && t.status !== 'archived',
-  );
-
-  // Planning step
-  const planning = planningTask !== undefined ? deriveStepState(planningTask.status) : null;
-
-  // Execution step
-  let execution: StepState | null = null;
-  if (executionTask !== undefined) {
-    execution = deriveStepState(executionTask.status);
-  } else if (
-    planning === 'completed' &&
-    planningTask !== undefined &&
-    planningTask.implementationTaskId === undefined
-  ) {
-    execution = 'actionable';
+  for (const task of tasks) {
+    if (task.agentType === undefined || task.status === 'archived') {
+      continue;
+    }
+    if (!stepMap.has(task.agentType)) {
+      stepMap.set(task.agentType, {
+        task,
+        step: {
+          agentType: task.agentType,
+          state: deriveStepState(task.status),
+          label: getAgentTypeLabel(task.agentType),
+        },
+      });
+    }
   }
 
-  // PR step — extract from any task's result.prUrl
+  // Sort steps by the representative task's createdAt ascending (chronological order)
+  const entries = [...stepMap.values()];
+  entries.sort((a, b) => a.task.createdAt.localeCompare(b.task.createdAt));
+
+  const steps = entries.map((e) => e.step);
+
+  // Actionable logic: if planning completed, no execution step exists, and no implementationTaskId
+  const planningEntry = stepMap.get('planning');
+  const executionEntry = stepMap.get('execution');
+  if (
+    planningEntry?.step.state === 'completed' &&
+    executionEntry === undefined &&
+    planningEntry.task.implementationTaskId === undefined
+  ) {
+    // Insert synthetic execution step right after planning
+    const planningIndex = steps.findIndex((s) => s.agentType === 'planning');
+    steps.splice(planningIndex + 1, 0, {
+      agentType: 'execution',
+      state: 'actionable',
+      label: 'Execution',
+    });
+  }
+
+  // PR step — extract from latest non-archived task's result.prUrl
   let pr: PipelineState['pr'] = null;
-  for (const task of tasks) {
-    const prUrl = task.result?.prUrl;
+  const nonArchivedTasks = tasks.filter((t) => t.status !== 'archived');
+  if (nonArchivedTasks.length > 0) {
+    // Find the latest task by updatedAt
+    const latestTask = nonArchivedTasks.reduce((latest, task) =>
+      new Date(task.updatedAt) > new Date(latest.updatedAt) ? task : latest
+    );
+    const prUrl = latestTask.result?.prUrl;
     if (prUrl !== undefined) {
       const match = PR_URL_REGEX.exec(prUrl);
       if (match !== null) {
         const prNumber = match[1];
         if (prNumber !== undefined) {
           pr = { url: prUrl, number: prNumber };
-          break;
         }
       }
     }
@@ -102,7 +147,7 @@ function derivePipeline(tasks: CodeTask[]): PipelineState {
   // archivedCount: count of tasks with status === 'archived'
   const archivedCount = tasks.filter((t) => t.status === 'archived').length;
 
-  return { planning, execution, pr, failedAttempts, archivedCount };
+  return { steps, pr, failedAttempts, archivedCount };
 }
 
 function deriveAggregateStatus(tasks: CodeTask[], pipeline: PipelineState): GroupStatus {
@@ -112,8 +157,8 @@ function deriveAggregateStatus(tasks: CodeTask[], pipeline: PipelineState): Grou
     return 'active';
   }
 
-  // Needs-action: has planned task without implementationTaskId
-  if (pipeline.execution === 'actionable') {
+  // Needs-action: has actionable step
+  if (pipeline.steps.some((s) => s.state === 'actionable')) {
     return 'needs-action';
   }
 
@@ -224,4 +269,87 @@ export function groupByLinearIssue(tasks: CodeTask[]): IssueGroup[] {
   });
 
   return groups;
+}
+
+export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): IssueGroup[] {
+  const sorted = [...groups];
+
+  if (sortBy === 'linear-id') {
+    // Sort by Linear issue number descending; standalone (null linearIssueId) groups sort first.
+    // This mirrors the sort already applied inside groupByLinearIssue(), making the function
+    // correct regardless of the caller's input order.
+    sorted.sort((a, b) => {
+      const aNum = a.linearIssueId !== null ? parseLinearIssueNumber(a.linearIssueId) : null;
+      const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
+
+      if (aNum === null && bNum === null) {
+        return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+      }
+      if (aNum === null) return -1;
+      if (bNum === null) return 1;
+      if (aNum !== bNum) return bNum - aNum;
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
+    return sorted;
+  }
+
+  if (sortBy === 'pr-number') {
+    sorted.sort((a, b) => {
+      const aNum = a.pipeline.pr !== null ? Number(a.pipeline.pr.number) : null;
+      const bNum = b.pipeline.pr !== null ? Number(b.pipeline.pr.number) : null;
+
+      // Both have PR: sort desc
+      if (aNum !== null && bNum !== null) return bNum - aNum;
+      // Only one has PR: the one with PR sorts first
+      if (aNum !== null) return -1;
+      if (bNum !== null) return 1;
+      // Neither has PR: fall back to updatedAt desc
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
+    return sorted;
+  }
+
+  // finished-time
+  if (sortBy === 'finished-time') {
+    sorted.sort((a, b) => {
+      const aDone = a.aggregateStatus === 'done';
+      const bDone = b.aggregateStatus === 'done';
+
+      // Done groups sort first, by updatedAt desc
+      if (aDone && bDone) return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+      if (aDone) return -1;
+      if (bDone) return 1;
+      // Non-done: fall back to updatedAt desc
+      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    });
+    return sorted;
+  }
+
+  // created-time: sort by createdAt desc
+  if (sortBy === 'created-time') {
+    sorted.sort((a, b) => b.latestTask.createdAt.localeCompare(a.latestTask.createdAt));
+    return sorted;
+  }
+
+  // started-time: sort by most recent dispatchedAt desc (groups with dispatchedAt first, then by issue number)
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (sortBy === 'started-time') {
+    sorted.sort((a, b) => {
+      const aDispatched = a.latestTask.dispatchedAt;
+      const bDispatched = b.latestTask.dispatchedAt;
+
+      // Both have dispatchedAt: sort desc
+      if (aDispatched !== undefined && bDispatched !== undefined) {
+        return bDispatched.localeCompare(aDispatched);
+      }
+      // Only one has dispatchedAt: the one with dispatchedAt sorts first
+      if (aDispatched !== undefined) return -1;
+      if (bDispatched !== undefined) return 1;
+      // Neither has dispatchedAt: fall back to createdAt desc
+      return b.latestTask.createdAt.localeCompare(a.latestTask.createdAt);
+    });
+    return sorted;
+  }
+
+  return sorted;
 }

@@ -5,33 +5,48 @@
  * the UnifiedEvaluator. Provides an audit trail linking events to actions.
  */
 
-import type { GitHubEventType } from './gitHubPREvent.js';
+import type {
+  GitHubWebhookAction,
+  GitHubWebhookEventType,
+} from './gitHubWebhookTypes.js';
+import type { WorkerType } from './codeTask.js';
+
+export type EventDecisionMaker = 'hard_rules' | 'github_agent' | 'webhook_route';
+export type EventDecisionOutcome = 'dispatch' | 'skip' | 'request_review';
+export type EventDecisionDispatchAction = 'create_task' | 'send_message' | 'create_review_task';
+export type EventDecisionReviewType = 'code_quality' | 'security' | 'architecture';
 
 export interface EventDecision {
   id: string;
   eventId: string;
-  repository: string;
-  pullRequestNumber: number;
+  normalizedEventId?: string;
+  repository: string | null;
+  pullRequestNumber: number | null;
 
-  eventType: GitHubEventType;
-  eventAction: string;
-  senderLogin: string;
+  eventType: GitHubWebhookEventType;
+  eventAction: GitHubWebhookAction;
+  senderLogin: string | null;
 
-  decidedBy: 'hard_rules' | 'github_agent';
+  decidedBy: EventDecisionMaker;
 
-  decision: 'dispatch' | 'skip' | 'request_review';
+  decision: EventDecisionOutcome;
   reason: string;
 
-  dispatchAction?: 'create_task' | 'send_message' | 'create_review_task';
+  dispatchAction?: EventDecisionDispatchAction;
   dispatchParams?: {
     taskId?: string;
     messageTemplate?: string;
-    reviewTypes?: string[];
+    reviewTypes?: EventDecisionReviewType[];
+    workerType?: WorkerType;
   };
 
   llmModel?: string;
   llmCostUsd?: number;
   llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
+  llmReasoning?: string;
+
+  dispatchSuccess?: boolean;
+  dispatchError?: string;
 
   createdAt: Date;
   decisionLatencyMs: number;
@@ -42,28 +57,34 @@ export interface EventDecision {
  */
 export interface CreateEventDecisionInput {
   eventId: string;
-  repository: string;
-  pullRequestNumber: number;
+  normalizedEventId?: string;
+  repository: string | null;
+  pullRequestNumber: number | null;
 
-  eventType: GitHubEventType;
-  eventAction: string;
-  senderLogin: string;
+  eventType: GitHubWebhookEventType;
+  eventAction: GitHubWebhookAction;
+  senderLogin: string | null;
 
-  decidedBy: 'hard_rules' | 'github_agent';
+  decidedBy: EventDecisionMaker;
 
-  decision: 'dispatch' | 'skip' | 'request_review';
+  decision: EventDecisionOutcome;
   reason: string;
 
-  dispatchAction?: 'create_task' | 'send_message' | 'create_review_task';
+  dispatchAction?: EventDecisionDispatchAction;
   dispatchParams?: {
     taskId?: string;
     messageTemplate?: string;
-    reviewTypes?: string[];
+    reviewTypes?: EventDecisionReviewType[];
+    workerType?: WorkerType;
   };
 
   llmModel?: string;
   llmCostUsd?: number;
   llmToolCalls?: { tool: string; args: Record<string, unknown> }[];
+  llmReasoning?: string;
+
+  dispatchSuccess?: boolean;
+  dispatchError?: string;
 
   decisionLatencyMs: number;
 }

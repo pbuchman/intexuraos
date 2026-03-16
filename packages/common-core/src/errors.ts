@@ -29,7 +29,8 @@ export type ErrorCode =
   | 'INVALID_NONCE'
   | 'NONCE_EXPIRED'
   | 'NOT_OWNER'
-  | 'TASK_NOT_CANCELLABLE';
+  | 'TASK_NOT_CANCELLABLE'
+  | 'QUEUE_FULL';
 
 /**
  * HTTP status codes mapped to error codes.
@@ -62,6 +63,7 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   NONCE_EXPIRED: 400,
   NOT_OWNER: 403,
   TASK_NOT_CANCELLABLE: 400,
+  QUEUE_FULL: 503,
 };
 
 /**
@@ -88,7 +90,23 @@ export class IntexuraOSError extends Error {
  * @returns The error message or fallback
  */
 export function getErrorMessage(error: unknown, fallback = 'Unknown error'): string {
-  return error instanceof Error ? error.message : fallback;
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error.length > 0 ? error : fallback;
+  }
+  if (typeof error === 'object' && error !== null) {
+    if ('message' in error && typeof (error as { message: unknown }).message === 'string') {
+      const msg = (error as { message: string }).message;
+      if (msg.length > 0) return msg;
+    }
+    if ('details' in error && typeof (error as { details: unknown }).details === 'string') {
+      const det = (error as { details: string }).details;
+      if (det.length > 0) return det;
+    }
+  }
+  return fallback;
 }
 
 const MAX_STACK_LENGTH = 2000;
@@ -127,7 +145,16 @@ export interface SerializedError {
  */
 export function serializeError(error: unknown): SerializedError {
   if (!(error instanceof Error)) {
-    return { message: 'Unknown error' };
+    const message = getErrorMessage(error);
+    if (typeof error === 'object' && error !== null) {
+      const obj = error as Record<string, unknown>;
+      return {
+        message,
+        ...(typeof obj['name'] === 'string' && { name: obj['name'] }),
+        ...(typeof obj['code'] === 'string' && { code: obj['code'] }),
+      };
+    }
+    return { message };
   }
 
   const result: SerializedError = {
@@ -135,15 +162,11 @@ export function serializeError(error: unknown): SerializedError {
     name: error.name,
   };
 
-  /* v8 ignore start -- ts-type: Error.stack can be undefined per TS types but practically always exists in JS runtimes @preserve */
   if (error.stack !== undefined) {
-    /* v8 ignore stop @preserve */
-    /* v8 ignore start -- test-infra: MAX_STACK_LENGTH truncation branch requires generating 100KB+ stack trace @preserve */
     result.stack =
       error.stack.length > MAX_STACK_LENGTH
         ? error.stack.substring(0, MAX_STACK_LENGTH)
         : error.stack;
-    /* v8 ignore stop @preserve */
   }
 
   const errorWithCode = error as Error & { code?: unknown; errno?: unknown; syscall?: unknown };

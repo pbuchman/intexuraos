@@ -1,4 +1,4 @@
-# Orchestrator - Tutorial
+# Orchestrator — Tutorial
 
 This tutorial walks through setting up the orchestrator from scratch, verifying it works, and submitting your first code task.
 
@@ -108,8 +108,10 @@ Expected response:
   "capacity": 2,
   "running": 0,
   "available": 2,
-  "githubTokenExpiresAt": "2026-02-08T15:30:00.000Z",
-  "anthropicOAuth": { "status": "not_configured", "message": "Not configured" }
+  "githubTokenExpiresAt": "2026-03-15T15:30:00.000Z",
+  "anthropicOAuth": { "status": "active", "expiresInMinutes": 45, "subscriptionType": "max" },
+  "dockerHealthy": true,
+  "diskHealthy": true
 }
 ```
 
@@ -138,7 +140,7 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
-The `workerType` field controls which AI model handles the task. Valid types are `opus`, `auto`, `sonnet`, `minimax`, `glm`, and `qwen3.5-plus`.
+The `workerType` field controls which AI model handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), and `glm`, `qwen`, `kimi` (Alibaba Cloud DashScope).
 
 ```bash
 BODY='{
@@ -209,7 +211,45 @@ BODY='{
 }'
 ```
 
-### Step 4: Monitor the task
+### Step 4: Submit a task that continues an existing PR
+
+When retrying a task, pass the existing PR details so the worker builds on previous work:
+
+```bash
+BODY='{
+  "taskId": "retry-task-001",
+  "workerType": "opus",
+  "prompt": "Continue implementation for INT-500",
+  "agentType": "execution",
+  "continuationPrNumber": 42,
+  "continuationPrBranch": "task_abc123",
+  "linearIssueId": "INT-500",
+  "linearIssueLabels": ["code-task"],
+  "hasChildren": false,
+  "webhookUrl": "http://localhost:3001/webhook",
+  "webhookSecret": "test-secret-123"
+}'
+```
+
+### Step 5: Submit a review task
+
+To dispatch an automated code review:
+
+```bash
+BODY='{
+  "taskId": "review-task-001",
+  "workerType": "auto",
+  "prompt": "Review PR #42 for code quality, security, and architecture",
+  "agentType": "review",
+  "linearIssueId": "INT-500",
+  "linearIssueLabels": [],
+  "hasChildren": false,
+  "webhookUrl": "http://localhost:3001/webhook",
+  "webhookSecret": "test-secret-123"
+}'
+```
+
+### Step 6: Monitor the task
 
 Check task status:
 
@@ -229,7 +269,7 @@ View orchestrator health:
 curl http://localhost:8199/health | jq
 ```
 
-### Step 5: Send a message to a running task
+### Step 7: Send a message to a running task
 
 Messages can be sent to running, completed, or failed tasks. For running tasks, the message is queued and delivered when the current attempt finishes. For completed or failed tasks, the task is resumed with a new worker session.
 
@@ -248,7 +288,7 @@ curl -X POST http://localhost:8199/tasks/test-task-001/message \
 
 The message field supports up to 20,000 characters.
 
-### Step 6: Cancel a task
+### Step 8: Cancel a task
 
 ```bash
 curl -X DELETE http://localhost:8199/tasks/test-task-001
@@ -370,7 +410,7 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `Secret Manager fetch failed`                     | Wrong credentials path               | Verify `GOOGLE_APPLICATION_CREDENTIALS` file exists                                                                                               |
 | `502 from tunnel`                                 | Orchestrator not running             | Start with `pnpm --filter orchestrator dev`                                                                                                       |
 | `401 Invalid signature`                           | HMAC secret mismatch                 | Match `INTEXURAOS_ORCHESTRATOR_SECRET` with UI setting                                                                                            |
-| Docker `name already in use`                      | Orphaned container from previous run | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`                                                                                      |
+| Docker `name already in use`                      | Orphaned container from previous run | Periodic stale cleanup handles this; manual: `docker rm -f $(docker ps -aq --filter name=claude-worker-)`                                         |
 | `Network not found`                               | Missing Docker network               | `./scripts/setup-worker-network.sh`                                                                                                               |
 | `Image not found`                                 | Claude worker image not pulled/built | `docker pull europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`; or set `INTEXURAOS_CLAUDE_WORKER_IMAGE` |
 | Tests skipped (E2E)                               | Docker network or test image missing | See Part 3 prerequisites                                                                                                                          |
@@ -379,5 +419,7 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `INTEXURAOS_GEMINI_APP_API_KEY not set`           | Missing required env var             | Add to `.envrc.local` and run `direnv allow`; completion verification is always required                                                          |
 | Tasks fail with `TASK_COMPLETION_VERIFIER_FAILED` | Gemini API unreachable               | Check network connectivity and Gemini API key validity; tasks fail rather than complete unverified                                                |
 | `INTEXURAOS_MINIMAX_APP_API_KEY not set`          | Missing MiniMax API key              | Required if dispatching `minimax` worker type tasks; add to `.envrc.local`                                                                        |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY not set`        | Missing Alibaba Cloud API key        | Required if dispatching `qwen3.5-plus` worker type tasks; add to `.envrc.local`                                                                   |
+| `INTEXURAOS_DASHSCOPE_APP_API_KEY not set`        | Missing DashScope API key            | Required if dispatching `glm`, `qwen`, or `kimi` worker type tasks; add to `.envrc.local`                                                         |
 | Task adopted on restart but fails immediately     | Container state drift                | Container was running but in a bad state; check Docker logs for the container before it was adopted                                               |
+| `503 docker_unavailable`                          | Docker daemon not responding         | Check Docker Desktop is running; the health gate rejects tasks when Docker is unreachable                                                         |
+| Container creation timeout                        | Docker pull or create taking > 2min  | Check network connectivity for image pull; check Docker disk space                                                                                |

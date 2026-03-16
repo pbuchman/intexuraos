@@ -2,7 +2,7 @@
 
 Sentry error tracking integration for IntexuraOS services. Provides SDK initialization, a Pino log stream that forwards errors/warnings to Sentry, a Fastify error handler, and a logger factory that wires everything together.
 
-**Package:** `@intexuraos/infra-sentry` | **Version:** 2.1.0 | **Type:** ESM | **Node:** >=22.0.0
+**Package:** `@intexuraos/infra-sentry` | **Version:** 3.3.0 | **Type:** ESM | **Node:** >=22.0.0
 
 ---
 
@@ -243,15 +243,13 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 
 ## Recent Changes
 
-| Commit     | Description                                                      | When    |
-| ---------- | ---------------------------------------------------------------- | ------- |
-| `0338e04f` | Route pino logs to Dash0 via pino-opentelemetry-transport        | Recent  |
-| `620afa4b` | Rework dev log format to time \                                  | level \ | name \ | msg \ | key=val | Recent |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                  | Recent  |
-| `f10ebdbf` | Fix empty error objects in log output                            | 3 weeks |
-| `44017d5c` | Fix ESLint OOM with batched parallel lint runner                 | 3 weeks |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps           | 4 weeks |
-| `4fa0fed3` | Release v2.0.0                                                   | 5 weeks |
+| Commit     | Description                                               |
+| ---------- | --------------------------------------------------------- |
+| `0338e04f` | Route pino logs to Dash0 via pino-opentelemetry-transport |
+| `6063175b` | Add dev-mode log formatting for PM2 readability           |
+| `f10ebdbf` | Fix empty error objects in log output                     |
+| `44017d5c` | Fix ESLint OOM with batched parallel lint runner          |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps    |
 
 ---
 

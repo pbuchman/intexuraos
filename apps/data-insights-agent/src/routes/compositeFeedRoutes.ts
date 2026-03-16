@@ -372,7 +372,6 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
       const vizDeleteResult = await services.visualizationRepository.deleteByFeedId(
         request.params.id
       );
-      /* v8 ignore start -- upstream: fake repo deleteByFeedId never errors @preserve */
       if (!vizDeleteResult.ok) {
         request.log.warn(
           {
@@ -382,7 +381,6 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
           'Failed to delete visualizations after feed deletion (non-fatal)'
         );
       }
-      /* v8 ignore stop @preserve */
 
       return await reply.ok({});
     }

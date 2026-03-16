@@ -10,6 +10,7 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../domain/services/taskDispatcher.js';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -29,7 +30,7 @@ export interface ProcessCodeActionRequest {
   approvalEventId: string;
   userId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: WorkerType;
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
@@ -103,7 +104,6 @@ export async function processCodeAction(
 
   // Step 1: Fetch user's worker settings (required for dispatch)
   const settingsResult = await workerSettingsRepo.getSettings(userId);
-  /* v8 ignore start -- test-infra: error path requires Firestore failure @preserve */
   if (!settingsResult.ok) {
     logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
     return err({
@@ -111,16 +111,12 @@ export async function processCodeAction(
       message: 'Failed to fetch worker settings',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const settings = settingsResult.value;
 
   // Build worker credentials from user's settings - NO FALLBACKS
-  /* v8 ignore start -- ts-type: nullish coalescing for when settings is null @preserve */
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- test-infra: requires user with no enabled workers fixture @preserve */
   if (enabledWorkers.length === 0) {
     logger.warn({ userId }, 'User has no workers configured');
     return err({
@@ -128,7 +124,6 @@ export async function processCodeAction(
       message: 'Please configure your workers in Settings before submitting code tasks',
     });
   }
-  /* v8 ignore stop @preserve */
 
   const workerCredentials: DispatchWorkerCredentials = {
     workers: enabledWorkers.map((w) => ({
@@ -159,7 +154,6 @@ export async function processCodeAction(
   });
 
   // CRITICAL: If user provided an issue ID but we're in fallback mode, this is an error
-  /* v8 ignore start -- test-infra: requires linear-agent mock to return validation failure @preserve */
   if (linearIssueId !== undefined && issueResult.linearFallback) {
     logger.error({ linearIssueId }, 'User-provided Linear issue could not be validated');
     return err({
@@ -167,7 +161,6 @@ export async function processCodeAction(
       message: `The Linear issue "${linearIssueId}" could not be validated. Please check that it exists and you have access to it.`,
     });
   }
-  /* v8 ignore stop @preserve */
 
   const {
     linearIssueId: finalLinearIssueId,
@@ -203,7 +196,7 @@ export async function processCodeAction(
     prompt: string;
     sanitizedPrompt: string;
     systemPromptHash: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+    workerType: WorkerType;
     workerLocation: string;
     repository: string;
     baseBranch: string;
@@ -233,11 +226,9 @@ export async function processCodeAction(
   };
 
   // Only include linear issue fields if we have them
-  /* v8 ignore start -- ts-type: type narrowing branch for optional linear issue fields, requires complex setup @preserve */
   if (finalLinearIssueId !== undefined) {
     createInput.linearIssueId = finalLinearIssueId;
   }
-  /* v8 ignore stop @preserve */
 
   const createResult = await codeTaskRepo.create(createInput);
 
@@ -285,7 +276,7 @@ export async function processCodeAction(
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+    workerType: WorkerType;
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;
@@ -324,14 +315,12 @@ export async function processCodeAction(
     // INT-619: Queue task when all workers are at capacity
     if (dispatchError.code === 'at_capacity') {
       const queueCountResult = await codeTaskRepo.countQueued();
-      /* v8 ignore start -- test-infra: Firestore countQueued failure fallback to fail-closed @preserve */
       if (!queueCountResult.ok) {
         logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
       }
-      /* v8 ignore stop @preserve */
-      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize;
+      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
 
-      if (queueCount >= config.queue.maxSize) {
+      if (queueCount > config.queue.maxSize) {
         await codeTaskRepo.update(task.id, {
           status: 'failed',
           error: {
@@ -345,21 +334,8 @@ export async function processCodeAction(
         });
       }
 
-      const queuedAt = new Date();
-      const queueUpdateResult = await codeTaskRepo.update(task.id, {
-        status: 'queued',
-        queuedAt,
-      });
-
-      if (!queueUpdateResult.ok) {
-        logger.error({ taskId: task.id, error: queueUpdateResult.error }, 'Failed to persist queued status');
-        return err({
-          code: 'internal_error',
-          message: 'Failed to queue task',
-        });
-      }
-
-      const queuePosition = queueCount + 1;
+      // Task is already in 'queued' status from creation — no status update needed
+      const queuePosition = queueCount;
       const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
       await whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
 
@@ -402,6 +378,8 @@ export async function processCodeAction(
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(task.id, {
+    status: 'dispatched',
+    dispatchedAt: new Date(),
     workerLocation: dispatchValue.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,

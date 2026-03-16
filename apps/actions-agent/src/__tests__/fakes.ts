@@ -1,4 +1,4 @@
-import type { Result, ServiceFeedback } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback, CodeTaskWorkerType } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
@@ -48,6 +48,10 @@ import {
   createChangeActionTypeUseCase,
   type ChangeActionTypeUseCase,
 } from '../domain/usecases/changeActionType.js';
+import {
+  createUpdateActionUseCase,
+  type UpdateActionUseCase,
+} from '../domain/usecases/updateAction.js';
 import type {
   HandleApprovalReplyUseCase,
   ApprovalReplyInput,
@@ -745,7 +749,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     approvalEventId: string;
     payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+      workerType: CodeTaskWorkerType;
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
@@ -798,7 +802,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     approvalEventId: string;
     payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+      workerType: CodeTaskWorkerType;
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
@@ -1335,6 +1339,7 @@ export function createFakeServices(deps: {
   executeCodeActionUseCase?: FakeExecuteCodeActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
+  updateActionUseCase?: UpdateActionUseCase;
   approvalMessageRepository?: FakeApprovalMessageRepository;
   userServiceClient?: FakeUserServiceClient;
   handleApprovalReplyUseCase?: HandleApprovalReplyUseCase;
@@ -1471,6 +1476,13 @@ export function createFakeServices(deps: {
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
+    updateActionUseCase:
+      deps.updateActionUseCase ??
+      createUpdateActionUseCase({
+        actionRepository,
+        changeActionTypeUseCase,
+        logger: createMockLogger(),
+      }),
     approvalMessageRepository,
     userServiceClient,
     handleApprovalReplyUseCase:

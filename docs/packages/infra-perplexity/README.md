@@ -2,6 +2,8 @@
 
 Perplexity AI API wrapper implementing `research` and `generate` from the `LLMClient` interface. Uses raw HTTP fetch (no SDK) with SSE streaming support for long-running deep research models.
 
+**Version:** 3.3.0 | **Node:** >=22.0.0 | **Type:** ESM
+
 ## What It Wraps
 
 - **External API:** Perplexity Chat Completions API (`https://api.perplexity.ai/chat/completions`)
@@ -140,10 +142,10 @@ All methods return `Result<T, PerplexityError>`. Error mapping:
 
 ## Recent Changes
 
-| Commit     | Description                                           | When        |
-| ---------- | ----------------------------------------------------- | ----------- |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)     | 8 days ago  |
-| `7872eabb` | Phase 2: Fix v8-ignore script and begin coverage work | 8 days ago  |
-| `766ae429` | Add tests for branch coverage gaps in packages        | 13 days ago |
-| `51b4a325` | Migrate LLM clients to UsageLogger class              | 2 weeks ago |
-| `8aad9098` | Migrate imports and delete llm-common                 | 2 weeks ago |
+| Commit     | Description                                           |
+| ---------- | ----------------------------------------------------- |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)     |
+| `7872eabb` | Phase 2: Fix v8-ignore script and begin coverage work |
+| `766ae429` | Add tests for branch coverage gaps in packages        |
+| `51b4a325` | Migrate LLM clients to UsageLogger class              |
+| `8aad9098` | Migrate imports and delete llm-common                 |

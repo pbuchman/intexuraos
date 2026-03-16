@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { type Result, ok, err, type Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
+const SAFE_GIT_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 
 export interface WorktreeManagerConfig {
   repositoryPath: string;
@@ -14,96 +15,158 @@ export interface WorktreeManagerConfig {
   settingsLocalTemplatePath?: string;
 }
 
+const LOCK_TIMEOUT_MS = 10_000;
+
+function assertSafeBranchName(branch: string, branchLabel: string): void {
+  if (!SAFE_GIT_BRANCH_PATTERN.test(branch)) {
+    throw new Error(`Invalid ${branchLabel} branch name: ${branch}`);
+  }
+}
+
 export class WorktreeManager {
+  private gitLock: Promise<void> = Promise.resolve();
+
   constructor(
     private readonly config: WorktreeManagerConfig,
     private readonly logger: Logger
   ) {}
 
-  async createWorktree(taskId: string, baseBranch: string): Promise<string> {
-    const worktreePath = join(this.config.worktreeBasePath, taskId);
-    this.logger.info({ taskId, baseBranch }, 'Creating worktree');
+  private async withGitLock<T>(fn: () => Promise<T>): Promise<T> {
+    let releaseLock: () => void = () => undefined;
+    const nextLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
 
-    // Check if worktree already exists
-    if (await this.worktreeExists(taskId)) {
-      throw new Error(`Worktree for task ${taskId} already exists at ${worktreePath}`);
-    }
+    const previousLock = this.gitLock;
+    this.gitLock = nextLock;
+
+    let rejectTimeout: (reason: Error) => void = () => undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      rejectTimeout = reject;
+    });
+    const timeoutId = setTimeout(() => {
+      rejectTimeout(new Error('Timed out waiting for git lock after 10s'));
+    }, LOCK_TIMEOUT_MS);
 
     try {
-      // Ensure base directory exists
-      await mkdir(this.config.worktreeBasePath, { recursive: true });
-
-      // Create worktree with a new branch for the task
-      // Using -b creates a local branch, avoiding detached HEAD state
-      // which is required for Claude to create commits and PRs
-      const { stderr } = await execAsync(
-        `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
-        {
-          cwd: this.config.repositoryPath,
-        }
-      );
-
-      // git worktree add outputs to stderr even on success
-      /* v8 ignore start -- test-infra: git worktree add outputs to stderr on success (e @preserve */
-      if (stderr && !stderr.includes('Preparing worktree')) {
-        throw new Error(`Failed to create worktree: ${stderr}`);
-      }
-      /* v8 ignore stop @preserve */
-
-      // Copy MCP config template if provided
-      if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
-        await this.copyMcpConfig(worktreePath);
-      }
-
-      // Copy settings.local.json template if provided
-      if (
-        this.config.settingsLocalTemplatePath !== undefined &&
-        existsSync(this.config.settingsLocalTemplatePath)
-      ) {
-        await this.copySettingsLocal(worktreePath);
-      } else if (this.config.settingsLocalTemplatePath !== undefined) {
-        this.logger.warn(
-          { templatePath: this.config.settingsLocalTemplatePath },
-          'settings.local.json template path configured but file not found on disk'
-        );
-      }
-
-      this.logger.info({ taskId, worktreePath }, 'Worktree created');
-      return worktreePath;
-    } catch (error: unknown) {
-      /* v8 ignore start -- test-infra: worktree creation failure requires git worktree state manipulation @preserve */
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      /* v8 ignore stop @preserve */
-      throw new Error(`Failed to create worktree: ${message}`);
+      await Promise.race([previousLock, timeout]);
+      return await fn();
+    } finally {
+      clearTimeout(timeoutId);
+      releaseLock();
     }
   }
 
-  async removeWorktree(taskId: string): Promise<void> {
-    const worktreePath = join(this.config.worktreeBasePath, taskId);
-    this.logger.info({ taskId, worktreePath }, 'Removing worktree');
+  async createWorktree(
+    taskId: string,
+    baseBranch: string,
+    continuationPrBranch?: string
+  ): Promise<string> {
+    return await this.withGitLock(async () => {
+      const worktreePath = join(this.config.worktreeBasePath, taskId);
+      this.logger.info({ taskId, baseBranch, continuationPrBranch }, 'Creating worktree');
 
-    if (!existsSync(worktreePath)) {
-      throw new Error(`Worktree for task ${taskId} does not exist at ${worktreePath}`);
-    }
-
-    try {
-      // Remove worktree using git worktree remove
-      const { stderr } = await execAsync(`git worktree remove "${worktreePath}" --force`, {
-        cwd: this.config.repositoryPath,
-      });
-
-      /* v8 ignore start -- test-infra: similar to create worktree - requires git worktree remove failure simulation @preserve */
-      if (stderr) {
-        throw new Error(`Failed to remove worktree: ${stderr}`);
+      assertSafeBranchName(baseBranch, 'base');
+      if (continuationPrBranch !== undefined) {
+        assertSafeBranchName(continuationPrBranch, 'continuation PR');
       }
-      /* v8 ignore stop @preserve */
-      this.logger.info({ taskId }, 'Worktree removed');
-    } catch (error: unknown) {
-      /* v8 ignore start -- test-infra: worktree removal failure requires git worktree state manipulation @preserve */
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      /* v8 ignore stop @preserve */
-      throw new Error(`Failed to remove worktree: ${message}`);
-    }
+
+      // Check if worktree already exists
+      if (await this.worktreeExists(taskId)) {
+        throw new Error(`Worktree for task ${taskId} already exists at ${worktreePath}`);
+      }
+
+      try {
+        // Ensure base directory exists
+        await mkdir(this.config.worktreeBasePath, { recursive: true });
+
+        // Create worktree with a new branch for the task
+        // Using -b creates a local branch, avoiding detached HEAD state
+        // which is required for Claude to create commits and PRs
+        let stderr: string;
+        if (continuationPrBranch === undefined) {
+          ({ stderr } = await execAsync(
+            `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
+            {
+              cwd: this.config.repositoryPath,
+            }
+          ));
+        } else {
+          await execAsync(`git fetch origin "${continuationPrBranch}"`, {
+            cwd: this.config.repositoryPath,
+          });
+          ({ stderr } = await execAsync(
+            `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`,
+            {
+              cwd: this.config.repositoryPath,
+            }
+          ));
+        }
+
+        // git worktree add outputs to stderr even on success
+        /* v8 ignore start -- test-infra: git worktree add outputs to stderr on success (e @preserve */
+        if (stderr && !stderr.includes('Preparing worktree')) {
+          throw new Error(`Failed to create worktree: ${stderr}`);
+        }
+        /* v8 ignore stop @preserve */
+
+        // Copy MCP config template if provided
+        if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
+          await this.copyMcpConfig(worktreePath);
+        }
+
+        // Copy settings.local.json template if provided
+        if (
+          this.config.settingsLocalTemplatePath !== undefined &&
+          existsSync(this.config.settingsLocalTemplatePath)
+        ) {
+          await this.copySettingsLocal(worktreePath);
+        } else if (this.config.settingsLocalTemplatePath !== undefined) {
+          this.logger.warn(
+            { templatePath: this.config.settingsLocalTemplatePath },
+            'settings.local.json template path configured but file not found on disk'
+          );
+        }
+
+        this.logger.info({ taskId, worktreePath }, 'Worktree created');
+        return worktreePath;
+      } catch (error: unknown) {
+        /* v8 ignore start -- test-infra: worktree creation failure requires git worktree state manipulation @preserve */
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        /* v8 ignore stop @preserve */
+        throw new Error(`Failed to create worktree: ${message}`);
+      }
+    });
+  }
+
+  async removeWorktree(taskId: string): Promise<void> {
+    await this.withGitLock(async () => {
+      const worktreePath = join(this.config.worktreeBasePath, taskId);
+      this.logger.info({ taskId, worktreePath }, 'Removing worktree');
+
+      if (!existsSync(worktreePath)) {
+        throw new Error(`Worktree for task ${taskId} does not exist at ${worktreePath}`);
+      }
+
+      try {
+        // Remove worktree using git worktree remove
+        const { stderr } = await execAsync(`git worktree remove "${worktreePath}" --force`, {
+          cwd: this.config.repositoryPath,
+        });
+
+        /* v8 ignore start -- test-infra: similar to create worktree - requires git worktree remove failure simulation @preserve */
+        if (stderr) {
+          throw new Error(`Failed to remove worktree: ${stderr}`);
+        }
+        /* v8 ignore stop @preserve */
+        this.logger.info({ taskId }, 'Worktree removed');
+      } catch (error: unknown) {
+        /* v8 ignore start -- test-infra: worktree removal failure requires git worktree state manipulation @preserve */
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        /* v8 ignore stop @preserve */
+        throw new Error(`Failed to remove worktree: ${message}`);
+      }
+    });
   }
 
   async listWorktrees(): Promise<string[]> {
@@ -144,6 +207,7 @@ export class WorktreeManager {
     planningBranch: string
   ): Promise<Result<void, string>> {
     try {
+      assertSafeBranchName(planningBranch, 'planning');
       await execAsync(`git fetch origin "${planningBranch}"`, { cwd: worktreePath });
       await execAsync(`git merge "origin/${planningBranch}" --no-edit`, { cwd: worktreePath });
       this.logger.info({ worktreePath, planningBranch }, 'Planning branch merged into worktree');

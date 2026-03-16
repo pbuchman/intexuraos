@@ -3,7 +3,12 @@ import { Timestamp } from '@google-cloud/firestore';
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
-import { extractOrGenerateTraceId, type ErrorCode } from '@intexuraos/common-core';
+import {
+  CODE_TASK_WORKER_TYPES,
+  extractOrGenerateTraceId,
+  isCodeTaskWorkerType,
+  type ErrorCode,
+} from '@intexuraos/common-core';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
@@ -13,10 +18,11 @@ import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { drainRetryQueue } from '../domain/usecases/drainRetryQueue.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
-import type { TaskStatus } from '../domain/models/codeTask.js';
+import type { TaskStatus, WorkerType } from '../domain/models/codeTask.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
@@ -29,7 +35,7 @@ const logger = createAppLogger({ name: 'code-routes' });
  * Track in-flight health probe requests per user for deduplication.
  * Prevents thundering herd when multiple concurrent requests arrive while health status is stale.
  */
-const inFlightRequests = new Map<string, Promise<void>>();
+export const inFlightRequests = new Map<string, Promise<void>>();
 
 export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
@@ -77,6 +83,11 @@ const linearIssueForDisplaySchema = {
   required: ['identifier', 'title', 'state', 'priority', 'assignee', 'labels', 'url', 'commentCount', 'lastCommentAt'],
 } as const;
 
+const workerTypeSchema = {
+  type: 'string',
+  enum: CODE_TASK_WORKER_TYPES,
+} as const;
+
 // Response schema for created task
 const codeTaskSchema = {
   type: 'object',
@@ -86,19 +97,20 @@ const codeTaskSchema = {
     prompt: { type: 'string' },
     sanitizedPrompt: { type: 'string' },
     systemPromptHash: { type: 'string' },
-    workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
+    workerType: workerTypeSchema,
     workerLocation: { type: 'string' },
     repository: { type: 'string' },
     baseBranch: { type: 'string' },
     traceId: { type: 'string' },
     status: {
       type: 'string',
-      enum: ['dispatched', 'running', 'queued', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled'],
+      enum: ['dispatched', 'running', 'queued', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled'],
     },
     dedupKey: { type: 'string' },
     callbackReceived: { type: 'boolean' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
+    dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
     actionId: { type: 'string', nullable: true },
     approvalEventId: { type: 'string', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
@@ -121,6 +133,8 @@ const codeTaskSchema = {
         ciFailed: { type: 'boolean', nullable: true },
         partialWork: { type: 'boolean', nullable: true },
         rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'], nullable: true },
+        review_comments_posted: { type: 'string', nullable: true },
+        review_types: { type: 'string', nullable: true },
       },
     },
     error: {
@@ -188,16 +202,17 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: WorkerType;
   workerLocation: string;
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
+  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'reviewed' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: unknown;
   updatedAt: unknown;
+  dispatchedAt?: unknown;
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
@@ -213,6 +228,8 @@ function taskToApiResponse(task: {
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
+    review_comments_posted?: string;
+    review_types?: string;
   };
   error?: {
     code: string;
@@ -224,7 +241,6 @@ function taskToApiResponse(task: {
     };
   };
   completedAt?: unknown;
-  dispatchedAt?: unknown;
   logChunksDropped?: number;
   statusSummary?: unknown;
   retriedFrom?: string;
@@ -234,16 +250,17 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType: WorkerType;
   workerLocation: string;
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
+  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'reviewed' | 'failed' | 'interrupted' | 'cancelled' | 'archived';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;
   updatedAt: string;
+  dispatchedAt?: string;
   actionId?: string;
   approvalEventId?: string;
   linearIssueId?: string;
@@ -259,6 +276,8 @@ function taskToApiResponse(task: {
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
+    review_comments_posted?: string;
+    review_types?: string;
   };
   error?: {
     code: string;
@@ -289,6 +308,9 @@ function taskToApiResponse(task: {
     createdAt: timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '',
     /* v8 ignore stop @preserve */
     updatedAt: timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '',
+    /* v8 ignore start -- ts-type: spread operators create type narrowing branches @preserve */
+    ...(task.dispatchedAt !== undefined && { dispatchedAt: timestampToIso(task.dispatchedAt as { toDate: () => Date } | string | undefined) as string }),
+    /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: spread operators create type narrowing branches @preserve */
     ...(task.actionId !== undefined && { actionId: task.actionId }),
     /* v8 ignore stop @preserve */
@@ -333,7 +355,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       userId: string;
       payload: {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+        workerType?: WorkerType;
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -357,7 +379,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               type: 'object',
               properties: {
                 prompt: { type: 'string' },
-                workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
+                workerType: workerTypeSchema,
                 linearIssueId: { type: 'string' },
                 repository: { type: 'string' },
                 baseBranch: { type: 'string' },
@@ -468,7 +490,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: WorkerType; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/code/process',
       });
@@ -503,7 +525,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         approvalEventId: string;
         userId: string;
         prompt: string;
-        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+        workerType: WorkerType;
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -847,7 +869,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Record task completion for rate limiting (decrement concurrent, update cost)
       // Do this for terminal states: completed, failed, cancelled, interrupted
       /* v8 ignore start -- ts-type: optional chaining and array includes create type narrowing branches @preserve */
-      const terminalStatuses = ['planned', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
+      const terminalStatuses = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'] as const;
       /* v8 ignore stop @preserve */
       /* v8 ignore start -- ts-type: terminal status includes check @preserve */
       if (body.status !== undefined && terminalStatuses.includes(body.status)) {
@@ -866,14 +888,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
-  // GET /internal/code-tasks/linear/:linearIssueId/active - Check for active task
+  // GET /internal/code-tasks/linear/:linearIssueId/active - Check for active blocking task
   fastify.get<{ Params: { linearIssueId: string } }>(
     '/internal/code-tasks/linear/:linearIssueId/active',
     {
       schema: {
         operationId: 'hasActiveCodeTaskForLinearIssue',
-        summary: 'Check if active task exists for Linear issue',
-        description: 'Internal endpoint for checking if a Linear issue has an active (non-completed) task.',
+        summary: 'Check if blocking task exists for Linear issue',
+        description: 'Internal endpoint for checking if a Linear issue has an active non-review task.',
         tags: ['internal'],
         params: {
           type: 'object',
@@ -934,16 +956,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo } = getServices();
       const { linearIssueId } = request.params;
 
-      request.log.info({ linearIssueId }, 'Checking for active code task');
+      request.log.info({ linearIssueId }, 'Checking for active blocking code task');
 
       const result = await codeTaskRepo.hasActiveTaskForLinearIssue(linearIssueId);
 
       if (!result.ok) {
-        request.log.error({ linearIssueId, error: result.error }, 'Failed to check active code task');
+        request.log.error({ linearIssueId, error: result.error }, 'Failed to check active blocking code task');
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active code task check complete'); // @allow-result-access -- .ok checked at line 891
+      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active blocking code task check complete'); // @allow-result-access -- .ok checked at line 891
       return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 891
     }
   );
@@ -1053,7 +1075,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
   fastify.post<{
     Body: {
       prompt: string;
-      workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+      workerType?: WorkerType;
       workerLocation?: string;
       linearIssueId?: string;
     };
@@ -1070,7 +1092,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           type: 'object',
           properties: {
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
-            workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'] },
+            workerType: workerTypeSchema,
             workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
           },
@@ -1171,7 +1193,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['MISCONFIGURED'] },
+                  code: { type: 'string', enum: ['MISCONFIGURED', 'QUEUE_FULL'] },
                   message: { type: 'string' },
                 },
               },
@@ -1196,16 +1218,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: WorkerType; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/submit',
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo } = getServices();
+      const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo, whatsappNotifier } = getServices();
       const body = request.body as {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+        workerType?: WorkerType;
         workerLocation?: string;
         linearIssueId?: string;
       };
@@ -1244,8 +1266,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
       // Pre-generate task ID and derive deterministic webhook secret
+      const config = loadConfig();
       const taskId = `task_${randomUUID()}`;
-      const webhookSecret = generateWebhookSecret(loadConfig().orchestratorSecret, taskId);
+      const webhookSecret = generateWebhookSecret(config.orchestratorSecret, taskId);
 
       // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
       const createInput: {
@@ -1254,7 +1277,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         prompt: string;
         sanitizedPrompt: string;
         systemPromptHash: string;
-        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+        workerType: WorkerType;
         workerLocation: string;
         repository: string;
         baseBranch: string;
@@ -1314,12 +1337,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Fetch user's worker settings
       const settingsResult = await workerSettingsRepo.getSettings(userId);
-      /* v8 ignore start -- test-infra: error path requires Firestore failure @preserve */
       if (!settingsResult.ok) {
         request.log.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch worker settings');
       }
-      /* v8 ignore stop @preserve */
 
       const settings = settingsResult.value;
 
@@ -1329,16 +1350,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const enabledWorkers = settings?.workers.filter((w) => w.enabled) ?? [];
       /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: requires user with no enabled workers fixture @preserve */
       // Fail if no workers configured
       if (enabledWorkers.length === 0) {
         request.log.warn({ userId }, 'User has no workers configured');
         return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: requires fixtures for invalid/unhealthy worker scenarios @preserve */
-      // Validate workerLocation if provided
+      // Validate workerLocation and compute worker ordering if provided
+      let orderedWorkers = enabledWorkers;
       if (body.workerLocation !== undefined) {
         const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
 
@@ -1347,22 +1366,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
         }
 
+        // Move the requested worker to the front of the list
+        orderedWorkers = [
+          requestedWorker,
+          ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
+        ];
+
         // Health is checked live via WorkerHealthProbe at dispatch time (capacity-aware dispatch, INT-741).
         // No cached health check needed here — the dispatcher probes all workers and excludes unhealthy ones.
       }
-
-      // If workerLocation specified, put that worker first in the list
-      let orderedWorkers = enabledWorkers;
-      if (body.workerLocation !== undefined) {
-        const selectedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
-        if (selectedWorker !== undefined) {
-          orderedWorkers = [
-            selectedWorker,
-            ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
-          ];
-        }
-      }
-      /* v8 ignore stop @preserve */
 
       const workerCredentials = {
         workers: orderedWorkers.map((w) => ({
@@ -1382,7 +1394,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         systemPromptHash: string;
         repository: string;
         baseBranch: string;
-        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+        workerType: WorkerType;
         webhookUrl: string;
         webhookSecret: string;
         linearIssueLabels: string[];
@@ -1413,13 +1425,48 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const dispatchResult = await taskDispatcher.dispatch(dispatchInput);
 
       if (!dispatchResult.ok) {
-        request.log.error({ error: dispatchResult.error, taskId: task.id }, 'Failed to dispatch code task');
+        const dispatchError = dispatchResult.error;
 
-        // Update task with error
+        // Queue task when all workers are at capacity (matching processCodeAction pattern)
+        if (dispatchError.code === 'at_capacity') {
+          const queueCountResult = await codeTaskRepo.countQueued();
+          if (!queueCountResult.ok) {
+            request.log.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
+          }
+          const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
+
+          if (queueCount > config.queue.maxSize) {
+            await codeTaskRepo.update(task.id, {
+              status: 'failed',
+              error: {
+                code: 'queue_full',
+                message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
+              },
+            });
+            return await reply.fail('QUEUE_FULL', 'All workers are busy and the queue is full. Please try again in a few minutes.');
+          }
+
+          // Task is already in 'queued' status from creation — no status update needed
+          const queuePosition = queueCount;
+          const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
+
+          await whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
+
+          request.log.info({ taskId: task.id, queuePosition }, 'Task queued due to worker capacity');
+
+          return await reply.ok({
+            status: 'submitted',
+            codeTaskId: task.id,
+          });
+        }
+
+        // Other dispatch errors - fail as before
+        request.log.error({ error: dispatchError, taskId: task.id }, 'Failed to dispatch code task');
         await codeTaskRepo.update(task.id, {
+          status: 'failed',
           error: {
-            code: dispatchResult.error.code,
-            message: dispatchResult.error.message,
+            code: dispatchError.code,
+            message: dispatchError.message,
           },
         });
 
@@ -1429,6 +1476,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Save the actual worker location returned by the dispatcher
       const actualWorkerLocation = dispatchResult.value.workerLocation;
       await codeTaskRepo.update(task.id, {
+        status: 'dispatched',
         workerLocation: actualWorkerLocation,
         dispatchedAt: new Date(),
       });
@@ -1549,7 +1597,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
 
       // Parse comma-separated status filter (matching actions-agent pattern)
-      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'queued', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled', 'archived'];
+      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'queued', 'planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled', 'archived'];
       let statusFilter: TaskStatus[] | undefined;
       if (request.query.status !== undefined) {
         statusFilter = request.query.status
@@ -1708,6 +1756,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       ciFailed: { type: 'boolean', nullable: true },
                       partialWork: { type: 'boolean', nullable: true },
                       rebaseResult: { type: 'string', nullable: true },
+                      review_comments_posted: { type: 'string', nullable: true },
+                      review_types: { type: 'string', nullable: true },
                     },
                   },
                   error: {
@@ -2216,23 +2266,18 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const settingsResult = await workerSettingsRepo.getSettings(userId);
 
-      /* v8 ignore start -- upstream: Firestore fetch failure or missing settings @preserve */
       if (!settingsResult.ok || settingsResult.value === null) {
         return reply.ok({ workers: [], stale: false });
       }
-      /* v8 ignore stop @preserve */
 
       const settings = settingsResult.value;
       const TTL_MS = 60_000;
       const now = Date.now();
 
       const healthStatusesResult = await workerSettingsRepo.getHealthStatuses(userId);
-      /* v8 ignore start -- test-infra: requires integration test with health status repository @preserve */
       const healthStatuses = healthStatusesResult.ok ? healthStatusesResult.value ?? {} : {};
-      /* v8 ignore stop @preserve */
 
       let stale = false;
-      /* v8 ignore start -- test-infra: requires testing with time-based staleness @preserve */
       for (const [_name, status] of Object.entries(healthStatuses)) {
         const checkedAt = new Date(status.checkedAt).getTime();
         if (now - checkedAt > TTL_MS) {
@@ -2275,7 +2320,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger.error({ error }, 'Failed to refresh worker health statuses');
         });
       }
-      /* v8 ignore stop @preserve */
 
       const workers = settings.workers.map((w, index) => {
         const healthStatus = healthStatuses[w.name];
@@ -2293,7 +2337,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           code?: string;
         } | null = null;
 
-        /* v8 ignore start -- test-infra: requires integration tests with health status data @preserve */
         if (state?._tag === 'healthy') {
           details = {
             capacity: state.capacity,
@@ -2309,7 +2352,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             details.code = state.code;
           }
         }
-        /* v8 ignore stop @preserve */
 
         return {
           name: w.name,
@@ -2419,11 +2461,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const settingsResult = await workerSettingsRepo.getSettings(userId);
 
-      /* v8 ignore start -- upstream: Firestore fetch failure or missing settings @preserve */
       if (!settingsResult.ok || settingsResult.value === null) {
         return reply.ok({ workers: [], stale: false });
       }
-      /* v8 ignore stop @preserve */
 
       const settings = settingsResult.value;
 
@@ -2440,10 +2480,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const workers = settings.workers.map((w, index) => {
         const state = results[w.name];
 
-        /* v8 ignore start -- test-infra: requires integration test with health state data @preserve */
         const isHealthy = state?.healthy ?? false;
         const statusTag = state?._tag ?? 'unknown';
-        /* v8 ignore stop @preserve */
 
         let details: {
           capacity?: number;
@@ -2454,7 +2492,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           code?: string;
         } | null = null;
 
-        /* v8 ignore start -- test-infra: requires integration tests with health status data @preserve */
         if (state?._tag === 'healthy') {
           details = {
             capacity: state.capacity,
@@ -2470,7 +2507,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             details.code = state.code;
           }
         }
-        /* v8 ignore stop @preserve */
 
         return {
           name: w.name,
@@ -2878,12 +2914,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Validate internal auth
       const authResult = validateInternalAuth(request);
-      /* v8 ignore start -- test-infra: internal auth validation branch covered by other tests @preserve */
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for submit-phase2');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
-      /* v8 ignore stop @preserve */
 
       const services = getServices();
       const { taskId, userId } = request.body;
@@ -3119,8 +3153,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               maxLength: 5000,
             },
             workerType: {
-              type: 'string',
-              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'],
+              ...workerTypeSchema,
               description: 'Optional worker type to use for the retry',
             },
           },
@@ -3220,7 +3253,17 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /code/retry',
       });
 
-      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo } =
+      const {
+        codeTaskRepo,
+        linearAgentClient,
+        taskDispatcher,
+        whatsappNotifier,
+        metricsClient,
+        workerSettingsRepo,
+        gitHubPRClient,
+        userServiceClient,
+        automationLog,
+      } =
         getServices();
       const userId = request.user?.userId;
 
@@ -3239,7 +3282,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         originalTaskId: string;
         userId: string;
         additionalContext?: string;
-        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+        workerType?: WorkerType;
       } = {
         originalTaskId: taskId,
         userId,
@@ -3249,8 +3292,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         retryRequest.additionalContext = additionalContext;
       }
       // Only add workerType if provided and valid
-      if (workerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'].includes(workerType)) {
-        retryRequest.workerType = workerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+      if (workerType !== undefined && isCodeTaskWorkerType(workerType)) {
+        retryRequest.workerType = workerType;
       }
 
       const result = await retryTask(
@@ -3262,8 +3305,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier,
           metricsClient,
           workerSettingsRepo,
+          gitHubPRClient,
+          userServiceClient,
           orchestratorSecret: loadConfig().orchestratorSecret,
           serviceUrl: loadConfig().serviceUrl,
+          automationLog,
         },
         retryRequest
       );
@@ -3430,7 +3476,17 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /code/tasks/:taskId/feedback',
       });
 
-      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo } =
+      const {
+        codeTaskRepo,
+        linearAgentClient,
+        taskDispatcher,
+        whatsappNotifier,
+        metricsClient,
+        workerSettingsRepo,
+        gitHubPRClient,
+        userServiceClient,
+        automationLog: feedbackAutomationLog,
+      } =
         getServices();
       const userId = request.user?.userId;
 
@@ -3454,8 +3510,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier,
           metricsClient,
           workerSettingsRepo,
+          gitHubPRClient,
+          userServiceClient,
           orchestratorSecret: loadConfig().orchestratorSecret,
           serviceUrl: loadConfig().serviceUrl,
+          automationLog: feedbackAutomationLog,
         },
         {
           originalTaskId: taskId,
@@ -3525,8 +3584,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           type: 'object',
           properties: {
             workerType: {
-              type: 'string',
-              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'],
+              ...workerTypeSchema,
               description: 'Optional worker type to use for the implementation',
             },
           },
@@ -3645,7 +3703,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Check rate limits before dispatching (prompt length 0 — reuses existing task prompt)
       const limitCheck = await rateLimitService.checkLimits(userId, 0);
-      /* v8 ignore start -- test-infra: rate limit failure covered by rateLimitService unit tests @preserve */
       if (!limitCheck.ok) {
         const { error } = limitCheck;
         request.log.warn({ userId, error }, 'Rate limit exceeded for implement request');
@@ -3654,14 +3711,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
         return reply.fail('RATE_LIMITED', error.message);
       }
-      /* v8 ignore stop @preserve */
 
       request.log.info({ taskId, userId, workerType: requestedWorkerType }, 'Processing Execution Agent implementation request');
 
       // Only add workerType if provided and valid
-      const executionAgentRequest: { originalTaskId: string; userId: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus' } = { originalTaskId: taskId, userId };
-      if (requestedWorkerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'].includes(requestedWorkerType)) {
-        executionAgentRequest.workerType = requestedWorkerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+      const executionAgentRequest: { originalTaskId: string; userId: string; workerType?: WorkerType } = { originalTaskId: taskId, userId };
+      if (requestedWorkerType !== undefined && isCodeTaskWorkerType(requestedWorkerType)) {
+        executionAgentRequest.workerType = requestedWorkerType;
       }
 
       const result = await submitToExecutionAgent(
@@ -3833,7 +3889,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               data: {
                 type: 'object',
                 properties: {
-                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped', 'failed'] },
+                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped', 'failed', 'message_sent', 'exhausted', 'retry_failed'] },
                   taskId: { type: 'string' },
                 },
                 required: ['action'],
@@ -3906,6 +3962,27 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const services = getServices();
 
+      // Step 1: Retry queue (front-of-line priority)
+      const retryResult = await drainRetryQueue({
+        logger: services.logger,
+        dispatchRetryRepo: services.dispatchRetryRepo,
+        codeTaskRepo: services.codeTaskRepo,
+        taskDispatcher: services.taskDispatcher,
+        linearAgentClient: services.linearAgentClient,
+        whatsappNotifier: services.whatsappNotifier,
+        workerSettingsRepo: services.workerSettingsRepo,
+        logLineRepo: services.logLineRepo,
+        statusMirrorService: services.statusMirrorService,
+      });
+
+      if (retryResult.ok && retryResult.value.action !== 'empty' && retryResult.value.action !== 'failed') {
+        for (const lock of retryResult.value.locksToCleanup ?? []) {
+          await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+        }
+        return await reply.ok(retryResult.value);
+      }
+
+      // Step 2: Regular task queue (existing behavior)
       const result = await drainTaskQueue({
         logger: services.logger,
         codeTaskRepo: services.codeTaskRepo,

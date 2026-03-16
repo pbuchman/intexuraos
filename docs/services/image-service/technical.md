@@ -99,23 +99,26 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                           | Date       |
-| ---------- | --------------------------------------------------------------------- | ---------- |
-| `44ea683a` | Release v3.2.0 (package.json version bump only)                       | 2026-03-07 |
-| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks             | 2026-03-02 |
-| `7fbf7668` | Remove stale fields from test fixtures per code review                | 2026-02-27 |
-| `8fb90669` | Align thumbnail output contract with consumed parser fields (INT-605) | 2026-02-27 |
-| `b3f34d85` | Release v3.1.0                                                        | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                                        | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                       | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration across all services               | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention                  | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback           | 2026-02-15 |
-| `d5fbb354` | Fix start:local to use tsx instead of node                            | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local                | 2026-02-14 |
-| `0f69a74b` | Add default model selector with platform Zai fallback                 | 2026-02-09 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                     | 2026-02-01 |
-| `c3198407` | Fix all 132 response contract violations across codebase              | 2026-01-30 |
+| Commit     | Description                                                                  | Date       |
+| ---------- | ---------------------------------------------------------------------------- | ---------- |
+| `c4e3a13c` | Release v3.3.0                                                               | 2026-03-15 |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models; ZAI pricing removed from services.ts | 2026-03-12 |
+| `e348b66e` | Fix silent dispatch failures and nested transaction (INT-810/811)            | 2026-03-10 |
+| `44ea683a` | Release v3.2.0 (package.json version bump only)                              | 2026-03-07 |
+| `99febe66` | Wire GitHub OAuth integration, update cross-service mocks                    | 2026-03-02 |
+| `7fbf7668` | Remove stale fields from test fixtures per code review                       | 2026-02-27 |
+| `8fb90669` | Align thumbnail output contract with consumed parser fields (INT-605)        | 2026-02-27 |
+| `b3f34d85` | Release v3.1.0                                                               | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                                               | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                              | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration across all services                      | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention                         | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback                  | 2026-02-15 |
+| `d5fbb354` | Fix start:local to use tsx instead of node                                   | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local                       | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform fallback                            | 2026-02-09 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)                            | 2026-02-01 |
+| `c3198407` | Fix all 132 response contract violations across codebase                     | 2026-01-30 |
 
 ## API Endpoints
 
@@ -209,10 +212,10 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 ### External Services
 
-| Service           | Purpose                             | Failure Mode     |
-| ----------------- | ----------------------------------- | ---------------- |
-| OpenAI API        | GPT Image 1, GPT-4.1                | DOWNSTREAM_ERROR |
-| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro  | DOWNSTREAM_ERROR |
+| Service           | Purpose                            | Failure Mode     |
+| ----------------- | ---------------------------------- | ---------------- |
+| OpenAI API        | GPT Image 1, GPT-4.1               | DOWNSTREAM_ERROR |
+| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro | DOWNSTREAM_ERROR |
 
 ### Infrastructure
 
@@ -235,7 +238,6 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects               |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service URL (pricing data)       |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking DSN                     |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key for user fallback        |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback     |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for OpenTelemetry tracing |
 
@@ -245,7 +247,7 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 **Slug generation**: The `slug` field is derived from the title using `slugify()` — max 50 characters, lowercase, normalized unicode, hyphens for spaces. Only used when a title is provided (research cover images).
 
-**Thumbnail size**: Thumbnails are exactly 256px on the longest edge, maintaining aspect ratio, saved as JPEG at 80% quality. Created using Sharp image processing library.
+**Thumbnail size**: Thumbnails are exactly 256px on the longest edge, maintaining aspect ratio, saved as JPEG at 80% quality. Created using the Sharp image processing library.
 
 **GCS path patterns**:
 - With slug: `images/{id}-{slug}.png` / `images/{id}-{slug}-thumb.jpg`
@@ -268,6 +270,8 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 **Delete endpoint resilience**: The DELETE endpoint attempts both GCS deletion and Firestore deletion independently. If either fails, it logs the error but still returns `{ deleted: true }` to the caller.
 
 **Prompt parameters trimmed (INT-605)**: The `ThumbnailPromptParameters` type only contains `framing`, `realism`, and `people`. Previously documented fields `aspectRatio`, `textOnImage`, and `logosTrademarks` were removed from the consumed contract. The LLM prompt may still produce them, but the parser discards any fields not in the validated schema.
+
+**ZAI provider removed (v3.3.0)**: The ZAI provider and GLM-4.7 models were removed from the LLM contract in v3.3.0. The single line removed from `services.ts` was the ZAI pricing fetch. Platform fallback now uses Gemini exclusively via `INTEXURAOS_GEMINI_APP_API_KEY`.
 
 ## File Structure
 
@@ -309,6 +313,12 @@ apps/image-service/src/
 
 ## Migration Notes
 
+### v3.3.0: ZAI Provider Removal (2026-03-12)
+
+- ZAI pricing entry removed from `services.ts` (`REQUIRED_MODELS` now has 4 models)
+- Platform fallback is now exclusively Gemini via `INTEXURAOS_GEMINI_APP_API_KEY`
+- No functional change to image generation flows
+
 ### INT-605: Thumbnail Output Contract Alignment (2026-02-27)
 
 - `ThumbnailPromptParameters` trimmed to 3 fields: `framing`, `realism`, `people`
@@ -338,11 +348,10 @@ apps/image-service/src/
 
 ### API Key Naming Standardization (2026-02-15)
 
-- `INTEXURAOS_ZAI_APP_API_KEY` consolidates `INTEXURAOS_GUEST_ZAI_API_KEY` + `INTEXURAOS_ZAI_API_KEY`
-- `INTEXURAOS_GEMINI_APP_API_KEY` added as primary platform fallback before ZAI
-- Gemini 2.5 Flash is now the default platform model (ZAI GLM was too slow at 29s)
+- `INTEXURAOS_GEMINI_APP_API_KEY` is the platform fallback key (ZAI key removed in v3.3.0)
+- Gemini 2.5 Flash is the default platform model
 
 ### Platform Key Fallback (2026-02-09)
 
-- Users without personal API keys fall back to platform-owned Gemini key first, then Zai
+- Users without personal API keys fall back to platform-owned Gemini key
 - `UserServiceClient.getApiKeys()` returns platform keys if user has none configured

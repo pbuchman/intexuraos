@@ -179,6 +179,14 @@
       "owner": "code-agent",
       "description": "GitHub pull request webhook events for PR timeline and context in Code Agent UI"
     },
+    "github-webhook-audit-events": {
+      "owner": "code-agent",
+      "description": "Auth-passed GitHub webhook deliveries persisted before normalization so every saved delivery can be linked to a decision"
+    },
+    "github-event-log-entries": {
+      "owner": "code-agent",
+      "description": "Lightweight live projection for the GitHub event decision log UI, used as the Firestore change feed for row hydration"
+    },
     "github-pr-summaries": {
       "owner": "code-agent",
       "description": "PR summaries for 30-day list view. One doc per unique PR, upserted on every webhook."
@@ -190,6 +198,14 @@
     "event_decisions": {
       "owner": "code-agent",
       "description": "Audit trail of webhook event evaluation decisions (hard rules or LLM triage)"
+    },
+    "dispatch_retries": {
+      "owner": "code-agent",
+      "description": "Failed webhook dispatch retry queue with TTL and max-attempts bounds"
+    },
+    "pr_automation_comments": {
+      "owner": "code-agent",
+      "description": "PR automation comment tracking for unified PR log (one doc per PR, keyed by repository:prNumber)"
     }
   }
 }

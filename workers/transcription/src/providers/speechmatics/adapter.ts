@@ -49,7 +49,6 @@ const SPEECHMATICS_EU_API_URL = 'https://asr.api.speechmatics.com/v2';
 /**
  * Extract a human-readable message from an error object.
  */
-/* v8 ignore start -- ts-type: type narrowing for unknown error shapes @preserve */
 function extractErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     return error;
@@ -68,12 +67,10 @@ function extractErrorMessage(error: unknown): string {
   }
   return JSON.stringify(error);
 }
-/* v8 ignore stop @preserve */
 
 /**
  * Extract detailed error context for debugging.
  */
-/* v8 ignore start -- ts-type: type narrowing on unknown error shapes with optional properties @preserve */
 function extractErrorContext(error: unknown): Record<string, unknown> {
   const context: Record<string, unknown> = {
     errorType: typeof error,
@@ -117,7 +114,6 @@ function extractErrorContext(error: unknown): Record<string, unknown> {
 
   return context;
 }
-/* v8 ignore stop @preserve */
 
 /**
  * Create a TranscriptionApiCall record.
@@ -307,7 +303,6 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
         const firstWord = result.results[0];
         detectedLanguage = firstWord?.alternatives?.[0]?.language;
       }
-      /* v8 ignore start -- upstream: metadata language fallback depends on Speechmatics API response shape @preserve */
       if (
         detectedLanguage === undefined &&
         result.metadata?.language_pack_info?.language_description !== undefined
@@ -319,10 +314,8 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
           detectedLanguage = 'en';
         }
       }
-      /* v8 ignore stop @preserve */
 
       let text = '';
-      /* v8 ignore start -- upstream: non-array results guard for malformed Speechmatics API response @preserve */
       if (Array.isArray(result.results)) {
         for (const item of result.results) {
           const alt = item.alternatives?.[0];
@@ -331,7 +324,6 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
           }
         }
       }
-      /* v8 ignore stop @preserve */
       text = text.trim();
 
       const apiCall = createApiCall('fetch_result', true, {

@@ -19,6 +19,7 @@ import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sent
 import { bookmarkRoutes } from './routes/bookmarkRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
 import { pubsubRoutes } from './routes/pubsubRoutes.js';
+import { imageProxyRoutes } from './routes/imageProxyRoutes.js';
 
 const SERVICE_NAME = 'bookmarks-agent';
 const SERVICE_VERSION = '0.0.4';
@@ -171,6 +172,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(bookmarkRoutes);
   await app.register(internalRoutes);
   await app.register(pubsubRoutes);
+  await app.register(imageProxyRoutes);
 
   app.get(
     '/openapi.json',

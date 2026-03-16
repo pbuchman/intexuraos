@@ -33,16 +33,16 @@ Validates a Notion integration token by calling the `users.me` endpoint.
 
 ```ts
 const result = await validateNotionToken(token, logger);
-if (result.ok && result.data) {
+if (result.ok && result.data === true) {
   // Token is valid
-} else if (result.ok && !result.data) {
+} else if (result.ok && result.data === false) {
   // Token is invalid (unauthorized)
 }
 ```
 
 ### `getPageWithPreview(token: string, pageId: string, logger: NotionLogger): Promise<Result<NotionPagePreview, NotionError>>`
 
-Retrieves a Notion page with the first 10 blocks as a preview. Extracts the page title from common property names (`title`, `Title`, `Name`, `name`).
+Retrieves a Notion page with the first 10 blocks as a preview. Extracts the page title from common property names (`title`, `Title`, `Name`, `name`). Non-`rich_text` block types (images, embeds, code, callouts) yield empty `content` in the preview.
 
 ```ts
 const result = await getPageWithPreview(token, pageId, logger);
@@ -125,6 +125,7 @@ All functions return `Result<T, NotionError>`. Error mapping:
 
 | Commit     | Description                                         | When        |
 | ---------- | --------------------------------------------------- | ----------- |
+| `c4e3a13c` | Release v3.3.0                                      | 2 hours ago |
 | `1f06a8c0` | Add manual Notion export trigger for research       | 3 weeks ago |
 | `13d66654` | Add linear-agent integration tests for 95% coverage | 5 weeks ago |
 | `1dc6097d` | Make logger mandatory in infra-notion package       | 5 weeks ago |

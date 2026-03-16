@@ -88,6 +88,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           processedAt: unknown;
           mergedAt: unknown;
         } = {
+          ...(input.auditEventId !== undefined && { auditEventId: input.auditEventId }),
           githubEventId: input.githubEventId,
           deliveryId: input.deliveryId,
           repository: input.repository,
@@ -99,6 +100,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           senderLogin: input.senderLogin,
           senderId: input.senderId,
           senderType: input.senderType,
+          prAuthorLogin: input.prAuthorLogin,
           title: input.title,
           body: input.body,
           state: input.state,
@@ -113,6 +115,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
 
         return ok({
           id: eventId,
+          ...(eventData.auditEventId !== undefined && { auditEventId: eventData.auditEventId }),
           githubEventId: eventData.githubEventId,
           deliveryId: eventData.deliveryId,
           repository: eventData.repository,
@@ -124,6 +127,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           senderLogin: eventData.senderLogin,
           senderId: eventData.senderId,
           senderType: eventData.senderType,
+          prAuthorLogin: eventData.prAuthorLogin,
           title: eventData.title,
           body: eventData.body,
           state: eventData.state,
@@ -164,7 +168,9 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
             deliveryId: readDeliveryId(data as Record<string, unknown>),
+            prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
             baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
@@ -208,7 +214,9 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
             deliveryId: readDeliveryId(data as Record<string, unknown>),
+            prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
             baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
@@ -260,8 +268,10 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             events.push({
               ...data,
               id: doc.id,
+              ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
               deliveryId: readDeliveryId(data as Record<string, unknown>),
-              baseBranch: data.baseBranch ?? null,
+              prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
+            baseBranch: data.baseBranch ?? null,
               createdAt: toDate(data.createdAt),
               processedAt: toDate(data.processedAt),
               /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */
@@ -299,7 +309,9 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
+            ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
             deliveryId: readDeliveryId(data as Record<string, unknown>),
+            prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
             baseBranch: data.baseBranch ?? null,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),

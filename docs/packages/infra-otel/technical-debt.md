@@ -1,7 +1,7 @@
 # Technical Debt: @intexuraos/infra-otel
 
-**Last Updated:** 2026-02-19
-**Analysis Run:** [2026-02-19 documentation run](../../documentation-runs.md)
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 documentation run](../../documentation-runs.md)
 
 ---
 

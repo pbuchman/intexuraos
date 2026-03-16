@@ -1,12 +1,17 @@
-# Code Agent - Agent Reference
+# Code Agent — Agent Interface
 
-Machine-readable reference for AI agents interacting with the code-agent service.
+> **Machine-readable specification for AI agent integration**
 
 ## Identity
 
+| Attribute | Value                                                                     |
+| --------- | ------------------------------------------------------------------------- |
+| Name      | code-agent                                                                |
+| Role      | Orchestrate autonomous code execution tasks on user-owned worker machines |
+| Goal      | Accept task requests, dispatch to workers, and return pull request URLs   |
+
 ```yaml
-name: code-agent
-version: 3.2.0
+version: 3.3.0
 port: 8128
 framework: fastify
 runtime: node22
@@ -19,34 +24,72 @@ collections:
   - github-pr-events
   - github-pr-summaries
   - pr_task_locks
+  - event_decisions
+  - dispatch_retries
+  - github-webhook-audit-events
+  - github-event-log-entries
+  - pr_automation_comments
 ```
 
 ## Capabilities
 
 ### Task Submission
 
+**Endpoint:** `POST /internal/code/process`
+
+**When to use:** When actions-agent needs to dispatch a code task after user approval
+
+**Input Schema:**
+
 ```typescript
-// Internal (from actions-agent)
 interface ProcessCodeActionRequest {
   actionId: string;
   approvalEventId: string;
   userId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
   traceId?: string;
   source?: 'whatsapp' | 'web';
 }
+```
 
-// Public (from web UI)
-interface SubmitCodeTaskRequest {
-  prompt: string; // 1-100000 chars
-  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus'; // default: 'auto'
-  workerLocation?: string; // 1-32 chars
-  linearIssueId?: string;
-  linearIssueTitle?: string;
+**Output Schema:**
+
+```typescript
+interface ProcessCodeActionResponse {
+  success: true;
+  data: {
+    status: 'submitted';
+    codeTaskId: string;
+    resourceUrl: string; // e.g., "/#/code-tasks/uuid"
+  };
+}
+```
+
+**Example:**
+
+```json
+// Request
+{
+  "actionId": "action-uuid",
+  "approvalEventId": "approval-uuid",
+  "userId": "auth0|user-id",
+  "prompt": "Implement cursor-based pagination for bookmarks",
+  "workerType": "auto",
+  "linearIssueId": "INT-500"
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "status": "submitted",
+    "codeTaskId": "task_abc123",
+    "resourceUrl": "/#/code-tasks/task_abc123"
+  }
 }
 ```
 
@@ -58,29 +101,103 @@ All prompts pass through two sanitization layers before reaching the worker:
 ### Task Lifecycle
 
 ```typescript
-// 'planned' = planning agent completed; 'implemented' = execution agent completed
-// 'completed' is NOT used -- tasks finish as 'planned' or 'implemented'
+// 'planned' = planning agent completed; 'implemented' = execution agent completed; 'reviewed' = review agent completed
+// 'completed' is NOT used — tasks finish as 'planned', 'implemented', or 'reviewed'
 type TaskStatus =
   | 'dispatched'
   | 'running'
-  | 'queued'       // waiting for worker capacity (INT-619)
+  | 'queued'       // waiting for worker capacity
   | 'planned'
   | 'implemented'
+  | 'reviewed'
   | 'failed'
   | 'interrupted'
   | 'cancelled'
-  | 'archived';    // original archived after retry (INT-711)
+  | 'archived';    // original archived after retry
+
+type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 
 // Transitions:
+// queued -> dispatched (drain queue picks up task, or immediate dispatch succeeds)
 // dispatched -> running (on first log chunk)
-// dispatched -> planned | implemented | failed | interrupted (on webhook)
+// dispatched -> planned | implemented | reviewed | failed | interrupted (on webhook)
 // dispatched | running -> cancelled (on cancel)
-// running -> planned | implemented | failed | interrupted (on webhook)
+// running -> planned | implemented | reviewed | failed | interrupted (on webhook)
 // dispatched | running -> interrupted (zombie detection after 30 min)
-// queued -> dispatched (drain queue picks up task)
 // queued -> failed (TTL expired or queue full)
 // planned | implemented | failed -> running (on sendTaskMessage with 'resumed' action)
-// failed | cancelled | interrupted -> archived (when task is retried, INT-711)
+// failed | cancelled | interrupted -> archived (when task is retried)
+```
+
+### Check Active Task for Linear Issue
+
+**Endpoint:** `GET /internal/code-tasks/linear:linearIssueId/active`
+
+**When to use:** Before creating a new task, check if an active task exists for the same Linear issue
+
+**Output Schema:**
+
+```typescript
+interface ActiveTaskCheckResponse {
+  success: true;
+  data: {
+    hasActiveTask: boolean;
+    taskId?: string;
+    status?: TaskStatus;
+  };
+}
+```
+
+### GitHub Agent (PR Triage)
+
+```typescript
+// Two-tier evaluation pipeline for GitHub webhook events
+interface UnifiedEvaluator {
+  evaluate(event: GitHubPREvent, logger: Logger): Promise<void>;
+}
+
+// Step 1: Hard rules (deterministic)
+// - CodeWorkerOutputRule: skips events from code worker bots
+// - ActionableEventRule: filters to supported event+action combos
+// - ProtectedBaseBranchRule: skips pushes to protected branches
+// - SenderWhitelistRule: only ALLOWED_BOTS + repo owner
+// - SkipPrefixRule: ignores @claude, @codex, @ignore prefixes
+
+// Step 2: LLM triage (Gemini tool calling, only if needs_triage)
+interface GitHubAgentEvalResult {
+  action: 'skip' | 'request_review' | 'dispatch';
+  reason?: string;
+  reviewTypes?: ('code_quality' | 'security' | 'architecture')[];
+  workerType?: WorkerType;
+  messageTemplate?: string;
+}
+
+// Triage output is validated against Zod schemas (TriageSkipSchema, TriageReviewSchema).
+// Invalid output triggers automatic repair prompt via buildTriageRepairMessage.
+// LLM retries once with failed response as corrective context.
+// GitHub Agent only activates when INTEXURAOS_GEMINI_APP_API_KEY is set and non-empty.
+```
+
+### Automation Log
+
+```typescript
+// All PR automation events are recorded to a unified, append-only GitHub PR comment.
+interface AutomationLog {
+  record(prRef: PRRef, event: AutomationEvent, tokenUserId?: string): Promise<void>;
+}
+
+type AutomationEvent =
+  | { type: 'webhook_received'; eventType: string; action: string; sender: string; deliveryId: string }
+  | { type: 'skipped'; decidedBy: 'webhook_route' | 'hard_rules' | 'llm_triage'; reason: string }
+  | { type: 'triage_dispatch'; reviewTypes?: string[]; workerType?: string; cost: number; reasoning: string }
+  | { type: 'triage_failed'; error: string; fallbackAction: 'dispatch' | 'skip' | 'none' }
+  | { type: 'task_dispatched'; taskId: string; workerType: string; agentType: AgentType }
+  | { type: 'task_dispatch_failed'; error: string }
+  | { type: 'task_started'; taskId: string; workerType: string; attempt: number }
+  | { type: 'task_completed'; taskId: string; status: string; duration: number }
+  | { type: 'task_failed'; taskId: string; error: string }
+  | { type: 'task_interrupted'; taskId: string }
+  | { type: 'review_replaced'; replacedTaskId: string };
 ```
 
 ### Task Completion Webhook
@@ -91,9 +208,9 @@ interface TaskCompleteWebhook {
   status: 'completed' | 'failed' | 'interrupted';
   result?: {
     prUrl?: string;
-    branch: string;
-    commits: number;
-    summary: string;
+    branch?: string;
+    commits?: number;
+    summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
@@ -102,8 +219,10 @@ interface TaskCompleteWebhook {
     planning_linear_url?: string;
     planning_subtask_urls?: string;
     planning_pr_url?: string;
-    execution_outcome_label?: 'implemented';
+    execution_outcome_label?: 'implemented' | 'already_completed';
     execution_linear_issue_url?: string;
+    review_comments_posted?: string;
+    review_types?: string;
   };
   error?: {
     code: string;
@@ -140,6 +259,7 @@ interface RetryTaskRequest {
 // - No active task on same Linear issue
 // - User must have configured workers
 // - Original task is archived (status -> 'archived')
+// - New task inherits open PR branch from original
 ```
 
 ### Task Feedback
@@ -170,8 +290,8 @@ interface SendTaskMessageResult {
   action: 'queued' | 'resumed';
 }
 
-// 'queued'  -- task is running; message held in pendingUserMessages, delivered at turn end
-// 'resumed' -- task is in terminal state (planned/implemented/failed/cancelled); task re-dispatched via --continue
+// 'queued'  — task is running; message held in pendingUserMessages, delivered at turn end
+// 'resumed' — task is in terminal state (planned/implemented/reviewed/failed/cancelled); task re-dispatched via --continue
 // Constraints:
 // - Task must be owned by userId
 // - Status must NOT be 'queued' (only queued tasks reject messages)
@@ -201,7 +321,37 @@ interface SubmitToExecutionAgentResult {
 // - No existing implementationTaskId on planning task (optimistic lock)
 // - No active task on same Linear issue
 // - User must have configured workers
-// - Planning task back-linked via implementationTaskId (INT-725)
+// - Planning task back-linked via implementationTaskId
+```
+
+### Create Review Task
+
+```typescript
+interface CreateReviewTaskRequest {
+  repository: string;
+  prNumber: number;
+  senderLogin: string;
+  reviewTypes: string[];        // 'code_quality' | 'security' | 'architecture'
+  workerType?: WorkerType;      // Falls back to user's defaultReviewWorkerType
+  eventId: string;
+  prTitle?: string;
+  prBody?: string;
+  reviewComment?: string;
+  baseBranch?: string;
+}
+
+interface CreateReviewTaskResult {
+  status: 'created' | 'queued';
+  taskId: string;
+  workerType: WorkerType;
+}
+
+// Constraints:
+// - PR-scoped dedup: reuses active review task for same PR
+// - Active review tasks replaced if newer review requested
+// - Best-effort Linear issue linking for UI grouping
+// - Sets agentType: 'review' on dispatch
+// - Queue support when workers at capacity (v3.3.0)
 ```
 
 ### Worker Settings
@@ -213,6 +363,11 @@ interface WorkerConfigInput {
   cfAccessClientId: string;
   cfAccessClientSecret: string;
   dispatchSigningSecret: string;
+}
+
+interface UserWorkerSettings {
+  workers: WorkerConfig[];            // Max 2, ordered by priority
+  defaultReviewWorkerType?: WorkerType; // Default model for review tasks
 }
 
 // Constraints:
@@ -277,7 +432,7 @@ interface TurnMetrics {
 // sanitizePromptForInjection() (layer 2 - injection prevention):
 // Rejects: system override markers, base64 blobs > 3000 chars
 // Strips: control characters (preserves \t, \n, \r)
-// Returns: Result<string, error> -- rejects with 'empty_prompt' or 'base64_blob_detected'
+// Returns: Result<string, error> — rejects with 'empty_prompt' or 'base64_blob_detected'
 ```
 
 ### Cancel via Nonce
@@ -307,13 +462,28 @@ interface WebhookRule {
 }
 
 // Active rules:
-// 1. ActionableEventRule - filters to supported event+action combos
-// 2. SenderWhitelistRule - only ALLOWED_BOTS + repo owner
-// 3. SkipPrefixRule - ignores @claude, @codex, @ignore prefixes
+// 1. CodeWorkerOutputRule - skips events from intexuraos-code-worker[bot]
+// 2. ActionableEventRule - filters to supported event+action combos
+// 3. ProtectedBaseBranchRule - skips pushes to protected base branches
+// 4. SenderWhitelistRule - only ALLOWED_BOTS + repo owner
+// 5. SkipPrefixRule - ignores @claude, @codex, @ignore prefixes
 
-// When all rules pass, WebhookDispatchService dispatches:
-// - Existing task found for PR: sendTaskMessage (queue or resume)
-// - No task found: createTaskForPR (lock-guarded, user lookup)
+// Outcomes: dispatch | skip | needs_triage
+// When needs_triage: UnifiedEvaluator invokes GitHub Agent (Gemini)
+// When dispatch: WebhookDispatchService dispatches directly
+```
+
+### Merge Conflict Detection
+
+```typescript
+interface MergeConflictDetector {
+  detectOnPush(event: GitHubPREvent, logger: Logger): Promise<void>;
+}
+
+// Triggered on push events to base branches.
+// Checks bot-authored PRs for merge conflicts.
+// Posts GitHub comment and dispatches resolution task.
+// Bot author remapped to PR owner for correct worker dispatch.
 ```
 
 ## Constraints
@@ -340,10 +510,10 @@ Layer 3: linearIssueId active check (one active task per issue)
 
 ```typescript
 type RateLimitErrorCode =
-  | 'concurrent_limit' // 429 - max 3 concurrent
-  | 'hourly_limit' // 429 - max 10/hour
-  | 'monthly_cost_limit' // 429 - $200/month cap
-  | 'prompt_too_long' // 429 - >10000 chars
+  | 'concurrent_limit'    // 429 - max 3 concurrent
+  | 'hourly_limit'        // 429 - max 10/hour
+  | 'monthly_cost_limit'  // 429 - $200/month cap
+  | 'prompt_too_long'     // 429 - >10000 chars
   | 'service_unavailable'; // 503 - usage DB unreachable
 ```
 
@@ -353,6 +523,7 @@ PR comment auto-dispatch only processes comments from:
 
 - `claude[bot]`
 - `chatgpt-codex-connector[bot]`
+- `intexuraos-code-worker[bot]`
 - Repository owner (matches `repository.owner.login`)
 
 All other senders are silently ignored. Comments starting with `@claude`, `@codex`, or `@ignore` are also skipped.
@@ -420,6 +591,51 @@ Authorization: Bearer <auth0-jwt>
 -> 409: { "success": false, "error": { "code": "already_implemented", "message": "Implementation already started" } }
 ```
 
+### GitHub event decision log
+
+```
+GET /code/github-event-log?limit=20&cursor=<iso-date>
+Authorization: Bearer <auth0-jwt>
+
+-> 200: {
+  "success": true,
+  "data": {
+    "entries": [{
+      "id": "uuid",
+      "githubEventName": "pull_request",
+      "eventType": "pull_request",
+      "action": "opened",
+      "repository": "org/repo",
+      "pullRequestNumber": 42,
+      "decisionState": "completed",
+      "decisionOutcome": "request_review",
+      "authPassedAt": "2026-03-15T10:00:00.000Z"
+    }],
+    "nextCursor": "2026-03-15T09:55:00.000Z"
+  }
+}
+```
+
+### Hydrate event log rows
+
+```
+POST /code/github-event-log/rows
+Authorization: Bearer <auth0-jwt>
+
+{ "ids": ["uuid-1", "uuid-2"] }
+
+-> 200: {
+  "success": true,
+  "data": {
+    "rows": [{
+      "entry": { ... },
+      "audit": { ... },       // Full webhook payload
+      "decision": { ... }     // LLM reasoning, tool calls, cost
+    }]
+  }
+}
+```
+
 ### GitHub PR summaries (list view)
 
 ```
@@ -434,48 +650,11 @@ Authorization: Bearer <auth0-jwt>
       "pullRequestNumber": 42,
       "title": "Add cursor-based pagination",
       "status": "open" | "closed" | "merged",
-      "lastActivityAt": "2026-03-07T10:00:00.000Z"
+      "lastActivityAt": "2026-03-15T10:00:00.000Z"
     }]
   }
 }
 ```
-
-Notes:
-
-- Returns PRs with any activity in the last 30 days
-- Sorted by PR number descending
-- O(PRs) query backed by `github-pr-summaries` collection
-
-### GitHub PR events
-
-```
-GET /code/github-pr-events?repository=org/repo&pullRequestNumber=42&limit=50
-Authorization: Bearer <auth0-jwt>
-
--> 200: {
-  "success": true,
-  "data": {
-    "events": [{
-      "pullRequestNumber": 42,
-      "title": "Add cursor-based pagination",
-      "repository": "org/repo",
-      "eventType": "pull_request" | "pull_request_review" | "pull_request_review_comment" | "issue_comment" | "push",
-      "action": "opened" | "synchronize" | "submitted" | "created" | null,
-      "senderLogin": "username",
-      "createdAt": "2026-03-07T10:00:00.000Z",
-      "eventUrl": "https://github.com/org/repo/compare/abc...def",
-      "body": "Comment text or PR description (deduplicated)"
-    }]
-  }
-}
-```
-
-Notes:
-
-- `pullRequestNumber` requires `repository` to also be set
-- Per-PR queries return oldest-first; repository/all queries return newest-first
-- Comment `edited` events are merged with their original — same position, latest body
-- PR body appears only on the most recent `pull_request` event
 
 ### Send message to task
 
@@ -490,95 +669,42 @@ Authorization: Bearer <auth0-jwt>
 -> 400: { "success": false, "error": { "code": "invalid_status", ... } }  // task cancelled/dispatched
 ```
 
-### Cancel task (from web UI)
-
-```
-POST /code/cancel
-Authorization: Bearer <auth0-jwt>
-
-{ "taskId": "uuid" }
-
--> 200: { "success": true, "data": { "cancelled": true } }
-```
-
-### Cancel task (from WhatsApp via actions-agent)
-
-```
-POST /internal/code/cancel-with-nonce
-X-Internal-Auth: <token>
-
-{
-  "taskId": "uuid",
-  "nonce": "a1b2",
-  "userId": "auth0|user-id"
-}
-
--> 200: { "success": true, "data": { "cancelled": true } }
-```
-
-### Receive task completion webhook
-
-```
-POST /internal/webhooks/task-complete
-X-Internal-Auth: <token>
-X-Webhook-Signature: sha256=<hmac>
-
-{
-  "taskId": "uuid",
-  "status": "completed",
-  "result": {
-    "prUrl": "https://github.com/org/repo/pull/42",
-    "branch": "feature/pagination",
-    "commits": 3,
-    "summary": "Added cursor-based pagination to bookmarks endpoint"
-  },
-  "duration": 847
-}
-
--> 200: { "received": true }
-```
-
-### Receive turn metrics
-
-```
-POST /internal/turn-metrics
-X-Internal-Auth: <token>
-X-Webhook-Signature: sha256=<hmac>
-
-{
-  "taskId": "uuid",
-  "attempt": 1,
-  "timestamp": "2026-03-07T10:30:00.000Z",
-  "cpuTimeSeconds": 42.5,
-  "cpuCores": 10,
-  "peakMemoryMB": 2100,
-  "wallTimeSeconds": 120,
-  "apiWaitSeconds": 60,
-  "toolExecSeconds": 30,
-  "backgroundWaitSeconds": 10,
-  "overheadSeconds": 20,
-  "totalInputTokens": 45000,
-  "totalOutputTokens": 12000,
-  "totalCacheReadTokens": 35000,
-  "totalCacheCreationTokens": 5000,
-  "apiCallCount": 15,
-  "cpuUtilizationPercent": 42.5,
-  "idlePercent": 78.2
-}
-
--> 200: { "received": true }
-```
-
-### Drain task queue (Cloud Scheduler)
+### Drain task + retry queues (Cloud Scheduler)
 
 ```
 POST /internal/drain-queue
 X-Internal-Auth: <token>
 
+// Drains retry queue first (failed webhook dispatches), then task queue (queued tasks)
 -> 200: { "success": true, "data": { "action": "dispatched", "taskId": "uuid" } }
 -> 200: { "success": true, "data": { "action": "expired", "taskId": "uuid" } }
 -> 200: { "success": true, "data": { "action": "still_busy", "taskId": "uuid" } }
 -> 200: { "success": true, "data": { "action": "empty" } }
+```
+
+### Receive task lifecycle event (automation log)
+
+```
+POST /internal/webhooks/task-event
+X-Internal-Auth: <token>
+X-Webhook-Signature: sha256=<hmac>
+
+{
+  "taskId": "uuid",
+  "event": "started" | "completed" | "failed",
+  "repository": "org/repo",
+  "prNumber": 42,
+  "workerType": "sonnet",
+  "attempt": 1,
+  "status": "implemented",
+  "duration": 847000,
+  "error": "optional error message",
+  "errorCode": "optional_error_code",
+  "prUrl": "https://github.com/org/repo/pull/42",
+  "commits": [{ "sha": "abc123", "message": "Add pagination" }]
+}
+
+-> 200: { "received": true }
 ```
 
 ## Error Handling
@@ -615,20 +741,24 @@ All errors follow the IntexuraOS contract:
 
 ### Outgoing HTTP Calls
 
-| Target        | Endpoint                                      | When                       |
-| ------------- | --------------------------------------------- | -------------------------- |
-| Worker        | `POST {workerUrl}/tasks`                      | Task dispatch              |
-| Worker        | `DELETE {workerUrl}/tasks/{taskId}`           | Task cancellation          |
-| Worker        | `POST {workerUrl}/tasks/{taskId}/messages`    | Send message               |
-| Worker        | `GET {workerUrl}/health`                      | Connectivity test          |
-| linear-agent  | `POST /internal/linear/issues`                | Issue creation             |
-| linear-agent  | `PATCH /internal/linear/issues/{id}/state`    | State transition           |
-| linear-agent  | `POST /internal/linear/issues/validate`       | Issue validation           |
-| linear-agent  | `POST /internal/linear/issues/generate-title` | LLM title generation       |
-| linear-agent  | `POST /internal/linear/issues/{id}/comments`  | Comment addition           |
-| actions-agent | `PATCH /internal/actions/{id}/status`         | Action status update       |
-| user-service  | `GET /internal/users/oauth-token`             | GitHub OAuth token         |
-| user-service  | `GET /internal/users/by-github-username`      | GitHub username resolution |
+| Target        | Endpoint                                              | When                       |
+| ------------- | ----------------------------------------------------- | -------------------------- |
+| Worker        | `POST {workerUrl}/tasks`                              | Task dispatch              |
+| Worker        | `DELETE {workerUrl}/tasks/{taskId}`                   | Task cancellation          |
+| Worker        | `POST {workerUrl}/tasks/{taskId}/messages`            | Send message               |
+| Worker        | `GET {workerUrl}/health`                              | Connectivity test          |
+| linear-agent  | `POST /internal/linear/issues`                        | Issue creation             |
+| linear-agent  | `PATCH /internal/linear/issues/{id}/state`            | State transition           |
+| linear-agent  | `POST /internal/linear/issues/validate`               | Issue validation           |
+| linear-agent  | `POST /internal/linear/issues/generate-title`         | LLM title generation       |
+| linear-agent  | `POST /internal/linear/issues/{id}/comments`          | Comment addition           |
+| actions-agent | `PATCH /internal/actions/{id}/status`                 | Action status update       |
+| user-service  | `GET /internal/users/oauth-token`                     | GitHub OAuth token         |
+| user-service  | `GET /internal/users/by-github-username`              | GitHub username resolution |
+| GitHub API    | `PATCH /repos/{owner}/{repo}/pulls/{number}`          | PR title update            |
+| GitHub API    | `GET /repos/{owner}/{repo}/pulls/{number}/files`      | PR file list (triage)      |
+| GitHub API    | `POST /repos/{owner}/{repo}/issues/{number}/comments` | Automation log comment     |
+| Gemini API    | Tool-calling inference                                | PR triage evaluation       |
 
 ### Outgoing Pub/Sub
 
@@ -638,12 +768,13 @@ All errors follow the IntexuraOS contract:
 
 ### Incoming Webhooks
 
-| Source       | Path                               | Trigger                            |
-| ------------ | ---------------------------------- | ---------------------------------- |
-| Orchestrator | `/internal/webhooks/task-complete` | Task finished (completed/failed)   |
-| Orchestrator | `/internal/logs`                   | Log chunks during execution        |
-| Orchestrator | `/internal/turn-metrics`           | Per-turn resource metrics          |
-| GitHub       | `/webhooks/github`                 | PR events (push, review, comment)  |
+| Source       | Path                               | Trigger                             |
+| ------------ | ---------------------------------- | ----------------------------------- |
+| Orchestrator | `/internal/webhooks/task-complete` | Task finished (completed/failed)    |
+| Orchestrator | `/internal/webhooks/task-event`    | Task lifecycle events (auto log)    |
+| Orchestrator | `/internal/logs`                   | Log chunks during execution         |
+| Orchestrator | `/internal/turn-metrics`           | Per-turn resource metrics           |
+| GitHub       | `/webhooks/github`                 | PR events (push, review, comment)   |
 
 ### Metrics (Cloud Monitoring)
 

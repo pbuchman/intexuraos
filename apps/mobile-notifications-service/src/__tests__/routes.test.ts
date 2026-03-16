@@ -550,4 +550,5 @@ describe('Notification Routes', () => {
 
     expect(response.statusCode).toBe(401);
   });
+
 });

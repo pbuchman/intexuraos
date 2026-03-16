@@ -9,6 +9,13 @@ export interface QueueConfig {
   ttlMinutes: number;
 }
 
+export interface RetryQueueConfig {
+  /** Maximum retry attempts before giving up (default 3) */
+  maxAttempts: number;
+  /** TTL for retry entries in minutes (default 10) */
+  ttlMinutes: number;
+}
+
 export interface Config {
   port: number;
   gcpProjectId: string;
@@ -30,6 +37,7 @@ export interface Config {
   auth0JwksUri: string;
   // Task queue configuration (INT-619)
   queue: QueueConfig;
+  retryQueue: RetryQueueConfig;
   // GitHub Agent (INT-743)
   geminiAppApiKey: string;
 }
@@ -75,6 +83,10 @@ export function loadConfig(): Config {
     queue: {
       maxSize: parseInt(process.env['INTEXURAOS_QUEUE_MAX_SIZE'] ?? '10', 10),
       ttlMinutes: parseInt(process.env['INTEXURAOS_QUEUE_TTL_MINUTES'] ?? '360', 10),
+    },
+    retryQueue: {
+      maxAttempts: parseInt(process.env['INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS'] ?? '3', 10),
+      ttlMinutes: parseInt(process.env['INTEXURAOS_RETRY_QUEUE_TTL_MINUTES'] ?? '10', 10),
     },
     geminiAppApiKey,
   };

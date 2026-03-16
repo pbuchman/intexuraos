@@ -1,299 +1,266 @@
-# todos-agent — Agent Interface
+# Todos Agent — Agent Interface
 
-> Machine-readable interface definition for AI agents interacting with todos-agent.
-
----
+> **Machine-readable specification for AI agent integration**
 
 ## Identity
 
-| Field    | Value                                                         |
-| -------- | ------------------------------------------------------------- |
-| **Name** | todos-agent                                                   |
-| **Role** | Task Management Service                                       |
-| **Goal** | Manage todos with sub-items, priorities, and status workflows |
-
----
+| Attribute | Value                                                                             |
+| --------- | --------------------------------------------------------------------------------- |
+| Name      | todos-agent                                                                       |
+| Role      | Create and manage user-scoped todos with AI-powered item extraction               |
+| Goal      | Convert natural language task descriptions into structured, actionable todo lists |
 
 ## Capabilities
 
-### Tools (Endpoints)
+### Create Todo (Internal — with AI Extraction)
+
+**Endpoint:** `POST /internal/todos`
+
+**When to use:** When another agent needs to create a todo on behalf of a user, especially when a natural language description is available for AI extraction. This is the primary integration point for all agent-to-agent todo creation.
+
+**Auth:** `X-Internal-Auth: <token>` header
+
+**Input Schema:**
 
 ```typescript
-interface TodosAgentTools {
-  // List todos with filters
-  listTodos(params?: {
-    status?: TodoStatus;
-    archived?: boolean;
-    priority?: TodoPriority;
-    tags?: string[];
-  }): Promise<Todo[]>;
-
-  // Create new todo
-  createTodo(params: {
+interface CreateTodoInternalInput {
+  userId: string;
+  title: string;
+  description?: string | null;  // Triggers AI item extraction when provided
+  tags: string[];
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  dueDate?: string | null;      // ISO 8601 datetime
+  source: string;               // Caller identifier (e.g. "actions-agent")
+  sourceId: string;             // Unique ID in calling system
+  items?: Array<{
     title: string;
-    description?: string;
-    tags: string[];
-    priority?: TodoPriority;
-    dueDate?: string;
-    source: string;
-    sourceId: string;
-    items?: { title: string; priority?: TodoPriority; dueDate?: string }[];
-  }): Promise<Todo>;
-
-  // Get single todo
-  getTodo(id: string): Promise<Todo>;
-
-  // Update todo
-  updateTodo(
-    id: string,
-    params: {
-      title?: string;
-      description?: string;
-      tags?: string[];
-      priority?: TodoPriority;
-      dueDate?: string;
-    }
-  ): Promise<Todo>;
-
-  // Delete todo
-  deleteTodo(id: string): Promise<void>;
-
-  // Add item to todo
-  addTodoItem(
-    todoId: string,
-    params: {
-      title: string;
-      priority?: TodoPriority;
-      dueDate?: string;
-    }
-  ): Promise<Todo>;
-
-  // Update item in todo
-  updateTodoItem(
-    todoId: string,
-    itemId: string,
-    params: {
-      title?: string;
-      status?: TodoItemStatus;
-      priority?: TodoPriority;
-      dueDate?: string;
-    }
-  ): Promise<Todo>;
-
-  // Delete item from todo
-  deleteTodoItem(todoId: string, itemId: string): Promise<Todo>;
-
-  // Reorder items (must include ALL item IDs)
-  reorderTodoItems(
-    todoId: string,
-    params: {
-      itemIds: string[];
-    }
-  ): Promise<Todo>;
-
-  // Archive completed/cancelled todo
-  archiveTodo(id: string): Promise<Todo>;
-
-  // Unarchive todo
-  unarchiveTodo(id: string): Promise<Todo>;
-
-  // Cancel todo (not completed ones)
-  cancelTodo(id: string): Promise<Todo>;
+    priority?: 'low' | 'medium' | 'high' | 'urgent' | null;
+    dueDate?: string | null;
+  }>;
 }
 ```
 
-### Types
+**Output Schema:**
 
 ```typescript
-type TodoStatus = 'draft' | 'processing' | 'pending' | 'in_progress' | 'completed' | 'cancelled';
+interface CreateTodoInternalOutput {
+  status: 'completed' | 'failed';
+  message: string;
+  resourceUrl?: string;  // "/#/todos/<id>" on success
+  errorCode?: string;    // On failure
+}
+```
 
-type TodoItemStatus = 'pending' | 'completed';
+**Example:**
 
-type TodoPriority = 'low' | 'medium' | 'high' | 'urgent';
-
-interface TodoItem {
-  id: string;
-  title: string;
-  status: TodoItemStatus;
-  priority: TodoPriority | null;
-  dueDate: string | null;
-  position: number;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+```json
+// Request
+{
+  "userId": "user-abc-123",
+  "title": "Board deck preparation",
+  "description": "Pull Q3 revenue numbers, draft narrative section, get design to polish slides by Friday, schedule dry run with team.",
+  "tags": ["work", "presentation"],
+  "source": "actions-agent",
+  "sourceId": "action-789"
 }
 
+// Response (201)
+{
+  "success": true,
+  "data": {
+    "status": "completed",
+    "message": "Todo \"Board deck preparation\" created successfully",
+    "resourceUrl": "/#/todos/def456"
+  }
+}
+```
+
+### Create Todo (Public — direct)
+
+**Endpoint:** `POST /todos`
+
+**When to use:** When the authenticated user is creating a todo directly without AI extraction (no async processing step). Status starts as `pending` immediately.
+
+**Auth:** Bearer token
+
+**Input Schema:**
+
+```typescript
+interface CreateTodoPublicInput {
+  title: string;
+  description?: string | null;
+  tags: string[];
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  dueDate?: string | null;
+  source: string;
+  sourceId: string;
+  items?: Array<{
+    title: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent' | null;
+    dueDate?: string | null;
+  }>;
+}
+```
+
+### List Todos
+
+**Endpoint:** `GET /todos`
+
+**When to use:** Retrieve the authenticated user's todos, optionally filtered.
+
+**Auth:** Bearer token
+
+**Query Parameters:**
+
+```typescript
+interface ListTodosQuery {
+  status?: 'draft' | 'processing' | 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  archived?: 'true' | 'false';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  tags?: string;  // Comma-separated; OR logic — any matching tag included
+}
+```
+
+### Get Todo
+
+**Endpoint:** `GET /todos/:id`
+
+**When to use:** Retrieve a specific todo and its items by ID. Poll this endpoint to check AI extraction status after creating via `/internal/todos`.
+
+**Auth:** Bearer token
+
+**Output Schema:**
+
+```typescript
 interface Todo {
   id: string;
   userId: string;
   title: string;
   description: string | null;
   tags: string[];
-  priority: TodoPriority;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
   dueDate: string | null;
   source: string;
   sourceId: string;
-  status: TodoStatus;
+  status: 'draft' | 'processing' | 'pending' | 'in_progress' | 'completed' | 'cancelled';
   archived: boolean;
   items: TodoItem[];
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
-```
 
----
-
-## Constraints
-
-| Rule                    | Description                                                           |
-| ----------------------- | --------------------------------------------------------------------- |
-| **Archive Restriction** | Can only archive completed or cancelled todos                         |
-| **Cancel Restriction**  | Cannot cancel already completed todos                                 |
-| **Auto Status**         | Completing all items auto-completes the todo                          |
-| **Reopening**           | Adding an item to a completed todo reverts status to `in_progress`    |
-| **Ownership**           | Users can only access their own todos                                 |
-| **Reorder**             | Item IDs must match existing items exactly (no partial reorders)      |
-| **Description Limit**   | Descriptions over 10,000 chars truncated for AI extraction            |
-| **Max Items**           | AI extraction capped at 50 items per todo                             |
-| **Default Priority**    | New todos default to `medium` priority if not specified               |
-| **Tag Filtering**       | Tag filter uses OR logic — matches todos containing ANY provided tag  |
-
----
-
-## Usage Patterns
-
-### Create Todo with Items
-
-```typescript
-const todo = await createTodo({
-  title: 'Prepare presentation',
-  tags: ['work', 'urgent'],
-  priority: 'high',
-  dueDate: '2026-01-25T17:00:00Z',
-  source: 'action',
-  sourceId: 'act_123',
-  items: [
-    { title: 'Create slides', priority: 'high' },
-    { title: 'Rehearse', priority: 'medium' },
-    { title: 'Send to team', priority: 'low' },
-  ],
-});
-```
-
-### Filter Todos
-
-```typescript
-// High priority work items
-const urgentTodos = await listTodos({
-  status: 'pending',
-  priority: 'high',
-  tags: ['work'],
-});
-
-// Archived items
-const archived = await listTodos({ archived: true });
-```
-
-### Complete Items Progressively
-
-```typescript
-// Mark first item complete — todo auto-transitions to in_progress
-await updateTodoItem(todoId, item1Id, { status: 'completed' });
-
-// Mark remaining items complete — todo auto-transitions to completed
-await updateTodoItem(todoId, item2Id, { status: 'completed' });
-await updateTodoItem(todoId, item3Id, { status: 'completed' });
-// todo.status is now 'completed', todo.completedAt is set
-```
-
-### Archive Completed Todos
-
-```typescript
-const todos = await listTodos({ status: 'completed', archived: false });
-for (const todo of todos) {
-  await archiveTodo(todo.id);
+interface TodoItem {
+  id: string;
+  title: string;
+  status: 'pending' | 'completed';
+  priority: 'low' | 'medium' | 'high' | 'urgent' | null;
+  dueDate: string | null;
+  position: number;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 ```
 
-### Create via Internal API (Other Services)
+### Update Todo Item
+
+**Endpoint:** `PATCH /todos/:id/items/:itemId`
+
+**When to use:** Mark an item as completed, update its title, priority, or due date. Completing all items automatically sets the todo status to `completed`.
+
+**Auth:** Bearer token
+
+**Input Schema:**
 
 ```typescript
-// POST /internal/todos with X-Internal-Auth header
-// Status set to 'processing', triggers AI extraction via Pub/Sub
-const feedback = await createTodoInternal({
-  userId: 'user_123',
-  title: 'Weekly Planning',
-  description: 'Plan my week: finish presentation, call dentist, review updates',
-  tags: ['planning'],
-  source: 'commands-agent',
-  sourceId: 'cmd_456',
-});
-// feedback.status = 'completed'
-// feedback.resourceUrl = '/#/todos/<todoId>'
+interface UpdateTodoItemInput {
+  title?: string;
+  status?: 'pending' | 'completed';
+  priority?: 'low' | 'medium' | 'high' | 'urgent' | null;
+  dueDate?: string | null;
+}
 ```
 
----
+### Lifecycle Actions
 
-## Internal Endpoints
+| Action    | Endpoint                    | Restriction                            |
+| --------- | --------------------------- | -------------------------------------- |
+| Archive   | `POST /todos/:id/archive`   | Only `completed` or `cancelled` todos  |
+| Unarchive | `POST /todos/:id/unarchive` | No restriction                         |
+| Cancel    | `POST /todos/:id/cancel`    | Cannot cancel `completed` todos        |
+| Delete    | `DELETE /todos/:id`         | Permanently deletes todo and all items |
 
-| Method | Path                                      | Purpose                                |
-| ------ | ----------------------------------------- | -------------------------------------- |
-| POST   | `/internal/todos`                         | Create todo from other services        |
-| POST   | `/internal/todos/pubsub/todos-processing` | Pub/Sub push handler for AI extraction |
+## Constraints
 
----
+**Do NOT:**
 
-## Status Workflow
+- Call `/internal/todos` without a valid `userId` — the todo will be unowned
+- Fabricate `sourceId` values — use a stable, unique identifier from the caller's system
+- Assume AI extraction is complete immediately — poll `GET /todos/:id` until `status !== 'processing'`
+- Send reorder requests with a partial item list — all item IDs must be present or the request fails
+- Attempt to cancel a `completed` todo — returns `INVALID_OPERATION`
+
+**Requires:**
+
+- `X-Internal-Auth` header for all `/internal/*` endpoints
+- Bearer token for all public `/todos` endpoints
+- User must have an LLM API key configured in user-service for AI extraction to produce items
+
+## Usage Patterns
+
+### Pattern 1: Agent Creates Todo with AI Extraction
 
 ```
-draft -> processing -> pending -> in_progress -> completed -> archived
-                         |                         ^
-                     cancelled ____________________/
+1. Call POST /internal/todos with description field populated
+2. Record the todoId from resourceUrl in response ("/#/todos/<id>")
+3. Optionally: poll GET /todos/<id> until status !== 'processing'
+4. If polling: check items[] array for extracted results
 ```
 
-**Notes:**
+### Pattern 2: Check and Complete Todo Items
 
-- `draft`: Initial state, not yet visible in lists
-- `processing`: AI extraction in progress (async via Pub/Sub)
-- `pending`: Ready to work on
-- `in_progress`: At least one item completed
-- `completed`: All items completed (auto-computed or manual)
-- `cancelled`: Cancelled before completion (can be archived)
-- `archived`: Soft delete, not in default lists
+```
+1. Call GET /todos to list todos for a user (filter by status=pending or in_progress)
+2. For each todo, inspect items[] for pending items
+3. When work is done, call PATCH /todos/:id/items/:itemId with status: "completed"
+4. When all items completed, todo auto-transitions to "completed"
+5. Call POST /todos/:id/archive to clean up completed todos
+```
 
----
+### Pattern 3: Extraction Failure Handling
+
+```
+1. After POST /internal/todos, poll GET /todos/:id
+2. If status === 'pending' but items contain title starting with "Item extraction failed":
+   - User has no LLM API key, or Gemini was unreachable
+   - Treat todo as needing manual item entry
+3. If items contain "No actionable items found in todo description":
+   - Description had no extractable action items
+   - Add items manually via POST /todos/:id/items
+```
 
 ## Error Handling
 
-| Error Code | Meaning            | Recovery Action                             |
-| ---------- | ------------------ | ------------------------------------------- |
-| 400        | Invalid input      | Fix request payload (check required fields) |
-| 401        | Unauthorized       | Refresh access token                        |
-| 403        | Forbidden          | Verify todo ownership (user ID match)       |
-| 404        | Resource not found | Verify todo/item ID exists                  |
-| 500        | Server error       | Retry with backoff                          |
+| Error Code | Meaning                         | Recovery Action                            |
+| ---------- | ------------------------------- | ------------------------------------------ |
+| 400        | Validation failed or invalid op | Check request body / lifecycle restriction |
+| 401        | Missing or invalid auth         | Check Bearer token or internal auth key    |
+| 403        | Todo belongs to different user  | Verify userId matches authenticated user   |
+| 404        | Todo or item not found          | Verify IDs exist                           |
+| 500        | Server error                    | Retry with exponential backoff             |
 
----
+## Events Published
 
-## AI Item Extraction
+| Event                      | When                                      | Payload                     |
+| -------------------------- | ----------------------------------------- | --------------------------- |
+| `todos.processing.created` | After `POST /internal/todos` creates todo | `{ todoId, userId, title }` |
 
-Todos created via `/internal/todos` with a `description` trigger automatic AI extraction:
+## Dependencies
 
-1. Create todo with description -> status = `processing`
-2. Pub/Sub event fires -> handler calls LLM via user-service
-3. LLM extracts items (Zod-validated via `TodoExtractionResponseSchema`)
-4. Items added to todo -> status = `pending`
-
-**Model chain:** Gemini 2.5 Flash (primary), GLM-4.7 (fallback), GLM-4.7-Flash (fallback)
-
-**Fallback behaviors:**
-
-- No API key: Adds warning item with `NO_API_KEY` error
-- No items found: Adds "No actionable items found in todo description"
-- Extraction fails: Adds "Item extraction failed ({code})" with `high` priority
-- No description: Skips extraction, transitions directly to `pending`
-
----
-
-**Last updated:** 2026-03-07
+| Service              | Why Needed                               | Failure Behavior                               |
+| -------------------- | ---------------------------------------- | ---------------------------------------------- |
+| user-service         | Get user's LLM client for extraction     | Warning item added to todo; todo still created |
+| app-settings-service | Fetch LLM pricing at startup             | Service fails to start                         |
+| Firestore            | Persist todos                            | All endpoints return 500                       |
+| Pub/Sub              | Trigger async AI extraction              | Todo created but extraction skipped            |

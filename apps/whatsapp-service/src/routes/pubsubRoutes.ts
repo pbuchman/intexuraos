@@ -115,7 +115,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-        /* v8 ignore start -- test-infra: tests use internal auth header, not Pub/Sub push @preserve */
         if (isPubSubPush) {
           // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
           request.log.info(
@@ -126,10 +125,9 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          
           // Direct service call: validate x-internal-auth header
           const authResult = validateInternalAuth(request);
-          /* v8 ignore start -- auth-guard: tests use valid internal auth @preserve */
+
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -137,9 +135,8 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             );
             return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/send-message endpoint');
           }
-          /* v8 ignore stop @preserve */
+
         }
-        /* v8 ignore stop @preserve */
 
         const body = request.body as PubSubPushMessage;
 
@@ -147,9 +144,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
           eventData = JSON.parse(decoded) as SendMessageEvent;
-        /* v8 ignore start -- test-infra: tests send valid base64 messages @preserve */
         } catch {
-        /* v8 ignore stop @preserve */
           request.log.error(
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
@@ -158,12 +153,10 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         }
 
         const parsedType = eventData.type as string;
-        /* v8 ignore start -- test-infra: tests send correct event types @preserve */
         if (parsedType !== 'whatsapp.message.send') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
           return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
         }
-        /* v8 ignore stop @preserve */
 
         request.log.info(
           {
@@ -176,7 +169,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
 
         const { userMappingRepository } = getServices();
         const phoneResult = await userMappingRepository.findPhoneByUserId(eventData.userId);
-        /* v8 ignore start -- test-infra: fake repository always succeeds @preserve */
         if (!phoneResult.ok) {
           request.log.error(
             {
@@ -189,7 +181,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           );
           return await reply.fail('INTERNAL_ERROR', 'Failed to look up phone number');
         }
-        /* v8 ignore stop @preserve */
 
         if (phoneResult.value === null) {
           request.log.warn(
@@ -235,7 +226,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           result = await messageSender.sendTextMessage(phoneNumber, eventData.message);
         }
 
-        /* v8 ignore start -- test-infra: fake message sender always succeeds @preserve */
         if (!result.ok) {
           request.log.error(
             {
@@ -248,7 +238,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           );
           return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
         }
-        /* v8 ignore stop @preserve */
 
         const { wamid } = result.value;
 
@@ -278,14 +267,13 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         });
 
         if (!saveResult.ok) {
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
           request.log.warn(
             {
               wamid,
               correlationId: eventData.correlationId,
               error: saveResult.error.message,
             },
-          /* v8 ignore stop @preserve */
+
             'Failed to save outbound message for reply correlation (non-fatal)'
           );
         } else {
@@ -383,7 +371,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-        /* v8 ignore start -- test-infra: tests use internal auth header, not Pub/Sub push @preserve */
         if (isPubSubPush) {
           // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
           request.log.info(
@@ -394,10 +381,9 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          
           // Direct service call: validate x-internal-auth header
           const authResult = validateInternalAuth(request);
-          /* v8 ignore start -- auth-guard: tests use valid internal auth @preserve */
+
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -405,9 +391,8 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             );
             return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/media-cleanup endpoint');
           }
-          /* v8 ignore stop @preserve */
+
         }
-        /* v8 ignore stop @preserve */
 
         const body = request.body as PubSubPushMessage;
 
@@ -415,9 +400,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
           eventData = JSON.parse(decoded) as MediaCleanupEvent;
-        /* v8 ignore start -- test-infra: tests send valid base64 messages @preserve */
         } catch {
-        /* v8 ignore stop @preserve */
           request.log.error(
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
@@ -426,12 +409,10 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         }
 
         const parsedType = eventData.type as string;
-        /* v8 ignore start -- test-infra: tests send correct event types @preserve */
         if (parsedType !== 'whatsapp.media.cleanup') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
           return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
         }
-        /* v8 ignore stop @preserve */
 
         request.log.info(
           {
@@ -544,7 +525,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-        /* v8 ignore start -- test-infra: tests use internal auth header, not Pub/Sub push @preserve */
         if (isPubSubPush) {
           request.log.info(
             { from: fromHeader, userAgent: request.headers['user-agent'] },
@@ -552,7 +532,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           );
         } else {
           const authResult = validateInternalAuth(request);
-          /* v8 ignore start -- auth-guard: tests use valid internal auth @preserve */
+
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -560,9 +540,8 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             );
             return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/transcription-completed endpoint');
           }
-          /* v8 ignore stop @preserve */
+
         }
-        /* v8 ignore stop @preserve */
 
         const body = request.body as PubSubPushMessage;
 
@@ -654,7 +633,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-        /* v8 ignore start -- test-infra: tests use internal auth header, not Pub/Sub push @preserve */
         if (isPubSubPush) {
           request.log.info(
             { from: fromHeader, userAgent: request.headers['user-agent'] },
@@ -663,7 +641,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         } else {
           
           const authResult = validateInternalAuth(request);
-          /* v8 ignore start -- auth-guard: tests use valid internal auth @preserve */
+
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -671,9 +649,8 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             );
             return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/process-webhook endpoint');
           }
-          /* v8 ignore stop @preserve */
+
         }
-        /* v8 ignore stop @preserve */
 
         const body = request.body as PubSubPushMessage;
 

@@ -10,9 +10,9 @@
 
 A working integration that:
 
-- Sends WhatsApp messages to users via the internal API
+- Sends WhatsApp messages to users via the internal Pub/Sub API
 - Sends interactive approval messages with buttons
-- Sends CTA URL messages with clickable links
+- Sends CTA URL messages with clickable deep links
 - Tracks outbound messages for reply correlation
 - Handles approval responses (buttons and text replies)
 - Processes the approval workflow end-to-end
@@ -41,9 +41,9 @@ Outgoing: Your Service -> Pub/Sub -> whatsapp-service -> WhatsApp
 
 ### Key Concepts
 
-1. **User Mapping**: Phone numbers are mapped to userId internally
+1. **User Mapping**: Phone numbers are mapped to userId internally — you only need a userId to send a message
 2. **OutboundMessage Tracking**: Sent messages are stored with correlationId for reply correlation
-3. **Approval Correlation**: CorrelationId format `action-{type}-approval-{actionId}` enables actionId extraction
+3. **Approval Correlation**: CorrelationId format `action-{type}-approval-{actionId}` enables actionId extraction from text replies
 4. **Event-Driven Transcription**: Audio files are stored in GCS, then srt-service transcribes asynchronously
 
 ---
@@ -57,20 +57,20 @@ To send a WhatsApp message, publish a `whatsapp.message.send` event to Pub/Sub.
 ```typescript
 interface SendMessageEvent {
   type: 'whatsapp.message.send';
-  userId: string; // IntexuraOS user ID
-  message: string; // Message text
-  replyToMessageId?: string; // Optional: reply to specific message
-  buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons
-  ctaUrl?: { displayText: string; url: string }; // Optional: CTA URL button
-  correlationId: string; // For tracking and reply correlation
-  timestamp: string; // ISO 8601
+  userId: string;                                    // IntexuraOS user ID
+  message: string;                                   // Message text
+  replyToMessageId?: string;                         // Optional: reply to specific message
+  buttons?: WhatsAppInteractiveButton[];             // Optional: interactive buttons
+  ctaUrl?: { displayText: string; url: string };     // Optional: CTA URL button
+  correlationId: string;                             // For tracking and reply correlation
+  timestamp: string;                                 // ISO 8601
 }
 
 interface WhatsAppInteractiveButton {
   type: 'reply';
   reply: {
-    id: string; // Format: "intent:actionId"
-    title: string; // Max 20 characters
+    id: string;     // Format: "intent:actionId"
+    title: string;  // Max 20 characters
   };
 }
 ```
@@ -83,7 +83,7 @@ interface WhatsAppInteractiveButton {
 import { PubSub } from '@google-cloud/pubsub';
 
 const pubsub = new PubSub();
-const topic = pubsub.topic(process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC!);
+const topic = pubsub.topic(process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC']!);
 
 const event: SendMessageEvent = {
   type: 'whatsapp.message.send',
@@ -123,13 +123,13 @@ await topic.publishMessage({
 
 ### What Just Happened?
 
-1. Event published to `whatsapp-message-send` topic
-2. WhatsApp-service receives via push subscription
-3. Service looks up phone number for userId
-4. Message sent via WhatsApp Cloud API (text, interactive, or CTA based on payload)
-5. OutboundMessage saved with wamid and correlationId
+1. Event published to the `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` topic
+2. WhatsApp-service receives via push subscription at `/internal/whatsapp/pubsub/send-message`
+3. Service looks up phone number for userId from `whatsapp_user_mappings`
+4. Message sent via WhatsApp Cloud API (text, interactive, or CTA based on payload shape)
+5. OutboundMessage saved to `whatsapp_outbound_messages` with wamid and correlationId
 
-**Checkpoint:** User receives message on WhatsApp within 2–5 seconds.
+**Checkpoint:** User receives message on WhatsApp within a few seconds.
 
 ---
 
@@ -137,7 +137,7 @@ await topic.publishMessage({
 
 ### Step 3.1: Send an Approval Request with Buttons
 
-For approval messages, include interactive buttons with the message. The button ID encodes the intent and action ID:
+For approval messages, include interactive buttons. The button ID encodes the intent and action ID:
 
 ```typescript
 const actionId = 'act-xyz-789';
@@ -170,29 +170,28 @@ When the user taps a button or replies, whatsapp-service publishes an `action.ap
 ```typescript
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
-  replyToWamid: string; // Original approval message wamid
-  replyText: string; // "yes", "no", "convert", "cancel-task", "view-task", "proceed-implementation"
+  replyToWamid: string;   // Original approval message wamid
+  replyText: string;      // "yes", "no", "convert", "cancel-task", "view-task", "proceed-implementation"
   userId: string;
   timestamp: string;
-  actionId?: string; // Extracted from buttonId or correlationId
-  buttonId?: string; // Button ID if user tapped a button
-  buttonTitle?: string; // Button title if user tapped a button
+  actionId?: string;      // Extracted from buttonId or correlationId
+  buttonId?: string;      // Button ID if user tapped a button
+  buttonTitle?: string;   // Button title if user tapped a button
 }
 ```
 
 ### Step 3.3: Subscribe to Approval Replies
 
 ```typescript
-// In your Pub/Sub handler for action-approval-reply topic
+// In your Pub/Sub handler for INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC
 async function handleApprovalReply(event: ApprovalReplyEvent): Promise<void> {
   const { actionId, replyText, userId } = event;
 
   if (actionId === undefined) {
-    // Reply to non-approval message, handle differently
+    // Reply to non-approval message — handle differently
     return;
   }
 
-  // Classify intent from reply text
   const intent = classifyIntent(replyText);
 
   if (intent === 'approve') {
@@ -200,7 +199,6 @@ async function handleApprovalReply(event: ApprovalReplyEvent): Promise<void> {
   } else if (intent === 'reject') {
     await cancelAction(actionId);
   } else {
-    // Ambiguous response, maybe ask for clarification
     await requestClarification(userId, actionId);
   }
 }
@@ -210,7 +208,7 @@ function classifyIntent(text: string): 'approve' | 'reject' | 'ambiguous' {
   if (['yes', 'approve', 'ok', 'sure', 'do it'].includes(lower)) {
     return 'approve';
   }
-  if (['no', 'reject', 'cancel', 'nope', 'dont'].includes(lower)) {
+  if (['no', 'reject', 'cancel', 'nope'].includes(lower)) {
     return 'reject';
   }
   return 'ambiguous';
@@ -227,28 +225,27 @@ function classifyIntent(text: string): 'approve' | 'reject' | 'ambiguous' {
 
 Buttons and text replies both produce the same `ApprovalReplyEvent`:
 
-| Response Type              | `replyText`              | `buttonId`                    | `actionId`         |
-| -------------------------- | ------------------------ | ----------------------------- | ------------------ |
-| Button "Approve"           | "yes"                    | `approve:act-123`             | `act-123`          |
-| Button "Cancel"            | "no"                     | `cancel:act-123`              | `act-123`          |
-| Button "Reject"            | "no"                     | `reject:act-123`              | `act-123`          |
-| Button "Proceed"           | "proceed-implementation" | `proceed-implementation:id`   | from buttonId      |
-| Text reply "yes"           | "yes"                    | undefined                     | from correlationId |
-| Text reply "no"            | "no"                     | undefined                     | from correlationId |
+| Response Type              | `replyText`              | `buttonId`                  | `actionId`         |
+| -------------------------- | ------------------------ | --------------------------- | ------------------ |
+| Button "Approve"           | "yes"                    | `approve:act-123`           | `act-123`          |
+| Button "Cancel"            | "no"                     | `cancel:act-123`            | `act-123`          |
+| Button "Reject"            | "no"                     | `reject:act-123`            | `act-123`          |
+| Button "Proceed"           | "proceed-implementation" | `proceed-implementation:id` | from buttonId      |
+| Text reply "yes"           | "yes"                    | undefined                   | from correlationId |
+| Text reply "no"            | "no"                     | undefined                   | from correlationId |
 
 **Note:** Emoji reactions are not supported. They are ignored with status `REACTION_NOT_SUPPORTED`.
 
-### Step 4.2: No Code Changes Needed!
+### Step 4.2: One Handler for Both
 
-If you're handling `ApprovalReplyEvent`, buttons and text replies both work:
+The same handler works for button taps and text replies:
 
 ```typescript
-// Same handler works for buttons AND text replies
 async function handleApprovalReply(event: ApprovalReplyEvent): Promise<void> {
-  // event.replyText is always set ("yes" for approve, "no" for cancel/reject)
+  // event.replyText is always set
   // event.actionId is extracted from buttonId or correlationId
   // event.buttonId is set only for button taps
-  // Your existing logic handles both!
+  // Your existing intent classification handles both!
 }
 ```
 
@@ -260,14 +257,13 @@ async function handleApprovalReply(event: ApprovalReplyEvent): Promise<void> {
 
 ### Scenario A: Reply Without Known Action
 
-When a user replies to a message that isn't an approval request:
+When a user replies to a message that is not an approval request:
 
 ```typescript
 // event.actionId will be undefined
 if (event.actionId === undefined) {
   // This was a reply to a non-approval message
-  // Could be a general question or follow-up
-  // Route to general message handling
+  // Route to general message handling or ignore
 }
 ```
 
@@ -275,29 +271,26 @@ if (event.actionId === undefined) {
 
 WhatsApp-service automatically prevents duplicate actions:
 
-1. If reply is to approval message with known actionId:
+1. If reply is to an approval message with a known actionId:
    - Publishes `action.approval.reply` (with actionId)
    - Does NOT publish `command.ingest`
-
-2. If reply is to non-approval message:
+2. If reply is to a non-approval message:
    - Publishes `command.ingest` as normal
 
 No action needed on your side.
 
 ### Scenario C: Message Expiration
 
-OutboundMessages expire after 7 days. For long-lived workflows:
+OutboundMessages expire after 7 days. For long-lived workflows, store action state independently:
 
 ```typescript
-// Consider storing action state separately
-// Don't rely solely on correlationId after 7 days
 await actionRepository.save({
   actionId,
   userId,
   status: 'pending_approval',
   createdAt: new Date().toISOString(),
-  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h
 });
+// Do not rely solely on OutboundMessage correlation after 7 days
 ```
 
 ### Scenario D: Audio Message Processing
@@ -306,27 +299,29 @@ Audio messages follow an event-driven flow:
 
 1. User sends voice note via WhatsApp
 2. whatsapp-service downloads audio and stores it in GCS
-3. `whatsapp.audio.stored` event is published
+3. `whatsapp.audio.stored` event is published to srt-service
 4. srt-service transcribes the audio asynchronously
 5. `srt.transcription.completed` event is received
 6. whatsapp-service updates message, sends transcript to user, and publishes `command.ingest`
 
-You do not need to handle any of this — subscribe to `command.ingest` events with `sourceType: 'whatsapp_voice'` to receive the final text.
+Subscribe to `command.ingest` events with `sourceType: 'whatsapp_voice'` to receive the final text. No other integration needed.
 
 ---
 
 ## Troubleshooting
 
-| Problem                      | Solution                                                              |
-| ---------------------------- | --------------------------------------------------------------------- |
-| "Message not delivered"      | Check user has connected WhatsApp number via `/whatsapp/status`       |
-| "Phone not verified"         | Run `/whatsapp/verify/send` then `/whatsapp/verify/confirm` first     |
-| "No approval event received" | Verify buttonId format or correlationId format                        |
-| "actionId is undefined"      | User replied to non-approval message, check correlationId in DB       |
-| "Duplicate actions created"  | Ensure not publishing both approval reply AND command.ingest handlers |
-| "Reaction not processed"     | Emoji reactions removed; only buttons and text replies work           |
-| "Button title truncated"     | WhatsApp limits button titles to 20 characters                        |
-| "CTA button not showing"     | Ensure `buttons` and `ctaUrl` are not both provided                   |
+| Problem                       | Solution                                                              |
+| ----------------------------- | --------------------------------------------------------------------- |
+| "Message not delivered"       | Check user has connected WhatsApp number via `GET /whatsapp/status`   |
+| "Phone not verified"          | Run `/whatsapp/verify/send` then `/whatsapp/verify/confirm` first     |
+| "No approval event received"  | Verify buttonId format or correlationId matches expected pattern      |
+| "actionId is undefined"       | User replied to non-approval message; check correlationId pattern     |
+| "Duplicate actions created"   | Ensure approval and command handlers do not both run for same reply   |
+| "Reaction not processed"      | Emoji reactions are ignored; use buttons or text replies only         |
+| "Button title truncated"      | WhatsApp limits button titles to 20 characters                        |
+| "CTA button not showing"      | Ensure `buttons` and `ctaUrl` are not both provided in the same event |
+| "401 on internal endpoint"    | Use `X-Internal-Auth` header or ensure OIDC push subscription config  |
+| "Rate limited on verify"      | Wait for 60s cooldown or 1-hour window to reset                       |
 
 ---
 
@@ -336,7 +331,7 @@ Now that you understand the basics:
 
 1. Explore the [Technical Reference](technical.md) for full API details
 2. Review the actions-agent integration for complete approval workflows
-3. Consider implementing approval timeout handling (no response after X hours)
+3. Consider implementing approval timeout handling (no response after N hours)
 
 ---
 
@@ -345,13 +340,13 @@ Now that you understand the basics:
 ### Button ID Format for Approvals
 
 ```
-approve:{actionId}              -- Approve
-cancel:{actionId}               -- Cancel/reject
-reject:{actionId}               -- Explicitly reject
-convert:{actionId}              -- Convert to different type
-cancel-task:{taskId}            -- Cancel running task
-view-task:{taskId}              -- View task status
-proceed-implementation:{taskId} -- Proceed with implementation
+approve:{actionId}               Approve
+cancel:{actionId}                Cancel/reject
+reject:{actionId}                Explicitly reject
+convert:{actionId}               Convert to different type
+cancel-task:{taskId}             Cancel running task
+view-task:{taskId}               View task status
+proceed-implementation:{taskId}  Proceed with implementation
 ```
 
 ### CorrelationId Format for Text Reply Correlation
@@ -366,21 +361,21 @@ Examples:
 - `action-bookmark-approval-bk-456`
 - `action-research-approval-res-789`
 
-### Event Types
+### Event Types Reference
 
 | Event                          | Direction | Purpose                               |
 | ------------------------------ | --------- | ------------------------------------- |
-| `whatsapp.message.send`        | Outgoing  | Send message to user                  |
-| `action.approval.reply`        | Incoming  | User responded to approval            |
-| `command.ingest`               | Incoming  | Regular message for processing        |
+| `whatsapp.message.send`        | Consume   | Send message to user                  |
+| `action.approval.reply`        | Published | User responded to approval            |
+| `command.ingest`               | Published | Regular message for processing        |
 | `whatsapp.audio.stored`        | Published | Audio ready for transcription         |
-| `srt.transcription.completed`  | Received  | Transcription result from srt-service |
+| `srt.transcription.completed`  | Consume   | Transcription result from srt-service |
 
 ### Response Types Reference
 
 ```
-Button tap   -> replyText from intent, buttonId present
-Text reply   -> raw replyText, no buttonId
-Emoji reacts -> NOT supported
-CTA URL      -> One-way notification, no response expected
+Button tap    replyText from intent, buttonId present
+Text reply    raw replyText, no buttonId
+Emoji react   NOT supported
+CTA URL       One-way notification, no response expected
 ```

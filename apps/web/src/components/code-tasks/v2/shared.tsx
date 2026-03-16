@@ -1,10 +1,11 @@
+import { CODE_TASK_WORKER_TYPES, type CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
 import type { CodeTaskStatus, WorkerStatusTag } from '@/types';
 
 // --- Worker types (shared by V2TaskActions + V2NextSteps) ---
 
-export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen3.5-plus';
+export type WorkerType = CodeTaskWorkerType;
 
-export const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen3.5-plus'];
+export const WORKER_TYPES: WorkerType[] = [...CODE_TASK_WORKER_TYPES];
 
 export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   auto: 'Auto',
@@ -12,7 +13,8 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   sonnet: 'Sonnet',
   minimax: 'Minimax',
   glm: 'GLM',
-  'qwen3.5-plus': 'Qwen 3.5 Plus',
+  qwen: 'Qwen',
+  kimi: 'Kimi',
 };
 
 // --- Status badge config ---
@@ -30,6 +32,7 @@ export const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
   running:     { bg: 'bg-blue-100 dark:bg-blue-900/50',       text: 'text-blue-800 dark:text-blue-300',       label: 'Running',      icon: 'Loader2' },
   planned:     { bg: 'bg-violet-100 dark:bg-violet-900/50',   text: 'text-violet-800 dark:text-violet-300',   label: 'Planned',      icon: 'CheckCircle2' },
   implemented: { bg: 'bg-emerald-100 dark:bg-emerald-900/50', text: 'text-emerald-800 dark:text-emerald-300', label: 'Implemented',  icon: 'CheckCircle2' },
+  reviewed:    { bg: 'bg-teal-100 dark:bg-teal-900/50',      text: 'text-teal-800 dark:text-teal-300',      label: 'Reviewed',     icon: 'CheckCircle2' },
   failed:      { bg: 'bg-red-100 dark:bg-red-900/50',         text: 'text-red-800 dark:text-red-300',         label: 'Failed',       icon: 'XCircle' },
   interrupted: { bg: 'bg-orange-100 dark:bg-orange-900/50',   text: 'text-orange-800 dark:text-orange-300',   label: 'Interrupted',  icon: 'AlertCircle' },
   cancelled:   { bg: 'bg-slate-100 dark:bg-slate-700',        text: 'text-slate-600 dark:text-slate-400',     label: 'Cancelled',    icon: 'XCircle' },

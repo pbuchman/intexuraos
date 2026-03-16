@@ -5,7 +5,7 @@
 | Attribute | Value                                                 |
 | --------- | ----------------------------------------------------- |
 | Package   | `@intexuraos/infra-claude`                            |
-| Version   | 2.1.0                                                 |
+| Version   | 3.3.0                                                 |
 | Purpose   | Anthropic Claude API wrapper implementing `LLMClient` |
 | Provider  | `LlmProviders.Anthropic`                              |
 | SDK       | `@anthropic-ai/sdk` ^0.52.0                           |
@@ -92,10 +92,10 @@ if (result.ok) {
 if (!result.ok) {
   switch (result.error.code) {
     case 'RATE_LIMITED': // retry with backoff
-    case 'INVALID_KEY': // configuration error — do not retry
-    case 'OVERLOADED': // retry after delay
-    case 'TIMEOUT': // retry
-    case 'API_ERROR': // log and handle
+    case 'INVALID_KEY':  // configuration error — do not retry
+    case 'OVERLOADED':   // retry after delay
+    case 'TIMEOUT':      // retry
+    case 'API_ERROR':    // log and handle
   }
 }
 ```
@@ -121,7 +121,7 @@ if (!result.ok) {
 
 **Do NOT:**
 
-- Pass `generateImage` — not implemented (method does not exist on client)
+- Call `generateImage` — not implemented (method does not exist on this client)
 - Inject custom `auditSink` or `usageSink` — not supported (uses Firestore defaults)
 - Expect `reasoning_tokens` in usage — Claude does not expose reasoning tokens
 

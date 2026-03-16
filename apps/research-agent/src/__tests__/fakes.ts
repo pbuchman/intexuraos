@@ -62,6 +62,7 @@ export class FakeResearchRepository implements ResearchRepository {
   private failNextUpdate = false;
   private failNextUpdateLlmResult = false;
   private failNextClearShareInfo = false;
+  private deleteAfterNextFind = false;
 
   async save(research: Research): Promise<Result<Research, RepositoryError>> {
     if (this.failNextSave) {
@@ -78,6 +79,10 @@ export class FakeResearchRepository implements ResearchRepository {
       return err({ code: 'FIRESTORE_ERROR', message: 'Test find failure' });
     }
     const research = this.researches.get(id) ?? null;
+    if (this.deleteAfterNextFind) {
+      this.deleteAfterNextFind = false;
+      this.researches.delete(id);
+    }
     return ok(research);
   }
 
@@ -179,6 +184,10 @@ export class FakeResearchRepository implements ResearchRepository {
 
   setFailNextUpdateLlmResult(fail: boolean): void {
     this.failNextUpdateLlmResult = fail;
+  }
+
+  setDeleteAfterNextFind(value: boolean): void {
+    this.deleteAfterNextFind = value;
   }
 
   setFailNextClearShareInfo(fail: boolean): void {
@@ -430,7 +439,6 @@ export function createFakeLlmProviders(): Record<LlmProvider, LlmResearchProvide
     openai: createFakeLlmResearchProvider('OpenAI research result'),
     anthropic: createFakeLlmResearchProvider('Anthropic research result'),
     perplexity: createFakeLlmResearchProvider('Perplexity research result'),
-    zai: createFakeLlmResearchProvider('Zai research result'),
   };
 }
 
@@ -697,8 +705,13 @@ export function createFakeInputValidator(): InputValidationProvider {
  */
 export class FakeResearchExportSettings {
   private settings = new Map<string, ResearchExportSettings>();
+  private failNextGetResearchPageId = false;
 
   async getResearchPageId(userId: string): Promise<Result<string | null, ResearchExportSettingsError>> {
+    if (this.failNextGetResearchPageId) {
+      this.failNextGetResearchPageId = false;
+      return err({ code: 'INTERNAL_ERROR', message: 'Test getResearchPageId failure' });
+    }
     const setting = this.settings.get(userId);
     return ok(setting?.researchPageId ?? null);
   }
@@ -765,8 +778,13 @@ export class FakeResearchExportSettings {
     this.settings.set(userId, settings);
   }
 
+  setFailNextGetResearchPageId(fail: boolean): void {
+    this.failNextGetResearchPageId = fail;
+  }
+
   clear(): void {
     this.settings.clear();
+    this.failNextGetResearchPageId = false;
   }
 }
 
@@ -778,8 +796,13 @@ export class FakeNotionServiceClient implements NotionServiceClient {
   private token: string | null = null;
   private pagePreviews = new Map<string, { title: string; url: string }>();
   private nextError: NotionServiceError | null = null;
+  private failNextGetNotionToken = false;
 
-  async getNotionToken(_userId: string): Promise<Result<NotionTokenContext, never>> {
+  async getNotionToken(_userId: string): Promise<Result<NotionTokenContext, NotionServiceError>> {
+    if (this.failNextGetNotionToken) {
+      this.failNextGetNotionToken = false;
+      return err({ code: 'INTERNAL_ERROR', message: 'Test getNotionToken failure' });
+    }
     return ok({
       connected: this.connected,
       token: this.token,
@@ -822,11 +845,16 @@ export class FakeNotionServiceClient implements NotionServiceClient {
     this.nextError = error;
   }
 
+  setFailNextGetNotionToken(fail: boolean): void {
+    this.failNextGetNotionToken = fail;
+  }
+
   clear(): void {
     this.connected = false;
     this.token = null;
     this.pagePreviews.clear();
     this.nextError = null;
+    this.failNextGetNotionToken = false;
   }
 }
 

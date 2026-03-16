@@ -86,6 +86,8 @@ sequenceDiagram
 
 | Commit     | Description                                                           | Date       |
 | ---------- | --------------------------------------------------------------------- | ---------- |
+| `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)      | 2026-03-12 |
+| `ace7850b` | Write tests for v8-ignore blocks (INT-791)                            | 2026-03-13 |
 | `44ea683a` | Release v3.2.0                                                        | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration and update cross-service mocks          | 2026-03-02 |
 | `3608e1d6` | INT-595: Align TransformedDataSchema with prompt empty-array contract | 2026-02-23 |
@@ -268,7 +270,6 @@ sequenceDiagram
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Yes      | app-settings base URL (for pricing)                   |
 | `INTEXURAOS_SENTRY_DSN`                       | No       | Sentry DSN for error tracking (omit to disable)       |
 | `INTEXURAOS_ENVIRONMENT`                      | No       | Environment name for Sentry (default: `development`)  |
-| `INTEXURAOS_ZAI_APP_API_KEY`                  | No       | Platform-level Zai API key (fallback LLM provider)    |
 | `INTEXURAOS_GEMINI_APP_API_KEY`               | No       | Platform-level Gemini API key (fallback LLM provider) |
 
 ## LLM Models
@@ -276,8 +277,6 @@ sequenceDiagram
 | Model             | Constant          | Purpose                             |
 | ----------------- | ----------------- | ----------------------------------- |
 | Gemini 2.5 Flash  | `Gemini25Flash`   | Default model for all LLM tasks     |
-| GLM-4.7           | `Glm47`           | Alternative via Zai platform        |
-| GLM-4.7 Flash     | `Glm47Flash`      | Lightweight alternative via Zai     |
 
 ## Gotchas
 
@@ -293,7 +292,7 @@ sequenceDiagram
 - **Visualization refresh idempotency**: `POST /visualizations/:id/refresh` returns current state without queuing duplicate computation if already `refreshing`
 - **Orphaned visualizations**: When re-analysis replaces insights, visualizations linked to removed insights are marked as `error` with "Parent insight was replaced during re-analysis"
 - **Feed deletion cascade**: Deleting a composite feed also deletes its snapshot and all associated visualizations (non-fatal warnings on failure)
-- **Default LLM**: Gemini 2.5 Flash (with Gemini fallback); Zai available as alternative platform
+- **Default LLM**: Gemini 2.5 Flash (with platform Gemini fallback)
 - **Internal client**: Uses `@intexuraos/internal-clients` package for user-service access (INT-269)
 - **Response contract**: All routes use `reply.ok()` / `reply.fail()` instead of raw `reply.send()`
 - **Sentry logging**: Uses `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`)

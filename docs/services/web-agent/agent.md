@@ -1,4 +1,4 @@
-# web-agent -- Agent Interface
+# web-agent — Agent Interface
 
 > Machine-readable specification for AI agent integration
 
@@ -10,7 +10,7 @@
 | Role      | Web Content Extraction and Summarization Service                  |
 | Goal      | Extract OpenGraph metadata and generate prose summaries from URLs |
 | Port      | 8127 (local/dev), 8080 (production)                               |
-| Version   | 3.1.0                                                             |
+| Version   | 3.3.0                                                             |
 
 ## Capabilities
 
@@ -171,14 +171,15 @@ interface SummarizePageResponse {
 - Batch more than 10 URLs in link preview requests
 - Expect summaries to work on paywalled/login-protected content
 - Assume all sites will return metadata (some block scrapers)
+- Call without `X-Internal-Auth` header — all endpoints require internal auth
 
 **Requires:**
 
 - `X-Internal-Auth` header with valid internal token
 - HTTP/HTTPS URLs only (no ftp://, file://, etc.)
-- For summaries: `userId` is required; LLM resolution: user's own key, then platform Gemini 2.5 Flash, then platform ZAI
+- For summaries: `userId` is required; LLM resolution order is user's own key, then platform Gemini 2.5 Flash
 
-**Note on `API_ERROR` for summaries:** This error only surfaces if the user has no API key AND neither `INTEXURAOS_GEMINI_APP_API_KEY` nor `INTEXURAOS_ZAI_APP_API_KEY` are configured on the platform.
+**Note on `API_ERROR` for summaries:** This error only surfaces if the user has no API key AND `INTEXURAOS_GEMINI_APP_API_KEY` is not configured on the platform.
 
 ## Usage Patterns
 
@@ -218,7 +219,7 @@ interface SummarizePageResponse {
 | ACCESS_DENIED | Site returned 403           | Accept no preview available                 |
 | FETCH_FAILED  | Network or HTTP error       | Retry with backoff                          |
 | TIMEOUT       | Request exceeded time limit | Retry or increase timeout                   |
-| TOO_LARGE     | Response over 2MB           | Cannot process large pages                  |
+| TOO_LARGE     | Response over 2 MB          | Cannot process large pages                  |
 | NO_CONTENT    | No text extracted from page | Page may be JS-only or empty                |
 | API_ERROR     | LLM or user-service error   | Check platform fallback keys are configured |
 | RATE_LIMITED  | Crawl4AI returned HTTP 429  | Wait and retry with backoff                 |
@@ -240,9 +241,8 @@ interface SummarizePageResponse {
 | app-settings-service | LLM pricing context at startup        | Service fails start |
 | Crawl4AI             | Fetch page content                    | Return FETCH_FAILED |
 | User's LLM           | Generate summary (primary)            | Fall back to Gemini |
-| Platform Gemini      | Summary fallback (no user key)        | Fall back to ZAI    |
-| Platform ZAI         | Summary secondary fallback            | Return API_ERROR    |
+| Platform Gemini      | Summary fallback (no user key)        | Return API_ERROR    |
 
 ---
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-15 (v3.3.0 — removed ZAI provider; Chinese LLMs now via Alibaba Cloud Model Studio)

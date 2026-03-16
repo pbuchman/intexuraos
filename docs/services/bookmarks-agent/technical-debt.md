@@ -1,7 +1,7 @@
-# Bookmarks Agent - Technical Debt
+# Bookmarks Agent — Technical Debt
 
-**Last Updated:** 2026-02-22
-**Analysis Run:** [2026-02-22 documentation-runs.md entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 documentation-runs.md entry](../../documentation-runs.md)
 
 ---
 
@@ -9,13 +9,13 @@
 
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
-| Code Smells         | 0     | -        |
-| Test Coverage Gaps  | 0     | -        |
-| TypeScript Issues   | 0     | -        |
-| TODO/FIXME Comments | 0     | -        |
+| Code Smells         | 0     | —        |
+| Test Coverage Gaps  | 0     | —        |
+| TypeScript Issues   | 0     | —        |
+| TODO/FIXME Comments | 0     | —        |
 | SRP Violations      | 1     | Low      |
 | Code Duplicates     | 1     | Low      |
-| Deprecations        | 0     | -        |
+| Deprecations        | 0     | —        |
 | **Total**           | **2** | Low      |
 
 ---
@@ -26,20 +26,20 @@
 
 Features that are planned but not yet implemented:
 
-- **Full-text search** - Search across bookmark titles, descriptions, and summaries
-- **Link validation** - Periodic checks for broken or redirected URLs
-- **Folder hierarchy** - Nested bookmark organization (currently flat tags only)
-- **Bookmark sharing** - Share bookmarks with other users
-- **Import/export** - Bulk import browser bookmarks (Chrome, Firefox, Safari)
+- **Full-text search** — Search across bookmark titles, descriptions, and summaries
+- **Link validation** — Periodic checks for broken or redirected URLs
+- **Folder hierarchy** — Nested bookmark organization (currently flat tags only)
+- **Bookmark sharing** — Share bookmarks with other users
+- **Import/export** — Bulk import browser bookmarks (Chrome, Firefox, Safari)
 
 ### Proposed Enhancements
 
-1. **Web archive integration** - Wayback Machine snapshot for dead links
-2. **Annotation support** - User notes attached to bookmarks
-3. **Reading list queue** - Track read/unread status with time estimates
-4. **Summary regeneration** - Re-run AI summary on demand (currently only OG refresh via force-refresh)
-5. **Configurable WhatsApp notifications** - User preference to enable/disable summary delivery
-6. **Public API enrichment trigger** - Allow enrichment from the public `POST /bookmarks` endpoint (currently only internal create triggers it)
+1. **Web archive integration** — Wayback Machine snapshot for dead links
+2. **Annotation support** — User notes attached to bookmarks
+3. **Reading list queue** — Track read/unread status with time estimates
+4. **Summary regeneration** — Re-run AI summary on demand (currently only OG refresh via force-refresh)
+5. **Configurable WhatsApp notifications** — User preference to enable/disable summary delivery
+6. **Public API enrichment trigger** — Allow enrichment from the public `POST /bookmarks` endpoint (currently only internal create triggers it)
 
 ---
 
@@ -47,9 +47,9 @@ Features that are planned but not yet implemented:
 
 ### Low Priority
 
-| File                | Lines | Issue                                             | Suggestion                                             |
-| ------------------- | ----- | ------------------------------------------------- | ------------------------------------------------------ |
-| `bookmarkRoutes.ts` | 662   | CRUD routes + image proxy + schema definitions    | Extract image proxy to separate routes file            |
+| File                | Issue                                          | Suggestion                                  |
+| ------------------- | ---------------------------------------------- | ------------------------------------------- |
+| `bookmarkRoutes.ts` | CRUD routes + image proxy + schema definitions | Extract image proxy to separate routes file |
 
 The `bookmarkRoutes.ts` file handles 7 CRUD endpoints plus the image proxy endpoint, with inline JSON schema definitions for each. While still readable, the image proxy is a distinct concern that could be extracted to `imageRoutes.ts`.
 
@@ -59,9 +59,9 @@ The `bookmarkRoutes.ts` file handles 7 CRUD endpoints plus the image proxy endpo
 
 ### Low Priority
 
-| Pattern                     | Locations                                        | Suggestion                                                 |
-| --------------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
-| `formatBookmark()` function | `bookmarkRoutes.ts`, `internalRoutes.ts`         | Extract to shared utility in `domain/` or `routes/shared/` |
+| Pattern                     | Locations                                | Suggestion                                                  |
+| --------------------------- | ---------------------------------------- | ----------------------------------------------------------- |
+| `formatBookmark()` function | `bookmarkRoutes.ts`, `internalRoutes.ts` | Extract to shared utility in `domain/` or `routes/shared/`  |
 
 Both route files define an identical `formatBookmark()` function that converts domain `Bookmark` objects to JSON-serializable response objects. This could be a single shared function.
 
@@ -146,7 +146,7 @@ if (!publishResult.ok) {
 
 ### Event Ordering
 
-The three-stage pipeline (create -> enrich -> summarize) uses separate Pub/Sub topics. This ensures:
+The three-stage pipeline (create → enrich → summarize) uses separate Pub/Sub topics. This ensures:
 
 1. Each stage can fail independently
 2. Retries do not re-process earlier stages
@@ -156,7 +156,7 @@ The three-stage pipeline (create -> enrich -> summarize) uses separate Pub/Sub t
 
 ### Enrichment Asymmetry
 
-The public `POST /bookmarks` endpoint does not trigger enrichment -- only the internal `POST /internal/bookmarks` does. This means bookmarks created directly by end users via the public API will remain in `ogFetchStatus: pending` unless manually force-refreshed or enriched through another mechanism. This is by design because the public endpoint is currently only used by the web dashboard, which has its own enrichment trigger.
+The public `POST /bookmarks` endpoint does not trigger enrichment — only the internal `POST /internal/bookmarks` does. This means bookmarks created directly by end users via the public API will remain in `ogFetchStatus: pending` unless manually force-refreshed or enriched through another mechanism. This is by design because the public endpoint is currently only used by the web dashboard, which has its own enrichment trigger.
 
 ---
 
@@ -166,19 +166,21 @@ The public `POST /bookmarks` endpoint does not trigger enrichment -- only the in
 
 | Issue   | Description                                 | Resolution                                                  | Date       |
 | ------- | ------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| INT-786 | v8-ignore blocks missing test coverage      | Added tests for v8-ignore exemption branches                | 2026-03-13 |
 | INT-198 | Transient summary errors silently dropped   | Pub/Sub retry via HTTP 503 + transient error classification | 2026-01-28 |
 | INT-427 | Branch coverage below 100%                  | Added v8 ignore exemptions with valid categories            | 2026-01-31 |
-| -       | Direct pino() loggers missed Sentry         | Migrated to createAppLogger() from @intexuraos/infra-sentry | 2026-01-30 |
-| -       | Raw reply.send() in internal/pubsub routes  | Migrated to reply.ok()/reply.fail() response contract       | 2026-01-30 |
-| -       | Pub/Sub topic env vars not in REQUIRED_ENV  | Added INTEXURAOS_PUBSUB_BOOKMARK_ENRICH/SUMMARIZE           | 2026-01-28 |
+| —       | Direct pino() loggers missed Sentry         | Migrated to createAppLogger() from @intexuraos/infra-sentry | 2026-01-30 |
+| —       | Raw reply.send() in internal/pubsub routes  | Migrated to reply.ok()/reply.fail() response contract       | 2026-01-30 |
+| —       | Pub/Sub topic env vars not in REQUIRED_ENV  | Added INTEXURAOS_PUBSUB_BOOKMARK_ENRICH/SUMMARIZE           | 2026-01-28 |
 | INT-210 | WhatsApp delivery tightly coupled           | Decoupled via WhatsAppSendPublisher                         | 2026-01-24 |
 | INT-172 | Enrichment pipeline test coverage gaps      | Added comprehensive tests                                   | 2026-01-20 |
-| -       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline                           | 2026-01-15 |
+| —       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline                           | 2026-01-15 |
 
-### Recent Improvements (v3.0.0 - v3.1.0)
+### Recent Improvements (v3.0.0–v3.3.0)
 
 | Improvement                       | Description                                                        | Date       |
 | --------------------------------- | ------------------------------------------------------------------ | ---------- |
+| v8-ignore test coverage (INT-786) | Tests added for untestable branch exemptions                       | 2026-03-13 |
 | Dash0 OpenTelemetry integration   | Distributed tracing via package-level OTel instrumentation         | 2026-02-16 |
 | Dev-mode log formatting           | Human-readable logs in PM2 via createLogStream()                   | 2026-02-16 |
 | PM2 ecosystem migration           | Switched to pnpm --filter with start:local for reliable local dev  | 2026-02-14 |
@@ -190,7 +192,7 @@ The public `POST /bookmarks` endpoint does not trigger enrichment -- only the in
 
 ## Related
 
-- [Features](features.md) - User-facing documentation
-- [Technical](technical.md) - Developer reference
-- [Agent Interface](agent.md) - Machine-readable specification
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
+- [Agent Interface](agent.md) — Machine-readable specification
 - [Documentation Run Log](../../documentation-runs.md)

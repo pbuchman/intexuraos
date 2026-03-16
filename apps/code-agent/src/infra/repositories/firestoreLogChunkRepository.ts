@@ -51,9 +51,7 @@ export class FirestoreLogChunkRepository implements LogChunkRepository {
       await batch.commit();
       this.logger.debug({ taskId, count: chunks.length }, 'Stored log chunks');
       return ok(undefined);
-/* v8 ignore start -- test-infra: `firestorelogchunkrepository @preserve */
     } catch (error) {
-    /* v8 ignore stop @preserve */
       this.logger.error({ taskId, error: getErrorMessage(error) }, 'Failed to store log chunks');
       return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
     }

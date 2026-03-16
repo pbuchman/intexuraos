@@ -1,32 +1,66 @@
-# @intexuraos/llm-utils - Technical Debt
+# @intexuraos/llm-utils — Technical Debt
 
-## Code Quality
+**Last Updated:** 2026-03-15
 
-The package is small, well-tested, and focused on two concerns. Functions are pure (except `logLlmParseError` which logs as a side effect). No known test coverage gaps.
+---
 
-### Current Issues
+## Summary
 
-#### 1. Redaction is shallow only
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 3     | Low      |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
+| **Total**   | **3** | Low      |
 
-`redactObject` performs a shallow copy and only redacts top-level string fields. Nested objects containing sensitive fields (e.g., `{ config: { apiKey: 'secret' } }`) pass through unredacted.
-
-**Impact:** Low. Current callers only pass flat objects. Risk increases if callers start passing nested structures.
-**Suggested fix:** Add recursive redaction option or document the shallow-only limitation prominently.
-
-#### 2. SENSITIVE_FIELDS uses mixed naming conventions
-
-The list mixes `snake_case` (`access_token`, `client_secret`) and `camelCase` (`apiKey`, `clientSecret`) field names, plus HTTP headers (`x-internal-auth`). This reflects the reality of different source systems, but means callers must check both conventions.
-
-**Impact:** None. The list is intentionally comprehensive across conventions.
-
-#### 3. Zod dependency for a utility package
-
-The package depends on `zod` solely for the `formatZodErrors` function. This adds a non-trivial dependency to what is otherwise a lightweight utility package.
-
-**Impact:** Low. Zod is already used across the monorepo, so it does not increase the total dependency footprint.
-**Suggested fix:** Consider moving `formatZodErrors` into `llm-prompts` (which already depends on Zod) if the dependency becomes a concern.
+---
 
 ## Future Plans
 
 - Consider adding a `redactHeaders()` helper specifically for HTTP header redaction (common pattern across infra packages)
 - Evaluate adding rate-limiting to `logLlmParseError` to prevent log flooding during LLM model degradation events
+
+---
+
+## Code Smells
+
+### Low Priority
+
+| Issue                                                                                                                                                                                                         | File                | Impact                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------- |
+| `redactObject` performs a shallow copy only — nested objects containing sensitive fields (e.g., `{ config: { apiKey: 'secret' } }`) pass through unredacted                                                   | `src/redaction.ts`  | Current callers only pass flat objects; risk increases if callers start passing nested structures |
+| `SENSITIVE_FIELDS` mixes `snake_case` (`access_token`, `client_secret`), `camelCase` (`apiKey`, `clientSecret`), and HTTP header names (`x-internal-auth`) — reflects the reality of different source systems | `src/redaction.ts`  | List is intentionally comprehensive; no functional impact                                         |
+| `zod` dependency exists solely for `formatZodErrors` — adds a non-trivial dependency to what is otherwise a lightweight utility package                                                                       | `src/parseError.ts` | Zod is already used monorepo-wide; no increase in total footprint                                 |
+
+---
+
+## Test Coverage Gaps
+
+None. All functions have comprehensive test coverage.
+
+---
+
+## TypeScript Issues
+
+None.
+
+---
+
+## TODOs / FIXMEs
+
+None found in source files.
+
+---
+
+## Resolved Issues
+
+None archived yet.
+
+---
+
+## Related
+
+- [README](README.md) — API reference
+- [Agent Interface](agent.md)
+- [Documentation Run Log](../../documentation-runs.md)
