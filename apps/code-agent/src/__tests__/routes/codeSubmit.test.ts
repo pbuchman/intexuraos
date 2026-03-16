@@ -898,6 +898,46 @@ describe('POST /code/submit', () => {
       );
     });
 
+    it('queues task when at_capacity and queue count equals maxSize (boundary)', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'at_capacity', message: 'All workers are at capacity' },
+      });
+
+      // Count exactly equal to maxSize (10) should be treated as "has room" (condition is >)
+      vi.spyOn(codeTaskRepo, 'countQueued').mockResolvedValueOnce({
+        ok: true,
+        value: 10,
+      });
+
+      vi.spyOn(getServices().whatsappNotifier, 'notifyTaskQueued').mockResolvedValueOnce({
+        ok: true,
+        value: undefined,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Fix the bug' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('submitted');
+    });
+
     it('fails with queue_full when at_capacity and queue is full', async () => {
       const linearService = getServices().linearIssueService;
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
