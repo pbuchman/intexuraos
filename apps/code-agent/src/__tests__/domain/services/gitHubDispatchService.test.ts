@@ -456,6 +456,60 @@ describe('GitHubDispatchService', () => {
     });
   });
 
+  describe('dispatch — pull_request_review in new task path', () => {
+    it.each([
+      { sender: 'intexuraos-code-worker[bot]', label: 'code-worker' },
+      { sender: 'test-sender', label: 'human' },
+    ])('should use messageBuilder for $label review events', async ({ sender }) => {
+      const reviewEvent: GitHubPREvent = {
+        ...mockEvent,
+        eventType: 'pull_request_review',
+        action: 'submitted',
+        senderLogin: sender,
+        body: 'Review feedback',
+      };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-review-new' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: reviewEvent });
+
+      expect(deps.messageBuilder.build).toHaveBeenCalledWith(reviewEvent);
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg?.comment).toBe('built-message');
+    });
+
+    it('should not use messageBuilder for non-review events', async () => {
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-pr' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch(context);
+
+      expect(deps.messageBuilder.build).not.toHaveBeenCalled();
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg?.comment).toBe('Test description');
+    });
+
+    it('should extract worker type from raw body but use messageBuilder for comment', async () => {
+      const reviewEvent: GitHubPREvent = {
+        ...mockEvent,
+        eventType: 'pull_request_review',
+        action: 'submitted',
+        body: 'Fix this @worker minimax',
+      };
+      vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(ok(null));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker-review' }));
+
+      const service = createWebhookDispatchService(deps);
+      await service.dispatch({ ...context, event: reviewEvent });
+
+      const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+      expect(requestArg?.workerType).toBe('minimax');
+      expect(requestArg?.comment).toBe('built-message');
+    });
+  });
+
   describe('dispatch — error handling', () => {
     it('should return failure when findByPR fails', async () => {
       vi.mocked(deps.codeTaskRepo.findLatestNonReviewTaskByPR).mockResolvedValue(
