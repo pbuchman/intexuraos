@@ -1,793 +1,1285 @@
 {
-  "services": [
+  "documentation": [
     {
-      "id": "actions-agent",
-      "name": "Actions Agent",
-      "category": "infrastructure",
-      "summary": "Central action lifecycle with atomic status transitions, button-based WhatsApp approval, confidence-based auto-execution, and Google Calendar linking (v4.1.0)",
-      "features": [
-        "Confidence-based auto-execution for all action types at >= 90% (v4.1.0)",
-        "Button-based WhatsApp approval — LLM removed, buttonId resolves intent deterministically (v4.0.0)",
-        "Atomic status transitions via Firestore transactions (v2.0.0)",
-        "Race condition prevention via updateStatusIf (v2.0.0)",
-        "Calendar auto-execute and Google Calendar event linking (v3.1.0)",
-        "Code action dispatch with cancel-task and convert-to-issue buttons (v3.0.0)",
-        "Centralized user service client via @intexuraos/internal-clients (v2.1.0)",
-        "Unified action queue with 8 action types",
-        "Resource status tracking for code tasks (dispatched/running/completed/failed/cancelled/interrupted)",
-        "Pub/Sub event distribution and agent orchestration"
-      ],
-      "endpoints": 13,
-      "docs": "services/actions-agent"
+      "path": "overview.md",
+      "title": "IntexuraOS",
+      "category": "overview",
+      "description": "IntexuraOS system overview and vision"
     },
     {
-      "id": "research-agent",
-      "name": "Research Agent",
-      "category": "ai-research",
-      "summary": "Multi-LLM research orchestration with Notion export, distributed tracing, platform API key fallbacks, and natural language model selection (v3.1.0)",
-      "features": [
-        "4 LLM providers (Claude, OpenAI, Google, Perplexity)",
-        "Natural language model selection (v2.0.0)",
-        "Zod schema validation for LLM responses (v2.0.0)",
-        "Parallel query execution via Pub/Sub",
-        "Public sharing via GCS with cover images",
-        "Input validation with Zod schemas (v2.1.0)",
-        "User service client via @intexuraos/internal-clients (v2.1.0)",
-        "Notion export with per-model report pages (v2.2.0)",
-        "Platform API key fallbacks for Gemini when user has no key (v2.3.0)",
-        "Distributed tracing via Dash0 OpenTelemetry (v2.4.0)",
-        "Adversarial prompt audit with safer fallbacks (v3.1.0)"
-      ],
-      "endpoints": 19,
-      "docs": "services/research-agent"
+      "path": "services/index.md",
+      "title": "Services Catalog",
+      "category": "services-index",
+      "description": "Index of all service documentation"
     },
     {
-      "id": "user-service",
-      "name": "User Service",
-      "category": "integrations",
-      "summary": "Authentication, settings, OAuth tokens, and API key management",
-      "features": [
-        "Auth0 device code flow",
-        "AES-256-GCM encryption for API keys",
-        "Google OAuth token refresh",
-        "Settings management"
-      ],
-      "endpoints": 11,
-      "docs": "services/user-service"
+      "path": "services/actions-agent/features.md",
+      "title": "Actions Agent",
+      "category": "services",
+      "description": "Features documentation for actions-agent"
     },
     {
-      "id": "image-service",
-      "name": "Image Service",
-      "category": "infrastructure",
-      "summary": "AI image generation with GPT Image 1 and Gemini Flash Image (v2.1.0)",
-      "features": [
-        "GPT Image 1 and Gemini Flash Image support",
-        "LLM-powered prompt enhancement (GPT-4.1, Gemini 2.5 Pro)",
-        "Internal-only endpoints with X-Internal-Auth",
-        "GCS storage with automatic thumbnailing (256px)",
-        "user-service client via @intexuraos/internal-clients (v2.1.0)"
-      ],
-      "endpoints": 3,
-      "docs": "services/image-service"
+      "path": "services/actions-agent/technical.md",
+      "title": "Actions Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for actions-agent"
     },
     {
-      "id": "bookmarks-agent",
-      "name": "Bookmarks Agent",
-      "category": "content",
-      "summary": "Link management with OpenGraph metadata, AI summaries, and WhatsApp delivery",
-      "features": [
-        "OpenGraph metadata via web-agent",
-        "AI summaries with WhatsApp delivery (INT-210)",
-        "Event-driven enrichment pipeline",
-        "Tag-based filtering and archive management"
-      ],
-      "endpoints": 14,
-      "docs": "services/bookmarks-agent"
+      "path": "services/actions-agent/tutorial.md",
+      "title": "Actions Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for actions-agent"
     },
     {
-      "id": "notes-agent",
-      "name": "Notes Agent",
-      "category": "content",
-      "summary": "Lightweight note-taking service",
-      "features": ["CRUD operations", "Tag support", "Draft/active status", "Source tracking"],
-      "endpoints": 5,
-      "docs": "services/notes-agent"
+      "path": "services/actions-agent/agent.md",
+      "title": "actions-agent - Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for actions-agent"
     },
     {
-      "id": "todos-agent",
-      "name": "Todos Agent",
-      "category": "content",
-      "summary": "Task management with AI item extraction and sub-items (v2.1.0)",
-      "features": [
-        "AI item extraction via user's LLM (Gemini/GLM) with Zod validation (v2.1.0)",
-        "Sub-items with custom ordering",
-        "Priorities: low, medium, high, urgent",
-        "Status workflow"
-      ],
-      "endpoints": 13,
-      "docs": "services/todos-agent"
+      "path": "services/actions-agent/technical-debt.md",
+      "title": "Actions Agent - Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for actions-agent"
     },
     {
-      "id": "whatsapp-service",
-      "name": "WhatsApp Service",
-      "category": "integrations",
-      "summary": "WhatsApp Business API with interactive button approvals, phone verification, and voice transcription (v4.0.0)",
-      "features": [
-        "Interactive approval buttons with intent:actionId format (v4.0.0)",
-        "Read receipts and typing indicator on button tap (v4.0.0)",
-        "Phone number verification via 6-digit code (v3.0.0)",
-        "OutboundMessage correlation for reply tracking (v2.0.0)",
-        "Webhook HMAC-SHA256 signature validation",
-        "Text, image, and audio message handling",
-        "Media download to GCS with thumbnails",
-        "Speechmatics audio transcription with AI summary",
-        "Link preview extraction via Open Graph"
-      ],
-      "endpoints": 14,
-      "docs": "services/whatsapp-service"
+      "path": "services/api-docs-hub/features.md",
+      "title": "API Docs Hub",
+      "category": "services",
+      "description": "Features documentation for api-docs-hub"
     },
     {
-      "id": "commands-agent",
-      "name": "Commands Agent",
-      "category": "ai-research",
-      "summary": "AI command classification with 5-step decision tree and URL isolation (v2.0.0)",
-      "features": [
-        "5-step classification decision tree (v2.0.0)",
-        "URL keyword isolation - keywords in URLs ignored (v2.0.0)",
-        "Explicit intent priority detection (v2.0.0)",
-        "Polish language support (v2.0.0)",
-        "7 action types (todo, research, note, link, calendar, linear, code)",
-        "Model preference detection",
-        "Idempotency by source"
-      ],
-      "endpoints": 7,
-      "docs": "services/commands-agent"
+      "path": "services/api-docs-hub/technical.md",
+      "title": "API Docs Hub \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for api-docs-hub"
     },
     {
-      "id": "web-agent",
-      "name": "Web Agent",
-      "category": "infrastructure",
-      "summary": "Web content extraction and AI summarization with language preservation (v2.1.0)",
-      "features": [
-        "OpenGraph metadata extraction",
-        "AI summaries via user's LLM",
-        "Language preservation (summaries match source)",
-        "Browser-like headers for 403 bypass",
-        "Self-healing JSON response repair",
-        "@intexuraos/internal-clients integration (v2.1.0)"
-      ],
-      "endpoints": 2,
-      "docs": "services/web-agent"
+      "path": "services/api-docs-hub/tutorial.md",
+      "title": "API Docs Hub \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for api-docs-hub"
     },
     {
-      "id": "calendar-agent",
-      "name": "Calendar Agent",
-      "category": "integrations",
-      "summary": "Google Calendar integration with preview-before-commit and natural language scheduling",
-      "features": [
-        "Event preview generation before commit",
-        "Natural language event extraction",
-        "Full CRUD operations",
-        "Failed event recovery for review"
-      ],
-      "endpoints": 13,
-      "docs": "services/calendar-agent"
+      "path": "services/api-docs-hub/agent.md",
+      "title": "api-docs-hub \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for api-docs-hub"
     },
     {
-      "id": "data-insights-agent",
-      "name": "Data Insights Agent",
-      "category": "ai-research",
-      "summary": "AI-powered data analysis with composite feeds and Vega-Lite chart generation (v2.1.0)",
-      "features": [
-        "Custom data sources (CSV, JSON)",
-        "AI-generated titles and feed names",
-        "Composite feeds with notification filters",
-        "Zod-validated LLM response parsing (INT-218)",
-        "Vega-Lite chart definitions (6 types: line, bar, scatter, area, pie, heatmap)",
-        "15-minute snapshot caching",
-        "Auto-retry on parse failures (INT-79)",
-        "Internal-clients package migration (INT-269)"
-      ],
-      "endpoints": 18,
-      "docs": "services/data-insights-agent"
+      "path": "services/api-docs-hub/technical-debt.md",
+      "title": "API Docs Hub \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for api-docs-hub"
     },
     {
-      "id": "mobile-notifications-service",
-      "name": "Mobile Notifications Service",
-      "category": "infrastructure",
-      "summary": "Push notification gateway with signature-based authentication",
-      "features": [
-        "Signature connections",
-        "Notification filters",
-        "Webhook support",
-        "Multi-device support"
-      ],
-      "endpoints": 13,
-      "docs": "services/mobile-notifications-service"
+      "path": "services/app-settings-service/features.md",
+      "title": "App Settings Service",
+      "category": "services",
+      "description": "Features documentation for app-settings-service"
     },
     {
-      "id": "api-docs-hub",
-      "name": "API Docs Hub",
-      "category": "infrastructure",
-      "summary": "OpenAPI documentation aggregator for 18 services with live client-side spec fetching",
-      "features": [
-        "Single Swagger UI aggregating 18 service specs",
-        "Multi-spec dropdown with live client-side fetching",
-        "Service selector for instant API discovery",
-        "Health check with config validation"
-      ],
-      "endpoints": 2,
-      "docs": "services/api-docs-hub"
+      "path": "services/app-settings-service/technical.md",
+      "title": "App Settings Service -- Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for app-settings-service"
     },
     {
-      "id": "app-settings-service",
-      "name": "App Settings Service",
-      "category": "infrastructure",
-      "summary": "LLM pricing and usage analytics",
-      "features": [
-        "4 provider pricing (Google, OpenAI, Anthropic, Perplexity)",
-        "Usage cost tracking",
-        "Monthly breakdown",
-        "Per-model statistics"
-      ],
-      "endpoints": 3,
-      "docs": "services/app-settings-service"
+      "path": "services/app-settings-service/tutorial.md",
+      "title": "App Settings Service -- Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for app-settings-service"
     },
     {
-      "id": "notion-service",
-      "name": "Notion Service",
-      "category": "integrations",
-      "summary": "Notion integration management",
-      "features": [
-        "Token validation",
-        "Connection status",
-        "Workspace detection",
-        "Clean disconnect"
-      ],
-      "endpoints": 3,
-      "docs": "services/notion-service"
+      "path": "services/app-settings-service/agent.md",
+      "title": "app-settings-service -- Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for app-settings-service"
     },
     {
-      "id": "linear-agent",
-      "name": "Linear Agent",
-      "category": "integrations",
-      "summary": "Linear issue management with AI extraction, multi-user webhook fan-out, auto-trigger code tasks, and 12 internal endpoints (v3.1.0)",
-      "features": [
-        "Multi-user webhook fan-out via Promise.allSettled (INT-623)",
-        "Composite Firestore keys (userId_issueId) preventing cross-user data overwrite",
-        "Auto-trigger code tasks on assignment with dual-prompt selection (code-task label)",
-        "12 internal endpoints for code-agent integration (comments, metadata, display-batch, tree)",
-        "3-column dashboard: Planning, Work, Closed with Firestore-first loading",
-        "AI-powered issue extraction from natural language with priority inference",
-        "HMAC-SHA256 webhook signature validation with timing-safe comparison",
-        "Scheduled full sync for all users via Cloud Scheduler"
-      ],
-      "endpoints": 26,
-      "docs": "services/linear-agent"
+      "path": "services/app-settings-service/technical-debt.md",
+      "title": "App Settings Service -- Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for app-settings-service"
     },
     {
-      "id": "web",
-      "name": "Web App",
-      "category": "ui",
-      "summary": "Progressive Web App (PWA) providing unified UI dashboard for IntexuraOS",
-      "features": [
-        "Real-time action inbox with Firestore listeners",
-        "Configurable action buttons via YAML",
-        "PWA with offline support and install prompts",
-        "Hash routing for GCS backend bucket hosting",
-        "Integration settings for all external services",
-        "Deep linking to specific actions",
-        "Infinite scroll pagination",
-        "Sentry error tracking"
-      ],
-      "endpoints": 0,
-      "docs": "services/web"
+      "path": "services/bookmarks-agent/features.md",
+      "title": "Bookmarks Agent",
+      "category": "services",
+      "description": "Features documentation for bookmarks-agent"
     },
     {
-      "id": "chat-agent",
-      "name": "Chat Agent",
-      "category": "ai-research",
-      "summary": "In-app AI assistant with RAG-powered documentation Q&A and command creation",
-      "features": [
-        "Documentation Q&A with source citations via Firestore vector search",
-        "Command creation through natural conversation",
-        "Guest access without sign-up (Gemini 2.5 Flash, rate-limited)",
-        "Conversation context across follow-up questions",
-        "Multilingual confirmation (English and Polish)",
-        "OpenAI text-embedding-3-small for semantic search"
-      ],
-      "endpoints": 4,
-      "docs": "services/chat-agent"
+      "path": "services/bookmarks-agent/technical.md",
+      "title": "Bookmarks Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for bookmarks-agent"
     },
     {
-      "id": "code-agent",
-      "name": "Code Agent",
-      "category": "ai-research",
-      "summary": "Autonomous code execution with GitHub Agent PR triage, unified automation log, worker dispatch, prompt sanitization, agent-based execution, and GitHub PR lifecycle (v3.3.0)",
-      "features": [
-        "GitHub Agent with Gemini tool-calling for PR triage: hard rules then LLM evaluation (v3.3.0)",
-        "Unified PR automation log: all decisions and actions in a single append-only GitHub comment (v3.3.0)",
-        "Structured output validation with Zod schemas and automatic repair prompts for triage (v3.3.0)",
-        "Dispatch retry queue with bounded attempts and TTL for failed webhook dispatches (v3.3.0)",
-        "Merge conflict detection for bot-authored PRs with owner remapping (v3.3.0)",
-        "Automated code review tasks with PR-scoped dedup and queue support (v3.3.0)",
-        "Submit-and-forget code tasks from web UI or WhatsApp",
-        "Prompt sanitization stripping 9 secret categories before dispatch",
-        "Four-layer deduplication (approval event, action ID, sha256 dedup key, Linear active check)",
-        "Agent-based execution: planning then implementation with review agent",
-        "GitHub PR comment auto-response with sender whitelist",
-        "Per-user worker infrastructure with AES-256-GCM encrypted credentials",
-        "Retry, feedback, and mid-task messaging with task resume and PR branch inheritance",
-        "Turn-level metrics: CPU, memory, tokens, API wait times per worker turn",
-        "Rate limiting (3 concurrent, 10/hour, $200/month)",
-        "Real-time log streaming via chunked HMAC-signed uploads",
-        "Zombie task detection (30-minute heartbeat threshold)",
-        "Multi-model support: auto, opus, sonnet, minimax, glm, qwen, kimi"
-      ],
-      "endpoints": 32,
-      "docs": "services/code-agent"
+      "path": "services/bookmarks-agent/tutorial.md",
+      "title": "Bookmarks Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for bookmarks-agent"
     },
     {
-      "id": "orchestrator",
-      "name": "Orchestrator",
-      "category": "workers",
-      "summary": "Local worker orchestration engine dispatching code tasks to Docker containers running Claude Code with multi-model support and container adoption (v3.1.0)",
-      "features": [
-        "Multi-model support: 5 worker types across Anthropic, MiniMax, and Alibaba Cloud",
-        "Docker container isolation with dropped capabilities and memory limits",
-        "Git worktree parallelism for concurrent tasks",
-        "Container adoption on restart -- re-attaches to running containers instead of interrupting",
-        "HMAC request signing with nonce and timestamp verification",
-        "Real-time log forwarding in 64KB chunks at 3-second intervals",
-        "Gemini-based completion verification with agent-specific Zod schemas",
-        "Versioned PromptBuilder system prompts (planning, execution, pull request, PR review overlay)",
-        "Planning PR branch merging into execution worktrees",
-        "Crash-safe atomic JSON state persistence with recovery",
-        "Forensics mode for core dumps, exec stream persistence, and crash snapshots",
-        "Sensitive file guard reverting commits touching secrets",
-        "Mid-task messaging and task resume via sendMessage endpoint"
-      ],
-      "endpoints": 8,
-      "docs": "services/orchestrator"
+      "path": "services/bookmarks-agent/agent.md",
+      "title": "bookmarks-agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for bookmarks-agent"
     },
     {
-      "id": "claude-worker",
-      "name": "Claude Worker",
-      "category": "workers",
-      "summary": "Docker container image providing sandboxed Claude Code execution with defense-in-depth isolation",
-      "features": [
-        "Filesystem sandboxing with read-only secrets mount",
-        "Resource enforcement (4 CPU cores, 8 GB memory)",
-        "Non-root execution (UID 1001) with all capabilities dropped",
-        "Per-task secret partitioning",
-        "Network isolation blocking cloud metadata and private IPs",
-        "Ephemeral tmpfs home directory",
-        "Pre-baked developer toolchain (git, pnpm, ripgrep, gh, terraform, gcloud)",
-        "Multi-model worker types (opus, auto, sonnet, minimax, glm, qwen3.5-plus)"
-      ],
-      "endpoints": 0,
-      "docs": "services/claude-worker"
+      "path": "services/bookmarks-agent/technical-debt.md",
+      "title": "Bookmarks Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for bookmarks-agent"
     },
     {
-      "id": "log-cleanup",
-      "name": "Log Cleanup Worker",
-      "category": "workers",
-      "summary": "Scheduled Cloud Function for retention-based deletion of old execution logs",
-      "features": [
-        "Daily scheduled execution at 3 AM UTC via Cloud Scheduler",
-        "Configurable retention days, batch size, and tasks per run",
-        "Structured result reporting (tasks processed, logs deleted, duration)",
-        "Delegated deletion via code-agent internal API"
-      ],
-      "endpoints": 0,
-      "docs": "services/log-cleanup"
+      "path": "services/calendar-agent/features.md",
+      "title": "Calendar Agent",
+      "category": "services",
+      "description": "Features documentation for calendar-agent"
     },
     {
-      "id": "vm-lifecycle",
-      "name": "VM Lifecycle Worker",
-      "category": "workers",
-      "summary": "Cloud Functions for scheduled VM start/stop with health checks and graceful shutdown",
-      "features": [
-        "Scheduled start Monday-Friday 7 AM, stop daily 11 PM (Europe/Warsaw)",
-        "Health-aware startup with 3-minute polling timeout",
-        "Graceful shutdown waiting up to 10 minutes for running tasks",
-        "Self-healing restart of unhealthy running VMs",
-        "Internal auth via X-Internal-Auth header"
-      ],
-      "endpoints": 2,
-      "docs": "services/vm-lifecycle"
+      "path": "services/calendar-agent/technical.md",
+      "title": "Calendar Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for calendar-agent"
     },
     {
-      "id": "common-core",
-      "name": "Common Core",
+      "path": "services/calendar-agent/tutorial.md",
+      "title": "Calendar Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for calendar-agent"
+    },
+    {
+      "path": "services/calendar-agent/agent.md",
+      "title": "calendar-agent - Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for calendar-agent"
+    },
+    {
+      "path": "services/calendar-agent/technical-debt.md",
+      "title": "Calendar Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for calendar-agent"
+    },
+    {
+      "path": "services/chat-agent/features.md",
+      "title": "Chat Agent",
+      "category": "services",
+      "description": "Features documentation for chat-agent"
+    },
+    {
+      "path": "services/chat-agent/technical.md",
+      "title": "Chat Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for chat-agent"
+    },
+    {
+      "path": "services/chat-agent/tutorial.md",
+      "title": "Chat Agent \u2014 Getting Started",
+      "category": "services",
+      "description": "Tutorial documentation for chat-agent"
+    },
+    {
+      "path": "services/chat-agent/agent.md",
+      "title": "chat-agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for chat-agent"
+    },
+    {
+      "path": "services/chat-agent/technical-debt.md",
+      "title": "Chat Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for chat-agent"
+    },
+    {
+      "path": "services/claude-worker/features.md",
+      "title": "Claude Worker",
+      "category": "services",
+      "description": "Features documentation for claude-worker"
+    },
+    {
+      "path": "services/claude-worker/technical.md",
+      "title": "Claude Worker \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for claude-worker"
+    },
+    {
+      "path": "services/claude-worker/tutorial.md",
+      "title": "Claude Worker - Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for claude-worker"
+    },
+    {
+      "path": "services/claude-worker/agent.md",
+      "title": "claude-worker \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for claude-worker"
+    },
+    {
+      "path": "services/claude-worker/technical-debt.md",
+      "title": "Claude Worker - Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for claude-worker"
+    },
+    {
+      "path": "services/code-agent/features.md",
+      "title": "Code Agent",
+      "category": "services",
+      "description": "Features documentation for code-agent"
+    },
+    {
+      "path": "services/code-agent/technical.md",
+      "title": "Code Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for code-agent"
+    },
+    {
+      "path": "services/code-agent/tutorial.md",
+      "title": "Code Agent \u2014 Getting Started Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for code-agent"
+    },
+    {
+      "path": "services/code-agent/agent.md",
+      "title": "Code Agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for code-agent"
+    },
+    {
+      "path": "services/code-agent/technical-debt.md",
+      "title": "Code Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for code-agent"
+    },
+    {
+      "path": "services/commands-agent/features.md",
+      "title": "Commands Agent",
+      "category": "services",
+      "description": "Features documentation for commands-agent"
+    },
+    {
+      "path": "services/commands-agent/technical.md",
+      "title": "Commands Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for commands-agent"
+    },
+    {
+      "path": "services/commands-agent/tutorial.md",
+      "title": "Commands Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for commands-agent"
+    },
+    {
+      "path": "services/commands-agent/agent.md",
+      "title": "Commands Agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for commands-agent"
+    },
+    {
+      "path": "services/commands-agent/technical-debt.md",
+      "title": "Commands Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for commands-agent"
+    },
+    {
+      "path": "services/data-insights-agent/features.md",
+      "title": "Data Insights Agent",
+      "category": "services",
+      "description": "Features documentation for data-insights-agent"
+    },
+    {
+      "path": "services/data-insights-agent/technical.md",
+      "title": "Data Insights Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for data-insights-agent"
+    },
+    {
+      "path": "services/data-insights-agent/tutorial.md",
+      "title": "Data Insights Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for data-insights-agent"
+    },
+    {
+      "path": "services/data-insights-agent/agent.md",
+      "title": "data-insights-agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for data-insights-agent"
+    },
+    {
+      "path": "services/data-insights-agent/technical-debt.md",
+      "title": "Data Insights Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for data-insights-agent"
+    },
+    {
+      "path": "services/image-service/features.md",
+      "title": "Image Service",
+      "category": "services",
+      "description": "Features documentation for image-service"
+    },
+    {
+      "path": "services/image-service/technical.md",
+      "title": "Image Service \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for image-service"
+    },
+    {
+      "path": "services/image-service/tutorial.md",
+      "title": "Image Service \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for image-service"
+    },
+    {
+      "path": "services/image-service/agent.md",
+      "title": "image-service \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for image-service"
+    },
+    {
+      "path": "services/image-service/technical-debt.md",
+      "title": "Image Service \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for image-service"
+    },
+    {
+      "path": "services/linear-agent/features.md",
+      "title": "Linear Agent",
+      "category": "services",
+      "description": "Features documentation for linear-agent"
+    },
+    {
+      "path": "services/linear-agent/technical.md",
+      "title": "Linear Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for linear-agent"
+    },
+    {
+      "path": "services/linear-agent/tutorial.md",
+      "title": "Linear Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for linear-agent"
+    },
+    {
+      "path": "services/linear-agent/agent.md",
+      "title": "linear-agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for linear-agent"
+    },
+    {
+      "path": "services/linear-agent/technical-debt.md",
+      "title": "Linear Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for linear-agent"
+    },
+    {
+      "path": "services/log-cleanup/features.md",
+      "title": "Log Cleanup",
+      "category": "services",
+      "description": "Features documentation for log-cleanup"
+    },
+    {
+      "path": "services/log-cleanup/technical.md",
+      "title": "Log Cleanup Worker - Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for log-cleanup"
+    },
+    {
+      "path": "services/log-cleanup/tutorial.md",
+      "title": "Log Cleanup Worker - Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for log-cleanup"
+    },
+    {
+      "path": "services/log-cleanup/agent.md",
+      "title": "log-cleanup -- Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for log-cleanup"
+    },
+    {
+      "path": "services/log-cleanup/technical-debt.md",
+      "title": "Log Cleanup Worker - Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for log-cleanup"
+    },
+    {
+      "path": "services/mobile-notifications-service/features.md",
+      "title": "Mobile Notifications Service",
+      "category": "services",
+      "description": "Features documentation for mobile-notifications-service"
+    },
+    {
+      "path": "services/mobile-notifications-service/technical.md",
+      "title": "Mobile Notifications Service \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for mobile-notifications-service"
+    },
+    {
+      "path": "services/mobile-notifications-service/tutorial.md",
+      "title": "Mobile Notifications Service \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for mobile-notifications-service"
+    },
+    {
+      "path": "services/mobile-notifications-service/agent.md",
+      "title": "mobile-notifications-service \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for mobile-notifications-service"
+    },
+    {
+      "path": "services/mobile-notifications-service/technical-debt.md",
+      "title": "Mobile Notifications Service \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for mobile-notifications-service"
+    },
+    {
+      "path": "services/notes-agent/features.md",
+      "title": "Notes Agent",
+      "category": "services",
+      "description": "Features documentation for notes-agent"
+    },
+    {
+      "path": "services/notes-agent/technical.md",
+      "title": "Notes Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for notes-agent"
+    },
+    {
+      "path": "services/notes-agent/tutorial.md",
+      "title": "Notes Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for notes-agent"
+    },
+    {
+      "path": "services/notes-agent/agent.md",
+      "title": "notes-agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for notes-agent"
+    },
+    {
+      "path": "services/notes-agent/technical-debt.md",
+      "title": "Notes Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for notes-agent"
+    },
+    {
+      "path": "services/notion-service/features.md",
+      "title": "Notion Service",
+      "category": "services",
+      "description": "Features documentation for notion-service"
+    },
+    {
+      "path": "services/notion-service/technical.md",
+      "title": "Notion Service \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for notion-service"
+    },
+    {
+      "path": "services/notion-service/tutorial.md",
+      "title": "Notion Service \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for notion-service"
+    },
+    {
+      "path": "services/notion-service/agent.md",
+      "title": "notion-service \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for notion-service"
+    },
+    {
+      "path": "services/notion-service/technical-debt.md",
+      "title": "Notion Service \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for notion-service"
+    },
+    {
+      "path": "services/orchestrator/features.md",
+      "title": "Orchestrator",
+      "category": "services",
+      "description": "Features documentation for orchestrator"
+    },
+    {
+      "path": "services/orchestrator/technical.md",
+      "title": "Orchestrator \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for orchestrator"
+    },
+    {
+      "path": "services/orchestrator/tutorial.md",
+      "title": "Orchestrator \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for orchestrator"
+    },
+    {
+      "path": "services/orchestrator/agent.md",
+      "title": "orchestrator \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for orchestrator"
+    },
+    {
+      "path": "services/orchestrator/technical-debt.md",
+      "title": "Orchestrator \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for orchestrator"
+    },
+    {
+      "path": "services/research-agent/features.md",
+      "title": "Research Agent",
+      "category": "services",
+      "description": "Features documentation for research-agent"
+    },
+    {
+      "path": "services/research-agent/technical.md",
+      "title": "Research Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for research-agent"
+    },
+    {
+      "path": "services/research-agent/tutorial.md",
+      "title": "Research Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for research-agent"
+    },
+    {
+      "path": "services/research-agent/agent.md",
+      "title": "research-agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for research-agent"
+    },
+    {
+      "path": "services/research-agent/technical-debt.md",
+      "title": "Research Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for research-agent"
+    },
+    {
+      "path": "services/todos-agent/features.md",
+      "title": "Todos Agent",
+      "category": "services",
+      "description": "Features documentation for todos-agent"
+    },
+    {
+      "path": "services/todos-agent/technical.md",
+      "title": "Todos Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for todos-agent"
+    },
+    {
+      "path": "services/todos-agent/tutorial.md",
+      "title": "Todos Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for todos-agent"
+    },
+    {
+      "path": "services/todos-agent/agent.md",
+      "title": "Todos Agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for todos-agent"
+    },
+    {
+      "path": "services/todos-agent/technical-debt.md",
+      "title": "Todos Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for todos-agent"
+    },
+    {
+      "path": "services/transcription/features.md",
+      "title": "Transcription Worker",
+      "category": "services",
+      "description": "Features documentation for transcription"
+    },
+    {
+      "path": "services/transcription/technical.md",
+      "title": "Transcription Worker \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for transcription"
+    },
+    {
+      "path": "services/transcription/tutorial.md",
+      "title": "Transcription Worker \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for transcription"
+    },
+    {
+      "path": "services/transcription/agent.md",
+      "title": "Transcription Worker \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for transcription"
+    },
+    {
+      "path": "services/transcription/technical-debt.md",
+      "title": "Transcription Worker \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for transcription"
+    },
+    {
+      "path": "services/user-service/features.md",
+      "title": "User Service",
+      "category": "services",
+      "description": "Features documentation for user-service"
+    },
+    {
+      "path": "services/user-service/technical.md",
+      "title": "User Service \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for user-service"
+    },
+    {
+      "path": "services/user-service/tutorial.md",
+      "title": "User Service \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for user-service"
+    },
+    {
+      "path": "services/user-service/agent.md",
+      "title": "user-service - Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for user-service"
+    },
+    {
+      "path": "services/user-service/technical-debt.md",
+      "title": "User Service - Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for user-service"
+    },
+    {
+      "path": "services/vm-lifecycle/features.md",
+      "title": "VM Lifecycle",
+      "category": "services",
+      "description": "Features documentation for vm-lifecycle"
+    },
+    {
+      "path": "services/vm-lifecycle/technical.md",
+      "title": "VM Lifecycle Worker \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for vm-lifecycle"
+    },
+    {
+      "path": "services/vm-lifecycle/tutorial.md",
+      "title": "VM Lifecycle Worker \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for vm-lifecycle"
+    },
+    {
+      "path": "services/vm-lifecycle/agent.md",
+      "title": "vm-lifecycle \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for vm-lifecycle"
+    },
+    {
+      "path": "services/vm-lifecycle/technical-debt.md",
+      "title": "VM Lifecycle Worker \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for vm-lifecycle"
+    },
+    {
+      "path": "services/web/features.md",
+      "title": "Web App",
+      "category": "services",
+      "description": "Features documentation for web"
+    },
+    {
+      "path": "services/web/technical.md",
+      "title": "Web App \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for web"
+    },
+    {
+      "path": "services/web/tutorial.md",
+      "title": "Web App -- Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for web"
+    },
+    {
+      "path": "services/web/agent.md",
+      "title": "Web App \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for web"
+    },
+    {
+      "path": "services/web/technical-debt.md",
+      "title": "Web App \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for web"
+    },
+    {
+      "path": "services/web-agent/features.md",
+      "title": "Web Agent",
+      "category": "services",
+      "description": "Features documentation for web-agent"
+    },
+    {
+      "path": "services/web-agent/technical.md",
+      "title": "Web Agent \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for web-agent"
+    },
+    {
+      "path": "services/web-agent/tutorial.md",
+      "title": "Web Agent \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for web-agent"
+    },
+    {
+      "path": "services/web-agent/agent.md",
+      "title": "web-agent \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for web-agent"
+    },
+    {
+      "path": "services/web-agent/technical-debt.md",
+      "title": "Web Agent \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for web-agent"
+    },
+    {
+      "path": "services/whatsapp-service/features.md",
+      "title": "WhatsApp Service",
+      "category": "services",
+      "description": "Features documentation for whatsapp-service"
+    },
+    {
+      "path": "services/whatsapp-service/technical.md",
+      "title": "WhatsApp Service \u2014 Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for whatsapp-service"
+    },
+    {
+      "path": "services/whatsapp-service/tutorial.md",
+      "title": "WhatsApp Service \u2014 Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for whatsapp-service"
+    },
+    {
+      "path": "services/whatsapp-service/agent.md",
+      "title": "whatsapp-service \u2014 Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for whatsapp-service"
+    },
+    {
+      "path": "services/whatsapp-service/technical-debt.md",
+      "title": "WhatsApp Service \u2014 Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for whatsapp-service"
+    },
+    {
+      "path": "architecture/action-configuration-dsl.md",
+      "title": "Action Configuration DSL Reference",
+      "category": "architecture",
+      "description": "Architecture: action configuration dsl"
+    },
+    {
+      "path": "architecture/ai-architecture.md",
+      "title": "AI Architecture",
+      "category": "architecture",
+      "description": "Architecture: ai architecture"
+    },
+    {
+      "path": "architecture/api-contracts.md",
+      "title": "API Contracts",
+      "category": "architecture",
+      "description": "Architecture: api contracts"
+    },
+    {
+      "path": "architecture/container-lifecycle.md",
+      "title": "Container Lifecycle \u2014 Orchestrator Worker Containers",
+      "category": "architecture",
+      "description": "Architecture: container lifecycle"
+    },
+    {
+      "path": "architecture/firestore-ownership.md",
+      "title": "Firestore Collection Ownership",
+      "category": "architecture",
+      "description": "Architecture: firestore ownership"
+    },
+    {
+      "path": "architecture/llm-packages.md",
+      "title": "LLM Packages Reference",
+      "category": "architecture",
+      "description": "Architecture: llm packages"
+    },
+    {
+      "path": "architecture/package-contracts.md",
+      "title": "Package Contracts",
+      "category": "architecture",
+      "description": "Architecture: package contracts"
+    },
+    {
+      "path": "architecture/pubsub-standards.md",
+      "title": "Pub/Sub Standards",
+      "category": "architecture",
+      "description": "Architecture: pubsub standards"
+    },
+    {
+      "path": "architecture/research-flow.md",
+      "title": "Research Flow \u2014 Complete Lifecycle",
+      "category": "architecture",
+      "description": "Architecture: research flow"
+    },
+    {
+      "path": "architecture/service-to-service-communication.md",
+      "title": "Service-to-Service Communication",
+      "category": "architecture",
+      "description": "Architecture: service to service communication"
+    },
+    {
+      "path": "architecture/static-assets-hosting.md",
+      "title": "Static Assets Hosting",
+      "category": "architecture",
+      "description": "Architecture: static assets hosting"
+    },
+    {
+      "path": "architecture/transcription.md",
+      "title": "Audio Transcription Architecture",
+      "category": "architecture",
+      "description": "Architecture: transcription"
+    },
+    {
+      "path": "architecture/web-app-hosting.md",
+      "title": "Web App Hosting (GCS + Load Balancer)",
+      "category": "architecture",
+      "description": "Architecture: web app hosting"
+    },
+    {
+      "path": "architecture/webhook-verification-pipeline.md",
+      "title": "Webhook Verification Pipeline",
+      "category": "architecture",
+      "description": "Architecture: webhook verification pipeline"
+    },
+    {
+      "path": "setup/01-gcp-project.md",
+      "title": "01 - GCP Project Setup",
+      "category": "setup",
+      "description": "Setup: gcp project"
+    },
+    {
+      "path": "setup/02-terraform-bootstrap.md",
+      "title": "02 - Terraform Bootstrap",
+      "category": "setup",
+      "description": "Setup: terraform bootstrap"
+    },
+    {
+      "path": "setup/03-cloud-build-trigger.md",
+      "title": "03 - Cloud Build Trigger",
+      "category": "setup",
+      "description": "Setup: cloud build trigger"
+    },
+    {
+      "path": "setup/04-cloud-run-services.md",
+      "title": "04 - Cloud Run Services",
+      "category": "setup",
+      "description": "Setup: cloud run services"
+    },
+    {
+      "path": "setup/05-local-dev-with-gcp-deps.md",
+      "title": "05 - Local Development with GCP Dependencies",
+      "category": "setup",
+      "description": "Setup: local dev with gcp deps"
+    },
+    {
+      "path": "setup/06-auth0.md",
+      "title": "Auth0 Setup Guide (Updated 2025-12-27)",
+      "category": "setup",
+      "description": "Setup: auth0"
+    },
+    {
+      "path": "setup/07-whatsapp-business-cloud-api.md",
+      "title": "WhatsApp Business Cloud API Setup",
+      "category": "setup",
+      "description": "Setup: whatsapp business cloud api"
+    },
+    {
+      "path": "setup/08-mobile-notifications-xiaomi.md",
+      "title": "Mobile Notifications Setup (Xiaomi/HyperOS)",
+      "category": "setup",
+      "description": "Setup: mobile notifications xiaomi"
+    },
+    {
+      "path": "setup/09-pwa.md",
+      "title": "Progressive Web App (PWA) Setup",
+      "category": "setup",
+      "description": "Setup: pwa"
+    },
+    {
+      "path": "setup/10-claude-code-cloud-dev.md",
+      "title": "10 - Claude Code Cloud Development Setup",
+      "category": "setup",
+      "description": "Setup: claude code cloud dev"
+    },
+    {
+      "path": "setup/11-claude-code-mcp-setup.md",
+      "title": "11 - Claude Code MCP Setup",
+      "category": "setup",
+      "description": "Setup: claude code mcp setup"
+    },
+    {
+      "path": "setup/12-linear-integration.md",
+      "title": "Linear Integration Setup",
+      "category": "setup",
+      "description": "Setup: linear integration"
+    },
+    {
+      "path": "setup/13-github-oauth.md",
+      "title": "GitHub OAuth App Setup",
+      "category": "setup",
+      "description": "Setup: github oauth"
+    },
+    {
+      "path": "setup/14-google-calendar-oauth.md",
+      "title": "Google Calendar OAuth Setup",
+      "category": "setup",
+      "description": "Setup: google calendar oauth"
+    },
+    {
+      "path": "packages/common-core/README.md",
+      "title": "@intexuraos/common-core",
       "category": "packages",
-      "summary": "Pure utilities with zero dependencies: Result types, Logger interface, error codes, and tracing",
-      "features": [
-        "Result<T, E> discriminated union for explicit error handling",
-        "ErrorCode with HTTP status mapping and IntexuraOSError class",
-        "Logger interface matching pino signature",
-        "Nullability utilities for noUncheckedIndexedAccess",
-        "ServiceFeedback contract for downstream results",
-        "Distributed tracing via X-Trace-Id header"
-      ],
-      "endpoints": 0,
-      "docs": "packages/common-core"
+      "description": "Package documentation: common-core"
     },
     {
-      "id": "common-http",
-      "name": "Common HTTP",
+      "path": "packages/common-core/technical-debt.md",
+      "title": "@intexuraos/common-core \u2014 Technical Debt",
       "category": "packages",
-      "summary": "Fastify plugin with reply.ok/reply.fail response envelope, JWT auth, and request logging",
-      "features": [
-        "reply.ok() and reply.fail() response envelope decorators",
-        "JWT authentication via JWKS with requireAuth and tryAuth",
-        "Internal service-to-service auth via X-Internal-Auth",
-        "Request ID tracking and health check log suppression",
-        "Sensitive data redaction in logs",
-        "Zod validation error handler"
-      ],
-      "endpoints": 0,
-      "docs": "packages/common-http"
+      "description": "Technical debt notes for common-core"
     },
     {
-      "id": "http-contracts",
-      "name": "HTTP Contracts",
+      "path": "packages/common-http/README.md",
+      "title": "@intexuraos/common-http",
       "category": "packages",
-      "summary": "Shared OpenAPI and Fastify JSON Schema definitions for consistent API documentation",
-      "features": [
-        "OpenAPI schema definitions for Swagger documentation",
-        "Fastify JSON Schemas with $id for route validation",
-        "Error code, diagnostics, and health check schemas",
-        "Bearer auth security scheme definition"
-      ],
-      "endpoints": 0,
-      "docs": "packages/http-contracts"
+      "description": "Package documentation: common-http"
     },
     {
-      "id": "http-server",
-      "name": "HTTP Server",
+      "path": "packages/common-http/technical-debt.md",
+      "title": "@intexuraos/common-http \u2014 Technical Debt",
       "category": "packages",
-      "summary": "Server setup utilities: health checks, env validation, and validation error handling",
-      "features": [
-        "Health check infrastructure with aggregated status",
-        "Fail-fast environment variable validation at startup",
-        "Firestore connectivity health check",
-        "Standardized validation error handler for Fastify"
-      ],
-      "endpoints": 0,
-      "docs": "packages/http-server"
+      "description": "Technical debt notes for common-http"
     },
     {
-      "id": "infra-claude",
-      "name": "Infra Claude",
+      "path": "packages/http-contracts/README.md",
+      "title": "@intexuraos/http-contracts",
       "category": "packages",
-      "summary": "Anthropic Claude API wrapper with web search research and prompt caching",
-      "features": [
-        "LLMClient interface implementation for Anthropic",
-        "Web search research via web_search_20250305 tool",
-        "Prompt caching with cache read/write cost tracking",
-        "Automatic audit trail and usage logging"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-claude"
+      "description": "Package documentation: http-contracts"
     },
     {
-      "id": "infra-firestore",
-      "name": "Infra Firestore",
+      "path": "packages/http-contracts/technical-debt.md",
+      "title": "@intexuraos/http-contracts \u2014 Technical Debt",
       "category": "packages",
-      "summary": "Firestore client singleton with in-memory fake for testing",
-      "features": [
-        "Singleton Firestore client with emulator support",
-        "In-memory FakeFirestore with queries, transactions, and batches",
-        "Test utilities: seedCollection, getAllData, error injection",
-        "Subcollection and dot-notation field path support"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-firestore"
+      "description": "Technical debt notes for http-contracts"
     },
     {
-      "id": "infra-gemini",
-      "name": "Infra Gemini",
+      "path": "packages/http-server/README.md",
+      "title": "@intexuraos/http-server",
       "category": "packages",
-      "summary": "Google Gemini API wrapper with Google Search grounding and image generation",
-      "features": [
-        "LLMClient interface implementation for Google Gemini",
-        "Web search research via Google Search grounding",
-        "Image generation via Gemini 2.5 Flash",
-        "Automatic audit trail and usage logging"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-gemini"
+      "description": "Package documentation: http-server"
     },
     {
-      "id": "infra-gpt",
-      "name": "Infra GPT",
+      "path": "packages/http-server/technical-debt.md",
+      "title": "@intexuraos/http-server \u2014 Technical Debt",
       "category": "packages",
-      "summary": "OpenAI GPT API wrapper with web search, image generation, and reasoning token tracking",
-      "features": [
-        "LLMClient interface implementation for OpenAI GPT",
-        "Web search research via Responses API with web_search_preview",
-        "Image generation via DALL-E / gpt-image-1",
-        "Reasoning token tracking for o-series models",
-        "Automatic audit trail and usage logging"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-gpt"
+      "description": "Technical debt notes for http-server"
     },
     {
-      "id": "infra-notion",
-      "name": "Infra Notion",
+      "path": "packages/infra-claude/README.md",
+      "title": "@intexuraos/infra-claude",
       "category": "packages",
-      "summary": "Notion API wrapper with logging fetch, token validation, and page preview retrieval",
-      "features": [
-        "Client creation with logging fetch wrapper",
-        "Token validation via users.me endpoint",
-        "Page retrieval with first 10 blocks preview",
-        "Error mapping to domain error codes"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-notion"
+      "description": "Package documentation: infra-claude"
     },
     {
-      "id": "infra-perplexity",
-      "name": "Infra Perplexity",
+      "path": "packages/infra-claude/technical-debt.md",
+      "title": "Technical Debt: @intexuraos/infra-claude",
       "category": "packages",
-      "summary": "Perplexity AI wrapper with SSE streaming for deep research and source citations",
-      "features": [
-        "SSE-streamed research for long-running models",
-        "Source citation extraction from search results",
-        "Two-tier cost calculation (provider cost vs token-based)",
-        "Configurable timeout (default 14 minutes)"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-perplexity"
+      "description": "Technical debt notes for infra-claude"
     },
     {
-      "id": "infra-sentry",
-      "name": "Infra Sentry",
+      "path": "packages/infra-firestore/README.md",
+      "title": "@intexuraos/infra-firestore",
       "category": "packages",
-      "summary": "Sentry error tracking with Pino log stream, Fastify error handler, and logger factory",
-      "features": [
-        "initSentry() SDK initialization at process startup",
-        "createAppLogger() factory with automatic Sentry integration",
-        "Pino multistream add-on forwarding warn/error/fatal to Sentry",
-        "Fastify error handler with request context and header redaction",
-        "Graceful degradation when SENTRY_DSN is not set"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-sentry"
+      "description": "Package documentation: infra-firestore"
     },
     {
-      "id": "infra-whatsapp",
-      "name": "Infra WhatsApp",
+      "path": "packages/infra-firestore/technical-debt.md",
+      "title": "Technical Debt: @intexuraos/infra-firestore",
       "category": "packages",
-      "summary": "WhatsApp Cloud API wrapper for message sending, media handling, and read receipts",
-      "features": [
-        "Text message sending with reply threading",
-        "Media URL retrieval and binary download",
-        "Read receipts with typing indicator",
-        "Error mapping (API_ERROR, NETWORK_ERROR, TIMEOUT)"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-whatsapp"
+      "description": "Technical debt notes for infra-firestore"
     },
     {
-      "id": "internal-clients",
-      "name": "Internal Clients",
+      "path": "packages/infra-gemini/README.md",
+      "title": "@intexuraos/infra-gemini",
       "category": "packages",
-      "summary": "Shared HTTP client library for internal service APIs with user-service client and fetchWithAuth",
-      "features": [
-        "User service client (API keys, LLM client creation, OAuth tokens)",
-        "Generic fetchWithAuth for authenticated internal calls",
-        "Automatic X-Internal-Auth and X-Trace-Id header injection",
-        "Result<T, E> return types for explicit error handling"
-      ],
-      "endpoints": 0,
-      "docs": "packages/internal-clients"
+      "description": "Package documentation: infra-gemini"
     },
     {
-      "id": "llm-contract",
-      "name": "LLM Contract",
+      "path": "packages/infra-gemini/technical-debt.md",
+      "title": "Technical Debt: @intexuraos/infra-gemini",
       "category": "packages",
-      "summary": "Single source of truth for LLM model names, provider IDs, pricing structures, and client interfaces",
-      "features": [
-        "16 models across 5 providers as branded string literal types",
-        "LLMClient interface with research, generate, and generateImage methods",
-        "Model category types (ImageModel, ResearchModel, FastModel, etc.)",
-        "ModelPricing and ProviderPricing structures with CostCalculator"
-      ],
-      "endpoints": 0,
-      "docs": "packages/llm-contract"
+      "description": "Technical debt notes for infra-gemini"
     },
     {
-      "id": "llm-factory",
-      "name": "LLM Factory",
+      "path": "packages/infra-glm/README.md",
+      "title": "@intexuraos/infra-glm",
       "category": "packages",
-      "summary": "Unified factory mapping model identifiers to provider-specific LLM client implementations",
-      "features": [
-        "createLlmClient() mapping model to correct provider client",
-        "Google (Gemini) and Alibaba Cloud (GLM-5, Qwen) provider support",
-        "isSupportedProvider() type guard",
-        "Provider selection logic centralized in one place"
-      ],
-      "endpoints": 0,
-      "docs": "packages/llm-factory"
+      "description": "Package documentation: infra-glm"
     },
     {
-      "id": "infra-pubsub",
-      "name": "Infra Pub/Sub",
+      "path": "packages/infra-glm/technical-debt.md",
+      "title": "Technical Debt: @intexuraos/infra-glm",
       "category": "packages",
-      "summary": "Cloud Pub/Sub adapters with BasePubSubPublisher and concrete publishers for WhatsApp, todos, and calendar",
-      "features": [
-        "BasePubSubPublisher abstract class with topic caching and error classification",
-        "WhatsApp send publisher with correlation IDs",
-        "Todos processing publisher for created events",
-        "Calendar preview publisher for natural language event generation",
-        "Graceful no-op when topic is not configured"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-pubsub"
+      "description": "Technical debt notes for infra-glm"
     },
     {
-      "id": "llm-utils",
-      "name": "LLM Utils",
+      "path": "packages/infra-gpt/README.md",
+      "title": "@intexuraos/infra-gpt",
       "category": "packages",
-      "summary": "Sensitive data redaction for logging and structured error handling for LLM response parsing",
-      "features": [
-        "Token and object redaction with configurable sensitive fields",
-        "LLM parse error creation with full debugging context",
-        "withLlmParseErrorLogging wrapper for automatic error logging",
-        "Zod validation error formatting (limited to 5 issues)"
-      ],
-      "endpoints": 0,
-      "docs": "packages/llm-utils"
+      "description": "Package documentation: infra-gpt"
     },
     {
-      "id": "llm-prompts",
-      "name": "LLM Prompts",
+      "path": "packages/infra-gpt/technical-debt.md",
+      "title": "Technical Debt: @intexuraos/infra-gpt",
       "category": "packages",
-      "summary": "Centralized library of all LLM prompt templates organized by domain with co-located Zod schemas",
-      "features": [
-        "PromptBuilder interface with typed input and dependency contracts",
-        "12 domain modules: generation, classification, research, synthesis, validation, todos, image, dataInsights, approvals, calendar, linear, shared",
-        "Zod schemas co-located with prompts for LLM response validation",
-        "Research context inference and repair prompts"
-      ],
-      "endpoints": 0,
-      "docs": "packages/llm-prompts"
+      "description": "Technical debt notes for infra-gpt"
     },
     {
-      "id": "llm-pricing",
-      "name": "LLM Pricing",
+      "path": "packages/infra-notion/README.md",
+      "title": "@intexuraos/infra-notion",
       "category": "packages",
-      "summary": "Runtime pricing lookups from app-settings-service and LLM usage tracking to Firestore",
-      "features": [
-        "fetchAllPricing from centralized settings service",
-        "PricingContext with O(1) model pricing lookups",
-        "UsageLogger recording calls to Firestore by model, call type, and period",
-        "Test fixtures with FakePricingContext"
-      ],
-      "endpoints": 0,
-      "docs": "packages/llm-pricing"
+      "description": "Package documentation: infra-notion"
     },
     {
-      "id": "llm-audit",
-      "name": "LLM Audit",
+      "path": "packages/infra-notion/technical-debt.md",
+      "title": "Technical Debt: @intexuraos/infra-notion",
       "category": "packages",
-      "summary": "LLM API audit logging to Firestore with full request/response context and cost tracking",
-      "features": [
-        "AuditContext class tracking request/response lifecycle",
-        "Firestore llm_api_logs collection with prompt, response, usage, and timing",
-        "Support for all token types (cache, reasoning, web search, grounding)",
-        "Image generation audit fields (count, model, size, cost)"
-      ],
-      "endpoints": 0,
-      "docs": "packages/llm-audit"
+      "description": "Technical debt notes for infra-notion"
     },
     {
-      "id": "infra-otel",
-      "name": "Infra OpenTelemetry",
+      "path": "packages/infra-otel/README.md",
+      "title": "@intexuraos/infra-otel",
       "category": "packages",
-      "summary": "OpenTelemetry SDK integration with automatic HTTP/Fastify/Undici instrumentation via --import startup hook",
-      "features": [
-        "NodeSDK bootstrap via Node.js --import startup hook (side-effect, not application import)",
-        "OTLP trace and metric export to Dash0 or any OTLP-compatible collector",
-        "Auto-instrumentation: HTTP, Fastify, Undici, DNS, Net via getInstrumentations()",
-        "Graceful no-op when INTEXURAOS_DASH0_OTLP_ENDPOINT is not configured",
-        "Library API for infra-sentry otelTransport integration"
-      ],
-      "endpoints": 0,
-      "docs": "packages/infra-otel"
+      "description": "Package documentation: infra-otel"
+    },
+    {
+      "path": "packages/infra-otel/technical-debt.md",
+      "title": "Technical Debt: @intexuraos/infra-otel",
+      "category": "packages",
+      "description": "Technical debt notes for infra-otel"
+    },
+    {
+      "path": "packages/infra-perplexity/README.md",
+      "title": "@intexuraos/infra-perplexity",
+      "category": "packages",
+      "description": "Package documentation: infra-perplexity"
+    },
+    {
+      "path": "packages/infra-perplexity/technical-debt.md",
+      "title": "Technical Debt: @intexuraos/infra-perplexity",
+      "category": "packages",
+      "description": "Technical debt notes for infra-perplexity"
+    },
+    {
+      "path": "packages/infra-pubsub/README.md",
+      "title": "@intexuraos/infra-pubsub",
+      "category": "packages",
+      "description": "Package documentation: infra-pubsub"
+    },
+    {
+      "path": "packages/infra-pubsub/technical-debt.md",
+      "title": "@intexuraos/infra-pubsub - Technical Debt",
+      "category": "packages",
+      "description": "Technical debt notes for infra-pubsub"
+    },
+    {
+      "path": "packages/infra-sentry/README.md",
+      "title": "@intexuraos/infra-sentry",
+      "category": "packages",
+      "description": "Package documentation: infra-sentry"
+    },
+    {
+      "path": "packages/infra-sentry/technical-debt.md",
+      "title": "infra-sentry \u2014 Technical Debt",
+      "category": "packages",
+      "description": "Technical debt notes for infra-sentry"
+    },
+    {
+      "path": "packages/infra-whatsapp/README.md",
+      "title": "@intexuraos/infra-whatsapp",
+      "category": "packages",
+      "description": "Package documentation: infra-whatsapp"
+    },
+    {
+      "path": "packages/infra-whatsapp/technical-debt.md",
+      "title": "Technical Debt: @intexuraos/infra-whatsapp",
+      "category": "packages",
+      "description": "Technical debt notes for infra-whatsapp"
+    },
+    {
+      "path": "packages/internal-clients/README.md",
+      "title": "@intexuraos/internal-clients",
+      "category": "packages",
+      "description": "Package documentation: internal-clients"
+    },
+    {
+      "path": "packages/internal-clients/technical-debt.md",
+      "title": "@intexuraos/internal-clients \u2014 Technical Debt",
+      "category": "packages",
+      "description": "Technical debt notes for internal-clients"
+    },
+    {
+      "path": "packages/llm-audit/README.md",
+      "title": "@intexuraos/llm-audit",
+      "category": "packages",
+      "description": "Package documentation: llm-audit"
+    },
+    {
+      "path": "packages/llm-audit/technical-debt.md",
+      "title": "@intexuraos/llm-audit \u2014 Technical Debt",
+      "category": "packages",
+      "description": "Technical debt notes for llm-audit"
+    },
+    {
+      "path": "packages/llm-contract/README.md",
+      "title": "@intexuraos/llm-contract",
+      "category": "packages",
+      "description": "Package documentation: llm-contract"
+    },
+    {
+      "path": "packages/llm-contract/technical-debt.md",
+      "title": "@intexuraos/llm-contract \u2014 Technical Debt",
+      "category": "packages",
+      "description": "Technical debt notes for llm-contract"
+    },
+    {
+      "path": "packages/llm-factory/README.md",
+      "title": "@intexuraos/llm-factory",
+      "category": "packages",
+      "description": "Package documentation: llm-factory"
+    },
+    {
+      "path": "packages/llm-factory/technical-debt.md",
+      "title": "@intexuraos/llm-factory \u2014 Technical Debt",
+      "category": "packages",
+      "description": "Technical debt notes for llm-factory"
+    },
+    {
+      "path": "packages/llm-pricing/README.md",
+      "title": "@intexuraos/llm-pricing",
+      "category": "packages",
+      "description": "Package documentation: llm-pricing"
+    },
+    {
+      "path": "packages/llm-pricing/technical-debt.md",
+      "title": "@intexuraos/llm-pricing \u2014 Technical Debt",
+      "category": "packages",
+      "description": "Technical debt notes for llm-pricing"
+    },
+    {
+      "path": "packages/llm-prompts/README.md",
+      "title": "@intexuraos/llm-prompts",
+      "category": "packages",
+      "description": "Package documentation: llm-prompts"
+    },
+    {
+      "path": "packages/llm-prompts/technical-debt.md",
+      "title": "@intexuraos/llm-prompts \u2014 Technical Debt",
+      "category": "packages",
+      "description": "Technical debt notes for llm-prompts"
+    },
+    {
+      "path": "packages/llm-utils/README.md",
+      "title": "@intexuraos/llm-utils",
+      "category": "packages",
+      "description": "Package documentation: llm-utils"
+    },
+    {
+      "path": "packages/llm-utils/technical-debt.md",
+      "title": "@intexuraos/llm-utils \u2014 Technical Debt",
+      "category": "packages",
+      "description": "Technical debt notes for llm-utils"
+    },
+    {
+      "path": "validation/ai-models-validation.md",
+      "title": "AI Models Cross-Validation Report",
+      "category": "validation",
+      "description": "Validation report: ai models validation"
+    },
+    {
+      "path": "validation/env-vars-validation.md",
+      "title": "Environment Variables Cross-Validation Report",
+      "category": "validation",
+      "description": "Validation report: env vars validation"
+    },
+    {
+      "path": "validation/error-contracts-validation.md",
+      "title": "Error Contract Cross-Validation Report",
+      "category": "validation",
+      "description": "Validation report: error contracts validation"
+    },
+    {
+      "path": "validation/firestore-validation.md",
+      "title": "Firestore Collection Ownership Validation Report",
+      "category": "validation",
+      "description": "Validation report: firestore validation"
+    },
+    {
+      "path": "validation/http-contracts-validation.md",
+      "title": "HTTP Contracts Cross-Validation Report",
+      "category": "validation",
+      "description": "Validation report: http contracts validation"
+    },
+    {
+      "path": "validation/meta-validation-report.md",
+      "title": "Meta-Validation Report \u2014 Cross-Report Consistency",
+      "category": "validation",
+      "description": "Validation report: meta validation report"
+    },
+    {
+      "path": "validation/package-deps-validation.md",
+      "title": "Package Dependency Documentation Validation",
+      "category": "validation",
+      "description": "Validation report: package deps validation"
+    },
+    {
+      "path": "validation/pubsub-contracts-validation.md",
+      "title": "Pub/Sub Contracts Cross-Validation Report",
+      "category": "validation",
+      "description": "Validation report: pubsub contracts validation"
+    },
+    {
+      "path": "validation/route-auth-validation.md",
+      "title": "Route Authentication Cross-Validation Report",
+      "category": "validation",
+      "description": "Validation report: route auth validation"
+    },
+    {
+      "path": "validation/service-urls-validation.md",
+      "title": "Service URL Configuration Cross-Validation Report",
+      "category": "validation",
+      "description": "Validation report: service urls validation"
+    },
+    {
+      "path": "validation/terraform-code-sync-validation.md",
+      "title": "Terraform-Code Sync Cross-Validation Report",
+      "category": "validation",
+      "description": "Validation report: terraform code sync validation"
+    },
+    {
+      "path": "validation/v3.0.0-documentation-run-report.md",
+      "title": "v3.0.0 Documentation Run Report",
+      "category": "validation",
+      "description": "Validation report: v3.0.0 documentation run report"
     }
   ],
-  "categories": {
-    "ai-research": {
-      "name": "AI & Research",
-      "description": "Services that use LLMs for analysis, classification, and autonomous coding",
-      "services": [
-        "research-agent",
-        "commands-agent",
-        "data-insights-agent",
-        "chat-agent",
-        "code-agent"
-      ]
+  "statistics": {
+    "total": 211,
+    "byCategory": {
+      "overview": 1,
+      "services-index": 1,
+      "services": 125,
+      "architecture": 14,
+      "setup": 14,
+      "packages": 44,
+      "validation": 12
     },
-    "content": {
-      "name": "Content Management",
-      "description": "Services for managing user content",
-      "services": ["bookmarks-agent", "notes-agent", "todos-agent"]
-    },
-    "integrations": {
-      "name": "External Integrations",
-      "description": "Services that connect to external platforms",
-      "services": [
-        "user-service",
-        "whatsapp-service",
-        "calendar-agent",
-        "notion-service",
-        "linear-agent"
-      ]
-    },
-    "infrastructure": {
-      "name": "Infrastructure",
-      "description": "Core platform services",
-      "services": [
-        "actions-agent",
-        "web-agent",
-        "image-service",
-        "mobile-notifications-service",
-        "api-docs-hub",
-        "app-settings-service"
-      ]
-    },
-    "ui": {
-      "name": "User Interface",
-      "description": "Frontend applications and dashboards",
-      "services": ["web"]
-    },
-    "workers": {
-      "name": "Workers",
-      "description": "Cloud Functions and local worker processes for background tasks and infrastructure management",
-      "services": ["orchestrator", "claude-worker", "log-cleanup", "vm-lifecycle"]
-    },
-    "packages": {
-      "name": "Packages",
-      "description": "Shared libraries providing common utilities, LLM integrations, and infrastructure adapters",
-      "services": [
-        "common-core",
-        "common-http",
-        "http-contracts",
-        "http-server",
-        "infra-claude",
-        "infra-firestore",
-        "infra-gemini",
-        "infra-glm",
-        "infra-gpt",
-        "infra-notion",
-        "infra-perplexity",
-        "infra-sentry",
-        "infra-whatsapp",
-        "internal-clients",
-        "llm-contract",
-        "llm-factory",
-        "infra-pubsub",
-        "llm-utils",
-        "llm-prompts",
-        "llm-pricing",
-        "llm-audit",
-        "infra-otel"
-      ]
-    }
-  },
-  "stats": {
-    "total": 46,
-    "totalServices": 20,
-    "totalWorkers": 4,
-    "totalPackages": 22,
-    "documented": 46,
-    "documentedServices": 46,
-    "completion": 100,
-    "version": "3.0.0",
-    "lastUpdated": "2026-03-07"
+    "version": "4.0.0",
+    "lastUpdated": "2026-03-16",
+    "generatedAt": "2026-03-16T00:08:02.977972"
   }
 }

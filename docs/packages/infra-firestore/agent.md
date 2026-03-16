@@ -2,10 +2,12 @@
 
 ## Identity
 
-- **Package:** `@intexuraos/infra-firestore`
-- **Version:** 2.1.0
-- **Purpose:** Firestore client singleton and in-memory testing fake
-- **External SDK:** `@google-cloud/firestore` ^7.10.0
+| Attribute | Value                                                      |
+| --------- | ---------------------------------------------------------- |
+| Package   | `@intexuraos/infra-firestore`                              |
+| Version   | 3.3.0                                                      |
+| Purpose   | Firestore client singleton and in-memory testing fake      |
+| SDK       | `@google-cloud/firestore` ^7.10.0                          |
 
 ## Exports
 
@@ -35,11 +37,11 @@ interface FakeFirestoreConfig {
 
 // FakeFirestore provides:
 // .collection(name) => FakeCollectionReference
-// .batch() => FakeBatch           -- NOT truly atomic; operations execute sequentially on commit()
-// .runTransaction(fn) => Promise<T>  -- serialized via queue; reads/writes isolated until commit
+// .batch() => FakeBatch           — NOT truly atomic; operations execute sequentially on commit()
+// .runTransaction(fn) => Promise<T>  — serialized via queue; reads/writes isolated until commit
 // .seedCollection(name, docs) => void
 // .getAllData() => Map<string, Map<string, DocumentData>>
-// .clear() => void               -- also resets transaction queue
+// .clear() => void               — also resets transaction queue
 // .configure(config) => void
 // .listCollections() => Promise<CollectionReference[]>
 ```
@@ -90,7 +92,7 @@ fakeDb.configure({ errorToThrow: new Error('Firestore unavailable') });
 
 ## Dependencies
 
-- `@intexuraos/common-core` -- Result types
+- `@intexuraos/common-core` — Result types
 
 ## Environment Variables
 
@@ -98,17 +100,30 @@ fakeDb.configure({ errorToThrow: new Error('Firestore unavailable') });
 
 ## FakeFirestore Capabilities
 
-| Feature                 | Supported |
-| ----------------------- | --------- |
-| CRUD operations         | Yes       |
-| where() queries         | Yes       |
-| orderBy / limit         | Yes       |
-| startAfter              | Yes       |
-| Subcollections          | Yes       |
-| Batch writes            | Yes       |
-| Transactions            | Yes       |
-| FieldValue.delete()     | Yes       |
-| FieldValue.arrayUnion() | Yes       |
-| Dot-notation paths      | Yes       |
-| collectionGroup()       | No        |
-| onSnapshot()            | No        |
+| Feature                   | Supported |
+| ------------------------- | --------- |
+| CRUD operations           | Yes       |
+| `where()` queries         | Yes       |
+| `orderBy` / `limit`       | Yes       |
+| `startAfter`              | Yes       |
+| Subcollections            | Yes       |
+| Batch writes              | Yes       |
+| Transactions              | Yes       |
+| `FieldValue.delete()`     | Yes       |
+| `FieldValue.arrayUnion()` | Yes       |
+| Dot-notation paths        | Yes       |
+| `collectionGroup()`       | No        |
+| `onSnapshot()`            | No        |
+
+## Constraints
+
+**Do NOT:**
+
+- Use `where()` with dot-notation field paths — the fake evaluates filters using direct property lookup, not `getNestedField()`
+- Rely on string-based `orderBy` sorting — the fake defaults to numeric comparison
+- Rely on batch atomicity semantics — `FakeBatch.commit()` executes operations sequentially; failures do not roll back
+
+**Requires:**
+
+- `INTEXURAOS_GCP_PROJECT_ID` environment variable for production use
+- Call `fakeDb.clear()` in `afterEach` to avoid test-to-test state leakage via the transaction queue

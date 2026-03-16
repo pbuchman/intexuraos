@@ -2,20 +2,20 @@
 
 Unified factory for creating LLM clients across different providers. Maps model identifiers to the correct provider-specific client implementation, allowing apps to switch LLM providers without changing application code.
 
-**Version:** 2.1.0
+**Version:** 3.3.0
 **Node:** >=22.0.0
 **Type:** ESM
-**Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-gemini`, `@intexuraos/infra-glm`, `@intexuraos/llm-audit`, `@intexuraos/llm-contract`, `@intexuraos/llm-pricing`
+**Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-gemini`, `@intexuraos/llm-audit`, `@intexuraos/llm-contract`, `@intexuraos/llm-pricing`
 
 ## Why It Exists
 
-IntexuraOS supports multiple LLM providers (Google Gemini, Zai GLM, and others via separate client packages). Each provider has its own client constructor with different configuration requirements. The factory abstracts this away: callers pass a model name and configuration, and the factory returns the correct client. This keeps provider selection logic in one place rather than scattered across every agent app.
+IntexuraOS supports multiple LLM providers. Each provider has its own client constructor with different configuration requirements. The factory abstracts this away: callers pass a model name and configuration, and the factory returns the correct client. This keeps provider selection logic in one place rather than scattered across every agent app.
 
 ## API Reference
 
 ### `createLlmClient(config: LlmClientConfig): LlmGenerateClient`
 
-Maps a model to its provider and creates the appropriate client.
+Maps a model to its provider and creates the appropriate client. Currently routes Google (Gemini) models only — Anthropic, OpenAI, and Perplexity models are not routed through this factory and will throw.
 
 ```typescript
 import { createLlmClient } from '@intexuraos/llm-factory';
@@ -30,39 +30,59 @@ const client = createLlmClient({
 
 const result = await client.generate('Write a poem');
 if (result.ok) {
-  console.log(result.value.content);
-  console.log(`Cost: $${String(result.value.usage.costUsd)}`);
+  console.log(result.data.content);
+  console.log(`Cost: $${String(result.data.usage.costUsd)}`);
 }
 ```
 
 **Supported providers:**
 
-| Provider | Models Created                                                                     | Client Package             |
+| Provider | Models Supported                                                                   | Client Package             |
 | -------- | ---------------------------------------------------------------------------------- | -------------------------- |
 | Google   | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-2.5-flash-image` | `@intexuraos/infra-gemini` |
-| Zai      | `glm-4.7`, `glm-4.7-flash`                                                         | `@intexuraos/infra-glm`    |
 
 **Unsupported providers** (not routed through this factory):
 
-- Anthropic (Claude) -- handled via separate client setup
-- OpenAI (GPT) -- handled via separate client setup
-- Perplexity (Sonar) -- handled via separate client setup
+- Anthropic (Claude) — configured via separate client setup in each app
+- OpenAI (GPT) — configured via separate client setup in each app
+- Perplexity (Sonar) — configured via separate client setup in each app
 
-Calling `createLlmClient` with an unsupported provider model throws an `Error` with message `"Unsupported LLM provider: {provider}"`.
+Calling `createLlmClient` with a non-Google model throws `Error("Unsupported LLM provider: {provider}. Only google is supported.")`.
+
+### `createToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient`
+
+Creates a tool-calling agent loop client. Currently supports Google (Gemini) only, routed through `infra-gemini`.
+
+```typescript
+import { createToolCallingClient } from '@intexuraos/llm-factory';
+
+const client = createToolCallingClient({
+  model: 'gemini-2.5-flash',
+  apiKey: process.env.GOOGLE_API_KEY,
+  userId: 'user-123',
+  pricing: pricingContext.getPricing('gemini-2.5-flash'),
+  logger,
+  tools: [myTool],
+});
+
+const result = await client.run({
+  systemPrompt: 'You are a helpful assistant.',
+  messages: [{ role: 'user', content: 'Do the thing' }],
+  tools: [myTool],
+  maxIterations: 10,
+});
+```
 
 ### `isSupportedProvider(provider: string): provider is SupportedProvider`
 
-Type guard that checks if a provider string is supported by this factory.
+Type guard that checks whether a provider is supported by this factory.
 
 ```typescript
 import { isSupportedProvider } from '@intexuraos/llm-factory';
 
-if (isSupportedProvider('google')) {
-  // TypeScript narrows to 'google' | 'zai'
-}
-
-isSupportedProvider('anthropic'); // false
-isSupportedProvider('openai'); // false
+isSupportedProvider('google');     // true
+isSupportedProvider('anthropic');  // false
+isSupportedProvider('openai');     // false
 ```
 
 ### Types
@@ -74,8 +94,8 @@ interface LlmClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink; // from @intexuraos/llm-audit; defaults to Firestore sink
-  usageSink?: UsageSink; // from @intexuraos/llm-pricing; defaults to Firestore sink
+  auditSink?: AuditSink;  // from @intexuraos/llm-audit; defaults to Firestore sink
+  usageSink?: UsageSink;  // from @intexuraos/llm-pricing; defaults to Firestore sink
 }
 
 interface GenerateResult {
@@ -93,7 +113,7 @@ interface LlmGenerateClient {
 }
 ```
 
-The factory also re-exports `LLMError` from `@intexuraos/llm-contract` for convenience.
+`ToolCallingClientConfig` is re-exported from `@intexuraos/infra-gemini`.
 
 ## Used By
 
@@ -103,20 +123,23 @@ The factory also re-exports `LLMError` from `@intexuraos/llm-contract` for conve
 
 **Workers (1):** `orchestrator`
 
+## Known Limitations
+
+- Only Google (Gemini) models are routed through this factory. Claude, GPT, and Perplexity clients are constructed independently in each app.
+- `LlmGenerateClient` only exposes `generate()`. Callers needing `research()` or `generateImage()` must bypass the factory or cast to the full `LLMClient` interface from `llm-contract`.
+
 ## Recent Changes
 
-| Commit   | Description                                                           | Age     |
-| -------- | --------------------------------------------------------------------- | ------- |
-| 1c9d7ec9 | Orchestrator verification hardening and unified secrets sync workflow | 10 days |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner                      | 17 days |
-| 21c1528a | Fix release skill to bump all package versions                        | 3 weeks |
-| 4fa0fed3 | Release v2.0.0                                                        | 3 weeks |
-| 8aad9098 | Migrate imports and delete llm-common                                 | 3 weeks |
-| 6ec4205e | Make logger mandatory in all LLM configs                              | 4 weeks |
+| Commit    | Description                                             | Age     |
+| --------- | ------------------------------------------------------- | ------- |
+| c4e3a13cb | Release v3.3.0                                          | 2 hours |
+| e4d231053 | Remove ZAI provider and GLM-4.7 models                  | 3 days  |
+| 293426524 | Add `createToolCallingClient` for GitHub Agent          | 7 days  |
+| 44ae683ae | Release v3.2.0                                          | 8 days  |
 
 ## Source Files
 
-| File                      | Purpose                                       |
-| ------------------------- | --------------------------------------------- |
-| `src/index.ts`            | Re-exports factory function, types, and guard |
-| `src/llmClientFactory.ts` | Factory implementation with exhaustive switch |
+| File                      | Purpose                                                        |
+| ------------------------- | -------------------------------------------------------------- |
+| `src/index.ts`            | Re-exports factory functions, types, and `isSupportedProvider` |
+| `src/llmClientFactory.ts` | `createLlmClient`, `createToolCallingClient`, provider routing |

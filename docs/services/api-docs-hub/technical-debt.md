@@ -1,7 +1,7 @@
 # API Docs Hub — Technical Debt
 
-**Last Updated:** 2026-03-07
-**Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
+**Last Updated:** 2026-03-15
+**Analysis Run:** [2026-03-15 entry](../../documentation-runs.md)
 
 ---
 
@@ -83,6 +83,7 @@ None.
 
 | Date       | Issue                                             | Resolution                                                                |
 | ---------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| 2026-03-15 | Package version bump to 3.3.0                     | Release v3.3.0 — no source changes, package.json version updated          |
 | 2026-03-07 | Package version bump to 3.2.0                     | Release v3.2.0 — no source changes, package.json version updated          |
 | 2026-02-22 | Missing code-agent, linear-agent, web-agent specs | Added 3 new `INTEXURAOS_*_OPENAPI_URL` env vars, bumped spec to 0.0.5     |
 | 2026-02-16 | Dash0 OTel integration                            | `@intexuraos/infra-otel` added; log pipeline forwards to Dash0 via OTLP   |

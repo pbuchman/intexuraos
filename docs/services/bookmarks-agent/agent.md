@@ -1,4 +1,4 @@
-# bookmarks-agent - Agent Interface
+# bookmarks-agent — Agent Interface
 
 > Machine-readable specification for AI agent integration
 
@@ -9,7 +9,7 @@
 | Attribute | Value                                                                                             |
 | --------- | ------------------------------------------------------------------------------------------------- |
 | Name      | bookmarks-agent                                                                                   |
-| Version   | 3.1.0                                                                                             |
+| Version   | 3.3.0                                                                                             |
 | Port      | 8124                                                                                              |
 | Role      | Link Intelligence Service                                                                         |
 | Goal      | Save, enrich, and organize bookmarks with OpenGraph metadata, AI summaries, and WhatsApp delivery |
@@ -52,7 +52,7 @@ interface CreateBookmarkOutput {
 **Endpoint:** `POST /internal/bookmarks`
 **Auth:** `X-Internal-Auth` header
 
-**When to use:** When creating a bookmark from another service (e.g., actions-agent). Triggers async enrichment pipeline (OG fetch -> AI summary -> WhatsApp notification).
+**When to use:** When creating a bookmark from another service (e.g., actions-agent). Triggers async enrichment pipeline (OG fetch → AI summary → WhatsApp notification).
 
 **Input Schema:**
 
@@ -75,7 +75,7 @@ interface CreateBookmarkInternalInput {
 interface CreateBookmarkInternalOutput {
   success: true;
   data: {
-    id: string;       // Bookmark ID
+    id: string;        // Bookmark ID
     url: string;       // App deep link: "/#/bookmarks/{id}"
     bookmark: Bookmark;
   };
@@ -190,7 +190,7 @@ interface UpdateBookmarkInternalInput {
 **Endpoint:** `POST /bookmarks/:id/archive` | `POST /bookmarks/:id/unarchive`
 **Auth:** Bearer token
 
-**When to use:** To soft-delete (archive) or restore (unarchive) a bookmark. Idempotent -- archiving an already-archived bookmark returns success.
+**When to use:** To soft-delete (archive) or restore (unarchive) a bookmark. Idempotent — archiving an already-archived bookmark returns success.
 
 ### Force Refresh
 
@@ -330,18 +330,18 @@ WhatsApp message delivered to user
 | `NOT_FOUND`       | 404  | Bookmark ID does not exist                          |
 | `CONFLICT`        | 409  | URL already bookmarked by this user                 |
 | `INTERNAL_ERROR`  | 500  | Unexpected server error                             |
-| `TRANSIENT_ERROR` | 503  | Temporary failure (rate limit, timeout) - retryable |
+| `TRANSIENT_ERROR` | 503  | Temporary failure (rate limit, timeout) — retryable |
 
 ---
 
 ## Dependencies
 
-| Service            | Why Needed                  | Failure Behavior                           |
-| ------------------ | --------------------------- | ------------------------------------------ |
-| web-agent          | OG metadata + AI summaries  | Enrichment fails; bookmark remains pending |
-| Firestore          | Bookmark persistence        | All operations fail                        |
-| Pub/Sub            | Async enrichment pipeline   | Enrichment delayed; retried automatically  |
-| whatsapp-service   | Summary delivery            | Fire-and-forget; summary still saved       |
+| Service          | Why Needed                 | Failure Behavior                           |
+| ---------------- | -------------------------- | ------------------------------------------ |
+| web-agent        | OG metadata + AI summaries | Enrichment fails; bookmark remains pending |
+| Firestore        | Bookmark persistence       | All operations fail                        |
+| Pub/Sub          | Async enrichment pipeline  | Enrichment delayed; retried automatically  |
+| whatsapp-service | Summary delivery           | Fire-and-forget; summary still saved       |
 
 ---
 
@@ -372,17 +372,17 @@ const response = await fetch(`${BOOKMARKS_AGENT_URL}/internal/bookmarks`, {
 After AI summarization, the service publishes a WhatsApp message:
 
 ```
-[bookmark emoji] *Bookmark Summary*
+📑 *Bookmark Summary*
 
 *[Page Title]*
 
 [AI Summary]
 
-[link emoji] [Original URL]
+🔗 [Original URL]
 ```
 
 The title line is omitted if no title is available. `correlationId` is `bookmark-{bookmarkId}`.
 
 ---
 
-**Last updated:** 2026-02-22 (v3.1.0 documentation refresh)
+**Last updated:** 2026-03-15 (v3.3.0 documentation refresh)

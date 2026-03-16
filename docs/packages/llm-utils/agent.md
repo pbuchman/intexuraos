@@ -1,4 +1,4 @@
-# @intexuraos/llm-utils - Agent Reference
+# @intexuraos/llm-utils — Agent Reference
 
 Machine-readable export map and interface definitions for automated tooling.
 
@@ -6,10 +6,9 @@ Machine-readable export map and interface definitions for automated tooling.
 
 ```
 name: @intexuraos/llm-utils
-version: 2.1.0
 type: module
 leaf: false
-dependencies: @intexuraos/common-core, pino, zod
+dependencies: @intexuraos/common-core, zod
 entry_points:
   - ".": ./src/index.ts
 ```
@@ -102,7 +101,7 @@ common-core
 ```typescript
 // Redact sensitive data before logging
 import { redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-utils';
-logger.info({ config: redactObject(config, SENSITIVE_FIELDS) }, 'LLM configured');
+logger.info({ config: redactObject(config, [...SENSITIVE_FIELDS]) }, 'LLM configured');
 
 // Wrap a parser with error logging
 import { withLlmParseErrorLogging } from '@intexuraos/llm-utils';

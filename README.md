@@ -15,17 +15,11 @@
 
 > Most productivity tools ask you to have the idea _and_ organize it at the same time. IntexuraOS removes the organizing step. Say what you need — while walking, while commuting, while thinking of something else — and a system of specialized agents handles the rest.
 
-This is not one AI that tries to do everything. It is 25 services — 20 apps, 5 workers, and 22 shared packages — each built for a single domain, communicating through a shared platform. One agent classifies your intent. Another dispatches it. A third executes it. Your dentist appointment lands on Google Calendar. Your research question goes to five AI models simultaneously. Your bug report becomes finished, tested code — written by an autonomous coding agent on your own machine, inside isolated containers, under your own AI subscription. Code never leaves your network.
+Your bug report becomes finished, tested code — written by an autonomous coding agent on your own machine, verified by an independent AI, and delivered as a code change for review. This is not one AI that tries to do everything. It is 48 components — 20 apps, 6 workers, and 22 shared packages — each built for a single domain, communicating through a shared platform. One agent classifies your intent. Another dispatches it. A third writes the code inside an isolated container, runs the tests, and opens a code change. A separate model verifies the result. Your dentist appointment lands on Google Calendar. Your research question goes to multiple AI models simultaneously. Code never leaves your network.
 
 IntexuraOS does not use AI as a feature. It deploys AI agents that use software as a tool. The platform researches, schedules, manages tasks, and **writes and ships its own code**.
 
 ---
-
-## Ambient Task Submission
-
-You submit tasks while walking, while commuting, while thinking of something else. The primary interface is WhatsApp — an app already on your phone, already open, always available. This is not a convenience shortcut to a desktop workflow. It is a fundamentally different interaction model: ambient task submission that fits into the gaps of a working day.
-
-Speak to WhatsApp. IntexuraOS classifies your intent, routes to the right agent, and executes. A voice note about a bug becomes a code task. A question about solid-state batteries becomes a five-model research report. A mention of lunch Friday becomes a calendar event you approve with one tap.
 
 ## The Self-Building System
 
@@ -83,6 +77,8 @@ The same path works for every domain. A voice note about a bug becomes a code ta
 
 **Verification.** After each attempt, a completion verifier checks the work against a checklist: Are the right files modified? Do tests pass? Is the code change created? If not, the system resumes with preserved context and tries again. Per-user limits on concurrency, hourly rate, and daily spend keep costs predictable — the estimated cost per task is about $1.17.
 
+**Cross-LLM verification.** The verifier is not the same AI that wrote the code. Claude (Anthropic) executes the task inside the container. Gemini 2.5 Flash (Google) independently extracts structured completion data from the last 50 lines of logs and validates it against agent-type-specific schemas. For execution tasks, a second Gemini pass performs deep semantic validation — reading up to 200,000 characters of the full session transcript, cross-referencing the Linear issue requirements, and posting a [detailed validation report](docs/architecture/webhook-verification-pipeline.md) directly to the GitHub PR. Neither model evaluates its own work.
+
 ### Isolation and Security
 
 Every task runs in its own world:
@@ -93,6 +89,14 @@ Every task runs in its own world:
 - **Network isolation** blocking cloud metadata endpoints, private IP ranges, and localhost
 - **Sensitive file guard** that automatically reverts commits touching credentials or secret keys
 - **Verified task requests** — every dispatch is cryptographically signed and checked before it runs
+
+---
+
+## Ambient Task Submission
+
+You submit tasks while walking, while commuting, while thinking of something else. The primary interface is WhatsApp — an app already on your phone, already open, always available. This is not a convenience shortcut to a desktop workflow. It is a fundamentally different interaction model: ambient task submission that fits into the gaps of a working day.
+
+Speak to WhatsApp. IntexuraOS classifies your intent, routes to the right agent, and executes. A voice note about a bug becomes a code task. A question about solid-state batteries becomes a five-model research report. A mention of lunch Friday becomes a calendar event you approve with one tap.
 
 ---
 
@@ -225,7 +229,7 @@ Not a target. A gate. Every branch in every service is either tested or explicit
 
 ### Strict TypeScript
 
-The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 46 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
+The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 48 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
 
 ### Automated Cross-Linking
 

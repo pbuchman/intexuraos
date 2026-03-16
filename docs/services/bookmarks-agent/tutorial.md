@@ -1,6 +1,6 @@
-# Bookmarks Agent - Tutorial
+# Bookmarks Agent — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 20–30 minutes
 > **Prerequisites:** IntexuraOS dev environment, Auth0 access token, WhatsApp connected
 > **You'll learn:** How to create, enrich, filter, and manage bookmarks, and understand the async event pipeline
 
@@ -72,7 +72,7 @@ curl -X POST http://localhost:8124/bookmarks \
 
 ### What Just Happened?
 
-The bookmark was created with `ogFetchStatus: pending` and no metadata. The public API does NOT trigger the enrichment pipeline -- it only stores the bookmark. Enrichment is triggered only by the internal create endpoint.
+The bookmark was created with `ogFetchStatus: pending` and no metadata. The public API does NOT trigger the enrichment pipeline — it only stores the bookmark. Enrichment is triggered only by the internal create endpoint.
 
 ---
 
@@ -115,7 +115,7 @@ Note the `url` field is the app deep link, not the bookmarked URL. This endpoint
 
 ### Step 2.2: Wait for enrichment
 
-The enrichment pipeline processes asynchronously. Poll for completion (typically 5-10 seconds):
+The enrichment pipeline processes asynchronously. Poll for completion (typically 5–10 seconds):
 
 ```bash
 curl "http://localhost:8124/bookmarks/bookmark_def456" \

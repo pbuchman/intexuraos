@@ -2,7 +2,6 @@
 
 Fastify helpers, request ID handling, response envelopes, and authentication utilities. This package provides the HTTP middleware stack that every IntexuraOS service registers during startup.
 
-**Version:** 2.1.0
 **Node:** >=22.0.0
 **Type:** ESM
 
@@ -50,10 +49,11 @@ And `FastifyRequest` gains:
 interface FastifyRequest {
   requestId: string;
   startTime: number;
+  rawBody: string; // raw request body string, stored before parsing
 }
 ```
 
-The plugin reads `x-request-id` from incoming headers (or generates a UUID) and attaches it to every response via the `onSend` hook.
+The plugin reads `x-request-id` from incoming headers (or generates a UUID) and attaches it to every response via the `onSend` hook. It also replaces Fastify's default JSON parser to accept empty bodies (fixing bodyless POST endpoints such as cron triggers) and stores the raw body on `request.rawBody` for webhook signature validation.
 
 ### Response Envelope (`http/response.ts`)
 
@@ -192,7 +192,7 @@ interface LogIncomingRequestOptions {
 function logIncomingRequest(request: FastifyRequest, options?: LogIncomingRequestOptions): void;
 ```
 
-`registerQuietHealthCheckLogging` suppresses log output for `/health` requests (Cloud Run probes). `logIncomingRequest` automatically redacts sensitive headers before logging.
+`registerQuietHealthCheckLogging` suppresses log output for `/health` requests (Cloud Run probes). `logIncomingRequest` automatically redacts sensitive headers before logging. Required by CLAUDE.md on all endpoints.
 
 ### Validation Helper (`http/validation.ts`)
 
@@ -218,12 +218,11 @@ For convenience, this package re-exports from its dependencies:
 
 ## Recent Changes
 
-| Commit     | Description                                      | Age    |
-| ---------- | ------------------------------------------------ | ------ |
-| `8aad9098` | Migrate imports and delete llm-common            | recent |
-| `b32d75b7` | Handle worker 502 errors gracefully              | recent |
-| `44017d5c` | Fix ESLint OOM with batched parallel lint runner | recent |
-| `4fa0fed3` | Release v2.0.0                                   | recent |
+| Commit      | Description                                                            |
+| ----------- | ---------------------------------------------------------------------- |
+| `84a56c76f` | Remove redundant error handler causing FSTWRN004                       |
+| `5e51c9c86` | Preserve rawBody in custom JSON parser for webhook signatures          |
+| `fc16d26ac` | Tighten test assertion, audit http-server for empty JSON body handling |
 
 ## Source Files
 

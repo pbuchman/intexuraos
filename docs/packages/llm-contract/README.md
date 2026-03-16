@@ -1,8 +1,8 @@
 # @intexuraos/llm-contract
 
-Shared type definitions and constants for all LLM provider implementations. This package serves as the single source of truth for model names, provider identifiers, pricing structures, and client interfaces across the entire LLM stack.
+Shared type definitions, constants, and interfaces for all LLM provider implementations. Serves as the single source of truth for model names, provider identifiers, pricing structures, error codes, and client interfaces across the entire LLM stack.
 
-**Version:** 2.1.0
+**Version:** 3.3.0
 **Node:** >=22.0.0
 **Type:** ESM
 **Dependencies:** `@intexuraos/common-core`
@@ -15,7 +15,7 @@ Every LLM-related package needs to agree on model names, provider strings, error
 
 ### Model Types (`supportedModels.ts`)
 
-Defines 16 models across 5 providers as branded string literal types.
+Defines 14 models across 4 providers as branded string literal types.
 
 ```typescript
 type LLMModel =
@@ -36,23 +36,21 @@ type LLMModel =
   // Perplexity (3)
   | 'sonar'
   | 'sonar-pro'
-  | 'sonar-deep-research'
-  // Zai (2)
-  | 'glm-4.7'
-  | 'glm-4.7-flash';
+  | 'sonar-deep-research';
 
-type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
+type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 ```
 
 **Category types** narrow `LLMModel` for specific use cases:
 
-| Type              | Purpose                           | Models                                                                                              |
-| ----------------- | --------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `ImageModel`      | Image generation                  | `gpt-image-1`, `gemini-2.5-flash-image`                                                             |
-| `ResearchModel`   | Web search enhanced generation    | All models except image-only and validation-only                                                    |
-| `ValidationModel` | API key validation (cheap, fast)  | `claude-3-5-haiku`, `gemini-2.0-flash`, `gpt-4o-mini`, `sonar`, `glm-4.7-flash`                     |
-| `FastModel`       | Quick tasks (classification, etc) | `gemini-2.5-flash`, `gemini-2.0-flash`, `glm-4.7-flash`, `claude-3-5-haiku-20241022`, `gpt-4o-mini` |
-| `GenericModel`    | General-purpose                   | `gemini-2.5-pro`, `gpt-5.2`                                                                         |
+| Type               | Purpose                            | Models                                                                                                                                                                          |
+| ------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ImageModel`       | Image generation                   | `gpt-image-1`, `gemini-2.5-flash-image`                                                                                                                                         |
+| `ResearchModel`    | Web search enhanced generation     | `gemini-2.5-pro`, `gemini-2.5-flash`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `o4-mini-deep-research`, `gpt-5.2`, `sonar`, `sonar-pro`, `sonar-deep-research` |
+| `ValidationModel`  | API key validation (cheap, fast)   | `claude-3-5-haiku-20241022`, `gemini-2.0-flash`, `gpt-4o-mini`, `sonar`                                                                                                         |
+| `FastModel`        | Quick tasks (classification, etc.) | `gemini-2.5-flash`, `gemini-2.0-flash`, `claude-3-5-haiku-20241022`, `gpt-4o-mini`                                                                                              |
+| `GenericModel`     | General-purpose                    | `gemini-2.5-pro`, `gpt-5.2`                                                                                                                                                     |
+| `ToolCallingModel` | Agent tool-calling loops           | `gemini-2.5-flash`                                                                                                                                                              |
 
 ### Constants
 
@@ -62,7 +60,6 @@ const LlmProviders = {
   OpenAI: 'openai',
   Anthropic: 'anthropic',
   Perplexity: 'perplexity',
-  Zai: 'zai',
 } as const;
 
 const LlmModels = {
@@ -80,12 +77,11 @@ const LlmModels = {
   Sonar: 'sonar',
   SonarPro: 'sonar-pro',
   SonarDeepResearch: 'sonar-deep-research',
-  Glm47: 'glm-4.7',
-  Glm47Flash: 'glm-4.7-flash',
 } as const;
 
-const ALL_LLM_MODELS: LLMModel[];
-const ALL_FAST_MODELS: FastModel[];
+const ALL_LLM_MODELS: LLMModel[];           // All 14 models
+const ALL_FAST_MODELS: FastModel[];         // 4 fast models
+const ALL_TOOL_CALLING_MODELS: ToolCallingModel[]; // ['gemini-2.5-flash']
 const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider>;
 const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string>;
 ```
@@ -96,11 +92,12 @@ const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string>;
 function getProviderForModel(model: LLMModel): LlmProvider;
 function isValidModel(model: string): model is LLMModel;
 function isFastModel(model: string): model is FastModel;
+function isToolCallingModel(model: string): model is ToolCallingModel;
 ```
 
 ### Client Interface (`types.ts`)
 
-All provider implementations conform to this interface:
+All LLM provider implementations conform to `LLMClient`:
 
 ```typescript
 interface LLMClient {
@@ -113,13 +110,47 @@ interface LLMClient {
 }
 ```
 
+### Tool Calling Interface (`toolCalling.ts`)
+
+Abstract contract for agent loops. Provider-specific implementations live in `infra-*` packages.
+
+```typescript
+interface ToolCallingClient {
+  run(params: {
+    systemPrompt: string;
+    messages: ToolCallingMessage[];
+    tools: ToolDefinition[];
+    maxIterations?: number;          // default: 5
+    onExhausted?: (context: {
+      iterationCount: number;
+      toolCallsMade: number;
+    }) => string | undefined;        // inject repair message or fail
+    repairIterations?: number;       // default: 2
+  }): Promise<Result<ToolCallingResult, LLMError>>;
+}
+
+interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>; // JSON Schema sent to LLM
+  run: (args: Record<string, unknown>) => Promise<string>; // returns JSON string
+}
+
+interface ToolCallingResult {
+  content: string;
+  toolCallsMade: number;
+  iterationCount: number;
+  usage: NormalizedUsage;
+}
+```
+
 ### Result Types
 
-| Type                    | Fields                                                   |
-| ----------------------- | -------------------------------------------------------- |
-| `GenerateResult`        | `content`, `usage: NormalizedUsage`                      |
-| `ResearchResult`        | `content`, `sources: string[]`, `usage: NormalizedUsage` |
-| `ImageGenerationResult` | `imageData: Buffer`, `model`, `usage: NormalizedUsage`   |
+| Type                    | Fields                                                           |
+| ----------------------- | ---------------------------------------------------------------- |
+| `GenerateResult`        | `content: string`, `usage: NormalizedUsage`                      |
+| `ResearchResult`        | `content: string`, `sources: string[]`, `usage: NormalizedUsage` |
+| `ImageGenerationResult` | `imageData: Buffer`, `model: string`, `usage: NormalizedUsage`   |
 
 ### Usage Types
 
@@ -127,12 +158,12 @@ interface LLMClient {
 interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
-  cacheCreationTokens?: number; // Anthropic
-  cacheReadTokens?: number; // Anthropic
-  cachedTokens?: number; // OpenAI
-  reasoningTokens?: number; // OpenAI o1
+  cacheCreationTokens?: number; // Anthropic: tokens written to cache
+  cacheReadTokens?: number;     // Anthropic: tokens read from cache
+  cachedTokens?: number;        // OpenAI: combined cached tokens
+  reasoningTokens?: number;     // OpenAI o-series extended reasoning
   webSearchCalls?: number;
-  groundingEnabled?: boolean; // Google
+  groundingEnabled?: boolean;   // Google grounding flag
   providerCost?: number;
 }
 
@@ -152,13 +183,13 @@ interface NormalizedUsage {
 
 ```typescript
 type LLMErrorCode =
-  | 'API_ERROR'
-  | 'TIMEOUT'
-  | 'INVALID_KEY'
-  | 'RATE_LIMITED'
-  | 'OVERLOADED'
-  | 'CONTEXT_LENGTH'
-  | 'CONTENT_FILTERED';
+  | 'API_ERROR'        // General provider error
+  | 'TIMEOUT'          // Request timed out — retry with backoff
+  | 'INVALID_KEY'      // API key invalid or missing
+  | 'RATE_LIMITED'     // Rate limit hit — retry with backoff
+  | 'OVERLOADED'       // Provider overloaded — retry after delay
+  | 'CONTEXT_LENGTH'   // Prompt exceeds model context window
+  | 'CONTENT_FILTERED'; // Content filtered by safety systems
 
 interface LLMError {
   code: LLMErrorCode;
@@ -172,12 +203,12 @@ interface LLMError {
 interface ModelPricing {
   inputPricePerMillion: number;
   outputPricePerMillion: number;
-  cacheReadMultiplier?: number;
-  cacheWriteMultiplier?: number;
+  cacheReadMultiplier?: number;       // e.g. 0.1 = 10% of base (Anthropic)
+  cacheWriteMultiplier?: number;      // e.g. 1.25 = 125% of base (Anthropic)
   webSearchCostPerCall?: number;
   groundingCostPerRequest?: number;
   imagePricing?: Partial<Record<ImageSize, number>>;
-  useProviderCost?: boolean;
+  useProviderCost?: boolean;          // Use cost from provider response instead
 }
 
 interface ProviderPricing {
@@ -196,7 +227,7 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 ## Used By
 
-**Packages (10):** `llm-factory`, `llm-pricing`, `llm-audit`, `llm-prompts`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-glm`, `infra-perplexity`, `internal-clients`
+**Packages (9):** `llm-factory`, `llm-pricing`, `llm-audit`, `llm-prompts`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-perplexity`, `internal-clients`
 
 **Apps (14):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `user-service`, `web`, `web-agent`
 
@@ -204,20 +235,19 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 ## Recent Changes
 
-| Commit   | Description                                                                                               | Age     |
-| -------- | --------------------------------------------------------------------------------------------------------- | ------- |
-| 0f69a74b | Extend FastModel with ClaudeHaiku35/GPT4oMini; add ALL_FAST_MODELS, isFastModel, FAST_MODEL_DISPLAY_NAMES | 10 days |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner                                                          | 17 days |
-| 21c1528a | Fix release skill to bump all package versions                                                            | 3 weeks |
-| 4fa0fed3 | Release v2.0.0                                                                                            | 3 weeks |
-| 68ab051c | Break llm-contract -> llm-common dependency                                                               | 3 weeks |
-| 2c3a98ce | Add GLM-4.7-Flash support as free Zai AI model                                                            | 4 weeks |
+| Commit    | Description                                                     | Age     |
+| --------- | --------------------------------------------------------------- | ------- |
+| c4e3a13cb | Release v3.3.0                                                  | 2 hours |
+| e4d231053 | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 removal  | 3 days  |
+| 293426524 | Add tool calling infrastructure for GitHub Agent                | 7 days  |
+| 44ae683ae | Release v3.2.0                                                  | 8 days  |
 
 ## Source Files
 
-| File                     | Purpose                                        |
-| ------------------------ | ---------------------------------------------- |
-| `src/index.ts`           | Re-exports all types, constants, and functions |
-| `src/types.ts`           | LLMClient, result types, error types           |
-| `src/supportedModels.ts` | Model/provider types, constants, helpers       |
-| `src/pricing.ts`         | ModelPricing, ProviderPricing, CostCalculator  |
+| File                     | Purpose                                                    |
+| ------------------------ | ---------------------------------------------------------- |
+| `src/index.ts`           | Re-exports all types, constants, and functions             |
+| `src/types.ts`           | `LLMClient`, result types, error types, usage types        |
+| `src/supportedModels.ts` | Model/provider types, constants, runtime helpers           |
+| `src/pricing.ts`         | `ModelPricing`, `ProviderPricing`, `CostCalculator`        |
+| `src/toolCalling.ts`     | `ToolCallingClient`, `ToolDefinition`, `ToolCallingResult` |

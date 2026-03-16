@@ -2,7 +2,7 @@
 
 Complete documentation for all IntexuraOS services, workers, and packages.
 
-**Version 3.3.0** — March 15, 2026
+**Version 3.3.0** — March 16, 2026
 
 ---
 
@@ -31,15 +31,15 @@ Complete documentation for all IntexuraOS services, workers, and packages.
 
 ## v3.0.0 Highlights (Previous)
 
-| Component         | Key Changes                                                         |
-| ----------------- | ------------------------------------------------------------------- |
-| **chat-agent**    | New: In-app AI assistant with RAG, guest access, command creation   |
-| **code-agent**    | New: Autonomous code execution with worker dispatch and dedup       |
-| **orchestrator**  | New: Local worker orchestration for Claude Code sessions via Docker |
-| **claude-worker** | New: Docker container image for isolated Claude Code execution      |
-| **log-cleanup**   | New: Cloud Function for scheduled log retention management          |
-| **vm-lifecycle**  | New: Cloud Functions for GCE VM start/stop lifecycle control        |
-| **22 packages**   | New: All shared packages documented (common, infra, LLM stack)      |
+| Component         | Key Changes                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| **chat-agent**    | New: In-app AI assistant with RAG, guest access, command creation                   |
+| **code-agent**    | New: Autonomous code execution with worker dispatch and dedup                       |
+| **orchestrator**  | New: Local worker orchestration for Claude Code sessions via Docker                 |
+| **claude-worker** | New: Docker container image for isolated Claude Code execution                      |
+| **log-cleanup**   | New: Cloud Function for scheduled log retention management                          |
+| **vm-lifecycle**  | New: Cloud Functions for GCE VM start/stop lifecycle control                        |
+| **22 packages**   | New: All shared packages documented (common, infra, LLM stack)                      |
 
 ## v2.1.0 Highlights (Older)
 
@@ -252,6 +252,7 @@ Shared libraries used across apps and workers.
 | [infra-whatsapp](../packages/infra-whatsapp/README.md)   | WhatsApp Cloud API client (send, media, read receipts)                       |
 | [infra-notion](../packages/infra-notion/README.md)       | Notion API client, token validation, page retrieval                          |
 | [infra-otel](../packages/infra-otel/README.md)           | OpenTelemetry SDK bootstrap, distributed tracing and metrics export to Dash0 |
+| [infra-glm](../packages/infra-glm/README.md)             | Alibaba Cloud Model Studio GLM client implementation                         |
 
 ### LLM Provider Clients
 
@@ -452,6 +453,6 @@ graph TD
 
 ---
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-03-16
 
 **Components documented:** 20 apps + 6 workers + 22 packages = 48 total (predev-lifecycle has no docs yet)

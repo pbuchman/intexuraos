@@ -2,10 +2,9 @@
 
 Shared utility functions for LLM operations across IntexuraOS. Provides two core capabilities: sensitive data redaction for safe logging and structured error handling for LLM response parsing failures.
 
-**Version:** 2.1.0
 **Node:** >=22.0.0
 **Type:** ESM
-**Dependencies:** `@intexuraos/common-core`, `pino`, `zod`
+**Dependencies:** `@intexuraos/common-core`, `zod`
 
 ## Why It Exists
 
@@ -88,9 +87,7 @@ Logs a parse error in structured format queryable in logging systems and Sentry.
 ```typescript
 import { logLlmParseError, createLlmParseError } from '@intexuraos/llm-utils';
 
-const details = createLlmParseError({
-  /* ... */
-});
+const details = createLlmParseError({ /* ... */ });
 logLlmParseError(logger, details);
 // Logs at warn level with operation, errorMessage, llmResponse, expectedSchema
 ```
@@ -164,14 +161,10 @@ interface LlmParseErrorDetails {
 
 ## Recent Changes
 
-| Commit   | Description                                       | Age     |
-| -------- | ------------------------------------------------- | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner  | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions    | 12 days |
-| c8d2797f | Add comprehensive error path tests for code-agent | 2 weeks |
-| 35f4c699 | Migrate LLM validation to Zod schemas (3/8)       | 2 weeks |
-| 4fa0fed3 | Release v2.0.0                                    | 2 weeks |
-| 34d44c76 | Fix package exports for type resolution           | 2 weeks |
+| Commit      | Description                                       |
+| ----------- | ------------------------------------------------- |
+| `44017d5c9` | Fix ESLint OOM with batched parallel lint runner  |
+| `35f4c6990` | Migrate LLM validation to Zod schemas (3/8)       |
 
 ## Source Files
 

@@ -1,4 +1,4 @@
-# Notes Agent -- Tutorial
+# Notes Agent — Tutorial
 
 > **Time:** 15-20 minutes
 > **Prerequisites:** IntexuraOS development environment, Auth0 access token
@@ -61,8 +61,8 @@ curl -X POST http://localhost:8121/notes \
     "tags": ["work", "planning"],
     "source": "manual",
     "sourceId": "local-1",
-    "createdAt": "2026-02-22T10:00:00.000Z",
-    "updatedAt": "2026-02-22T10:00:00.000Z"
+    "createdAt": "2026-03-15T10:00:00.000Z",
+    "updatedAt": "2026-03-15T10:00:00.000Z"
   }
 }
 ```
@@ -112,14 +112,14 @@ curl -s http://localhost:8121/notes \
       "tags": ["work", "planning"],
       "source": "manual",
       "sourceId": "local-1",
-      "createdAt": "2026-02-22T10:00:00.000Z",
-      "updatedAt": "2026-02-22T10:00:00.000Z"
+      "createdAt": "2026-03-15T10:00:00.000Z",
+      "updatedAt": "2026-03-15T10:00:00.000Z"
     }
   ]
 }
 ```
 
-Notes are returned ordered by `updatedAt` descending -- most recently updated first. Only notes belonging to your `userId` are returned.
+Notes are returned ordered by `updatedAt` descending — most recently updated first. Only notes belonging to your `userId` are returned.
 
 ### Step 2.2: Get a Specific Note
 
@@ -158,7 +158,7 @@ curl -s -X PATCH http://localhost:8121/notes/$NOTE_ID \
     "title": "Meeting Notes",
     "content": "Discussed Q4 roadmap, deliverables, and timeline adjustments.",
     "tags": ["work", "planning", "q4"],
-    "updatedAt": "2026-02-22T10:05:00.000Z"
+    "updatedAt": "2026-03-15T10:05:00.000Z"
   }
 }
 ```
@@ -246,12 +246,12 @@ curl -s -X POST http://localhost:8121/internal/notes \
 
 ### Key Differences from Public Endpoint
 
-| Aspect        | Public (`POST /notes`)                | Internal (`POST /internal/notes`)        |
-| ------------- | ------------------------------------- | ---------------------------------------- |
-| Auth          | Bearer JWT (userId from `sub` claim)  | `X-Internal-Auth` header                 |
-| userId        | Extracted from JWT automatically      | Provided in request body                 |
-| status field  | Not accepted (always `active`)        | Optional (`draft` or `active`)           |
-| Response body | Full Note object                      | ServiceFeedback with `resourceUrl`       |
+| Aspect       | Public (`POST /notes`)               | Internal (`POST /internal/notes`)  |
+| ------------ | ------------------------------------ | ---------------------------------- |
+| Auth         | Bearer JWT (userId from `sub` claim) | `X-Internal-Auth` header           |
+| userId       | Extracted from JWT automatically     | Provided in request body           |
+| status field | Not accepted (always `active`)       | Optional (`draft` or `active`)     |
+| Response     | Full Note object                     | ServiceFeedback with `resourceUrl` |
 
 ---
 
@@ -289,14 +289,14 @@ curl -s http://localhost:8121/notes \
 
 ## Troubleshooting
 
-| Problem         | Symptom                  | Solution                                                             |
-| --------------- | ------------------------ | -------------------------------------------------------------------- |
-| Auth failed     | 401 Unauthorized         | Check JWT token validity and ensure correct audience/issuer          |
-| Note not found  | 404 NOT_FOUND            | Verify note ID exists and belongs to your account                    |
-| Access denied   | 403 FORBIDDEN            | Note belongs to a different user                                     |
-| Invalid request | 400 Bad Request          | Check required fields: title, content, tags, source, sourceId        |
-| Server error    | 500 INTERNAL_ERROR       | Check Firestore connectivity; review service logs                    |
-| Internal auth   | 401 on /internal/notes   | Verify X-Internal-Auth header matches INTEXURAOS_INTERNAL_AUTH_TOKEN |
+| Problem         | Symptom                | Solution                                                             |
+| --------------- | ---------------------- | -------------------------------------------------------------------- |
+| Auth failed     | 401 Unauthorized       | Check JWT token validity and ensure correct audience/issuer          |
+| Note not found  | 404 NOT_FOUND          | Verify note ID exists and belongs to your account                    |
+| Access denied   | 403 FORBIDDEN          | Note belongs to a different user                                     |
+| Invalid request | 400 Bad Request        | Check required fields: title, content, tags, source, sourceId        |
+| Server error    | 500 INTERNAL_ERROR     | Check Firestore connectivity; review service logs                    |
+| Internal auth   | 401 on /internal/notes | Verify X-Internal-Auth header matches INTEXURAOS_INTERNAL_AUTH_TOKEN |
 
 ---
 
@@ -356,7 +356,7 @@ curl -s -X PATCH http://localhost:8121/notes/$ID1 \
   -H "Content-Type: application/json" \
   -d '{"title":"First Note (Updated)"}' > /dev/null
 
-# List and check order -- first note should now be at index 0
+# List and check order — first note should now be at index 0
 curl -s http://localhost:8121/notes \
   -H "Authorization: Bearer $TOKEN" \
   | jq '.data[0].title'

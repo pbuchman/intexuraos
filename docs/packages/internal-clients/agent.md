@@ -1,4 +1,4 @@
-# internal-clients -- Agent Reference
+# @intexuraos/internal-clients — Agent Reference
 
 Machine-readable export and interface reference for `@intexuraos/internal-clients`.
 
@@ -8,7 +8,6 @@ Machine-readable export and interface reference for `@intexuraos/internal-client
 
 ```yaml
 name: '@intexuraos/internal-clients'
-version: '2.1.0'
 entry: './src/index.ts'
 type: 'module'
 private: true
@@ -39,7 +38,6 @@ interface UserServiceConfig {
   pricingContext: IPricingContext;
   logger: Logger;
   platformGeminiApiKey?: string | undefined; // fallback: Gemini 2.5 Flash when user has no key
-  platformZaiApiKey?: string | undefined; // fallback: Glm47Flash when user has no key
 }
 
 interface UserServiceClient {
@@ -50,6 +48,9 @@ interface UserServiceClient {
     userId: string,
     provider: OAuthProvider
   ): Promise<Result<OAuthTokenResult, UserServiceError>>;
+  resolveGitHubUsername(
+    gitHubUsername: string
+  ): Promise<Result<{ userId: string } | null, UserServiceError>>;
 }
 
 interface DecryptedApiKeys {
@@ -57,7 +58,6 @@ interface DecryptedApiKeys {
   openai?: string;
   anthropic?: string;
   perplexity?: string;
-  zai?: string;
 }
 
 interface OAuthTokenResult {
@@ -99,7 +99,7 @@ interface ServiceClientError {
 ### Type Aliases
 
 ```typescript
-type OAuthProvider = 'google';
+type OAuthProvider = 'google' | 'github';
 ```
 
 ### Re-exports
@@ -118,6 +118,7 @@ export type { LlmProvider } from '@intexuraos/llm-contract';
 | GET    | `/internal/users/:userId/settings`                     | `getLlmClient`               |
 | POST   | `/internal/users/:userId/llm-keys/:provider/last-used` | `reportLlmSuccess`           |
 | GET    | `/internal/users/:userId/oauth/:provider/token`        | `getOAuthToken`              |
+| GET    | `/internal/users/by-github-username/:gitHubUsername`   | `resolveGitHubUsername`      |
 
 All endpoints require `X-Internal-Auth` header.
 
