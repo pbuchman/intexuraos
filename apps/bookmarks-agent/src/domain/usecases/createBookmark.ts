@@ -47,21 +47,27 @@ export async function createBookmark(
   if (result.ok) {
     deps.logger.info({ bookmarkId: result.value.id }, 'Bookmark created');
 
-    // Publish enrichment event if enrichPublisher is provided (best-effort)
+    // Publish enrichment event if enrichPublisher is provided (best-effort, fire-and-forget)
     if (deps.enrichPublisher !== undefined) {
-      const publishResult = await deps.enrichPublisher.publishEnrichBookmark({
-        type: 'bookmarks.enrich',
-        bookmarkId: result.value.id,
-        userId: input.userId,
-        url: input.url,
-      });
-
-      if (!publishResult.ok) {
-        deps.logger.warn(
-          { bookmarkId: result.value.id, error: publishResult.error },
-          'Failed to publish enrichment event'
-        );
-      }
+      const bookmarkId = result.value.id;
+      deps.enrichPublisher
+        .publishEnrichBookmark({
+          type: 'bookmarks.enrich',
+          bookmarkId,
+          userId: input.userId,
+          url: input.url,
+        })
+        .then((publishResult) => {
+          if (!publishResult.ok) {
+            deps.logger.warn(
+              { bookmarkId, error: publishResult.error },
+              'Failed to publish enrichment event'
+            );
+          }
+        })
+        .catch((error: unknown) => {
+          deps.logger.warn({ bookmarkId, error }, 'Failed to publish enrichment event');
+        });
     }
   } else {
     deps.logger.error({ error: result.error }, 'Failed to create bookmark');
