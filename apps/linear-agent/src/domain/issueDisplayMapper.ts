@@ -50,6 +50,7 @@ export function buildIssueDisplayResponse(
 
 /**
  * Derive a comment summary (count + last comment timestamp) from an array of comments.
+ * Assumes comments are sorted chronologically (oldest first) — the last element is treated as the most recent.
  */
 export function toCommentSummary(comments: { createdAt: string }[]): { commentCount: number; lastCommentAt: string | null } {
   return {
