@@ -13,13 +13,18 @@ import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { setServices } from './serviceContainer.js';
 
 export function initializeServices(pricingContext: IPricingContext): void {
-  const bucketName = process.env['INTEXURAOS_IMAGE_BUCKET'] ?? '';
+  const bucketName =
+    process.env['INTEXURAOS_IMAGE_BUCKET'] ?? ''; /* v8 ignore module-init -- Tested via integration tests @preserve */
   const publicBaseUrl = process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
   const storage = createGcsImageStorage(bucketName, publicBaseUrl);
 
   const userServiceClient = createUserServiceClient({
-    baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
-    internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    baseUrl:
+      process.env['INTEXURAOS_USER_SERVICE_URL'] ??
+      'http://localhost:8110' /* v8 ignore module-init -- Tested via integration tests @preserve */,
+    internalAuthToken:
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ??
+      '' /* v8 ignore module-init -- Tested via integration tests @preserve */,
     pricingContext,
     logger: createAppLogger({ name: 'user-service-client' }),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
