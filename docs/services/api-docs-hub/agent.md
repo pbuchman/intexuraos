@@ -9,7 +9,7 @@
 | **Name**    | api-docs-hub                                                            |
 | **Role**    | Aggregates OpenAPI specs from 18 services into a single Swagger UI      |
 | **Goal**    | Provide a unified documentation portal for all IntexuraOS service APIs  |
-| **Version** | 3.2.0 (package) / 0.0.5 (OpenAPI spec)                                  |
+| **Version** | 3.3.0 (package) / 0.0.5 (OpenAPI spec)                                  |
 
 ---
 
@@ -169,4 +169,4 @@ The hub serves Swagger UI HTML to the browser. The browser then fetches OpenAPI 
 
 ---
 
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-15

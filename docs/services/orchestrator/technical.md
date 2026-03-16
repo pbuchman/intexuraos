@@ -142,6 +142,10 @@ graph TB
 
 ## Recent Changes
 
+### v3.3.0 Release (2026-03-15)
+
+Consolidated release including Docker health gate, container creation timeout, unified PR automation log, `already_completed` execution outcome, mandatory model name in PR descriptions, Deep Validation improvements with severity indicators, Review Agent additions, Kimi worker type, and numerous reliability fixes (fatal exit code handling, worktree serialization, resilient repo startup, periodic stale cleanup, Docker exec stream leak fix, resume result preservation, pending resume recovery).
+
 ### Docker Health Gate and Container Creation Timeout (2026-03-15)
 
 The orchestrator now checks Docker daemon health and disk availability before accepting new tasks. Task submission returns `503 docker_unavailable` when the daemon is not responding. Container creation has a 2-minute timeout (`CONTAINER_CREATE_TIMEOUT_MS`) to prevent hung dispatches.

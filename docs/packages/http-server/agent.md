@@ -1,4 +1,4 @@
-# @intexuraos/http-server - Agent Reference
+# @intexuraos/http-server — Agent Reference
 
 Machine-readable export map and interface definitions for automated tooling.
 
@@ -6,14 +6,13 @@ Machine-readable export map and interface definitions for automated tooling.
 
 ```
 name: @intexuraos/http-server
-version: 2.1.0
 type: module
 leaf: false
 dependencies:
   - @intexuraos/common-core (workspace)
   - @intexuraos/common-http (workspace)
   - @intexuraos/infra-firestore (workspace)
-  - fastify ^5.1.0
+  - fastify ^5.x
 entry_points:
   - ".": ./src/index.ts
 ```
@@ -90,7 +89,7 @@ app.setErrorHandler(createValidationErrorHandler());
 
 app.get('/health', async (_req, reply) => {
   const checks = [checkSecrets(REQUIRED_ENV), await checkFirestore()];
-  return reply.ok(buildHealthResponse('my-service', '2.1.0', checks));
+  return reply.ok(buildHealthResponse('my-service', '3.3.0', checks));
 });
 ```
 

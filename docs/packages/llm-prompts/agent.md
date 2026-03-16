@@ -1,222 +1,138 @@
-# @intexuraos/llm-prompts - Agent Reference
+# @intexuraos/llm-prompts — Agent Reference
 
-Machine-readable export map and interface definitions for automated tooling.
+> Machine-readable interface for automated tooling and AI agents.
 
-## Package Metadata
+## Identity
 
-```
-name: @intexuraos/llm-prompts
-version: 2.1.0
-type: module
-leaf: false
-dependencies: @intexuraos/llm-contract, @intexuraos/common-core, @intexuraos/llm-utils, pino, zod
-entry_points:
-  - ".": ./src/index.ts
-domains: generation, classification, research, synthesis, validation, todos, image, dataInsights, approvals, calendar, linear, shared
-```
+| Attribute | Value                                                                |
+| --------- | -------------------------------------------------------------------- |
+| Package   | `@intexuraos/llm-prompts`                                            |
+| Role      | Centralized LLM prompt library for all IntexuraOS domains            |
+| Goal      | Provide typed, versioned, testable prompt builders to every service  |
+| Firestore | None — this package has no Firestore access                          |
 
-## Core Interfaces
+## Core Interface
 
 ```typescript
+interface PromptBuilder<TInput, TDeps extends PromptDeps = PromptDeps> {
+  readonly name: string;
+  readonly description: string;
+  readonly version: string;  // semver — bumped when content changes
+  build(input: TInput, deps?: TDeps): string;
+}
+
 interface PromptDeps {
   currentDate?: () => string;
   maxLength?: number;
   language?: string;
 }
-
-interface PromptBuilder<TInput, TDeps extends PromptDeps = PromptDeps> {
-  readonly name: string;
-  readonly description: string;
-  /** Semver string (MAJOR.MINOR.PATCH). CI-enforced via verify:prompt-versions. */
-  readonly version: string;
-  build(input: TInput, deps?: TDeps): string;
-}
 ```
 
-## Exported PromptBuilder Instances
+## Export Map by Domain
 
-```typescript
-// generation/
-const titlePrompt: PromptBuilder<TitlePromptInput, TitlePromptDeps>;
-const labelPrompt: PromptBuilder<LabelPromptInput, LabelPromptDeps>;
-const feedNamePrompt: PromptBuilder<FeedNamePromptInput, FeedNamePromptDeps>;
+### generation
 
-// classification/
-const commandClassifierPrompt: PromptBuilder<
-  CommandClassifierPromptInput,
-  CommandClassifierPromptDeps
->;
-const intelligentClassifierPrompt: PromptBuilder<
-  IntelligentClassifierPromptInput,
-  IntelligentClassifierPromptDeps
->;
+| Export           | Input type                               | Key deps                                       |
+| ---------------- | ---------------------------------------- | ---------------------------------------------- |
+| `titlePrompt`    | `{ content: string }`                    | `maxLength?`, `wordRange?`, `includeExamples?` |
+| `labelPrompt`    | `{ content: string }`                    | `maxLength?`                                   |
+| `feedNamePrompt` | `{ name: string; description?: string }` | —                                              |
 
-// validation/
-const inputQualityPrompt: PromptBuilder<InputQualityPromptInput, InputQualityPromptDeps>;
-const inputImprovementPrompt: PromptBuilder<
-  InputImprovementPromptInput,
-  InputImprovementPromptDeps
->;
+### classification
 
-// todos/
-const itemExtractionPrompt: PromptBuilder<ItemExtractionPromptInput, ItemExtractionPromptDeps>;
+| Export                     | Input type                  | Output format                  |
+| -------------------------- | --------------------------- | ------------------------------ |
+| `commandClassifierPrompt`  | `{ message: string }`       | Single category string         |
+| `intelligentPromptBuilder` | `{ message: string }`       | Category with confidence       |
 
-// image/
-const thumbnailPrompt: PromptBuilder<ThumbnailPromptInput, ThumbnailPromptDeps>;
+Categories: `'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code'`
 
-// dataInsights/
-const dataAnalysisPrompt: PromptBuilder<DataAnalysisPromptInput, DataAnalysisPromptDeps>;
-const chartDefinitionPrompt: PromptBuilder<ChartDefinitionPromptInput, ChartDefinitionPromptDeps>;
-const dataTransformPrompt: PromptBuilder<DataTransformPromptInput, DataTransformPromptDeps>;
+### research
 
-// approvals/
-const approvalIntentPrompt: PromptBuilder<ApprovalIntentPromptInput, ApprovalIntentPromptDeps>;
+| Export                  | Input type             | Output format                          |
+| ----------------------- | ---------------------- | -------------------------------------- |
+| `researchPrompt`        | `ResearchContext`      | Structured research prompt string      |
+| `synthesisPrompt`       | `SynthesisInput[]`     | Multi-source synthesis prompt          |
+| `modelExtractionPrompt` | `{ message: string }`  | JSON `{ model: LLMModel }`             |
+| `repairPrompt`          | `{ query, error }`     | Repair instruction prompt              |
 
-// calendar/
-const calendarActionExtractionPrompt: PromptBuilder<
-  CalendarEventExtractionPromptInput,
-  CalendarEventExtractionPromptDeps
->;
-const calendarExtractionRepairPrompt: PromptBuilder<
-  CalendarExtractionRepairPromptInput,
-  CalendarExtractionRepairPromptDeps
->;
+### todos
 
-// linear/
-const linearActionExtractionPrompt: PromptBuilder<
-  LinearIssueExtractionPromptInput,
-  LinearIssueExtractionPromptDeps
->;
-const linearIssueTitlePrompt: PromptBuilder<
-  LinearIssueTitlePromptInput,
-  LinearIssueTitlePromptDeps
->;
-```
+| Export                 | Input type                | Output format             |
+| ---------------------- | ------------------------- | ------------------------- |
+| `itemExtractionPrompt` | `{ description: string }` | JSON array of todo items  |
 
-## Exported Functions
+### image
 
-```typescript
-// research/
-function buildResearchPrompt(/* ... */): string;
-function buildSynthesisPrompt(/* ... */): string;
-function buildInferResearchContextPrompt(/* ... */): string;
-function buildResearchContextRepairPrompt(/* ... */): string;
-function buildModelExtractionPrompt(/* ... */): string;
-function parseModelExtractionResponse(/* ... */): ModelExtractionResponse | null;
-function parseModelExtractionResponseWithLogging(
-  logger: Logger /* ... */
-): ModelExtractionResponse | null;
-function parseAttributionLine(line: string): AttributionLine | null;
-function parseSections(content: string): ParsedSection[];
-function buildSourceMap(/* ... */): Map<SourceId, SourceMapItem>;
-function validateSynthesisAttributions(/* ... */): ValidationResult;
-function generateBreakdown(/* ... */): BreakdownEntry[];
-function stripAttributionLines(content: string): string;
+| Export                    | Input type                | Output format             |
+| ------------------------- | ------------------------- | ------------------------- |
+| `thumbnailPrompt`         | `{ content: string }`     | Image generation prompt   |
+| `generateThumbnailPrompt` | `{ title, description }`  | Image generation prompt   |
 
-// synthesis/
-function buildInferSynthesisContextPrompt(/* ... */): string;
-function buildSynthesisContextRepairPrompt(/* ... */): string;
+### dataInsights
 
-// validation/
-function buildValidationRepairPrompt(/* ... */): string;
-function buildImprovementRepairPrompt(/* ... */): string;
-function isInputQualityResult(value: unknown): value is InputQualityResult;
+| Export                    | Input type           | Output format                    |
+| ------------------------- | -------------------- | -------------------------------- |
+| `dataAnalysisPrompt`      | `{ data, source }`   | JSON array of up to 5 insights   |
+| `chartDefinitionPrompt`   | `{ data, insight }`  | Vega-Lite JSON spec              |
+| `dataTransformPrompt`     | `{ data, target }`   | Transformed data JSON            |
 
-// image/
-function generateThumbnailPrompt(/* ... */): Result<ThumbnailPrompt, ThumbnailPromptError>;
+### calendar
 
-// dataInsights/
-function parseInsightResponse(/* ... */): ParseInsightResult;
-function parseChartDefinition(/* ... */): ParsedChartDefinition;
-function parseTransformedData(/* ... */): unknown;
-function buildInsightRepairPrompt(/* ... */): string;
+| Export                           | Input type              | Output format              |
+| -------------------------------- | ----------------------- | -------------------------- |
+| `calendarActionExtractionPrompt` | `{ message: string }`   | JSON calendar event object |
+| `repairPrompt`                   | `{ message, error }`    | Repair instruction         |
 
-// approvals/
-function parseApprovalIntentResponse(/* ... */): ApprovalIntentResponse | null;
-function parseApprovalIntentResponseWithLogging(
-  logger: Logger /* ... */
-): ApprovalIntentResponse | null;
+### linear
 
-// calendar/
-function buildCalendarExtractionRepairPrompt(/* ... */): string;
+| Export                         | Input type                | Output format                 |
+| ------------------------------ | ------------------------- | ----------------------------- |
+| `linearActionExtractionPrompt` | `{ description: string }` | JSON Linear issue fields      |
+| `linearIssueTitlePrompt`       | `{ description: string }` | Plain title string            |
 
-// classification/
-function toClassificationExample(/* ... */): ClassificationExample;
-function toClassificationCorrection(/* ... */): ClassificationCorrection;
+### approvals
 
-// shared/
-function isStringArray(value: unknown): value is string[];
-function isObject(value: unknown): value is Record<string, unknown>;
-function isDomain(value: unknown): value is Domain;
-function isMode(value: unknown): value is Mode;
-function isDefaultApplied(value: unknown): value is DefaultApplied;
-function isSafetyInfo(value: unknown): value is SafetyInfo;
-```
+| Export                 | Input type              | Output format                         |
+| ---------------------- | ----------------------- | ------------------------------------- |
+| `approvalIntentPrompt` | `{ message: string }`   | JSON `{ intent: 'approve'             | 'reject' | 'unclear' }` |
 
-## Exported Zod Schemas
+### validation
 
-```typescript
-// classification/
-const CommandClassificationSchema: ZodSchema<CommandClassification>;
+| Export                             | Input type                  | Output format                            |
+| ---------------------------------- | --------------------------- | ---------------------------------------- |
+| `inputQualityPrompt`               | `{ query: string }`         | JSON `{ score: number, reason: string }` |
+| `inputImprovementPrompt`           | `{ query: string }`         | Improved query string                    |
+| `buildInputValidationRepairPrompt` | `{ query, error }`          | Repair instruction                       |
 
-// research/
-const AnswerStyleSchema, SourceTypeSchema, AvoidSourceTypeSchema: ZodSchema;
-const TimeScopeSchema, LocaleScopeSchema, ResearchPlanSchema, OutputFormatSchema: ZodSchema;
-const ResearchContextSchema: ZodSchema<ResearchContext>;
+### shared
 
-// synthesis/
-const SynthesisGoalSchema, ConflictSeveritySchema, DetectedConflictSchema: ZodSchema;
-const SourcePreferenceSchema, SynthesisOutputFormatSchema: ZodSchema;
-const SynthesisContextSchema: ZodSchema<SynthesisContext>;
+| Export           | Type       | Purpose                           |
+| ---------------- | ---------- | --------------------------------- |
+| `PromptBuilder`  | interface  | Base interface for all prompts    |
+| `PromptDeps`     | interface  | Base dependency injection type    |
+| `DOMAINS`        | string[]   | All recognized domain strings     |
+| `MODES`          | string[]   | All recognized mode strings       |
+| `DomainSchema`   | Zod schema | Runtime validation for domains    |
+| `ModeSchema`     | Zod schema | Runtime validation for modes      |
 
-// todos/
-const ExtractedItemSchema, TodoExtractionResponseSchema: ZodSchema;
+## Constraints
 
-// dataInsights/
-const VegaLiteConfigSchema, DataInsightSchema, TransformedDataSchema: ZodSchema;
+**Do NOT:**
+- Modify prompt content without bumping the `version` field (CI will fail)
+- Skip the literal-content injection guard for prompts accepting user-supplied text
+- Import directly from sub-paths — use the top-level `@intexuraos/llm-prompts` export
 
-// calendar/
-const CalendarEventSchema: ZodSchema<CalendarEvent>;
+**Requires:**
+- `zod` for response schema validation in consumer code
+- No runtime services or environment variables — this package is pure computation
 
-// linear/
-const LinearIssueDataSchema, LinearIssueTitleSchema, LinearIssueTypeSchema: ZodSchema;
+## Dependencies
 
-// shared/
-const DomainSchema,
-  ModeSchema,
-  DefaultAppliedSchema,
-  SafetyInfoSchema,
-  InputQualitySchema: ZodSchema;
-```
-
-## Dependency Graph
-
-```
-common-core, llm-contract, llm-utils
-  <- llm-prompts
-       <- infra-claude, infra-gemini, infra-glm, infra-gpt, infra-perplexity
-       <- 9 apps (actions-agent, calendar-agent, commands-agent,
-                   data-insights-agent, image-service, linear-agent,
-                   research-agent, todos-agent, web-agent)
-```
-
-## Usage Patterns
-
-```typescript
-// Build a prompt
-import { titlePrompt } from '@intexuraos/llm-prompts';
-const prompt = titlePrompt.build({ content: 'My article text...' }, { maxLength: 60 });
-
-// Validate LLM response with Zod schema
-import { CommandClassificationSchema } from '@intexuraos/llm-prompts';
-const result = CommandClassificationSchema.safeParse(JSON.parse(llmResponse));
-if (!result.success) {
-  /* handle validation error */
-}
-
-// Use type guards
-import { isResearchContext, type ResearchContext } from '@intexuraos/llm-prompts';
-if (isResearchContext(parsed)) {
-  const ctx: ResearchContext = parsed;
-}
-```
+| Package                    | Why Needed                                              |
+| -------------------------- | ------------------------------------------------------- |
+| `@intexuraos/llm-contract` | `SynthesisInput` and related types                      |
+| `@intexuraos/common-core`  | Utility types                                           |
+| `@intexuraos/llm-utils`    | Shared LLM utility helpers                              |
+| `zod`                      | Response schema validation (Zod schemas exported)       |
+| `pino`                     | Logger type for structured logging in context inference |

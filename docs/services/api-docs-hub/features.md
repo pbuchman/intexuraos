@@ -33,7 +33,7 @@ A developer's first visit to the docs hub reveals the full surface area of Intex
 - **Single bookmark** — One URL replaces eighteen, and the dropdown puts every service within two clicks
 - **Live specifications** — Fetched directly from running services, so docs are never stale
 - **Full platform map** — The dropdown doubles as a directory of every API in the system
-- **Zero learning curve** — built on Swagger UI, so any developer who has used API documentation before already knows how to navigate, test requests, and inspect schemas
+- **Zero learning curve** — Built on Swagger UI, so any developer who has used API documentation before already knows how to navigate, test requests, and inspect schemas
 
 ## Limitations
 

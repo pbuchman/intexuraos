@@ -1,82 +1,73 @@
 # Claude Worker
 
-A ready-to-go coding environment in a box — your credentials, your machine, your control.
+Every coding task gets a fully equipped, security-hardened development environment that self-destructs when the work is done.
 
 ## The Problem
 
-Running an AI coding agent on your host machine is like handing a contractor the master key to every room in the building. The agent needs access to source code, credentials, and network resources to do meaningful work — but nothing stops it from wandering into production databases, reading secrets it does not need, or making network calls to internal services you never intended to expose.
+Running an AI coding agent on your host machine is like handing a contractor the master key to every room in the building. The agent needs access to source code, credentials, and network resources to do meaningful work — but nothing stops it from wandering into production databases, reading secrets it does not need, or making network calls to internal services you never intended to expose. Most developers accept this risk because the alternative — manually provisioning isolated environments for every task — takes longer than doing the work themselves.
 
-Most managed platforms solve this by moving the problem off your machine entirely. They run the agent in their cloud, with their API keys, on their infrastructure. You gain convenience but surrender control. Your source code passes through third-party servers. Your API spend flows through someone else's account, with their rate limits and their audit trail. When something goes wrong — and with autonomous agents, things do go wrong — you have no way to inspect what the agent accessed, no way to replay its network calls, and no way to confirm that credentials were not logged somewhere you cannot reach.
+Most managed platforms solve this by moving the problem off your machine entirely. They run the agent in their cloud, with their API keys, on their infrastructure. Your source code passes through third-party servers. Your API spend flows through someone else's account, with their rate limits and their audit trail. When something goes wrong — and with autonomous agents, things do go wrong — you have no way to inspect what the agent accessed, no way to replay its network calls, and no way to confirm that credentials were not logged somewhere you cannot reach. Platforms like Devin, Cursor Background Agents, and Copilot Workspace all require this trade-off. The convenience is real. The control you give up is permanent.
 
-What teams actually need is neither of these. Not a process running loose on the host machine, and not a black box in someone else's cloud. They need an environment that is powerful enough for real engineering work, contained enough that a misbehaving process cannot reach beyond the task at hand, and owned entirely by the people who operate it.
+Claude Worker takes a fundamentally different position: the agent runs on your machine, inside your network, under your API keys — but it cannot touch anything beyond the single task it was assigned. Your source code never leaves your infrastructure. Your Anthropic subscription, your rate limits, your audit trail. The security boundary is not a vendor's terms of service; it is a container you own and can inspect. Rebuilding this from scratch — the credential isolation, the network restrictions, the session continuity, the daily toolchain updates — is months of infrastructure work that cloud-only competitors cannot shortcut by changing a configuration flag.
+
+This is also why Claude Worker exists as a separate, purpose-built container image rather than a mode of the orchestrator process. The orchestrator manages tasks, dispatches work, and verifies results. The worker is the environment itself — the toolchain, the security perimeter, the ephemeral workspace. Splitting them at the image boundary means you can rebuild the coding environment daily (picking up the latest Claude CLI) without redeploying orchestration logic. You can run four environments simultaneously, each with its own repository copy and credential set, without them sharing a single byte of memory or state. And you can version, audit, and pin the exact image digest that ran any given task — something impossible when the environment is just a subprocess of the orchestrator.
 
 ## Use Case: The Overnight Feature Build
 
 A team lead who wants a complex feature implemented by morning — without babysitting the process.
 
-1. The lead opens the IntexuraOS web dashboard — the browser-based interface for assigning tasks and monitoring progress — and assigns the task before leaving for the day. No one configures an environment, installs dependencies, or sets up credentials.
-2. The system provisions a fresh, isolated environment automatically. It arrives with version control, package management, fast code search, infrastructure tooling, a browser for automated testing, documentation lookup, error tracking, and pre-installed Claude Code plugins — all installed and connected from the first command.
-3. The agent begins working immediately. Project dependencies are installed at startup using a shared cache, so packages that any previous environment already downloaded are available in seconds rather than minutes. Environment variables are synced from GCP Secret Manager at container start, so the agent has access to every service credential it needs without manual configuration.
+1. The lead opens the IntexuraOS dashboard and assigns the task before leaving for the day. No one configures an environment, installs dependencies, or sets up credentials.
+2. The system provisions a fresh, isolated environment automatically. It arrives ready to write code, run tests, search codebases, validate infrastructure, automate a browser, create pull requests, and look up documentation — all connected and configured from the first command.
+3. Environment variables are synced from GCP Secret Manager at container start. Project dependencies install automatically using a shared package cache, so packages that any previous environment already downloaded are available in seconds rather than minutes. The agent begins working immediately.
 4. Logs stream back to the dashboard in real time. A teammate checking in over coffee can see exactly what the agent is doing, what tests it is running, and whether it has hit any problems.
-5. Midway through, a test fails. The agent adjusts its approach and continues. If it stalls or hits the two-hour attempt limit, the system retries automatically — but the environment stays warm. Session history, installed packages, and prior reasoning carry forward, so the next attempt picks up where the last one left off.
-6. If the agent crashes unexpectedly (e.g., a segfault in the Claude CLI), the system captures forensic data — core dumps, debug logs, session state, and stack traces — for post-mortem analysis, then retries automatically.
-7. By morning, the only evidence of the work is a clean pull request. The environment has been destroyed — no leftover processes, no credentials lingering on disk, no container sitting idle.
+5. Midway through, a test fails. The agent adjusts its approach and continues. If it stalls or hits the two-hour attempt limit, the system does not tear down the environment and start over. Instead, it retries inside the same running environment — session history, installed packages, and prior reasoning all carry forward. The next attempt picks up where the last one left off, already knowing what it tried and why it failed.
+6. By morning, the only evidence of the work is a clean pull request. The environment has been destroyed — no leftover processes, no credentials lingering on disk, no container sitting idle. Everything ran on the team's own infrastructure, under their own API keys, with nothing sent to a third-party cloud.
 
 ## How It Helps
 
-### Keeps Your Credentials on Your Machine
+### Recovers Instead of Restarting — Session Continuity Across Failures
 
-You can set spending caps, monitor usage in real time, and revoke access instantly if something looks wrong — because the agent runs under your team's own Anthropic subscription, managed by whoever administers your host machine. No usage appears on someone else's invoice. No audit trail lives in a vendor's log store.
+Most retry systems are amnesiacs. When an attempt fails — a test breaks, a timeout hits, the approach needs rethinking — they tear everything down and start from scratch. The agent reinstalls dependencies, re-reads the codebase, re-discovers the same dead ends, and burns through the same forty minutes of setup before it can try something new.
 
-This matters because autonomous agents can be expensive. When you control the subscription directly, you see exactly how much each task consumed and you can cut off a runaway task without filing a support ticket with a vendor.
+Claude Worker does not restart. It recovers. The environment stays alive between attempts. The orchestrator triggers each retry as a new command inside the same running container, resuming the agent's previous session with full context about what it tried and why it failed. Installed packages persist. The codebase is already indexed. The session history is intact.
 
-**Example:** Your team's Anthropic account shows exactly how many tokens each task consumed. If a runaway task burns through an unusual amount, you see it in the same dashboard you already use — and you can cut it off without filing a ticket.
+This is not a small optimization. It is the difference between an agent that takes three cold starts to solve a hard problem — each one burning setup time and API tokens — and an agent that accumulates knowledge across attempts, treating each failure as information rather than a reason to forget everything.
 
-### Delivers a Complete Workstation, Ready on Arrival
+**Example:** The agent spends forty minutes on a task before hitting a test failure that forces a different approach. On the retry, it does not repeat those forty minutes of setup. Dependencies are already installed. The codebase is already indexed. The session history shows what it tried and why it failed, so the next attempt starts with that context intact.
 
-Every environment arrives with tools for managing code history, installing dependencies, searching files across large codebases, processing structured data, creating pull requests, automating a browser, validating infrastructure configurations, and authenticating with cloud providers. Claude Code plugins for documentation lookup (Context7), error tracking (Sentry), browser automation (Playwright), commit attribution, PR review, and frontend design are pre-installed and configured before the agent writes its first line of code.
+### Runs on Your Infrastructure — Not in Someone Else's Cloud
 
-Project dependencies are installed automatically at startup. A shared package cache means the first environment pays the installation cost once, and every subsequent environment benefits. Environment variables are synced from GCP Secret Manager and loaded via direnv, so the agent has access to all service credentials without manual setup. A task that would take twenty minutes to set up by hand is ready in seconds.
+Every environment runs on a machine you control, using API keys you own, behind a network perimeter you define. Your source code is never uploaded to a third-party service. Your Anthropic API spend is yours — your rate limits, your usage dashboard, your billing. When you need to audit what the agent did, the logs are on your machine, the container image digest is in your registry, and the git history is in your repository.
 
-**Example:** The agent needs to validate infrastructure settings, run a browser-based integration test, and then create a pull request — all in the same task. It does not install anything or configure any credentials. Every tool is already there.
+This is not a philosophical preference. It is a structural advantage that cloud-hosted competitors cannot replicate without abandoning their business model. They need your code on their servers to run their agents. You do not need to send your code anywhere. The agent runs where the code already lives.
 
-### Isolates Each Task by Design
+**Example:** Your company's security policy prohibits source code from leaving the corporate network. With cloud-hosted coding agents, that is a non-starter. With Claude Worker, the agent runs on your own server or your development machine — the code never crosses a network boundary you do not control.
 
-Each environment starts without administrator access and cannot escalate its privileges. The system that manages containers is not accessible from inside — the agent cannot provision new environments, inspect other running tasks, or interfere with the host machine's operations.
+### Arrives Fully Equipped — Zero Setup, Zero Delay
 
-Network access is scoped to the public internet: package registries, source control, and external APIs are reachable. Private IP ranges, the host machine's local services, and cloud infrastructure metadata endpoints are blocked. The agent can pull a dependency from npm or call a public API, but it cannot probe the internal network or discover other workloads running on the same machine.
+Every environment ships with a complete developer toolchain: version control, package management, fast code search, infrastructure validation, browser automation for running end-to-end tests, the GitHub CLI for pull request workflows, and cloud authentication. Six Claude Code plugins — for documentation lookup, enhanced tool capabilities, browser testing, commit attribution, PR review, and frontend design — are pre-installed and configured before the agent writes its first line of code.
 
-Each task gets its own isolated copy of the repository, so concurrent tasks cannot step on each other's work. A two-hour maximum per attempt prevents any single task from running indefinitely.
+Project dependencies install automatically at startup. A shared package store means the first environment pays the installation cost once; every subsequent environment reuses the cached packages. Environment variables sync from a cloud secret store and load automatically, so the agent has access to every service credential without manual configuration. A task that would take twenty minutes to set up by hand is ready in seconds.
 
-**Example:** Two tasks run simultaneously on the same machine. One is refactoring authentication logic; the other is building a new API endpoint. Each operates in its own copy of the codebase with its own resource allocation. Neither can see the other's work, read the other's secrets, or compete for the other's memory.
+**Example:** The agent needs to validate Terraform configurations, run a Playwright browser test against a staging environment, and then create a pull request — all in the same task. It does not install anything or configure any credentials. Every tool is already there, every plugin is already connected.
 
-### Preserves Continuity Across Attempts
+### Isolates Every Task — Without Trusting the Agent to Behave
 
-An "attempt" is a single run of the agent against a task. If the first try does not succeed — a test fails, a timeout is hit, or the approach needs rethinking — the system retries with a fresh strategy. But the environment stays warm. Installed packages persist. The agent's previous session is resumed, so it starts the next attempt with context about what it tried and why it failed — though long sessions may be summarized to fit within the model's context window.
+Each environment runs as a non-root user with no ability to gain elevated privileges or spawn new containers. The agent cannot provision new environments, inspect other running tasks, or interfere with the host. Dangerous network utilities are removed from the image entirely.
 
-This is the difference between a system that retries and a system that recovers. A naive retry discards everything and starts from scratch — reinstalling dependencies, re-reading the codebase, re-discovering the same dead ends. A recovery picks up where the last attempt left off, skips the work that already succeeded, and tries a different path through the parts that failed.
+Network access is scoped to the public internet: package registries, source control, and external APIs are reachable. Private IP ranges, the host machine's local services, and the cloud metadata endpoint are all blocked via firewall rules. The agent can pull a dependency from a package registry or push to GitHub, but it cannot probe the internal network or discover other workloads running on the same machine. Each task gets its own isolated copy of the repository, so concurrent tasks cannot read each other's files, secrets, or session state.
 
-**Example:** The agent spends forty minutes on a task before hitting a test failure that forces a different approach. On the retry, it does not repeat those forty minutes of setup. Dependencies are already installed. The codebase is already indexed. The agent's session history shows what it tried and why it failed, so it starts the next attempt with that context intact.
+The security model does not depend on the agent following rules. The restrictions are structural — enforced by the container runtime and network firewall, not by prompt instructions the agent could choose to ignore.
 
-### Captures Crash Forensics Automatically
+**Example:** Two tasks run simultaneously on the same machine. One is refactoring authentication logic; the other is building a new API endpoint. Each operates in its own copy of the codebase. Neither can see the other's work, read the other's secrets, or interfere with the other's processes. If one task goes haywire, the other is unaffected.
 
-When a Claude CLI process crashes (e.g., exit code 139 indicating a segfault), the system automatically collects diagnostic artifacts: core dumps, GDB stack traces, command timing logs, debug directory contents, session snapshots, and process metadata. These artifacts are written to a timestamped directory that survives container teardown, enabling post-mortem analysis without reproducing the crash.
+### Cleans Up After Itself — No Stale Credentials, No Lingering State
 
-**Example:** An overnight task hits a segfault in the Claude CLI binary. By morning, the forensics directory contains the core dump, a full GDB backtrace, and the Claude session state at the time of the crash. The team can diagnose the issue without guessing what happened.
+When a task completes, the environment is destroyed. Temporary files, session state, credentials mounted during execution — all of it disappears. Secrets are mounted read-only during the task and cease to exist when the container is removed. Nothing persists on disk between tasks unless it was committed and pushed to the repository.
 
-### Cleans Up After Itself
-
-When a task completes, the environment is destroyed. Temporary files, session state, credentials mounted during execution — all of it disappears. Nothing persists on disk between tasks unless it was committed and pushed to the repository.
-
-This is not just tidiness. Ephemeral environments eliminate an entire category of security concerns. There are no stale credentials to rotate, no leftover files to audit, and no risk that one task's secrets leak into the next task's workspace. Any environment that has been running for more than twenty-four hours is automatically removed, even if the system that created it lost track of it.
+This is not just tidiness. Ephemeral environments eliminate an entire category of security concerns. There are no stale credentials to rotate, no leftover files to audit, and no risk that one task's secrets leak into the next task's workspace. Idle and exited environments are cleaned up automatically through periodic garbage collection, so no container lingers past its usefulness.
 
 **Example:** A task that required access to a sensitive API key finishes at 3 AM. By 3:01 AM, the environment is gone. The API key is no longer mounted anywhere on the machine. No one needs to remember to clean it up.
-
-### Stays Current with Daily Rebuilds
-
-The container image is rebuilt daily at 4 AM UTC via Cloud Build, automatically picking up the latest Claude CLI releases from Anthropic. The rebuild schedule targets the window after Anthropic's peak release hours (3-6 PM PST), so new CLI features and bug fixes are available to the next task without manual intervention.
-
-**Example:** Anthropic releases a Claude CLI update at 5 PM PST on Tuesday. By Wednesday morning, every new task uses the updated CLI — no manual image build, no deployment step.
 
 ## Getting Started
 
@@ -84,23 +75,21 @@ Claude Worker runs as part of the IntexuraOS platform. When you assign a coding 
 
 ## Key Benefits
 
-- **Zero-configuration startup** — the environment arrives fully provisioned with every tool, integration, plugin, and dependency pre-installed. No setup scripts, no interactive prompts.
-- **Credentials stay on your machine** — your team's Anthropic subscription, your audit trail, your rate limits. Nothing leaves the premises.
+- **Self-hosted by design** — the agent runs on your machine, under your API keys, behind your firewall. Source code never leaves your infrastructure. Cloud-hosted competitors cannot offer this without a fundamental architectural change.
+- **Session continuity across retries** — when an attempt fails, the next one inherits the full session history, installed packages, and prior reasoning rather than starting cold. The agent accumulates knowledge instead of amnesia.
+- **Ready from the first command** — the environment arrives with every tool, plugin, credential, and dependency pre-installed. No setup scripts, no interactive prompts, no waiting.
 - **Ephemeral by default** — when the task ends, the environment is destroyed. No persistent traces, no stale credentials, no cleanup checklists.
-- **Shared dependency cache** — package installations persist across environments, so repeated builds skip minutes of redundant downloads.
-- **Real-time visibility** — logs stream to the dashboard as the agent works, and a pull request appears when it finishes.
-- **Multiple tasks at once, no interference** — concurrent tasks each run in their own isolated copy of the repository with their own resource allocation. The concurrency ceiling is configurable by whoever operates the host.
-- **Crash resilience** — forensic data is captured automatically on crashes, and the system retries with session continuity.
-- **Always up to date** — daily image rebuilds ensure the latest Claude CLI and toolchain are available without manual maintenance.
+- **Shared package cache** — the first environment installs dependencies once; every subsequent environment reuses them, cutting minutes off each startup.
+- **Concurrent without interference** — multiple tasks run simultaneously in isolated copies of the repository, each with its own credential set and session state. The concurrency ceiling is configurable by whoever operates the host.
 
 ## Limitations
 
 - **One task per environment** — each environment handles a single task. This is a deliberate isolation boundary, not a scaling constraint.
-- **No access to private networks** — the agent can reach public endpoints but cannot probe internal services or private IP ranges. By design.
-- **Credentials are accessible during execution** — secrets are mounted read-only and destroyed with the environment when the task ends, so there are no stale credentials to rotate. But while the task runs, the agent can read them.
-- **Two-hour maximum per attempt** — individual attempts are capped. The system retries automatically, but each run has a hard ceiling.
+- **No private network access** — the agent can reach public endpoints but cannot access internal services, private IP ranges, or cloud metadata. By design.
+- **Secrets are readable during execution** — credentials are mounted read-only and destroyed with the environment, but while the task runs, the agent can read them.
+- **Two-hour cap per attempt** — individual attempts are time-limited. The system retries automatically with session continuity, but each run has a hard ceiling.
 - **No persistent storage** — anything not committed to version control or pushed to a remote is lost when the environment is destroyed.
-- **Configurable concurrency** — the number of simultaneous environments is set by whoever operates the host (default 4). Additional tasks wait in the queue.
+- **Configurable concurrency** — the number of simultaneous environments is set by whoever operates the host (default 4). Additional tasks queue until a slot opens.
 
 ---
 

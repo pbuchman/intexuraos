@@ -4,7 +4,7 @@
 
 ```yaml
 name: '@intexuraos/infra-otel'
-version: '1.0.0'
+version: '3.3.0'
 entry:
   '.': './src/index.ts'
   './register': './dist/register.js'

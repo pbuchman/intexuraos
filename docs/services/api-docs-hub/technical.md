@@ -4,7 +4,7 @@
 
 API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 18 IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration — it exists solely to serve a configured Swagger UI.
 
-**Versions:** Package `3.2.0` / OpenAPI spec `0.0.5`
+**Versions:** Package `3.3.0` / OpenAPI spec `0.0.5`
 
 ## Architecture
 
@@ -42,6 +42,7 @@ sequenceDiagram
 
 | Commit     | Description                                               | Date       |
 | ---------- | --------------------------------------------------------- | ---------- |
+| `c4e3a13c` | Release v3.3.0 — package version bump                     | 2026-03-15 |
 | `44ea683a` | Release v3.2.0 — package version bump                     | 2026-03-07 |
 | `ed9cdc25` | Add code-agent, linear-agent, web-agent to docs hub       | 2026-02-22 |
 | `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
@@ -51,7 +52,6 @@ sequenceDiagram
 | `d5fbb354` | Fix start:local to use tsx instead of experimental flags  | 2026-02-14 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local    | 2026-02-14 |
 | `40d83a23` | Implement Intex Chat MVP — added Chat Agent spec          | 2026-02-01 |
-| `7c5e9153` | Remove PromptVault feature, keep Notion connector         | 2026-01-26 |
 
 ## API Endpoints
 
@@ -171,14 +171,13 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 
 ### Optional Environment Variables
 
-| Variable                         | Default         | Description                          |
-| -------------------------------- | --------------- | ------------------------------------ |
-| `INTEXURAOS_SENTRY_DSN`          | -               | Sentry DSN for error tracking        |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT` | -               | Dash0 OTLP endpoint for log export   |
-| `INTEXURAOS_ENVIRONMENT`         | `development`   | Environment name for Sentry          |
-| `PORT`                           | `8080`          | Server listen port                   |
-| `HOST`                           | `0.0.0.0`       | Server listen host                   |
-| `LOG_LEVEL`                      | `info`          | Pino log level                       |
+| Variable                         | Default       | Description                          |
+| -------------------------------- | ------------- | ------------------------------------ |
+| `INTEXURAOS_SENTRY_DSN`          | -             | Sentry DSN for error tracking        |
+| `INTEXURAOS_ENVIRONMENT`         | `development` | Environment name for Sentry          |
+| `PORT`                           | `8080`        | Server listen port                   |
+| `HOST`                           | `0.0.0.0`     | Server listen host                   |
+| `LOG_LEVEL`                      | `info`        | Pino log level                       |
 
 ## Gotchas
 
@@ -188,7 +187,7 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 - **Static config** — OpenAPI source URLs are loaded once at startup. Adding or removing a service requires redeployment.
 - **Health endpoint uses raw reply.send()** — The `/health` endpoint bypasses the `reply.ok()` / `reply.fail()` response contract. This is intentional for infrastructure monitoring stability.
 - **Not in ecosystem.config.cjs** — This service is not listed in `ecosystem.config.cjs` for local PM2 development. It must be run manually via `pnpm --filter api-docs-hub start:local`.
-- **Max scale 1** — Terraform limits this service to a single Cloud Run instance, which is appropriate for a documentation-only service.
+- **Max scale 1** — Terraform limits this service to a single Cloud Run instance (min_scale=0, max_scale=1), which is appropriate for a documentation-only service.
 
 ## Terraform Configuration
 

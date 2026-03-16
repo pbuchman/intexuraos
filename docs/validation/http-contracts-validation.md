@@ -1,5 +1,219 @@
 # HTTP Contracts Cross-Validation Report
 
+---
+
+## v4 — /internal/* Focused Re-Validation (2026-03-16)
+
+**Scope:** code-agent, orchestrator, research-agent, commands-agent, actions-agent, user-service, linear-agent
+**Method:** Route source code read directly, compared against `docs/services/*/technical.md` endpoint tables.
+**Supersedes:** v3 findings for these 7 services only.
+
+### v4 Summary
+
+| Service        | Documented | In Code | Status                                                    |
+| -------------- | ---------- | ------- | --------------------------------------------------------- |
+| code-agent     | 14         | 14      | ⚠️ 1 path typo in docs, 2 dependency table errors         |
+| orchestrator   | n/a        | n/a     | ✅ No internal routes owned (local service, not in repo)   |
+| research-agent | 4          | 4       | ✅ Match (dependency table has phantom user-service paths) |
+| commands-agent | 3          | 3       | ✅ Match                                                   |
+| actions-agent  | 6          | 6       | ✅ Match                                                   |
+| user-service   | 6          | 6       | ✅ Match                                                   |
+| linear-agent   | 12         | 12      | ✅ Match                                                   |
+
+**All runtime contracts are intact.** Every endpoint actually called by a service exists in the target service's route code. The issues below are documentation errors only.
+
+---
+
+### code-agent
+
+**Sources:** `apps/code-agent/src/routes/codeRoutes.ts`, `webhookRoutes.ts`, `webhooks/taskEvent.ts`
+
+**Actual endpoints in code (14 total):**
+
+| Method  | Path                                                |
+| ------- | --------------------------------------------------- |
+| `POST`  | `/internal/code/process`                            |
+| `PATCH` | `/internal/code-tasks/:taskId`                      |
+| `GET`   | `/internal/code-tasks/linear/:linearIssueId/active` |
+| `GET`   | `/internal/code-tasks/zombies`                      |
+| `POST`  | `/internal/code/heartbeat`                          |
+| `POST`  | `/internal/code/detect-zombies`                     |
+| `POST`  | `/internal/code/cancel-with-nonce`                  |
+| `POST`  | `/internal/code/submit-phase2`                      |
+| `POST`  | `/internal/tasks/cleanup-logs`                      |
+| `POST`  | `/internal/drain-queue`                             |
+| `POST`  | `/internal/logs`                                    |
+| `POST`  | `/internal/turn-metrics`                            |
+| `POST`  | `/internal/webhooks/task-complete`                  |
+| `POST`  | `/internal/webhooks/task-event`                     |
+
+**Status: ⚠️ Mismatch — documentation errors (routes themselves are correct)**
+
+**Finding C1 — Path typo in Internal Endpoints table:**
+- Documented: `GET /internal/code-tasks/linear:linearIssueId/active` (missing `/` before param)
+- Actual code: `GET /internal/code-tasks/linear/:linearIssueId/active`
+- File: `docs/services/code-agent/technical.md` — Internal Endpoints table
+
+**Finding C2 — Dependency table lists phantom user-service paths:**
+- Documented: `GET /internal/users/oauth-token` — does not exist in user-service
+- Actual call (via `packages/internal-clients`): `GET /internal/users/:uid/oauth/github/token`
+- Documented: `GET /internal/users/by-github-username` — missing `/:username` param
+- Actual call: `GET /internal/users/by-github-username/:username`
+- File: `docs/services/code-agent/technical.md` — Dependencies > Internal Services
+
+**Finding C3 — Dependency table uses wrong method+path for linear-agent validate:**
+- Documented: `POST /internal/linear/issues/validate`
+- Actual call (in `apps/code-agent/src/infra/http/linearAgentHttpClient.ts`): `GET /internal/linear/issues/:identifier/validate?userId=...`
+- The endpoint exists in linear-agent with the correct method and path. The docs entry is wrong on both method (`POST` vs `GET`) and path structure.
+- File: `docs/services/code-agent/technical.md` — Dependencies > Internal Services
+
+---
+
+### orchestrator
+
+No `/internal/*` routes in this repo — the orchestrator is a local machine service (not a Cloud Run app). It is the *caller* of code-agent's internal endpoints, not the owner of any.
+
+**Status: ✅ Not applicable**
+
+---
+
+### research-agent
+
+**Source:** `apps/research-agent/src/routes/internalRoutes.ts`
+
+**Actual endpoints (4 total):**
+
+| Method | Path                                    |
+| ------ | --------------------------------------- |
+| `POST` | `/internal/research/draft`              |
+| `POST` | `/internal/llm/pubsub/process-research` |
+| `POST` | `/internal/llm/pubsub/report-analytics` |
+| `POST` | `/internal/llm/pubsub/process-llm-call` |
+
+**Status: ✅ Match** — all 4 endpoint paths and methods match `docs/services/research-agent/technical.md` exactly.
+
+**Finding R1 — Dependency table lists phantom user-service paths (documentation only):**
+- Documented: `/internal/user/api-keys`, `/internal/user/llm-client`, `/internal/user/report-llm-success`
+- These paths do not exist in user-service. The real paths (from `packages/internal-clients/src/user-service/client.ts`) are:
+  - `GET /internal/users/:uid/llm-keys`
+  - `GET /internal/users/:uid/settings` (combined with llm-keys for getLlmClient)
+  - `POST /internal/users/:uid/llm-keys/:provider/last-used`
+- The `/internal/user/` prefix (singular, no uid) is a legacy documentation artifact.
+- File: `docs/services/research-agent/technical.md` — Dependencies > Internal Services
+
+---
+
+### commands-agent
+
+**Source:** `apps/commands-agent/src/routes/internalRoutes.ts`
+
+**Actual endpoints (3 total):** `POST /internal/commands`, `POST /internal/retry-pending`, `GET /internal/commands/:commandId`
+
+**Status: ✅ Match** — all 3 endpoints match `docs/services/commands-agent/technical.md` exactly.
+
+---
+
+### actions-agent
+
+**Source:** `apps/actions-agent/src/routes/internalRoutes.ts`
+
+**Actual endpoints (6 total):** `POST /internal/actions`, `POST /internal/actions/:actionType`, `POST /internal/actions/process`, `POST /internal/actions/retry-pending`, `POST /internal/actions/approval-reply`, `PATCH /internal/actions/:actionId/status`
+
+**Status: ✅ Match** — all 6 endpoints match `docs/services/actions-agent/technical.md` exactly.
+
+---
+
+### user-service
+
+**Source:** `apps/user-service/src/routes/internalRoutes.ts`
+
+**Actual endpoints (6 total):**
+
+| Method | Path                                                |
+| ------ | --------------------------------------------------- |
+| `GET`  | `/internal/users/:uid/llm-keys`                     |
+| `POST` | `/internal/users/:uid/llm-keys/:provider/last-used` |
+| `GET`  | `/internal/users/:uid/oauth/google/token`           |
+| `GET`  | `/internal/users/:uid/oauth/github/token`           |
+| `GET`  | `/internal/users/:uid/settings`                     |
+| `GET`  | `/internal/users/by-github-username/:username`      |
+
+**Status: ✅ Match** — all 6 endpoints match `docs/services/user-service/technical.md` exactly.
+
+**Minor:** The file header comment in `apps/user-service/src/routes/internalRoutes.ts` (lines 1–10) lists only 4 routes; 6 are implemented. The header is stale but the documentation table is correct.
+
+---
+
+### linear-agent
+
+**Sources:** `apps/linear-agent/src/routes/internalRoutes.ts` (5 routes), `apps/linear-agent/src/routes/internalIssuesRoutes.ts` (7 routes)
+
+**Actual endpoints (12 total):**
+
+| Method  | Path                                           | Source file             |
+| ------- | ---------------------------------------------- | ----------------------- |
+| `POST`  | `/internal/linear/process-action`              | internalRoutes.ts       |
+| `GET`   | `/internal/linear/issues/:identifier/validate` | internalRoutes.ts       |
+| `POST`  | `/internal/linear/issues/generate-title`       | internalRoutes.ts       |
+| `POST`  | `/internal/linear/sync-all`                    | internalRoutes.ts       |
+| `POST`  | `/internal/linear/sync`                        | internalRoutes.ts       |
+| `POST`  | `/internal/issues`                             | internalIssuesRoutes.ts |
+| `POST`  | `/internal/linear/issues/:issueId/comments`    | internalIssuesRoutes.ts |
+| `PATCH` | `/internal/linear/issues/:issueId/metadata`    | internalIssuesRoutes.ts |
+| `PATCH` | `/internal/issues/:issueId/state`              | internalIssuesRoutes.ts |
+| `POST`  | `/internal/linear/issues/display-batch`        | internalIssuesRoutes.ts |
+| `GET`   | `/internal/linear/issues/:identifier`          | internalIssuesRoutes.ts |
+| `GET`   | `/internal/issues/:issueId/tree`               | internalIssuesRoutes.ts |
+
+**Status: ✅ Match** — all 12 endpoints match `docs/services/linear-agent/technical.md` exactly.
+
+---
+
+### v4 Cross-Service Call Validation
+
+All downstream calls verified against target route code.
+
+| Caller         | Endpoint called                                          | Target has it    | Status |
+| -------------- | -------------------------------------------------------- | ---------------- | ------ |
+| code-agent     | `POST /internal/issues`                                  | linear-agent ✅   | ✅      |
+| code-agent     | `PATCH /internal/issues/:issueId/state`                  | linear-agent ✅   | ✅      |
+| code-agent     | `GET /internal/linear/issues/:identifier/validate`       | linear-agent ✅   | ✅      |
+| code-agent     | `POST /internal/linear/issues/generate-title`            | linear-agent ✅   | ✅      |
+| code-agent     | `POST /internal/linear/issues/:issueId/comments`         | linear-agent ✅   | ✅      |
+| code-agent     | `GET /internal/issues/:issueId/tree`                     | linear-agent ✅   | ✅      |
+| code-agent     | `PATCH /internal/linear/issues/:issueId/metadata`        | linear-agent ✅   | ✅      |
+| code-agent     | `GET /internal/linear/issues/:identifier`                | linear-agent ✅   | ✅      |
+| code-agent     | `POST /internal/linear/issues/display-batch`             | linear-agent ✅   | ✅      |
+| code-agent     | `PATCH /internal/actions/:actionId/status`               | actions-agent ✅  | ✅      |
+| code-agent     | `GET /internal/users/:uid/oauth/github/token`            | user-service ✅   | ✅      |
+| code-agent     | `GET /internal/users/by-github-username/:username`       | user-service ✅   | ✅      |
+| actions-agent  | `POST /internal/code/process`                            | code-agent ✅     | ✅      |
+| actions-agent  | `POST /internal/code/cancel-with-nonce`                  | code-agent ✅     | ✅      |
+| actions-agent  | `POST /internal/code/submit-phase2`                      | code-agent ✅     | ✅      |
+| actions-agent  | `POST /internal/research/draft`                          | research-agent ✅ | ✅      |
+| research-agent | `GET /internal/users/:uid/llm-keys`                      | user-service ✅   | ✅      |
+| research-agent | `GET /internal/users/:uid/settings`                      | user-service ✅   | ✅      |
+| research-agent | `POST /internal/users/:uid/llm-keys/:provider/last-used` | user-service ✅   | ✅      |
+| linear-agent   | `POST /internal/code/process`                            | code-agent ✅     | ✅      |
+| linear-agent   | `GET /internal/users/:uid/llm-keys`                      | user-service ✅   | ✅      |
+| linear-agent   | `GET /internal/users/:uid/settings`                      | user-service ✅   | ✅      |
+
+**No broken cross-service calls found.**
+
+---
+
+### v4 Action Items
+
+| ID  | Severity | File                                             | Issue                                                                                                                                  |
+| --- | -------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | Minor    | `docs/services/code-agent/technical.md`          | Path typo: `linear:linearIssueId` → `linear/:linearIssueId`                                                                            |
+| C2  | Moderate | `docs/services/code-agent/technical.md`          | Dependency table: fix user-service paths (`/internal/users/oauth-token` → `/internal/users/:uid/oauth/github/token`; add `/:username`) |
+| C3  | Moderate | `docs/services/code-agent/technical.md`          | Dependency table: change `POST /internal/linear/issues/validate` → `GET /internal/linear/issues/:identifier/validate?userId=...`       |
+| R1  | Moderate | `docs/services/research-agent/technical.md`      | Dependency table: replace `/internal/user/*` phantom paths with actual `/internal/users/:uid/*` paths                                  |
+| U1  | Minor    | `apps/user-service/src/routes/internalRoutes.ts` | File header comment lists 4 routes; update to reflect all 6                                                                            |
+
+---
+
 **Generated:** 2026-02-19
 **Scope:** All HTTP endpoints (public, internal, webhooks) across 20 apps + 4 workers
 **Method:** Documentation-first, traced to code (Enhanced v3) — supersedes 2026-02-08 report

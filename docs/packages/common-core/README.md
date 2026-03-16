@@ -2,14 +2,11 @@
 
 Pure utilities with zero infrastructure dependencies. This is a leaf package that forms the foundation of the IntexuraOS type system. Every other package and app in the monorepo depends on it.
 
-**Version:** 2.1.0
 **Node:** >=22.0.0
 **Type:** ESM
 **Dependencies:** None (leaf package)
 
 ## Exports
-
-The package provides two entry points:
 
 | Entry Point | Path        | Contents                                   |
 | ----------- | ----------- | ------------------------------------------ |
@@ -212,15 +209,35 @@ End-to-end request tracing across service boundaries via the `X-Trace-Id` header
 const TRACE_ID_HEADER = 'X-Trace-Id';
 
 function extractOrGenerateTraceId(headers: Record<string, string | string[] | undefined>): string;
-
 function traceIdHeaders(traceId: string): Record<string, string>;
+```
+
+### Linear Label Utilities (`labels.ts`)
+
+Canonical normalization and detection for Linear issue labels. Consolidated here from four services during v3.2.0.
+
+```typescript
+function normalizeLabel(label: string): string;
+function hasCodeTaskLabel(labels: string[]): boolean;
+function hasPlanningTaskLabel(labels: string[]): boolean;
+```
+
+### Code Task Worker Types (`codeTaskWorkerTypes.ts`)
+
+Shared contract for the set of valid worker type identifiers.
+
+```typescript
+const CODE_TASK_WORKER_TYPES = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi'] as const;
+type CodeTaskWorkerType = (typeof CODE_TASK_WORKER_TYPES)[number];
+
+function isCodeTaskWorkerType(value: string): value is CodeTaskWorkerType;
 ```
 
 ## Used By
 
 Nearly every package and app in the monorepo depends on `common-core`:
 
-**Packages (13):** `common-http`, `http-server`, `infra-pubsub`, `infra-firestore`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-glm`, `infra-notion`, `infra-perplexity`, `infra-sentry`, `infra-whatsapp`, `internal-clients`, `llm-utils`, `llm-prompts`, `llm-pricing`, `llm-factory`, `llm-audit`, `llm-contract`
+**Packages (19):** `common-http`, `http-server`, `infra-pubsub`, `infra-firestore`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-notion`, `infra-perplexity`, `infra-sentry`, `infra-whatsapp`, `internal-clients`, `llm-utils`, `llm-prompts`, `llm-pricing`, `llm-factory`, `llm-audit`, `llm-contract`, `infra-otel`
 
 **Apps (19):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `code-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `todos-agent`, `user-service`, `web`, `web-agent`, `whatsapp-service`
 
@@ -228,25 +245,25 @@ Nearly every package and app in the monorepo depends on `common-core`:
 
 ## Recent Changes
 
-| Commit     | Description                                              | Age    |
-| ---------- | -------------------------------------------------------- | ------ |
-| `b32d75b7` | Handle worker 502 errors gracefully (WORKER_UNAVAILABLE) | recent |
-| `0a6b7b8f` | Normalize cancel-with-nonce error codes                  | recent |
-| `474ea6d1` | Validate workerLocation exists and is healthy            | recent |
-| `f10ebdbf` | Fix empty error objects in log output                    | recent |
-| `af5442c2` | Implement per-user worker configuration                  | recent |
-| `186f7ad8` | Enforce standardized HTTP response contract              | recent |
-| `b4aaafdf` | Add distributed tracing with X-Trace-Id header           | recent |
+| Commit      | Description                                           |
+| ----------- | ----------------------------------------------------- |
+| `71968fa01` | Add kimi worker type                                  |
+| `33129fd77` | Normalize qwen worker naming                          |
+| `daa15657b` | Extract shared code-task worker types                 |
+| `092a937d7` | Add hasPlanningTaskLabel utility                      |
+| `eed6e8baf` | Add tests for v8-ignore blocks in errors.ts           |
 
 ## Source Files
 
-| File                       | Purpose                                   |
-| -------------------------- | ----------------------------------------- |
-| `src/index.ts`             | Main entry point, re-exports all modules  |
-| `src/errors.ts`            | ErrorCode, IntexuraOSError, serialization |
-| `src/result.ts`            | Result discriminated union                |
-| `src/logging.ts`           | Logger interface, getLogLevel             |
-| `src/nullability.ts`       | Null-safe utility functions               |
-| `src/serviceFeedback.ts`   | ServiceFeedback contract                  |
-| `src/serviceErrorCodes.ts` | Standard service error codes              |
-| `src/tracing/traceId.ts`   | X-Trace-Id header utilities               |
+| File                         | Purpose                                   |
+| ---------------------------- | ----------------------------------------- |
+| `src/index.ts`               | Main entry point, re-exports all modules  |
+| `src/errors.ts`              | ErrorCode, IntexuraOSError, serialization |
+| `src/result.ts`              | Result discriminated union                |
+| `src/logging.ts`             | Logger interface, getLogLevel             |
+| `src/nullability.ts`         | Null-safe utility functions               |
+| `src/serviceFeedback.ts`     | ServiceFeedback contract                  |
+| `src/serviceErrorCodes.ts`   | Standard service error codes              |
+| `src/labels.ts`              | Linear label normalization                |
+| `src/codeTaskWorkerTypes.ts` | Worker type contract                      |
+| `src/tracing/traceId.ts`     | X-Trace-Id header utilities               |
