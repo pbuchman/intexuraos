@@ -38,6 +38,12 @@
 
 ---
 
+## Ambient Task Submission
+
+You submit tasks while walking, while commuting, while thinking of something else. The primary interface is WhatsApp — an app already on your phone, already open, always available. This is not a convenience shortcut to a desktop workflow. It is a fundamentally different interaction model: ambient task submission that fits into the gaps of a working day.
+
+Speak to WhatsApp. IntexuraOS classifies your intent, routes to the right agent, and executes. A voice note about a bug becomes a code task. A question about solid-state batteries becomes a five-model research report. A mention of lunch Friday becomes a calendar event you approve with one tap.
+
 ## The Self-Building System
 
 Most AI coding tools wait for you to sit at a keyboard. IntexuraOS does not.
@@ -93,8 +99,6 @@ The same path works for every domain. A voice note about a bug becomes a code ta
 **Step 2 — Execution.** A strict execution agent picks up the labeled issue, writes code in an isolated container with separate repository copies for each task, runs the full automated test suite, creates a code change for review, and moves the project issue to "In Review."
 
 **Verification.** After each attempt, a completion verifier checks the work against a checklist: Are the right files modified? Do tests pass? Is the code change created? If not, the system resumes with preserved context and tries again. Per-user limits on concurrency, hourly rate, and daily spend keep costs predictable — the estimated cost per task is about $1.17.
-
-**Cross-LLM verification.** The verifier is not the same AI that wrote the code. Claude (Anthropic) executes the task inside the container. Gemini 2.5 Flash (Google) independently extracts structured completion data from the last 50 lines of logs and validates it against agent-type-specific schemas. For execution tasks, a second Gemini pass performs deep semantic validation — reading up to 200,000 characters of the full session transcript, cross-referencing the Linear issue requirements, and posting a [detailed validation report](docs/architecture/webhook-verification-pipeline.md) directly to the GitHub PR. Neither model evaluates its own work.
 
 ### Isolation and Security
 
@@ -253,7 +257,7 @@ Not a target. A gate. Every branch in every service is either tested or explicit
 
 ### Strict TypeScript
 
-The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 48 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
+The compiler is configured to catch what tests might miss. Array access requires fallback handling. Optional properties must be declared precisely. Boolean checks must be explicit. Every operation returns a typed result — success or failure, never silent crashes. The system enforces these rules across all 46 components, so autonomous agents cannot introduce subtle type errors that pass tests but fail in production.
 
 ### Automated Cross-Linking
 
