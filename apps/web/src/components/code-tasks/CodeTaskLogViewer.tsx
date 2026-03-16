@@ -290,7 +290,7 @@ export function CodeTaskLogViewer({
       <div className="overflow-hidden rounded-b-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950">
         <div
           ref={containerRef}
-          className="max-h-[60vh] overflow-y-auto p-3 font-mono text-[13px] leading-6"
+          className="max-h-[60vh] overflow-x-auto overflow-y-auto p-3 font-mono text-[13px] leading-6"
         >
           {logs.length === 0 ? (
             <div className="flex min-h-[180px] flex-col items-center justify-center gap-2 text-center">
@@ -332,7 +332,7 @@ export function CodeTaskLogViewer({
                     ) : (
                       <span className="w-4 shrink-0" />
                     )}
-                    <pre className={`min-w-0 whitespace-pre-wrap break-words ${getLogLineClass(line.text)}`}>
+                    <pre className={`min-w-0 whitespace-pre md:whitespace-pre-wrap md:break-words ${getLogLineClass(line.text)}`}>
                       {line.text}
                     </pre>
                   </div>
