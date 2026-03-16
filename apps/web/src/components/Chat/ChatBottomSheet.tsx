@@ -186,10 +186,18 @@ export function ChatBottomSheet({
 
   if (!isOpen) return null;
 
+  const sheetClasses = [
+    'fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white dark:bg-gray-900 shadow-2xl md:hidden',
+    isDragging ? '' : 'transition-[height] duration-300 ease-out',
+    isExpanded ? 'h-[100vh] max-h-[100vh]' : 'h-[60vh] max-h-[60vh]',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <div
       ref={sheetRef}
-      className={`fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white dark:bg-gray-900 shadow-2xl md:hidden ${isDragging ? '' : 'transition-[height] duration-300 ease-out'} ${isExpanded ? 'h-[100vh] max-h-[100vh]' : 'h-[60vh] max-h-[60vh]'}`}
+      className={sheetClasses}
     >
       <div
         className="flex shrink-0 cursor-grab select-none items-center justify-between border-b border-gray-200 px-4 py-2 active:cursor-grabbing dark:border-gray-700"
