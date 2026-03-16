@@ -127,7 +127,7 @@ describe('TaskDispatcher', () => {
   const mockConfig: OrchestratorConfig = {
     port: 8100,
     capacity: 5,
-    taskTimeoutMs: 7200000,
+    taskTimeoutMs: 10800000,
     stateFilePath: '/tmp/state.json',
     worktreeBasePath: '/tmp/worktrees',
     logBasePath: '/tmp/logs',
@@ -871,13 +871,13 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance to 1h 55m (115 minutes)
-      await vi.advanceTimersByTimeAsync(115 * 60 * 1000);
+      // Advance to 2h 55m (175 minutes)
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
 
       expect(timeoutDispatcher.getRunningCount()).toBe(1);
     });
 
-    it('should kill container at 2h timeout', async () => {
+    it('should kill container at 3h timeout', async () => {
       const request: CreateTaskRequest = {
         taskId: 'timeout-kill-test',
         workerType: 'auto',
@@ -892,8 +892,8 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
-      // Advance to 2h (120 minutes)
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000);
+      // Advance to 3h (180 minutes)
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000);
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalled();
     });
@@ -913,12 +913,12 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance to 1h 55m (115 minutes) - warning timeout
-      await vi.advanceTimersByTimeAsync(115 * 60 * 1000);
+      // Advance to 2h 55m (175 minutes) - warning timeout
+      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
 
       expect(warnSpy).toHaveBeenCalledWith(
         { taskId: 'warning-test' },
-        'Task approaching 2-hour timeout'
+        'Task approaching 3-hour timeout'
       );
     });
 
@@ -937,8 +937,8 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
-      // Advance past 2h timeout
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past 3h timeout
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('kill-webhook-test');
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
@@ -963,8 +963,8 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance past 2h timeout
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past 3h timeout
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       const task = await timeoutDispatcher.getTask('interrupted-test');
       expect(task?.status).toBe('interrupted');
@@ -995,8 +995,8 @@ describe('TaskDispatcher', () => {
       // Clear mocks to see what gets called
       vi.clearAllMocks();
 
-      // Advance past 2h timeout - should NOT send interruption webhook since task is already completed
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past 3h timeout - should NOT send interruption webhook since task is already completed
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await timeoutDispatcher.getTask('race-test');
@@ -1401,8 +1401,8 @@ describe('TaskDispatcher', () => {
       task.status = 'completed';
       await statePersistence.save(state);
 
-      // Advance past 2h timeout
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past 3h timeout
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await dispatcher.getTask('no-timeout-kill-test');
@@ -1579,8 +1579,8 @@ describe('TaskDispatcher', () => {
 
       vi.clearAllMocks();
 
-      // Advance past the 2h kill timeout
-      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+      // Advance past the 3h kill timeout
+      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await timeoutDispatcher.getTask('status-change-test');

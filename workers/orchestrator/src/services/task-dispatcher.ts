@@ -42,8 +42,8 @@ import {
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
-const TASK_TIMEOUT_WARNING_MS = 115 * 60 * 1000; // 1h 55m
-const TASK_TIMEOUT_KILL_MS = 120 * 60 * 1000; // 2h
+const TASK_TIMEOUT_WARNING_MS = 175 * 60 * 1000; // 2h 55m
+const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 
@@ -627,7 +627,7 @@ export class TaskDispatcher {
         try {
           const task = await this.getTask(taskId);
           if (task !== null && task.status === 'running') {
-            this.logger.warn({ taskId }, 'Task approaching 2-hour timeout');
+            this.logger.warn({ taskId }, 'Task approaching 3-hour timeout');
           }
         } catch (error) {
           this.logger.error({ taskId, error }, 'Error in timeout warning callback');

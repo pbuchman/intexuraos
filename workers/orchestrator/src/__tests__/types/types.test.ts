@@ -70,7 +70,7 @@ describe('Orchestrator Types', () => {
       const config: OrchestratorConfig = {
         port: 8100,
         capacity: 5,
-        taskTimeoutMs: 7200000,
+        taskTimeoutMs: 10800000,
         stateFilePath: '/tmp/state.json',
         worktreeBasePath: '/tmp/worktrees',
         logBasePath: '/tmp/logs',
@@ -83,7 +83,7 @@ describe('Orchestrator Types', () => {
       };
 
       expect(config.capacity).toBe(5);
-      expect(config.taskTimeoutMs).toBe(7200000);
+      expect(config.taskTimeoutMs).toBe(10800000);
     });
   });
 
