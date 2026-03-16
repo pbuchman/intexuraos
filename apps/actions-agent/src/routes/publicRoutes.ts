@@ -220,35 +220,14 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         type?: ActionType;
       };
 
-      const { actionRepository, changeActionTypeUseCase } = getServices();
-      const action = await actionRepository.getById(actionId);
+      const { updateActionUseCase } = getServices();
+      const result = await updateActionUseCase({ actionId, userId: user.userId, status, type: newType });
 
-      if (action?.userId !== user.userId) {
-        return await reply.fail('NOT_FOUND', 'Action not found');
+      if (!result.ok) {
+        return await reply.fail(result.error.code, result.error.message);
       }
 
-      // Handle type change first (logs transition before modifying action)
-      if (newType !== undefined && newType !== action.type) {
-        const result = await changeActionTypeUseCase({
-          actionId,
-          userId: user.userId,
-          newType,
-        });
-        if (!result.ok) {
-          return await reply.fail(result.error.code, result.error.message);
-        }
-        // Refresh action.type after use case updated it
-        action.type = newType;
-      }
-
-      // Handle status change
-      if (status !== undefined) {
-        action.status = status;
-        action.updatedAt = new Date().toISOString();
-        await actionRepository.update(action);
-      }
-
-      return await reply.ok({ action });
+      return await reply.ok({ action: result.value.action });
     }
   );
 
