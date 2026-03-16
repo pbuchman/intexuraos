@@ -212,6 +212,7 @@ export function ChatBottomSheet({
           {/* Dropdown menu */}
           <div ref={menuRef} className="relative">
             <button
+              type="button"
               onClick={() => { setIsMenuOpen((prev) => !prev); }}
               className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
               aria-label="More options"
@@ -221,14 +222,21 @@ export function ChatBottomSheet({
               <MoreVertical className="h-4 w-4" />
             </button>
             {isMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800 z-50">
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800 z-50"
+              >
                 <button
+                  type="button"
+                  role="menuitem"
                   onClick={() => { toggleExpand(); setIsMenuOpen(false); }}
                   className="flex w-full items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                 >
                   {isExpanded ? 'Collapse' : 'Expand'}
                 </button>
                 <button
+                  type="button"
+                  role="menuitem"
                   onClick={() => { onClear(); setIsMenuOpen(false); }}
                   className="flex w-full items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                 >
@@ -240,6 +248,7 @@ export function ChatBottomSheet({
 
           {/* Close button stays standalone */}
           <button
+            type="button"
             onClick={onClose}
             className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             aria-label="Close chat"
