@@ -246,15 +246,31 @@ export function ChatBottomSheet({
                 Confirm action
               </p>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Say "yes" to create: <em>"{typeof pendingAction.payload['text'] === 'string' ? pendingAction.payload['text'] : 'this command'}"</em>
+                Create: <em>"{typeof pendingAction.payload['text'] === 'string' ? pendingAction.payload['text'] : 'this command'}"</em>
               </p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => { onSendMessage('yes'); }}
+                  disabled={isLoading}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed dark:bg-blue-500 dark:hover:bg-blue-600"
+                >
+                  ✓ Yes
+                </button>
+                <button
+                  onClick={() => { onSendMessage('cancel'); }}
+                  disabled={isLoading}
+                  className="rounded-lg bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-300 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       <div className="shrink-0 px-4 py-3">
-        <ChatInput onSend={onSendMessage} disabled={isLoading} {...(pendingAction?.awaitingConfirmation ? { placeholder: 'Say "yes" to confirm...' } : {})} />
+        <ChatInput onSend={onSendMessage} disabled={isLoading} />
       </div>
 
       {!isExpanded && (
