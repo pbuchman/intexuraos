@@ -276,7 +276,7 @@ export function CodeTasksPage(): React.JSX.Element {
         void deleteTask(taskId);
       }
       if (action === 'retry' || action === 'implement') {
-        void navigate(`/code-tasks/${taskId}/view`);
+        void navigate(`/code-tasks/${taskId}`);
       }
     },
     [deleteTask, navigate],

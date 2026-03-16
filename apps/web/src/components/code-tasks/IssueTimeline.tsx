@@ -210,7 +210,7 @@ function TimelineItem({ task }: { task: CodeTask }): React.JSX.Element {
       <div className="min-w-0 flex-1">
         {/* Clickable area: label + chips + timestamp */}
         <a
-          href={`/#/code-tasks/${task.id}/view`}
+          href={`/#/code-tasks/${task.id}`}
           className="block cursor-pointer rounded -mx-1 px-1 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
         >
           {/* First line: label + chips */}
@@ -251,7 +251,7 @@ function TimelineItem({ task }: { task: CodeTask }): React.JSX.Element {
 
         {/* Third line: detail */}
         <a
-          href={`/#/code-tasks/${task.id}/view`}
+          href={`/#/code-tasks/${task.id}`}
           className="mt-1 block cursor-pointer rounded -mx-1 px-1 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
         >
           <DetailLine task={task} />
