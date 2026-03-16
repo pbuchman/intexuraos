@@ -21,18 +21,18 @@
 
 ### Engineering Highlights
 
-| | |
-|---|---|
-| **Cross-LLM Verification** | Writer and verifier are always different providers — Claude executes, Gemini verifies, TypeScript validates |
-| **48 Components, One Developer** | 20 apps, 6 workers, 22 packages in a strict TypeScript monorepo |
-| **Autonomous Code Pipeline** | WhatsApp voice note → intent classification → Docker-isolated execution → tested PR |
-| **Container Isolation** | Non-root, all capabilities dropped, network-restricted, read-only secrets per task |
-| **26 Claude Code Hooks** | 1 SessionStart, 15 PreToolUse, 7 PostToolUse, 3 Stop — enforcing patterns before code is written |
-| **27 CI Verification Scripts** | Automated gates covering coverage, types, contracts, env vars, and cross-linking |
-| **Prompt Versioning** | Semver-versioned prompts with SHA-256 audit trail and CI-enforced bump validation |
-| **Multi-Provider AI Council** | 14 models across 5 providers queried in parallel with attributed synthesis |
-| **Result Type Discipline** | Every operation returns typed success or failure — no silent crashes, no unhandled exceptions |
-| **Event-Driven Architecture** | 41 Pub/Sub topics decoupling 20 services with crash-safe state persistence |
+|                                  |                                                                                                             |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Cross-LLM Verification**       | Writer and verifier are always different providers — Claude executes, Gemini verifies, TypeScript validates |
+| **48 Components, One Developer** | 20 apps, 6 workers, 22 packages in a strict TypeScript monorepo                                             |
+| **Autonomous Code Pipeline**     | WhatsApp voice note → intent classification → Docker-isolated execution → tested PR                         |
+| **Container Isolation**          | Non-root, all capabilities dropped, network-restricted, read-only secrets per task                          |
+| **26 Claude Code Hooks**         | 1 SessionStart, 15 PreToolUse, 7 PostToolUse, 3 Stop — enforcing patterns before code is written            |
+| **27 CI Verification Scripts**   | Automated gates covering coverage, types, contracts, env vars, and cross-linking                            |
+| **Prompt Versioning**            | Semver-versioned prompts with SHA-256 audit trail and CI-enforced bump validation                           |
+| **Multi-Provider AI Council**    | 14 models across 5 providers queried in parallel with attributed synthesis                                  |
+| **Result Type Discipline**       | Every operation returns typed success or failure — no silent crashes, no unhandled exceptions               |
+| **Event-Driven Architecture**    | 41 Pub/Sub topics decoupling 20 services with crash-safe state persistence                                  |
 
 **[The Self-Building System](#the-self-building-system)** · **[Cross-LLM Verification](#cross-llm-verification-pipeline)** · **[The Council of AI](#the-council-of-ai)** · **[Architecture](#architecture)** · **[Engineering Standards](#engineering-standards)** · **[Voice-First Intelligence](#voice-first-intelligence)** · **[Getting Started](#getting-started)** · **[Documentation](#documentation)**
 
@@ -143,6 +143,7 @@ sequenceDiagram
 Neither model evaluates its own work. The writer never sees the verification criteria. The verifier never modifies the code.
 
 ---
+
 ## The Council of AI
 
 When IntexuraOS needs to research a topic, it does not ask one model and hope for the best. It asks multiple models.
@@ -265,6 +266,7 @@ Everything in Terraform. No manual cloud console changes. Reproducible, auditabl
 ### 26 Claude Code Hooks
 
 Every autonomous development session is governed by hooks that fire before and after tool use:
+
 - **1 SessionStart** hook loads project context and enforces development patterns
 - **15 PreToolUse** hooks validate inputs, prevent common mistakes, and enforce conventions before actions execute
 - **7 PostToolUse** hooks verify outputs, check formatting, and ensure consistency after actions complete
@@ -275,6 +277,7 @@ Hooks encode the patterns that would otherwise live only in a developer's head �
 ### 27 CI Verification Scripts
 
 Automated gates that run on every commit, covering:
+
 - Branch coverage enforcement (100% or documented exemption)
 - TypeScript strict mode compliance across all 48 components
 - API contract validation and cross-service consistency
