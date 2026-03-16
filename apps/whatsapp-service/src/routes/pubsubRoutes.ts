@@ -12,9 +12,12 @@ import type {
   TranscriptionCompletedEvent,
   WebhookProcessEvent,
 } from '../domain/whatsapp/index.js';
-import { ExtractLinkPreviewsUseCase, HandleTranscriptionCompletedUseCase } from '../domain/whatsapp/index.js';
+import {
+  ExtractLinkPreviewsUseCase,
+  HandleTranscriptionCompletedUseCase,
+  ProcessWebhookEventUseCase,
+} from '../domain/whatsapp/index.js';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { processWebhookEvent } from './webhookRoutes.js';
 import type { WebhookPayload } from './schemas.js';
 
 interface PubSubPushMessage {
@@ -680,13 +683,24 @@ export function createPubsubRoutes(): FastifyPluginCallback {
 
           try {
             const payload = JSON.parse(eventData.payload) as WebhookPayload;
+            const services = getServices();
 
-            const mockRequest = {
-              body: payload,
-              log: request.log,
-            } as FastifyRequest<{ Body: WebhookPayload }>;
+            const processWebhookEventUseCase = new ProcessWebhookEventUseCase({
+              webhookEventRepository: services.webhookEventRepository,
+              userMappingRepository: services.userMappingRepository,
+              messageRepository: services.messageRepository,
+              outboundMessageRepository: services.outboundMessageRepository,
+              mediaStorage: services.mediaStorage,
+              whatsappCloudApi: services.whatsappCloudApi,
+              thumbnailGenerator: services.thumbnailGenerator,
+              eventPublisher: services.eventPublisher,
+            });
 
-            await processWebhookEvent(mockRequest, { id: eventData.eventId });
+            await processWebhookEventUseCase.execute(
+              payload,
+              { id: eventData.eventId },
+              request.log
+            );
 
             request.log.info({ eventId: eventData.eventId }, 'Webhook processing completed');
           } catch (error) {
