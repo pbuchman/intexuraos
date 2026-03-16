@@ -29,7 +29,8 @@ export type ErrorCode =
   | 'INVALID_NONCE'
   | 'NONCE_EXPIRED'
   | 'NOT_OWNER'
-  | 'TASK_NOT_CANCELLABLE';
+  | 'TASK_NOT_CANCELLABLE'
+  | 'QUEUE_FULL';
 
 /**
  * HTTP status codes mapped to error codes.
@@ -62,6 +63,7 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   NONCE_EXPIRED: 400,
   NOT_OWNER: 403,
   TASK_NOT_CANCELLABLE: 400,
+  QUEUE_FULL: 503,
 };
 
 /**

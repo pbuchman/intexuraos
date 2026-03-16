@@ -1193,7 +1193,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['MISCONFIGURED'] },
+                  code: { type: 'string', enum: ['MISCONFIGURED', 'QUEUE_FULL'] },
                   message: { type: 'string' },
                 },
               },
@@ -1224,7 +1224,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo } = getServices();
+      const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo, whatsappNotifier } = getServices();
       const body = request.body as {
         prompt: string;
         workerType?: WorkerType;
@@ -1266,8 +1266,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
       // Pre-generate task ID and derive deterministic webhook secret
+      const config = loadConfig();
       const taskId = `task_${randomUUID()}`;
-      const webhookSecret = generateWebhookSecret(loadConfig().orchestratorSecret, taskId);
+      const webhookSecret = generateWebhookSecret(config.orchestratorSecret, taskId);
 
       // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
       const createInput: {
@@ -1424,14 +1425,48 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const dispatchResult = await taskDispatcher.dispatch(dispatchInput);
 
       if (!dispatchResult.ok) {
-        request.log.error({ error: dispatchResult.error, taskId: task.id }, 'Failed to dispatch code task');
+        const dispatchError = dispatchResult.error;
 
-        // Update task with error and failed status
+        // Queue task when all workers are at capacity (matching processCodeAction pattern)
+        if (dispatchError.code === 'at_capacity') {
+          const queueCountResult = await codeTaskRepo.countQueued();
+          if (!queueCountResult.ok) {
+            request.log.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
+          }
+          const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
+
+          if (queueCount > config.queue.maxSize) {
+            await codeTaskRepo.update(task.id, {
+              status: 'failed',
+              error: {
+                code: 'queue_full',
+                message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
+              },
+            });
+            return await reply.fail('QUEUE_FULL', 'All workers are busy and the queue is full. Please try again in a few minutes.');
+          }
+
+          // Task is already in 'queued' status from creation — no status update needed
+          const queuePosition = queueCount;
+          const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
+
+          await whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
+
+          request.log.info({ taskId: task.id, queuePosition }, 'Task queued due to worker capacity');
+
+          return await reply.ok({
+            status: 'submitted',
+            codeTaskId: task.id,
+          });
+        }
+
+        // Other dispatch errors - fail as before
+        request.log.error({ error: dispatchError, taskId: task.id }, 'Failed to dispatch code task');
         await codeTaskRepo.update(task.id, {
           status: 'failed',
           error: {
-            code: dispatchResult.error.code,
-            message: dispatchResult.error.message,
+            code: dispatchError.code,
+            message: dispatchError.message,
           },
         });
 
