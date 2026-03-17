@@ -55,6 +55,8 @@ export interface LinearIssue {
 /** Linear issue with team ID for validation */
 export interface LinearIssueWithTeam extends LinearIssue {
   teamId: string;
+  /** Parent issue UUID (null for top-level issues) — required on WithTeam to prevent omission bugs */
+  parentId: string | null;
   /** Number of child issues (subtasks) */
   childCount: number;
 }
