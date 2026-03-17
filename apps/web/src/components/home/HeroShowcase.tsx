@@ -181,7 +181,7 @@ export function HeroShowcase(): React.JSX.Element {
             <SbItem icon={Inbox} label="Inbox" />
             <div className="h-1" />
             <SbItem icon={Code2} label="Code Tasks" active chevron="up" />
-            <SbSub icon={List} label="Task History" active />
+            <SbSub icon={List} label="Battlefield" active />
             <SbSub icon={Plus} label="New Task" />
             <SbSub icon={GitPullRequest} label="PR Events" />
             <div className="h-1" />
