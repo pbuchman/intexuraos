@@ -4,8 +4,10 @@
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import type { Result } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import { processCalendarAction, generateCalendarPreview } from '../domain/index.js';
+import { processCalendarAction, generateCalendarPreview, type CalendarError, type CalendarPreview } from '../domain/index.js';
+import { handleCalendarError } from './calendarErrorHandler.js';
 
 interface ProcessActionBody {
   action: {
@@ -43,20 +45,37 @@ interface GetPreviewParams {
   actionId: string;
 }
 
-async function handleCalendarError(
-  error: { code: string; message: string },
-  reply: FastifyReply
-): Promise<unknown> {
-  if (error.code === 'NOT_CONNECTED') {
-    reply.status(403);
-    return await reply.fail('FORBIDDEN', error.message);
+interface GeneratePreviewInput {
+  actionId: string;
+  userId: string;
+  text: string;
+  currentDate: string;
+}
+
+function decodePubSubMessage(
+  data: string,
+  logger: { error: (obj: object, msg: string) => void },
+  messageId: string
+): unknown {
+  try {
+    const decoded = Buffer.from(data, 'base64').toString('utf-8');
+    return JSON.parse(decoded);
+  } catch {
+    logger.error({ messageId }, 'decodePubSubMessage: failed to decode message');
+    return null;
   }
-  if (error.code === 'TOKEN_ERROR') {
-    reply.status(401);
-    return await reply.fail('UNAUTHORIZED', error.message);
-  }
-  reply.status(500);
-  return await reply.fail('DOWNSTREAM_ERROR', error.message);
+}
+
+async function callGeneratePreview(
+  input: GeneratePreviewInput,
+  logger: Parameters<typeof generateCalendarPreview>[1]['logger']
+): Promise<Result<{ preview: CalendarPreview }, CalendarError>> {
+  const services = getServices();
+  return await generateCalendarPreview(input, {
+    calendarActionExtractionService: services.calendarActionExtractionService,
+    calendarPreviewRepository: services.calendarPreviewRepository,
+    logger,
+  });
 }
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -287,15 +306,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       // Decode Pub/Sub message
-      let messageData: GeneratePreviewMessage;
-      try {
-        const decoded = Buffer.from(message.data, 'base64').toString('utf-8');
-        messageData = JSON.parse(decoded) as GeneratePreviewMessage;
-      } catch {
-        request.log.error(
-          { messageId: message.messageId },
-          'internal/generateCalendarPreview: failed to decode message'
-        );
+      const messageData = decodePubSubMessage(
+        message.data,
+        request.log,
+        message.messageId
+      ) as GeneratePreviewMessage | null;
+      if (messageData === null) {
         reply.status(400);
         return await reply.fail('INVALID_REQUEST', 'Invalid message format');
       }
@@ -307,16 +323,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'internal/generateCalendarPreview: processing preview request'
       );
 
-      const services = getServices();
-
-      const result = await generateCalendarPreview(
-        { actionId, userId, text, currentDate },
-        {
-          calendarActionExtractionService: services.calendarActionExtractionService,
-          calendarPreviewRepository: services.calendarPreviewRepository,
-          logger: request.log,
-        }
-      );
+      const result = await callGeneratePreview({ actionId, userId, text, currentDate }, request.log);
 
       if (!result.ok) {
         request.log.error(
@@ -542,16 +549,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'internal/generateCalendarPreviewDirect: processing preview request'
       );
 
-      const services = getServices();
-
-      const result = await generateCalendarPreview(
-        { actionId, userId, text, currentDate },
-        {
-          calendarActionExtractionService: services.calendarActionExtractionService,
-          calendarPreviewRepository: services.calendarPreviewRepository,
-          logger: request.log,
-        }
-      );
+      const result = await callGeneratePreview({ actionId, userId, text, currentDate }, request.log);
 
       if (!result.ok) {
         request.log.error(
