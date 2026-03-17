@@ -12,6 +12,17 @@ const REQUEST_TIMEOUT_MS = 30000;
 
 const logger = createAppLogger({ name: 'whatsapp-sender' });
 
+type WhatsAppMessageBody =
+  | { type: 'text'; text: { preview_url: boolean; body: string } }
+  | {
+      type: 'interactive';
+      interactive:
+        | { type: 'button'; body: { text: string }; action: { buttons: { type: string; reply: { id: string; title: string } }[] } }
+        | { type: 'cta_url'; body: { text: string }; action: { name: 'cta_url'; parameters: { display_text: string; url: string } } };
+    };
+
+type MessageTypeLabel = 'text' | 'interactive' | 'CTA URL';
+
 /**
  * WhatsApp Cloud API implementation of message sender.
  */
@@ -48,10 +59,16 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
       },
     }));
 
-    return await this.sendRequest(phoneNumber, {
-      type: 'interactive',
-      interactive: { type: 'button', body: { text: message }, action: { buttons: truncatedButtons } },
-    }, 'interactive');
+    const interactiveBody = {
+      type: 'interactive' as const,
+      interactive: {
+        type: 'button' as const,
+        body: { text: message },
+        action: { buttons: truncatedButtons },
+      },
+    };
+
+    return await this.sendRequest(phoneNumber, interactiveBody, 'interactive');
   }
 
   async sendCtaUrlMessage(
@@ -59,16 +76,22 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     message: string,
     ctaUrl: { displayText: string; url: string }
   ): Promise<Result<{ wamid: string }, WhatsAppError>> {
-    return await this.sendRequest(phoneNumber, {
-      type: 'interactive',
-      interactive: { type: 'cta_url', body: { text: message }, action: { name: 'cta_url', parameters: { display_text: ctaUrl.displayText, url: ctaUrl.url } } },
-    }, 'CTA URL');
+    const ctaUrlBody = {
+      type: 'interactive' as const,
+      interactive: {
+        type: 'cta_url' as const,
+        body: { text: message },
+        action: { name: 'cta_url' as const, parameters: { display_text: ctaUrl.displayText, url: ctaUrl.url } },
+      },
+    };
+
+    return await this.sendRequest(phoneNumber, ctaUrlBody, 'CTA URL');
   }
 
   private async sendRequest(
     phoneNumber: string,
-    body: Record<string, unknown>,
-    messageTypeLabel: string
+    body: WhatsAppMessageBody,
+    messageTypeLabel: MessageTypeLabel
   ): Promise<Result<{ wamid: string }, WhatsAppError>> {
     logger.info({ phoneNumber, messageType: messageTypeLabel }, `Sending WhatsApp ${messageTypeLabel} message`);
     const controller = new AbortController();
