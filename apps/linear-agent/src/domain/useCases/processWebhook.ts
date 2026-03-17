@@ -10,6 +10,8 @@ import type { Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import type { LinearConnectionRepository, LinearIssueRepository, LinearCommentRepository, CodeAgentClient } from '../ports.js';
 import type { LinearWebhookUpdatedFrom } from '../webhookTypes.js';
+import { WEBHOOK_TYPES } from '../webhookTypes.js';
+import type { WebhookAction } from '../webhookTypes.js';
 import { isIssueWebhookData, isCommentWebhookData } from '../webhookTypeGuards.js';
 import { syncSingleIssue, shouldTriggerCodeTask, triggerCodeTaskFromAssignment } from '../index.js';
 import { syncCommentFromWebhook } from './syncCommentFromWebhook.js';
@@ -54,7 +56,7 @@ export async function processWebhook(
   const { action, type, data, updatedFrom, webhookTimestamp, webhookId, rawBody } = payload;
 
   // 1. For non-Issue and non-Comment events, skip processing early
-  if (type !== 'Issue' && type !== 'Comment') {
+  if (type !== WEBHOOK_TYPES.ISSUE && type !== WEBHOOK_TYPES.COMMENT) {
     logger.info({ type }, 'Ignoring non-Issue/non-Comment webhook event');
     return { outcome: 'ignored', message: 'Ignored' };
   }
@@ -120,7 +122,7 @@ export async function processWebhook(
     // Use safe defaults for optional fields that might be missing
     const now = new Date().toISOString();
     const event = {
-      action: action as 'create' | 'update' | 'remove',
+      action: action as WebhookAction,
       type,
       data: {
         id: data.id,
@@ -263,23 +265,18 @@ export async function processWebhook(
 
     // Find all users who have this issue synced
     const userIdsResult = await issueRepository.findUserIdsByIssueId(data.issueId);
-    let commentUserId: string;
-    if (userIdsResult.ok && userIdsResult.value.length > 0) {
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces ?? fallback on userIdsResult.value[0] despite length guard @preserve */
-      commentUserId = userIdsResult.value[0] ?? issue.userId; // noUncheckedIndexedAccess
-      /* v8 ignore stop @preserve */
-    } else {
-      if (!userIdsResult.ok) {
-        logger.warn({ error: userIdsResult.error, issueId: data.issueId }, 'Failed to find users by issue ID, falling back to issue.userId');
-      }
-      commentUserId = issue.userId;
+    const userIds = userIdsResult.ok ? userIdsResult.value : [];
+    const commentUserId = userIds[0] ?? issue.userId;
+
+    if (!userIdsResult.ok) {
+      logger.warn({ error: userIdsResult.error, issueId: data.issueId }, 'Failed to find users by issue ID, falling back to issue.userId');
     }
 
     // Process Comment webhook
     // Comments are stored by Linear UUID (not user-scoped), so syncing once is sufficient
     const commentNow = new Date().toISOString();
     const commentEvent = {
-      action: action as 'create' | 'update' | 'remove',
+      action: action as WebhookAction,
       type,
       data: {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, fields may be missing at runtime
