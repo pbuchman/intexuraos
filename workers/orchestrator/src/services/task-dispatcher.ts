@@ -52,7 +52,7 @@ const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
-const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30 seconds
+const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
 
 export interface DispatchError {
   type:
