@@ -6,6 +6,7 @@ import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
 
 interface IssueGroupRowProps {
   group: IssueGroup;
+  timeTick: number;
   onAction: (taskId: string, action: 'delete' | 'retry' | 'implement') => void;
   onOpenLogs: (taskId: string) => void;
 }
@@ -236,7 +237,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
               {formatRelative(latestTask.createdAt)}
             </p>
             <p className="text-slate-400 dark:text-slate-500">
-              <span className="text-slate-500 dark:text-slate-600">Started</span>{' '}
+              <span className="text-slate-500 dark:text-slate-600">Dispatched</span>{' '}
               {latestTask.dispatchedAt !== undefined ? formatRelative(latestTask.dispatchedAt) : 'Pending'}
             </p>
           </div>
@@ -443,6 +444,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
     </div>
   );
 }, (prev, next) =>
+  prev.timeTick === next.timeTick &&
   prev.group.linearIssueId === next.group.linearIssueId &&
   prev.group.aggregateStatus === next.group.aggregateStatus &&
   prev.group.latestTask.updatedAt === next.group.latestTask.updatedAt &&

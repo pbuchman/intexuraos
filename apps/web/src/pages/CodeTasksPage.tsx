@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowUpDown, Plus } from 'lucide-react';
 import { Button, CodeTaskLogsModal, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
-import { useCodeTasks } from '@/hooks';
+import { useCodeTasks, useTimeTick } from '@/hooks';
 import { groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
 import type { IssueGroup, GroupStatus, SortOption } from '@/utils/issueGroups';
 import type { CodeTaskStatus } from '@/types';
@@ -228,6 +228,13 @@ export function CodeTasksPage(): React.JSX.Element {
   const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask } = useCodeTasks({
     status: apiStatuses,
   });
+
+  const hasActiveTasks = useMemo(
+    () => tasks.some((t) => t.status === 'running' || t.status === 'dispatched' || t.status === 'queued'),
+    [tasks],
+  );
+  const timeTick = useTimeTick(30000, hasActiveTasks);
+
   const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
 
   const filteredGroups = useMemo(() => {
@@ -346,6 +353,7 @@ export function CodeTasksPage(): React.JSX.Element {
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}
                 group={group}
+                timeTick={timeTick}
                 onAction={handleAction}
                 onOpenLogs={setPreviewTaskId}
               />
