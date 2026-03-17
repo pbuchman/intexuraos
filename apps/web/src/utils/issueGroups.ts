@@ -232,17 +232,13 @@ export function groupByLinearIssue(tasks: CodeTask[]): IssueGroup[] {
       continue;
     }
 
-    // linearIssue from any task in group that has it
+    // Derive linearIssue and mostRecentDispatchedAt in a single pass
     let linearIssue: CodeTask['linearIssue'] | undefined;
-    for (const task of group.tasks) {
-      if (task.linearIssue !== undefined) {
-        linearIssue = task.linearIssue;
-        break;
-      }
-    }
-
     let mostRecentDispatchedAt: string | undefined;
     for (const task of group.tasks) {
+      if (linearIssue === undefined && task.linearIssue !== undefined) {
+        linearIssue = task.linearIssue;
+      }
       if (task.dispatchedAt !== undefined) {
         if (mostRecentDispatchedAt === undefined || task.dispatchedAt > mostRecentDispatchedAt) {
           mostRecentDispatchedAt = task.dispatchedAt;
