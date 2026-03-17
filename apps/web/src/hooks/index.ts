@@ -8,6 +8,7 @@ export { useBookmarks } from './useBookmarks.js';
 export { useCalendarEvents } from './useCalendarEvents.js';
 export { useCodeTasks, useWorkersStatus, findRecentTask } from './useCodeTasks.js';
 export { useCodeTaskLogs, type CodeTaskLogsState } from './useCodeTaskLogs.js';
+export { useDispatchQueue, type DispatchQueueState } from './useDispatchQueue.js';
 export { useFailedCalendarEvents } from './useFailedCalendarEvents.js';
 export { useFailedLinearIssues } from './useFailedLinearIssues.js';
 export { useGitHubPREvents } from './useGitHubPREvents.js';
