@@ -4,9 +4,9 @@ import { ArrowUpDown, Plus } from 'lucide-react';
 import { Button, CodeTaskLogsModal, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useAuth } from '@/context';
-import { useCodeTasks } from '@/hooks';
+import { useCodeTasks, useTimeTick } from '@/hooks';
 import { startImplementation, retryCodeTask } from '@/services/codeAgentApi';
-import { groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
+import { ACTIVE_STATUSES, groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
 import type { IssueGroup, GroupStatus, SortOption } from '@/utils/issueGroups';
 import type { CodeTaskStatus } from '@/types';
 
@@ -231,6 +231,13 @@ export function CodeTasksPage(): React.JSX.Element {
   const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask, refresh } = useCodeTasks({
     status: apiStatuses,
   });
+
+  const hasActiveTasks = useMemo(
+    () => tasks.some((t) => ACTIVE_STATUSES.has(t.status)),
+    [tasks],
+  );
+  const timeTick = useTimeTick(30000, hasActiveTasks);
+
   const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
 
   const filteredGroups = useMemo(() => {
@@ -369,6 +376,7 @@ export function CodeTasksPage(): React.JSX.Element {
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}
                 group={group}
+                timeTick={timeTick}
                 onAction={fireAction}
                 onOpenLogs={setPreviewTaskId}
                 actioningTaskId={actioningTaskId}
