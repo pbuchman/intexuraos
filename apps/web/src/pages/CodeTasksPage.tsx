@@ -1,9 +1,11 @@
 import { useMemo, useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ArrowUpDown, Plus } from 'lucide-react';
 import { Button, CodeTaskLogsModal, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
+import { useAuth } from '@/context';
 import { useCodeTasks } from '@/hooks';
+import { startImplementation, retryCodeTask } from '@/services/codeAgentApi';
 import { groupByLinearIssue, sortIssueGroups } from '@/utils/issueGroups';
 import type { IssueGroup, GroupStatus, SortOption } from '@/utils/issueGroups';
 import type { CodeTaskStatus } from '@/types';
@@ -212,11 +214,12 @@ function ColumnHeader(): React.JSX.Element {
 // --- CodeTasksPage ---
 
 export function CodeTasksPage(): React.JSX.Element {
-  const navigate = useNavigate();
+  const { getAccessToken } = useAuth();
 
   const [activeFilters, setActiveFilters] = useState<Set<GroupStatus>>(loadFiltersFromStorage);
   const [activeSort, setActiveSort] = useState<SortOption>(loadSortFromStorage);
   const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
+  const [actioningTaskId, setActioningTaskId] = useState<string | null>(null);
 
   // When the Archived filter is active, include 'archived' in the API status filter
   // so the backend returns archived tasks. Otherwise use default (non-archived) statuses.
@@ -225,7 +228,7 @@ export function CodeTasksPage(): React.JSX.Element {
     [activeFilters],
   );
 
-  const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask } = useCodeTasks({
+  const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask, refresh } = useCodeTasks({
     status: apiStatuses,
   });
   const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
@@ -271,15 +274,28 @@ export function CodeTasksPage(): React.JSX.Element {
   }, []);
 
   const handleAction = useCallback(
-    (taskId: string, action: 'delete' | 'retry' | 'implement') => {
+    async (taskId: string, action: 'delete' | 'retry' | 'implement') => {
       if (action === 'delete') {
         void deleteTask(taskId);
+        return;
       }
-      if (action === 'retry' || action === 'implement') {
-        void navigate(`/code-tasks/${taskId}`);
+      setActioningTaskId(taskId);
+      try {
+        const token = await getAccessToken();
+        if (action === 'implement') {
+          await startImplementation(token, taskId);
+        }
+        if (action === 'retry') {
+          await retryCodeTask(token, { taskId });
+        }
+        await refresh(false);
+      } catch {
+        // Errors are transient — the row will show its normal state after refresh
+      } finally {
+        setActioningTaskId(null);
       }
     },
-    [deleteTask, navigate],
+    [deleteTask, getAccessToken, refresh],
   );
 
   if (loading && tasks.length === 0) {
@@ -346,8 +362,9 @@ export function CodeTasksPage(): React.JSX.Element {
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}
                 group={group}
-                onAction={handleAction}
+                onAction={(taskId, action): void => { void handleAction(taskId, action); }}
                 onOpenLogs={setPreviewTaskId}
+                actioningTaskId={actioningTaskId}
               />
             ))}
           </div>

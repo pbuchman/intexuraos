@@ -8,6 +8,7 @@ interface IssueGroupRowProps {
   group: IssueGroup;
   onAction: (taskId: string, action: 'delete' | 'retry' | 'implement') => void;
   onOpenLogs: (taskId: string) => void;
+  actioningTaskId?: string | null;
 }
 
 // --- Left border accent color ---
@@ -178,12 +179,14 @@ const IssueGroupRow = memo(function IssueGroupRow({
   group,
   onAction,
   onOpenLogs,
+  actioningTaskId,
 }: IssueGroupRowProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { latestTask, pipeline, aggregateStatus } = group;
   const hasActionable = pipeline.steps.some((s) => s.state === 'actionable');
+  const isActioning = actioningTaskId === latestTask.id || group.tasks.some((t) => t.id === actioningTaskId);
 
   const handleRowClick = (): void => {
     setExpanded((prev) => !prev);
@@ -251,7 +254,11 @@ const IssueGroupRow = memo(function IssueGroupRow({
 
           {/* Output column */}
           <div className="flex items-center justify-end gap-2">
-            {hasActionable ? (
+            {isActioning ? (
+              <span className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
+                <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+              </span>
+            ) : hasActionable ? (
               <button
                 onClick={(e): void => {
                   e.stopPropagation();
@@ -279,6 +286,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   e.stopPropagation();
                   onAction(latestTask.id, 'retry');
                 }}
+                disabled={isActioning}
                 className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300"
               >
                 <RotateCcw className="h-3 w-3" />
@@ -358,7 +366,11 @@ const IssueGroupRow = memo(function IssueGroupRow({
               >
                 <ScrollText className="h-3.5 w-3.5" />
               </button>
-              {hasActionable ? (
+              {isActioning ? (
+                <span className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+                </span>
+              ) : hasActionable ? (
                 <button
                   onClick={(e): void => {
                     e.stopPropagation();
@@ -462,6 +474,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   }) &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
+  prev.actioningTaskId === next.actioningTaskId &&
   prev.onAction === next.onAction &&
   prev.onOpenLogs === next.onOpenLogs,
 );
