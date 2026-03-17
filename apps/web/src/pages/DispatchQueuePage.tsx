@@ -3,25 +3,8 @@ import { ArrowLeft, Clock, Loader2 } from 'lucide-react';
 import { Layout } from '@/components';
 import { useDispatchQueue } from '@/hooks/useDispatchQueue';
 import { useTimeTick } from '@/hooks';
-
-function formatTimeAgo(isoDate: string): string {
-  const seconds = Math.floor((Date.now() - new Date(isoDate).getTime()) / 1000);
-  if (seconds < 60) return `${String(seconds)}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${String(minutes)}m ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${String(hours)}h ago`;
-}
-
-function agentTypeLabel(agentType?: string): string {
-  switch (agentType) {
-    case 'planning': return 'Planning';
-    case 'execution': return 'Execution';
-    case 'pull_request': return 'PR';
-    case 'review': return 'Review';
-    default: return 'Auto';
-  }
-}
+import { formatRelative } from '@/utils/dateFormat';
+import { getAgentTypeLabel } from '@/utils/issueGroups';
 
 export function DispatchQueuePage(): React.JSX.Element {
   const { tasks, totalQueued, maxQueueSize, loading, error } = useDispatchQueue();
@@ -97,7 +80,7 @@ export function DispatchQueuePage(): React.JSX.Element {
                         </span>
                       ) : null}
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                        {agentTypeLabel(task.agentType)}
+                        {getAgentTypeLabel(task.agentType ?? 'auto')}
                       </span>
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
                         {task.workerType}
@@ -113,7 +96,7 @@ export function DispatchQueuePage(): React.JSX.Element {
                   {/* Time info */}
                   <div className="flex-shrink-0 text-right">
                     <p className="text-xs text-slate-400 dark:text-slate-500">
-                      Queued {formatTimeAgo(task.queuedAt)}
+                      Queued {formatRelative(task.queuedAt)}
                     </p>
                   </div>
                 </div>
