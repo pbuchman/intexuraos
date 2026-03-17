@@ -37,7 +37,7 @@ export function useDispatchQueue(): DispatchQueueState {
 
   const getAccessTokenRef = useRef(getAccessToken);
   getAccessTokenRef.current = getAccessToken;
-  const isMountedRef = useRef(true);
+  const isMountedRef = useRef(false);
 
   const fetchQueue = useCallback(async (): Promise<void> => {
     try {
@@ -72,7 +72,7 @@ export function useDispatchQueue(): DispatchQueueState {
 
   // Firestore real-time listener for queue changes
   useEffect(() => {
-    if (!isAuthenticated || user === undefined) return;
+    if (!isAuthenticated || user?.sub === undefined) return;
 
     const cancelState = { cancelled: false };
     let unsub: Unsubscribe | null = null;
@@ -107,8 +107,9 @@ export function useDispatchQueue(): DispatchQueueState {
               void fetchQueue();
             }
           },
-          () => {
-            // Firestore listener error — silent, API polling still works
+          (err) => {
+            // eslint-disable-next-line no-console -- browser-only hook with no logger service available
+            console.warn('Firestore queue listener error', err);
           },
         );
       } catch {
@@ -124,7 +125,7 @@ export function useDispatchQueue(): DispatchQueueState {
         unsub();
       }
     };
-  }, [isAuthenticated, user, fetchQueue]);
+  }, [isAuthenticated, user?.sub, fetchQueue]);
 
   return {
     tasks,
