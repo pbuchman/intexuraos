@@ -55,7 +55,7 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   review: 'Review',
 };
 
-function getAgentTypeLabel(agentType: string): string {
+export function getAgentTypeLabel(agentType: string): string {
   const label = AGENT_TYPE_LABELS[agentType];
   if (label !== undefined) {
     return label;

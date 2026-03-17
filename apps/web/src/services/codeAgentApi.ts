@@ -15,6 +15,23 @@ import type {
   WorkersStatusResponse,
 } from '@/types';
 
+export interface QueuedTask {
+  id: string;
+  prompt: string;
+  linearIssueId?: string;
+  workerType: string;
+  agentType?: string;
+  queuedAt: string;
+  createdAt: string;
+  position: number;
+}
+
+export interface QueueResponse {
+  tasks: QueuedTask[];
+  totalQueued: number;
+  maxQueueSize: number;
+}
+
 /**
  * List code tasks for the current user
  */
@@ -215,4 +232,16 @@ export async function hydrateGitHubEventLogRows(
       body: { ids },
     }
   );
+}
+
+/**
+ * Get the current dispatch queue status
+ */
+export async function getDispatchQueue(accessToken: string): Promise<QueueResponse> {
+  const response = await apiRequest<{ success: boolean; data: QueueResponse }>(
+    config.codeAgentUrl,
+    '/code/queue',
+    accessToken,
+  );
+  return response.data;
 }
