@@ -18,7 +18,7 @@
 - `GET /health` — Health check
 - `GET /openapi.json` — OpenAPI spec (for api-docs-hub)
 - `POST /internal/cron/tick` — Cloud Scheduler tick (every minute), evaluates and executes due schedules
-- `GET /internal/cron/services` — List allowlisted services and their available tools (for UI dropdown)
+- `GET /cron/services` — List allowlisted services and their available tools (JWT auth, for UI dropdown)
 - `GET /cron/schedules` — List all schedules (JWT auth, paginated)
 - `POST /cron/schedules` — Create a new schedule (JWT auth)
 - `GET /cron/schedules/:id` — Get schedule details (JWT auth)
@@ -106,7 +106,7 @@ This plan splits into **2 independent subtasks** by service boundary. Each subta
 
 ### Subtask 1: cron-agent backend service (`apps/cron-agent`)
 
-**Owns:** All backend code, Firestore collections, Firestore composite index migrations, Terraform infrastructure (including `terraform apply`), ecosystem config, `firestore-collections.json` updates, OpenAPI spec endpoint, tool generation from service OpenAPI specs.
+**Owns:** All backend code, Firestore collections, Firestore composite index migrations (in root `migrations/` directory), infrastructure configuration (including `terraform apply` with SA credentials), ecosystem config, `firestore-collections.json` updates, OpenAPI spec endpoint, tool generation from service OpenAPI specs.
 
 **API Contract (consumed by Subtask 2):**
 
@@ -156,7 +156,7 @@ interface ListExecutionsResponse {
 // GET /cron/executions/:id
 // Response: CronExecution
 
-// GET /internal/cron/services
+// GET /cron/services (JWT auth — accessible from web client)
 // Response: { services: Array<{ key: string; name: string; tools: Array<{ name: string; description: string }> }> }
 
 // POST /internal/cron/tick (Cloud Scheduler, OIDC or X-Internal-Auth)
@@ -214,6 +214,9 @@ export interface ServiceDefinition {
   name: string;                    // human-readable: "Code Agent"
   url: string;                     // resolved from env var
   openapiUrl: string;              // e.g. "http://localhost:8128/openapi.json"
+  allowedOperations?: string[];    // optional operation-level allowlist (operationIds)
+                                   // when set, only these operations become tools
+                                   // when absent, all /internal/* operations are exposed
 }
 
 export interface CronAgentConfig {
@@ -248,7 +251,13 @@ export function loadConfig(): CronAgentConfig {
    - **`run` callback**: Makes HTTP `{method} {service_url}{path}` with `X-Internal-Auth`, returns response body as JSON string
 5. When executing a schedule, the agent receives only tools from `schedule.action.services`
 
-**Important:** The `allowedServices` allowlist ensures only known services can have tools generated. The `action.services` array on each schedule further restricts which service tools are available for that specific execution — the LLM can only call tools from those listed services.
+**Security — two-layer allowlist:**
+1. **Service-level:** `allowedServices` config restricts which services can have tools generated at all.
+2. **Operation-level:** Each `ServiceDefinition` includes an optional `allowedOperations: string[]` field. When present, only those `operationId`s are exposed as tools — all others are filtered out. When absent, **all** `/internal/*` endpoints from that service are available (use only for trusted, low-risk services). This prevents end-users from scheduling privileged administrative operations (e.g., data deletion, config changes) that happen to exist on `/internal/*` routes.
+
+The `action.services` array on each schedule further restricts which service tools are available for that specific execution — the LLM can only call tools from those listed services.
+
+> **Rationale:** Internal endpoints bypass user-level authorization — they trust the calling service. Exposing them all to user-defined schedules without operation filtering would let users drive privileged APIs outside their data scope. The operation-level allowlist mitigates this by restricting tool generation to explicitly approved, user-safe operations.
 
 **Env var three-location rule (CLAUDE.md):** Every new env var must appear in: (1) `apps/cron-agent/src/index.ts` `REQUIRED_ENV` / `PRODUCTION_ONLY_ENV`, (2) `terraform/environments/dev/main.tf` Cloud Run module env block, (3) `ecosystem.config.cjs` env section. The `INTEXURAOS_CRON_AGENT_URL` env var must additionally be added to: (a) `ecosystem.config.cjs` `COMMON_SERVICE_URLS`, (b) `terraform/environments/dev/main.tf` in the web app module env block.
 
@@ -469,6 +478,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
     //    - description: from summary + description
     //    - parameters: from OpenAPI params + requestBody schema
     //    - run: closure that makes HTTP call with X-Internal-Auth
+    // 6b. If service.allowedOperations is set, filter to only those operationIds
     // 7. Cache and return
   }
 }
@@ -732,12 +742,17 @@ Each route: `logIncomingRequest`, validate JWT auth, extract userId, call execut
 1. `POST /internal/cron/tick` — 200 with OIDC auth (Cloud Scheduler)
 2. `POST /internal/cron/tick` — 200 with X-Internal-Auth
 3. `POST /internal/cron/tick` — 401 without auth
-4. `GET /internal/cron/services` — 200 returns list of services with tool names
-5. Verify tick handler is called and response shape is correct
+4. Verify tick handler is called and response shape is correct
 
 - [ ] **Step 8: Implement internal-routes.ts**
 
-`logIncomingRequest` on every handler. Follow the exact OIDC + X-Internal-Auth dual-auth pattern from code-agent's drain-queue endpoint. The tick response is wrapped in `{ success: true, data: { executed, skipped, errors } }`. The services endpoint returns `{ success: true, data: { services: [...] } }` from `toolRegistry.listServiceTools()`. Register under `/internal/cron` prefix.
+`logIncomingRequest` on every handler. Follow the exact OIDC + X-Internal-Auth dual-auth pattern from code-agent's drain-queue endpoint. The tick response is wrapped in `{ success: true, data: { executed, skipped, errors } }`. Register under `/internal/cron` prefix.
+
+- [ ] **Step 8b: Add services list to schedule-routes.ts (JWT-protected)**
+
+Add `GET /cron/services` to the public schedule routes (JWT auth). Returns `{ success: true, data: { services: [...] } }` from `toolRegistry.listServiceTools()`. This is a public route because the web client needs it for the services multi-select, and internal routes require OIDC/X-Internal-Auth which browser clients cannot provide.
+
+Test: `GET /cron/services` — 200 returns list of services with tool names (JWT auth), 401 without auth.
 
 - [ ] **Step 9: Run tests, verify pass**
 
@@ -758,14 +773,14 @@ git commit -m "feat(cron-agent): add HTTP routes for schedules, executions, and 
 ### Task 9: Firestore Composite Index Migrations
 
 **Files:**
-- Create: `apps/cron-agent/migrations/001-composite-indexes.mjs`
+- Create: `migrations/062_cron-agent-composite-indexes.mjs` (root `migrations/` directory — the migration runner only discovers files here, NOT per-app directories)
 
 - [ ] **Step 1: Create composite index migration**
 
-The `findDueSchedules` query uses `status == 'active' AND nextExecutionAt <= now` — this requires a composite index. The `findByUserId` queries use `userId + status + createdAt` for ordering. Create migration file:
+The `findDueSchedules` query uses `status == 'active' AND nextExecutionAt <= now` — this requires a composite index. The `findByUserId` queries use `userId + status + createdAt` for ordering. Create migration file in the root `migrations/` directory (next sequence number after existing migrations):
 
 ```javascript
-// 001-composite-indexes.mjs
+// migrations/062_cron-agent-composite-indexes.mjs
 export const indexes = [
   {
     collectionGroup: 'cron_schedules',
@@ -793,6 +808,23 @@ export const indexes = [
     collectionGroup: 'cron_executions',
     fields: [
       { fieldPath: 'scheduleId', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+  },
+  // Status-filtered queries (required for execution listing with status filters)
+  {
+    collectionGroup: 'cron_executions',
+    fields: [
+      { fieldPath: 'userId', order: 'ASCENDING' },
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+  },
+  {
+    collectionGroup: 'cron_executions',
+    fields: [
+      { fieldPath: 'scheduleId', order: 'ASCENDING' },
+      { fieldPath: 'status', order: 'ASCENDING' },
       { fieldPath: 'createdAt', order: 'DESCENDING' },
     ],
   },
@@ -874,12 +906,26 @@ Update `apps/api-docs-hub/src/config.ts` to include cron-agent's OpenAPI URL. Ad
 git commit -m "infra(cron-agent): add Cloud Run service, Cloud Scheduler tick job, and api-docs-hub registration"
 ```
 
-- [ ] **Step 7: Apply Terraform**
+- [ ] **Step 7: Apply infrastructure changes**
+
+**Important:** Must use repo-standard invocation with SA credentials and cleared emulator env vars (required by `.claude/hooks/validate-terraform.sh`):
 
 ```bash
 cd terraform/environments/dev
+
+# Init
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform init
+
+# Plan
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform plan -out=tfplan
+
+# Apply
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform apply tfplan
 ```
 
@@ -1016,7 +1062,7 @@ export async function deleteSchedule(accessToken: string, id: string): Promise<v
 export async function triggerSchedule(accessToken: string, id: string): Promise<CronExecution>
 export async function listExecutions(accessToken: string, options?: { scheduleId?: string; status?: CronExecutionStatus[]; limit?: number; cursor?: string }): Promise<ListExecutionsResponse>
 export async function getExecution(accessToken: string, id: string): Promise<CronExecution>
-// Internal endpoint (no JWT, uses internal auth or proxied through dev)
+// JWT-protected public endpoint (GET /cron/services)
 export async function listAvailableServices(accessToken: string): Promise<ServiceInfo[]>
 ```
 
