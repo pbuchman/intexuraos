@@ -17,7 +17,7 @@ import type { WorktreeManager } from './worktree-manager.js';
 import type { LogForwarder } from './log-forwarder.js';
 import type { WebhookClient } from './webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
-import type { IsolationProvider, WorkerConfig } from './isolation/types.js';
+import type { IsolationProvider, WorkerConfig, WorkerHandle } from './isolation/types.js';
 import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
@@ -52,6 +52,7 @@ const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
+const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
 
 export interface DispatchError {
   type:
@@ -1645,11 +1646,16 @@ export class TaskDispatcher {
     this.claudeLogBuffers.delete(task.taskId);
     this.lastOutputAt.set(task.taskId, Date.now());
 
+    // Store promise to enable zombie cleanup if timeout fires mid-creation.
+    let createPromise: Promise<WorkerHandle> | undefined;
+
     try {
       await this.isolation.tokenRefresher.registerTask(task.taskId);
 
+      createPromise = this.isolation.provider.createWorker(workerConfig);
+
       const handle = await withTimeout(
-        this.isolation.provider.createWorker(workerConfig),
+        createPromise,
         CONTAINER_CREATE_TIMEOUT_MS,
         `Container creation timed out after ${String(CONTAINER_CREATE_TIMEOUT_MS / 1000)}s — Docker may be unresponsive`
       );
@@ -1681,6 +1687,29 @@ export class TaskDispatcher {
 
       return { ok: true, containerId: handle.containerId };
     } catch (error) {
+      // If the timeout fired but createWorker is still in-flight, it may
+      // eventually succeed and leave a zombie container running with no
+      // monitoring. Attach a cleanup handler to destroy it if that happens.
+      createPromise
+        ?.then((handle) => {
+          this.logger.warn(
+            { taskId: task.taskId, containerId: handle.containerId },
+            'Late container created after timeout — destroying zombie'
+          );
+          this.appendOrchestratorTaskLog(
+            task.taskId,
+            `Destroying zombie container created after timeout: ${handle.containerId}`
+          );
+          return withTimeout(
+            this.isolation.provider.destroyWorker(task.taskId),
+            ZOMBIE_CLEANUP_TIMEOUT_MS,
+            'Zombie container cleanup timed out'
+          );
+        })
+        .catch(() => {
+          // createWorker itself failed or cleanup timed out — best effort
+        });
+
       this.appendOrchestratorTaskLog(
         task.taskId,
         `Worker start failed: ${error instanceof Error ? error.message : String(error)}`
