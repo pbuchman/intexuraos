@@ -238,6 +238,7 @@ describe('Automation log integration flows', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator,
       automationLog: mockAutomationLog as AutomationLog,
+      taskEnqueueService: {} as never,
     };
 
     setServices(mockServices);
