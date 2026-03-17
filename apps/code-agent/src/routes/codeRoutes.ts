@@ -31,6 +31,9 @@ import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js
 
 const logger = createAppLogger({ name: 'code-routes' });
 
+/** Max characters of sanitized prompt to include in queue listing responses. */
+const QUEUE_PROMPT_PREVIEW_LENGTH = 200;
+
 /**
  * Track in-flight health probe requests per user for deduplication.
  * Prevents thundering herd when multiple concurrent requests arrive while health status is stale.
@@ -1466,7 +1469,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const tasks = result.value.map((task, index) => ({
         id: task.id,
-        prompt: task.sanitizedPrompt.slice(0, 200),
+        prompt: task.sanitizedPrompt.slice(0, QUEUE_PROMPT_PREVIEW_LENGTH),
         linearIssueId: task.linearIssueId,
         workerType: task.workerType,
         agentType: task.agentType,
