@@ -86,6 +86,20 @@ actions:
       message: 'Linear issue created!'
       linkLabel: 'View Issue →'
 
+  approve_code:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Code!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this code task?'
+    onSuccess:
+      message: 'Code task created!'
+      linkLabel: 'View Task →'
+
   retry:
     endpoint:
       path: /actions/{actionId}/execute
@@ -171,6 +185,20 @@ actions:
     onSuccess:
       message: 'Linear issue created!'
       linkLabel: 'View Issue →'
+
+  retry_code:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating code task?'
+    onSuccess:
+      message: 'Code task created!'
+      linkLabel: 'View Task →'
 
   reject:
     endpoint:
@@ -382,6 +410,18 @@ types:
 
   code:
     actions:
+      - action: approve_code
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_code
+        when:
+          field: status
+          op: eq
+          value: failed
+
       - action: reject
         when:
           field: status
