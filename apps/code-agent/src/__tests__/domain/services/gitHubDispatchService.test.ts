@@ -103,7 +103,6 @@ function createMockDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): We
       findArchivableTasks: vi.fn(),
       archiveTaskLogs: vi.fn(),
       deleteTask: vi.fn(),
-      findOldestQueued: vi.fn(),
       listQueuedByAge: vi.fn(),
       listQueued: vi.fn(),
       countQueued: vi.fn(),

@@ -1462,12 +1462,19 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo } = getServices();
       const config = loadConfig();
 
+      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
+
       const result = await codeTaskRepo.listQueued();
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch queue');
       }
 
-      const tasks = result.value.map((task, index) => ({
+      // Scope to requesting user's tasks only — prevents cross-user data leakage
+      const userTasks = result.value.filter((task) => task.userId === userId);
+
+      const tasks = userTasks.map((task, index) => ({
         id: task.id,
         prompt: task.sanitizedPrompt.slice(0, QUEUE_PROMPT_PREVIEW_LENGTH),
         linearIssueId: task.linearIssueId,

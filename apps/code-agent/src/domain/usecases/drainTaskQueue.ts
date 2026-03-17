@@ -168,7 +168,10 @@ export async function drainTaskQueue(
     const enabledWorkers = settings.workers.filter((w) => w.enabled);
 
     if (enabledWorkers.length === 0) {
-      logger.warn({ userId: task.userId }, 'User has no enabled workers during drain');
+      logger.warn(
+        { userId: task.userId, taskId: task.id, reason: 'no_enabled_workers' },
+        'Drain blocked: user has no enabled workers — task stays queued until workers are configured or TTL expires',
+      );
       return ok({ action: 'still_busy', taskId: task.id });
     }
 

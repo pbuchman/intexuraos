@@ -197,9 +197,9 @@ describe('GET /code/queue', () => {
 
   describe('with queued tasks', () => {
     it('returns queued tasks ordered by creation time', async () => {
-      // Create queued tasks
+      // Create queued tasks owned by the authenticated user (JWT sub: 'test-user-id')
       const result1 = await codeTaskRepo.create({
-        userId: 'user-1',
+        userId: 'test-user-id',
         prompt: 'First queued task',
         sanitizedPrompt: 'First queued task',
         systemPromptHash: 'default',
@@ -217,7 +217,7 @@ describe('GET /code/queue', () => {
       }
 
       const result2 = await codeTaskRepo.create({
-        userId: 'user-2',
+        userId: 'test-user-id',
         prompt: 'Second queued task',
         sanitizedPrompt: 'Second queued task',
         systemPromptHash: 'default',
@@ -233,9 +233,9 @@ describe('GET /code/queue', () => {
         throw new Error(`Failed to create task 2: ${result2.error.message}`);
       }
 
-      // Create a non-queued task (should not appear)
+      // Create a non-queued task (should not appear — different status)
       const result3 = await codeTaskRepo.create({
-        userId: 'user-3',
+        userId: 'test-user-id',
         prompt: 'Running task',
         sanitizedPrompt: 'Running task',
         systemPromptHash: 'default',
@@ -249,6 +249,23 @@ describe('GET /code/queue', () => {
 
       if (!result3.ok) {
         throw new Error(`Failed to create task 3: ${result3.error.message}`);
+      }
+
+      // Create a queued task owned by a different user (should not appear — userId scoping)
+      const result4 = await codeTaskRepo.create({
+        userId: 'other-user-id',
+        prompt: 'Other user task',
+        sanitizedPrompt: 'Other user task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'pending',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_q3',
+      });
+
+      if (!result4.ok) {
+        throw new Error(`Failed to create task 4: ${result4.error.message}`);
       }
 
       const response = await app.inject({
@@ -286,7 +303,7 @@ describe('GET /code/queue', () => {
     it('truncates prompt to 200 characters', async () => {
       const longPrompt = 'A'.repeat(500);
       const result = await codeTaskRepo.create({
-        userId: 'user-1',
+        userId: 'test-user-id',
         prompt: longPrompt,
         sanitizedPrompt: longPrompt,
         systemPromptHash: 'default',

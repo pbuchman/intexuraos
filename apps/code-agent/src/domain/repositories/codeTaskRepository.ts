@@ -205,12 +205,6 @@ export interface CodeTaskRepository {
   deleteTask(taskId: string, userId: string): Promise<Result<void, RepositoryError>>;
 
   /**
-   * Find oldest queued task for drain (INT-619).
-   * Returns null if no queued tasks exist.
-   */
-  findOldestQueued(): Promise<Result<CodeTask | null, RepositoryError>>;
-
-  /**
    * List queued tasks ordered by queuedAt ascending (FIFO), limited to `limit`.
    * Used by drainTaskQueue to find dispatchable candidates (INT-949).
    */
