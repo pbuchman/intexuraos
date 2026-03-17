@@ -75,6 +75,38 @@ export function V2TaskActions({
     </div>
   );
 
+  const isBusy = archiving || deleting || retrying;
+
+  const archiveDeleteButtons = (
+    <>
+      <button
+        type="button"
+        onClick={onArchive}
+        disabled={isBusy}
+        className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-300 disabled:opacity-50"
+      >
+        {archiving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+        <span className="hidden sm:inline">Archive</span>
+      </button>
+      <button
+        type="button"
+        onClick={onShowDeleteConfirm}
+        disabled={isBusy}
+        className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 disabled:opacity-50"
+      >
+        <Trash2 className="h-4 w-4" />
+        <span className="hidden sm:inline">Delete</span>
+      </button>
+    </>
+  );
+
+  const linkButtons = (
+    <>
+      {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+      {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+    </>
+  );
+
   return (
     <div className="mt-4 flex flex-wrap items-stretch gap-3">
       {isActive ? (
@@ -88,8 +120,7 @@ export function V2TaskActions({
             <StopCircle className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Cancel Task</span>
           </Button>
-          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+          {linkButtons}
         </>
       ) : null}
       {isRetryable ? (
@@ -141,61 +172,20 @@ export function V2TaskActions({
                 </div>
               ) : null}
             </div>
-            {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
-            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
-            <button
-              type="button"
-              onClick={onArchive}
-              disabled={archiving || deleting || retrying}
-              className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-300 disabled:opacity-50"
-            >
-              {archiving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-              <span className="hidden sm:inline">Archive</span>
-            </button>
-            <button
-              type="button"
-              onClick={onShowDeleteConfirm}
-              disabled={deleting || retrying}
-              className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 disabled:opacity-50"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Delete</span>
-            </button>
+            {linkButtons}
+            {archiveDeleteButtons}
           </>
         )
       ) : null}
       {isArchivable && !isRetryable ? (
         showDeleteConfirm ? deleteConfirmBlock : (
           <>
-            {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
-            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
-            <button
-              type="button"
-              onClick={onArchive}
-              disabled={archiving || deleting}
-              className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-300 disabled:opacity-50"
-            >
-              {archiving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-              <span className="hidden sm:inline">Archive</span>
-            </button>
-            <button
-              type="button"
-              onClick={onShowDeleteConfirm}
-              disabled={deleting || archiving}
-              className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 disabled:opacity-50"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Delete</span>
-            </button>
+            {linkButtons}
+            {archiveDeleteButtons}
           </>
         )
       ) : null}
-      {!isActive && !isRetryable && !isArchivable && !linksInNextSteps ? (
-        <>
-          {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
-          {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
-        </>
-      ) : null}
+      {!isActive && !isRetryable && !isArchivable && !linksInNextSteps ? linkButtons : null}
       {cancelError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{cancelError}</p>
       ) : null}
