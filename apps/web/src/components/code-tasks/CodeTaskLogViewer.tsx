@@ -332,7 +332,7 @@ export function CodeTaskLogViewer({
                     ) : (
                       <span className="w-4 shrink-0" />
                     )}
-                    <pre className={`min-w-0 whitespace-pre md:whitespace-pre-wrap md:break-words ${getLogLineClass(line.text)}`}>
+                    <pre className={`min-w-0 whitespace-pre ${getLogLineClass(line.text)}`}>
                       {line.text}
                     </pre>
                   </div>
@@ -352,7 +352,7 @@ export function CodeTaskLogViewer({
                   {block !== undefined && !collapsed ? (
                     logs.slice(block.bodyStart, block.bodyEnd).map((bodyLine, bodyIndex) => (
                       <div key={`${String(bodyLine.sequence)}-${String(bodyIndex)}-body`} className="pl-6">
-                        <pre className={`whitespace-pre-wrap break-words rounded px-2 py-0.5 ${getLogLineClass(bodyLine.text)}`}>
+                        <pre className={`whitespace-pre rounded px-2 py-0.5 ${getLogLineClass(bodyLine.text)}`}>
                           {bodyLine.text}
                         </pre>
                       </div>
