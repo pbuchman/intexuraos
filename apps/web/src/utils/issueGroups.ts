@@ -42,7 +42,7 @@ export function parseLinearIssueNumber(id: string): number | null {
   return Number(num);
 }
 
-const ACTIVE_STATUSES: ReadonlySet<CodeTaskStatus> = new Set<CodeTaskStatus>([
+export const ACTIVE_STATUSES: ReadonlySet<CodeTaskStatus> = new Set<CodeTaskStatus>([
   'running',
   'dispatched',
   'queued',
