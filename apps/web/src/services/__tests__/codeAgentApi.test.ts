@@ -12,6 +12,7 @@ import {
   deleteCodeTask,
   getGitHubEventLog,
   hydrateGitHubEventLogRows,
+  startImplementation,
 } from '../codeAgentApi.js';
 import type { CodeTask, ListCodeTasksResponse, WorkersStatusResponse } from '../../types/index.js';
 
@@ -330,6 +331,46 @@ describe('codeAgentApi', () => {
         mockAccessToken,
         { method: 'DELETE' }
       );
+    });
+  });
+
+  describe('startImplementation', () => {
+    it('sends empty object body when no workerType is provided', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = { taskId: 'impl-task-1', status: 'started' as const };
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const result = await startImplementation(mockAccessToken, 'task-123');
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/tasks/task-123/implement',
+        mockAccessToken,
+        {
+          method: 'POST',
+          body: {},
+        }
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('sends workerType in body when provided', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = { taskId: 'impl-task-2', status: 'started' as const };
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const result = await startImplementation(mockAccessToken, 'task-456', 'opus');
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/tasks/task-456/implement',
+        mockAccessToken,
+        {
+          method: 'POST',
+          body: { workerType: 'opus' },
+        }
+      );
+      expect(result).toEqual(mockResponse);
     });
   });
 

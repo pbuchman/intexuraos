@@ -238,7 +238,10 @@ export function CodeTaskLogViewer({
     <div className="mt-6 mb-6">
       <div className="flex items-center justify-between rounded-t-lg border border-b-0 border-slate-200 bg-white px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Execution Logs</span>
+          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+            <span className="md:hidden">Execution</span>
+            <span className="hidden md:inline">Execution Logs</span>
+          </span>
           {isActive && listenerHealthy ? (
             <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/50 dark:text-green-300">
               <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
@@ -247,7 +250,7 @@ export function CodeTaskLogViewer({
           ) : null}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400 dark:text-slate-500">
+          <span className="hidden text-xs text-slate-400 md:inline dark:text-slate-500">
             {String(logs.length)} line{logs.length !== 1 ? 's' : ''}
           </span>
           {logs.length > 0 ? (
@@ -272,7 +275,7 @@ export function CodeTaskLogViewer({
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
                 }`}
               >
-                {compactMode ? 'Collapse All' : 'Expand All'}
+                {compactMode ? 'Collapse' : 'Expand'}
               </button>
               <button
                 type="button"

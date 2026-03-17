@@ -104,6 +104,28 @@ describe('groupByLinearIssue', () => {
     expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('running');
   });
 
+  it('derives step as queued for queued status', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'queued' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('queued');
+  });
+
+  it('queued task still results in active aggregateStatus', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'queued' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.aggregateStatus).toBe('active');
+  });
+
   it('derives execution step as failed with attempt count', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'failed' }),
