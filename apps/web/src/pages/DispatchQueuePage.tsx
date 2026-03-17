@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Clock, Loader2 } from 'lucide-react';
 import { Layout } from '@/components';
-import { useDispatchQueue } from '@/hooks/useDispatchQueue';
+import { useDispatchQueue } from '@/hooks';
 import { useTimeTick } from '@/hooks';
 import { formatRelative } from '@/utils/dateFormat';
 import { getAgentTypeLabel } from '@/utils/issueGroups';
@@ -36,7 +36,7 @@ export function DispatchQueuePage(): React.JSX.Element {
         </div>
 
         {/* Error */}
-        {error !== null && error !== '' ? (
+        {error !== null ? (
           <div className="break-words rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
             {error}
           </div>
@@ -50,7 +50,7 @@ export function DispatchQueuePage(): React.JSX.Element {
         ) : null}
 
         {/* Empty state */}
-        {!loading && tasks.length === 0 && (error === null || error === '') ? (
+        {!loading && tasks.length === 0 && error === null ? (
           <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <Clock className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
             <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
