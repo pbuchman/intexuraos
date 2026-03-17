@@ -29,6 +29,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     sending, sendError, messageStatus,
     implementing, implementError, startImplementation,
     deleting, deleteError, deleteTask, clearDeleteError,
+    archiving, archiveError, archiveTask, clearArchiveError,
     cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
@@ -73,8 +74,18 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
     }
   }, [deleteTask, navigate]);
 
+  const handleArchive = useCallback(async (): Promise<void> => {
+    try {
+      await archiveTask();
+      void navigate('/code-tasks');
+    } catch {
+      // archiveTask already sets archiveError state
+    }
+  }, [archiveTask, navigate]);
+
   useEffect(() => {
-    if (task !== null && task.status !== 'failed' && task.status !== 'cancelled' && task.status !== 'interrupted') {
+    const terminalStatuses = ['failed', 'cancelled', 'interrupted', 'planned', 'implemented', 'reviewed'];
+    if (task !== null && !terminalStatuses.includes(task.status)) {
       setShowDeleteConfirm(false);
     }
   }, [task?.status]);
@@ -109,6 +120,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
   const isImplementable = task.status === 'planned' &&
     task.implementationTaskId === undefined &&
     task.linearIssueId !== undefined;
+  const isArchivable = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted' || task.status === 'planned' || task.status === 'implemented' || task.status === 'reviewed';
 
   return (
     <Layout>
@@ -176,8 +188,12 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
         deleteError={deleteError}
         showDeleteConfirm={showDeleteConfirm}
         onShowDeleteConfirm={(): void => { setShowDeleteConfirm(true); }}
-        onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); clearDeleteError(); }}
+        onCancelDeleteConfirm={(): void => { setShowDeleteConfirm(false); clearDeleteError(); clearArchiveError(); }}
         onConfirmDelete={(): void => { void handleDelete(); }}
+        isArchivable={isArchivable}
+        archiving={archiving}
+        archiveError={archiveError}
+        onArchive={(): void => { void handleArchive(); }}
         {...(task.result?.prUrl !== undefined ? { prUrl: task.result.prUrl } : {})}
         {...(task.linearIssue?.url !== undefined ? { linearIssueUrl: task.linearIssue.url } : {})}
         linksInNextSteps={isImplementable || task.implementationTaskId !== undefined}

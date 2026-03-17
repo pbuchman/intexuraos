@@ -1,4 +1,5 @@
 import {
+  Archive,
   ChevronDown,
   Loader2,
   RotateCcw,
@@ -29,6 +30,10 @@ interface V2TaskActionsProps {
   onShowDeleteConfirm: () => void;
   onCancelDeleteConfirm: () => void;
   onConfirmDelete: () => void;
+  isArchivable: boolean;
+  archiving: boolean;
+  archiveError: string | null;
+  onArchive: () => void;
   prUrl?: string;
   linearIssueUrl?: string;
   linksInNextSteps: boolean;
@@ -41,9 +46,34 @@ export function V2TaskActions({
   onRetry,
   deleting, deleteError, showDeleteConfirm,
   onShowDeleteConfirm, onCancelDeleteConfirm, onConfirmDelete,
+  isArchivable, archiving, archiveError, onArchive,
   prUrl, linearIssueUrl, linksInNextSteps,
 }: V2TaskActionsProps): React.JSX.Element | null {
-  if (!isActive && !isRetryable && cancelError === null && retryError === null && deleteError === null && (linksInNextSteps || (prUrl === undefined && linearIssueUrl === undefined))) return null;
+  if (!isActive && !isRetryable && !isArchivable && cancelError === null && retryError === null && deleteError === null && archiveError === null && (linksInNextSteps || (prUrl === undefined && linearIssueUrl === undefined))) return null;
+
+  const deleteConfirmBlock = (
+    <div className="ml-auto flex items-center gap-3">
+      <p className="text-sm text-red-700 dark:text-red-400">Delete this task permanently?</p>
+      <Button
+        variant="danger"
+        size="sm"
+        onClick={onConfirmDelete}
+        disabled={deleting}
+        isLoading={deleting}
+        loadingText="Deleting..."
+      >
+        Delete
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={onCancelDeleteConfirm}
+        disabled={deleting}
+      >
+        Cancel
+      </Button>
+    </div>
+  );
 
   return (
     <div className="mt-4 flex flex-wrap items-stretch gap-3">
@@ -63,29 +93,7 @@ export function V2TaskActions({
         </>
       ) : null}
       {isRetryable ? (
-        showDeleteConfirm ? (
-          <div className="ml-auto flex items-center gap-3">
-            <p className="text-sm text-red-700 dark:text-red-400">Delete this task permanently?</p>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={onConfirmDelete}
-              disabled={deleting}
-              isLoading={deleting}
-              loadingText="Deleting..."
-            >
-              Delete
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onCancelDeleteConfirm}
-              disabled={deleting}
-            >
-              Cancel
-            </Button>
-          </div>
-        ) : (
+        showDeleteConfirm ? deleteConfirmBlock : (
           <>
             <div className="relative flex">
               <button
@@ -137,6 +145,15 @@ export function V2TaskActions({
             {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
             <button
               type="button"
+              onClick={onArchive}
+              disabled={archiving || deleting || retrying}
+              className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-300 disabled:opacity-50"
+            >
+              {archiving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+              <span className="hidden sm:inline">Archive</span>
+            </button>
+            <button
+              type="button"
               onClick={onShowDeleteConfirm}
               disabled={deleting || retrying}
               className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 disabled:opacity-50"
@@ -147,7 +164,33 @@ export function V2TaskActions({
           </>
         )
       ) : null}
-      {!isActive && !isRetryable && !linksInNextSteps ? (
+      {isArchivable && !isRetryable ? (
+        showDeleteConfirm ? deleteConfirmBlock : (
+          <>
+            {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
+            {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
+            <button
+              type="button"
+              onClick={onArchive}
+              disabled={archiving || deleting}
+              className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-300 disabled:opacity-50"
+            >
+              {archiving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+              <span className="hidden sm:inline">Archive</span>
+            </button>
+            <button
+              type="button"
+              onClick={onShowDeleteConfirm}
+              disabled={deleting || archiving}
+              className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Delete</span>
+            </button>
+          </>
+        )
+      ) : null}
+      {!isActive && !isRetryable && !isArchivable && !linksInNextSteps ? (
         <>
           {linearIssueUrl !== undefined ? <LinearButton href={linearIssueUrl} /> : null}
           {prUrl !== undefined ? <GitHubButton href={prUrl} /> : null}
@@ -161,6 +204,9 @@ export function V2TaskActions({
       ) : null}
       {deleteError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>
+      ) : null}
+      {archiveError !== null ? (
+        <p className="text-sm text-red-600 dark:text-red-400">{archiveError}</p>
       ) : null}
     </div>
   );
