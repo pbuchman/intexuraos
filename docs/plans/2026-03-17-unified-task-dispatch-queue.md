@@ -1117,7 +1117,7 @@ git commit -m "refactor(code-agent): POST /code/submit uses enqueue service + wi
 - Modify: `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`
 - Modify: Route test files
 
-- [ ] **Step 1: Add listQueued method to repository**
+- [ ] **Step 1: Add listQueued method to repository and update test fakes**
 
 In `codeTaskRepository.ts`, add:
 
@@ -1145,6 +1145,15 @@ async listQueued(): Promise<Result<CodeTask[], RepositoryError>> {
     return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
   }
 }
+```
+
+Also update all test fakes/mocks that implement `CodeTaskRepository`. Search for fake repositories:
+```bash
+rg "countQueued|CodeTaskRepository" apps/code-agent/src/__tests__ --files-with-matches
+```
+For each fake, add a `listQueued` method:
+```typescript
+listQueued: async () => ok([]),
 ```
 
 - [ ] **Step 2: Add GET /code/queue route**
