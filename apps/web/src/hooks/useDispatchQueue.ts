@@ -37,32 +37,37 @@ export function useDispatchQueue(): DispatchQueueState {
 
   const getAccessTokenRef = useRef(getAccessToken);
   getAccessTokenRef.current = getAccessToken;
+  const isMountedRef = useRef(true);
 
   const fetchQueue = useCallback(async (): Promise<void> => {
     try {
       const token = await getAccessTokenRef.current();
       const data: QueueResponse = await getDispatchQueue(token);
-      setTasks(data.tasks);
-      setTotalQueued(data.totalQueued);
-      setMaxQueueSize(data.maxQueueSize);
-      setError(null);
+      if (isMountedRef.current) {
+        setTasks(data.tasks);
+        setTotalQueued(data.totalQueued);
+        setMaxQueueSize(data.maxQueueSize);
+        setError(null);
+      }
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load dispatch queue'));
+      if (isMountedRef.current) {
+        setError(getErrorMessage(err, 'Failed to load dispatch queue'));
+      }
     }
   }, []);
 
   // Initial load
   useEffect(() => {
-    let cancelled = false;
+    isMountedRef.current = true;
     const load = async (): Promise<void> => {
       setLoading(true);
       await fetchQueue();
-      if (!cancelled) {
+      if (isMountedRef.current) {
         setLoading(false);
       }
     };
     void load();
-    return (): void => { cancelled = true; };
+    return (): void => { isMountedRef.current = false; };
   }, [fetchQueue]);
 
   // Firestore real-time listener for queue changes
