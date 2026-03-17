@@ -108,8 +108,8 @@ describe('TaskEnqueueServiceImpl', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.taskId).toBe('task-123');
-      expect(result.value.queuePosition).toBe(3);
-      expect(result.value.estimatedWaitMinutes).toBe(15); // 3 * 5
+      expect(result.value.queuePosition).toBe(4); // 1-indexed: queueCount(3) + 1
+      expect(result.value.estimatedWaitMinutes).toBe(20); // 4 * 5
     }
   });
 
@@ -176,8 +176,8 @@ describe('TaskEnqueueServiceImpl', () => {
     expect(mockWhatsappNotifier.notifyTaskQueued).toHaveBeenCalledWith(
       'user-456',
       updatedTask,
-      4,   // queuePosition
-      20,  // estimatedWaitMinutes = 4 * 5
+      5,   // queuePosition: 1-indexed (queueCount 4 + 1)
+      25,  // estimatedWaitMinutes = 5 * 5
     );
   });
 
@@ -230,7 +230,7 @@ describe('TaskEnqueueServiceImpl', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.taskId).toBe('task-123');
-      expect(result.value.queuePosition).toBe(1);
+      expect(result.value.queuePosition).toBe(2); // 1-indexed: queueCount(1) + 1
     }
 
     // Warning was logged
@@ -245,7 +245,7 @@ describe('TaskEnqueueServiceImpl', () => {
     const updatedTask = createMockTask({ queuedAt: Timestamp.now() });
     mockCodeTaskRepo.findById.mockResolvedValue(ok(task));
     // count=9 is below maxSize (10), so not queue_full.
-    // 9 * 5 = 45 min, capped at min(45, 360) = 45
+    // 1-indexed position = 9 + 1 = 10, 10 * 5 = 50 min, capped at min(50, 360) = 50
     mockCodeTaskRepo.countQueued.mockResolvedValue(ok(9));
     mockCodeTaskRepo.update.mockResolvedValue(ok(updatedTask));
 
@@ -254,8 +254,8 @@ describe('TaskEnqueueServiceImpl', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // 9 * 5 = 45, min(45, 360) = 45
-      expect(result.value.estimatedWaitMinutes).toBe(45);
+      // position = 9 + 1 = 10, 10 * 5 = 50, min(50, 360) = 50
+      expect(result.value.estimatedWaitMinutes).toBe(50);
     }
   });
 });
