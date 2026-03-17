@@ -11,18 +11,16 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
-import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../domain/services/taskDispatcher.js';
-import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
-import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { randomUUID } from 'node:crypto';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
-import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
-import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
+import { generateWebhookSecret } from '../utils/secrets.js';
 import {
   bootstrapContinuationPrTaskComment,
   resolveExecutionContinuationPr,
@@ -72,8 +70,7 @@ export interface SubmitTaskFeedbackDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   linearAgentClient: LinearAgentClient;
-  taskDispatcher: TaskDispatcherService;
-  whatsappNotifier: WhatsAppNotifier;
+  taskEnqueueService: TaskEnqueueService;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   gitHubPRClient: GitHubPRClient;
@@ -101,7 +98,7 @@ export async function submitTaskFeedback(
   deps: SubmitTaskFeedbackDeps,
   request: SubmitTaskFeedbackRequest
 ): Promise<Result<SubmitTaskFeedbackResult, SubmitTaskFeedbackError>> {
-  const { logger, codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, linearAgentClient, taskEnqueueService, workerSettingsRepo } = deps;
   const { originalTaskId, userId, feedback } = request;
 
   // Step 1: Fetch original task
@@ -171,16 +168,6 @@ export async function submitTaskFeedback(
     });
   }
 
-  const workerCredentials: DispatchWorkerCredentials = {
-    workers: enabledWorkers.map((w) => ({
-      name: w.name,
-      url: w.url,
-      cfAccessClientId: w.cfAccessClientId,
-      cfAccessClientSecret: w.cfAccessClientSecret,
-      dispatchSigningSecret: w.dispatchSigningSecret,
-    })),
-  };
-
   // Step 5: Build follow-up prompt with feedback context
   // Use sanitizedPrompt (what the original worker received) as the base, not the raw prompt,
   // to avoid re-exposing credentials that were already stripped on the first dispatch.
@@ -199,7 +186,6 @@ ${feedback.trim()}
 
   // Step 7: Fetch fresh labels from Linear to determine agentType before create
   let linearIssueLabelsForDispatch: string[] = [];
-  let hasChildrenForDispatch = false;
 
   if (originalTask.linearIssueId !== undefined) {
     const validateIssueResult = await linearAgentClient.validateIssue({
@@ -209,7 +195,6 @@ ${feedback.trim()}
 
     if (validateIssueResult.ok) {
       linearIssueLabelsForDispatch = validateIssueResult.value.labels;
-      hasChildrenForDispatch = validateIssueResult.value.childCount > 0;
     } else {
       logger.warn(
         { linearIssueId: originalTask.linearIssueId },
@@ -219,7 +204,6 @@ ${feedback.trim()}
   }
 
   const agentType = resolveTaskAgentType(originalTask, linearIssueLabelsForDispatch);
-  const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabelsForDispatch, agentType);
 
   // resolveTaskAgentType() already routes legacy PR-linked tasks back to execution
   // when they only carry prNumber, prBranch, or result.prUrl metadata.
@@ -364,109 +348,29 @@ ${feedback.trim()}
     }
   }
 
-  // Step 10: Build webhook URL
-  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
-
-  // Step 11: Dispatch to worker
-  const dispatchRequest: {
-    taskId: string;
-    linearIssueId?: string;
-    prompt: string;
-    systemPromptHash: string;
-    repository: string;
-    baseBranch: string;
-    workerType: WorkerType;
-    webhookUrl: string;
-    webhookSecret: string;
-    traceId?: string;
-    workerCredentials: DispatchWorkerCredentials;
-    parentTaskId?: string;
-    linearIssueLabels: string[];
-    hasChildren: boolean;
-    agentType: 'planning' | 'execution' | 'pull_request' | 'review';
-    continuationPrNumber?: number;
-    continuationPrBranch?: string;
-  } = {
+  // Step 10: Enqueue task for dispatch
+  const enqueueResult = await taskEnqueueService.enqueue({
     taskId: followUpTask.id,
-    prompt: followUpTask.sanitizedPrompt,
-    systemPromptHash: followUpTask.systemPromptHash,
-    repository: followUpTask.repository,
-    baseBranch: followUpTask.baseBranch,
-    workerType: followUpTask.workerType,
-    webhookUrl,
-    webhookSecret,
-    workerCredentials,
-    parentTaskId: originalTask.id,
-    linearIssueLabels: dispatchLabels,
-    hasChildren: hasChildrenForDispatch,
-    agentType: followUpTask.agentType ?? 'planning',
-    ...(continuationPr !== null && { continuationPrNumber: continuationPr.prNumber }),
-    ...(continuationPr !== null && { continuationPrBranch: continuationPr.prBranch }),
-  };
+    userId,
+  });
 
-  // Add optional fields if defined
-  if (followUpTask.linearIssueId !== undefined) {
-    dispatchRequest.linearIssueId = followUpTask.linearIssueId;
-  }
-  // traceId was set in createInput, safe to assign directly
-  dispatchRequest.traceId = followUpTask.traceId;
-
-  const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
-
-  if (!dispatchResult.ok) {
-    // Update task with error and mark as failed
-    const dispatchError = dispatchResult.error;
-    await codeTaskRepo.update(followUpTask.id, {
-      status: 'failed',
-      error: {
-        code: dispatchError.code,
-        message: dispatchError.message,
-      },
-    });
-
-    logger.error({ taskId: followUpTask.id, error: dispatchResult.error }, 'Failed to dispatch follow-up task');
+  if (!enqueueResult.ok) {
+    logger.error({ taskId: followUpTask.id, error: enqueueResult.error }, 'Failed to enqueue follow-up task');
     return err({
       code: 'internal_error',
-      message: dispatchError.message,
+      message: enqueueResult.error.message,
     });
   }
 
   logger.info(
-    { taskId: followUpTask.id, workerLocation: dispatchResult.value.workerLocation },
-    'Follow-up task dispatched'
+    { taskId: followUpTask.id, queuePosition: enqueueResult.value.queuePosition },
+    'Follow-up task enqueued'
   );
-
-  // Step 12: Generate cancel nonce and send notification
-  const cancelNonce = generateCancelNonce();
-  const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
-
-  const updateResult = await codeTaskRepo.update(followUpTask.id, {
-    status: 'dispatched',
-    dispatchedAt: new Date(),
-    workerLocation: dispatchResult.value.workerLocation,
-    cancelNonce,
-    cancelNonceExpiresAt,
-  });
-
-  if (updateResult.ok) {
-    const updatedTask = updateResult.value;
-    const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
-    /* v8 ignore start -- test-infra: notifyResult.error branch tested but not detected by coverage tool @preserve */
-    if (!notifyResult.ok) {
-      logger.warn(
-        { taskId: followUpTask.id, error: notifyResult.error },
-        'Failed to send task started notification for feedback'
-      );
-    }
-    /* v8 ignore stop @preserve */
-  } else {
-    logger.warn({ taskId: followUpTask.id, error: updateResult.error }, 'Failed to update task with cancel nonce');
-  }
 
   return ok({
     codeTaskId: followUpTask.id,
     resourceUrl: `/#/code-tasks/${followUpTask.id}`,
-    workerLocation: followUpTask.workerLocation,
+    workerLocation: 'queued',
     followUpFor: originalTask.id,
   });
 }

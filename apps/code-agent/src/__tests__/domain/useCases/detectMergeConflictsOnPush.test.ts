@@ -39,6 +39,9 @@ interface TestDeps {
     dispatch: ReturnType<typeof vi.fn>;
     sendMessageToWorker: ReturnType<typeof vi.fn>;
   };
+  taskEnqueueService: {
+    enqueue: ReturnType<typeof vi.fn>;
+  };
   logLineRepo: {
     storeBatch: ReturnType<typeof vi.fn>;
   };
@@ -52,7 +55,6 @@ interface TestDeps {
     notifyTaskResumed: ReturnType<typeof vi.fn>;
   };
   allowedBots: Set<string>;
-  serviceUrl: string;
   orchestratorSecret: string;
   sleep?: ReturnType<typeof vi.fn>;
 }
@@ -230,6 +232,13 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
       })),
       sendMessageToWorker: vi.fn().mockResolvedValue(ok({ action: 'queued' })),
     },
+    taskEnqueueService: {
+      enqueue: vi.fn().mockResolvedValue(ok({
+        taskId: 'task-created',
+        queuePosition: 1,
+        estimatedWaitMinutes: 0,
+      })),
+    },
     logLineRepo: { storeBatch: vi.fn().mockResolvedValue(ok(undefined)) },
     workerSettingsRepo: {
       getSettings: vi.fn().mockResolvedValue(ok(createWorkerSettings())),
@@ -237,7 +246,6 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
     statusMirrorService: { mirrorStatus: vi.fn() },
     whatsappNotifier: { notifyTaskResumed: vi.fn() },
     allowedBots: new Set(['intexuraos-code-worker[bot]', 'claude[bot]']),
-    serviceUrl: 'https://code-agent.test',
     orchestratorSecret: 'orchestrator-secret',
     ...(includeSleep ? { sleep: vi.fn().mockResolvedValue(undefined) } : {}),
   };
@@ -318,13 +326,10 @@ describe('createDetectMergeConflictsOnPush', () => {
     );
     expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledTimes(1);
     expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
-    expect(deps.taskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalledWith({
       taskId: 'task_11111111-1111-4111-8111-111111111111',
-      agentType: 'pull_request',
-      trackingCommentId: '12345',
-      baseBranch: 'release/2026.03',
-      repository: 'intexuraos/intexuraos',
-    }));
+      userId: 'user-1',
+    });
     expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
       repository: 'intexuraos/intexuraos',
       pullRequestNumber: 42,
@@ -1172,7 +1177,7 @@ describe('createDetectMergeConflictsOnPush', () => {
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
-    expect(deps.taskDispatcher.dispatch).not.toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
     expect(deps.gitHubPRClient.updateIssueComment).toHaveBeenLastCalledWith(
       'oauth-token',
       'intexuraos',
@@ -1187,33 +1192,12 @@ describe('createDetectMergeConflictsOnPush', () => {
     }));
   });
 
-  it('creates a queued task when dispatch reports at-capacity', async () => {
+  it('marks the workflow failed when task enqueue fails after task creation', async () => {
     const logger = createLogger();
     const deps = createDeps(logger);
-    deps.taskDispatcher.dispatch.mockResolvedValue(err({
-      code: 'at_capacity',
-      message: 'busy',
-    }));
-
-    const detector = createDetectMergeConflictsOnPush(deps as never);
-    await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
-
-    expect(deps.codeTaskRepo.update).not.toHaveBeenCalledWith(
-      'task_11111111-1111-4111-8111-111111111111',
-      expect.objectContaining({ status: 'failed' })
-    );
-    expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      managedConflictTaskId: 'task_11111111-1111-4111-8111-111111111111',
-      managedConflictTaskOwnerUserId: 'user-1',
-    }));
-  });
-
-  it('marks the workflow failed when task dispatch fails after task creation', async () => {
-    const logger = createLogger();
-    const deps = createDeps(logger);
-    deps.taskDispatcher.dispatch.mockResolvedValue(err({
-      code: 'dispatch_failed',
-      message: 'dispatch failed',
+    deps.taskEnqueueService.enqueue.mockResolvedValue(err({
+      code: 'queue_full',
+      message: 'queue full',
     }));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
@@ -1223,7 +1207,7 @@ describe('createDetectMergeConflictsOnPush', () => {
       'task_11111111-1111-4111-8111-111111111111',
       expect.objectContaining({
         status: 'failed',
-        error: { code: 'dispatch_failed', message: 'dispatch failed' },
+        error: { code: 'queue_full', message: 'queue full' },
       })
     );
     expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -1281,9 +1265,10 @@ describe('createDetectMergeConflictsOnPush', () => {
 
     const createCall = deps.codeTaskRepo.create.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(createCall?.['linearIssueId']).toBeUndefined();
-    expect(deps.taskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
-      linearIssueLabels: ['pr-comment'],
-    }));
+    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalledWith({
+      taskId: 'task_11111111-1111-4111-8111-111111111111',
+      userId: 'user-1',
+    });
   });
 
   it('preserves an active conflict episode when mergeability remains unknown after retries', async () => {

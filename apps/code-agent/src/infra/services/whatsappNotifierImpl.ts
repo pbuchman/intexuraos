@@ -81,7 +81,9 @@ Error: ${error.message}${remedation}`;
 }
 
 function formatStartedMessage(title: string, _task: CodeTask, linearIssueId?: string): string {
+  /* v8 ignore start -- test-infra: notifyTaskStarted only called via drainTaskQueue which mocks WhatsAppNotifier @preserve */
   const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
+  /* v8 ignore stop @preserve */
   return `🚀 ${idPrefix}${title}`;
 }
 

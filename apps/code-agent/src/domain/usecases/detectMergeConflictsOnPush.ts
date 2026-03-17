@@ -13,7 +13,8 @@ import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { MergeConflictDetector } from '../services/mergeConflictDetector.js';
 import type { StatusMirrorService } from '../services/statusMirrorService.js';
-import type { DispatchWorkerCredentials, TaskDispatcherService } from '../services/taskDispatcher.js';
+import type { TaskDispatcherService } from '../services/taskDispatcher.js';
+import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import { resolveLoginForTaskCreation } from '../services/gitHubDispatchService.js';
 import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
@@ -63,8 +64,7 @@ interface ParsedRepository {
 interface CreateTaskDeps {
   codeTaskRepo: CodeTaskRepository;
   linearIssueService: LinearIssueService;
-  taskDispatcher: TaskDispatcherService;
-  serviceUrl: string;
+  taskEnqueueService: TaskEnqueueService;
   orchestratorSecret: string;
 }
 
@@ -76,7 +76,6 @@ interface CreateTaskParams {
   commentId: number;
   existingTask: CodeTask | null;
   ownerUserId: string;
-  worker: WorkerConfig;
 }
 
 interface ConflictWorkflowParams {
@@ -111,12 +110,12 @@ export interface DetectMergeConflictsOnPushDeps {
   gitHubPREventRepo: Pick<GitHubPREventRepository, 'findByPullRequest'>;
   linearIssueService: LinearIssueService;
   taskDispatcher: TaskDispatcherService;
+  taskEnqueueService: TaskEnqueueService;
   logLineRepo: LogLineRepository;
   workerSettingsRepo: WorkerSettingsRepository;
   statusMirrorService: StatusMirrorService;
   whatsappNotifier: WhatsAppNotifier;
   allowedBots: Set<string>;
-  serviceUrl: string;
   orchestratorSecret: string;
   sleep?: (ms: number) => Promise<void>;
   mergeabilityRetries?: number;
@@ -262,7 +261,6 @@ function buildCreateTaskInput(params: {
   baseBranch: string;
   prompt: string;
   eventId: string;
-  workerName: string;
   userId: string;
   webhookSecret: string;
   linearIssueId?: string;
@@ -274,7 +272,7 @@ function buildCreateTaskInput(params: {
     sanitizedPrompt: params.prompt,
     systemPromptHash: SYSTEM_PROMPT_HASH,
     workerType: 'auto',
-    workerLocation: params.workerName,
+    workerLocation: 'queued',
     repository: params.repository,
     baseBranch: params.baseBranch,
     traceId: params.eventId,
@@ -284,18 +282,6 @@ function buildCreateTaskInput(params: {
     webhookSecret: params.webhookSecret,
     agentType: 'pull_request',
     ...(params.linearIssueId !== undefined && { linearIssueId: params.linearIssueId }),
-  };
-}
-
-function buildWorkerCredentials(worker: WorkerConfig): DispatchWorkerCredentials {
-  return {
-    workers: [{
-      name: worker.name,
-      url: worker.url,
-      cfAccessClientId: worker.cfAccessClientId,
-      cfAccessClientSecret: worker.cfAccessClientSecret,
-      dispatchSigningSecret: worker.dispatchSigningSecret,
-    }],
   };
 }
 
@@ -575,7 +561,7 @@ async function createMergeConflictTask(
     baseBranch: params.details.baseBranch,
     prompt,
     eventId: params.eventId,
-    workerName: params.worker.name,
+
     userId: params.ownerUserId,
     webhookSecret,
     ...(linkedLinearIssueId !== undefined && !shouldOmitLinearIssueId && { linearIssueId: linkedLinearIssueId }),
@@ -594,7 +580,7 @@ async function createMergeConflictTask(
       baseBranch: params.details.baseBranch,
       prompt,
       eventId: params.eventId,
-      workerName: params.worker.name,
+  
       userId: params.ownerUserId,
       webhookSecret,
     }));
@@ -604,47 +590,21 @@ async function createMergeConflictTask(
     return err({ code: createResult.error.code, message: createResult.error.message });
   }
 
-  const dispatchResult = await deps.taskDispatcher.dispatch({
+  const enqueueResult = await deps.taskEnqueueService.enqueue({
     taskId,
-    ...(linkedLinearIssueId !== undefined && !shouldOmitLinearIssueId && { linearIssueId: linkedLinearIssueId }),
-    linearIssueLabels:
-      linearResult.linearIssueLabels.includes('pr-comment')
-        ? linearResult.linearIssueLabels
-        : [...linearResult.linearIssueLabels, 'pr-comment'],
-    hasChildren: linearResult.hasChildren,
-    prompt,
-    systemPromptHash: SYSTEM_PROMPT_HASH,
-    repository: params.repository,
-    baseBranch: params.details.baseBranch,
-    workerType: 'auto',
-    webhookUrl: `${deps.serviceUrl}/internal/webhooks/task-complete`,
-    webhookSecret,
-    traceId: params.eventId,
-    workerCredentials: buildWorkerCredentials(params.worker),
-    agentType: 'pull_request',
-    trackingCommentId: String(params.commentId),
+    userId: params.ownerUserId,
   });
 
-  if (!dispatchResult.ok) {
-    if (dispatchResult.error.code === 'at_capacity') {
-      return ok({ taskId, ownerUserId: params.ownerUserId });
-    }
-
+  if (!enqueueResult.ok) {
     await deps.codeTaskRepo.update(taskId, {
       status: 'failed',
       error: {
-        code: dispatchResult.error.code,
-        message: dispatchResult.error.message,
+        code: enqueueResult.error.code,
+        message: enqueueResult.error.message,
       },
     });
-    return err({ code: dispatchResult.error.code, message: dispatchResult.error.message });
+    return err({ code: enqueueResult.error.code, message: enqueueResult.error.message });
   }
-
-  await deps.codeTaskRepo.update(taskId, {
-    status: 'dispatched',
-    dispatchedAt: new Date(),
-    workerLocation: dispatchResult.value.workerLocation,
-  });
 
   return ok({ taskId, ownerUserId: params.ownerUserId });
 }
@@ -766,8 +726,7 @@ async function createConflictTaskWorkflow(
     {
       codeTaskRepo: params.deps.codeTaskRepo,
       linearIssueService: params.deps.linearIssueService,
-      taskDispatcher: params.deps.taskDispatcher,
-      serviceUrl: params.deps.serviceUrl,
+      taskEnqueueService: params.deps.taskEnqueueService,
       orchestratorSecret: params.deps.orchestratorSecret,
     },
     {
@@ -778,7 +737,6 @@ async function createConflictTaskWorkflow(
       commentId: params.commentId,
       existingTask: params.taskResolution.latestTask,
       ownerUserId: params.accessContext.userId,
-      worker: workerResult.value,
     }
   );
 

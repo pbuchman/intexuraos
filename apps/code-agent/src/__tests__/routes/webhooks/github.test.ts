@@ -110,6 +110,8 @@ describe('POST /webhooks/github', () => {
       findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       findOldestQueued: vi.fn().mockResolvedValue(ok(null)),
+      listQueuedByAge: vi.fn().mockResolvedValue(ok([])),
+      listQueued: vi.fn().mockResolvedValue(ok([])),
       countQueued: vi.fn().mockResolvedValue(ok(0)),
       findRecentTasksByLinearIssue: vi.fn().mockResolvedValue(ok([])),
       findPlannedTaskByLinearIssue: vi.fn().mockResolvedValue(ok(null)),
@@ -226,6 +228,7 @@ describe('POST /webhooks/github', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
       automationLog: { record: vi.fn().mockResolvedValue(undefined) },
+      taskEnqueueService: {} as never,
     };
 
     setServices(mockServices);

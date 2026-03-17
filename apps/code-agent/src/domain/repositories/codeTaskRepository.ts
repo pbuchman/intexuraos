@@ -39,6 +39,11 @@ export interface CreateTaskInput {
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review';
   /** Initial task status. Defaults to 'queued' if not specified. */
   initialStatus?: 'queued' | 'dispatched';
+
+  // Dispatch metadata stored for queue-based dispatch (INT-949)
+  planningPrBranch?: string;
+  planningPrUrl?: string;
+  trackingCommentId?: string;
 }
 
 export interface UpdateTaskInput {
@@ -204,6 +209,18 @@ export interface CodeTaskRepository {
    * Returns null if no queued tasks exist.
    */
   findOldestQueued(): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * List queued tasks ordered by queuedAt ascending (FIFO), limited to `limit`.
+   * Used by drainTaskQueue to find dispatchable candidates (INT-949).
+   */
+  listQueuedByAge(limit: number): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
+   * List all currently queued tasks, ordered by queuedAt ascending (FIFO).
+   * Used by the dispatch queue API endpoint (INT-949).
+   */
+  listQueued(): Promise<Result<CodeTask[], RepositoryError>>;
 
   /**
    * Count currently queued tasks (INT-619).
