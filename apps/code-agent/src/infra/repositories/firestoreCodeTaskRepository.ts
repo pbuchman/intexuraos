@@ -748,37 +748,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
-    findOldestQueued: async (): Promise<Result<CodeTask | null, RepositoryError>> => {
-      try {
-        const snapshot = await collection
-          .where('status', '==', 'queued')
-          .orderBy('createdAt', 'asc')
-          .limit(1)
-          .get();
-
-        if (snapshot.empty) {
-          return ok(null);
-        }
-
-        const doc = snapshot.docs[0]!;
-        const data = doc.data();
-        const task: CodeTask = {
-          ...data,
-          id: doc.id,
-          createdAt: data['createdAt'],
-          updatedAt: data['updatedAt'],
-        } as CodeTask;
-
-        return ok(task);
-      } catch (error) {
-        logger.error({ error }, 'Failed to find oldest queued task');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
     listQueuedByAge: async (limit: number): Promise<Result<CodeTask[], RepositoryError>> => {
       try {
         // Order by createdAt (not queuedAt) because createdAt is always present and

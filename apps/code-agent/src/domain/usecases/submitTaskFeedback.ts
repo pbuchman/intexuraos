@@ -242,9 +242,7 @@ ${feedback.trim()}
     sanitizedPrompt: sanitizePrompt(feedbackPrompt),
     systemPromptHash: originalTask.systemPromptHash,
     workerType: originalTask.workerType,
-    /* v8 ignore start -- ts-type: optional chaining with null fallback creates type narrowing branch @preserve */
-    workerLocation: enabledWorkers[0]?.name ?? 'unknown',
-    /* v8 ignore stop @preserve */
+    workerLocation: 'queued',
     repository: originalTask.repository,
     baseBranch: originalTask.baseBranch,
     traceId: `feedback-${String(Date.now())}`,

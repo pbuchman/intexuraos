@@ -93,9 +93,6 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
       return ok(undefined);
     },
-    async findOldestQueued(): ReturnType<CodeTaskRepository['findOldestQueued']> {
-      return ok(null);
-    },
     async listQueuedByAge(): ReturnType<CodeTaskRepository['listQueuedByAge']> {
       return ok([]);
     },
