@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestClient, type CodeTask } from '../helpers/client.js';
 import { waitForTaskStatus, waitForSuccessStatus, sleep } from '../helpers/wait.js';
 import { cleanupBranches, cleanupPRs } from '../helpers/cleanup.js';
+import { startDrainPoller, stopDrainPoller } from '../helpers/drain.js';
 
 describe('Code Tasks E2E', () => {
   const client = createTestClient();
@@ -32,9 +33,15 @@ describe('Code Tasks E2E', () => {
     if (createWorker.status !== 200) {
       throw new Error(`Failed to create e2e-test-worker: ${JSON.stringify(createWorker.data)}`);
     }
+
+    // Start drain poller to mimic Cloud Scheduler (INT-949: queue-first architecture)
+    startDrainPoller(client);
   });
 
   afterAll(async () => {
+    // Stop drain poller
+    stopDrainPoller();
+
     // Clean up any created resources
     cleanupBranches(createdBranches);
     cleanupPRs(createdPRs);
@@ -183,9 +190,9 @@ describe('Code Tasks E2E', () => {
       // Wait for task to start running
       await sleep(3000);
 
-      // Check it's running
+      // Check it's queued, dispatched, or running
       const checkResult = await client.get(`/code/tasks/${codeTaskId}`);
-      expect(checkResult.data.data.status).toMatch(/^(dispatched|running)$/);
+      expect(checkResult.data.data.status).toMatch(/^(queued|dispatched|running)$/);
 
       // Cancel it
       const cancelResult = await client.post('/code/cancel', { taskId: codeTaskId });
@@ -362,10 +369,10 @@ describe('Code Tasks E2E', () => {
 
       const { codeTaskId } = submitResult.data.data;
 
-      // Check initial status (dispatched or running)
+      // Check initial status (queued, dispatched, or running)
       const initialResponse = await client.get(`/code/tasks/${codeTaskId}`);
       const initialStatus = initialResponse.data.data.status;
-      expect(['dispatched', 'running']).toContain(initialStatus);
+      expect(['queued', 'dispatched', 'running']).toContain(initialStatus);
 
       // Wait for completion
       const task = await waitForSuccessStatus(client, codeTaskId, 60000);
