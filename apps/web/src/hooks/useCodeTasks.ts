@@ -118,6 +118,16 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus[] }): {
     };
   }, [refresh]);
 
+  useEffect(() => {
+    const hasActiveTasks = tasks.some(
+      (t) => t.status === 'running' || t.status === 'dispatched' || t.status === 'queued'
+    );
+    if (!hasActiveTasks) return;
+
+    const pollId = setInterval(() => { void refresh(false); }, 30000);
+    return (): void => { clearInterval(pollId); };
+  }, [tasks, refresh]);
+
   const loadMore = useCallback(async (): Promise<void> => {
     if (!hasMore || loading || loadingMore) return;
 
