@@ -23,6 +23,7 @@ import {
   CodeTaskViewPageV2,
   CodeTaskNewPage,
   CodeTasksPage,
+  DispatchQueuePage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataInsightsPage,
@@ -248,6 +249,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CodeTaskNewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/dispatch-queue"
+        element={
+          <ProtectedRoute>
+            <DispatchQueuePage />
           </ProtectedRoute>
         }
       />
