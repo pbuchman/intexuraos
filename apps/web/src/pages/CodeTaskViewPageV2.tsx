@@ -19,6 +19,9 @@ import { V2NextSteps } from '@/components/code-tasks/v2/V2NextSteps.js';
 import { isActiveStatus } from '@/components/code-tasks/v2/shared.js';
 import type { WorkerType } from '@/components/code-tasks/v2/shared.js';
 
+/** Terminal statuses eligible for archive/delete actions. */
+const ARCHIVABLE_STATUSES: ReadonlySet<string> = new Set(['failed', 'cancelled', 'interrupted', 'planned', 'implemented', 'reviewed']);
+
 export function CodeTaskViewPageV2(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -84,8 +87,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
   }, [archiveTask, navigate]);
 
   useEffect(() => {
-    const terminalStatuses = ['failed', 'cancelled', 'interrupted', 'planned', 'implemented', 'reviewed'];
-    if (task !== null && !terminalStatuses.includes(task.status)) {
+    if (task !== null && !ARCHIVABLE_STATUSES.has(task.status)) {
       setShowDeleteConfirm(false);
     }
   }, [task?.status]);
@@ -120,7 +122,7 @@ export function CodeTaskViewPageV2(): React.JSX.Element {
   const isImplementable = task.status === 'planned' &&
     task.implementationTaskId === undefined &&
     task.linearIssueId !== undefined;
-  const isArchivable = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted' || task.status === 'planned' || task.status === 'implemented' || task.status === 'reviewed';
+  const isArchivable = ARCHIVABLE_STATUSES.has(task.status);
 
   return (
     <Layout>

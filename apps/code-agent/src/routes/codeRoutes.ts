@@ -31,6 +31,9 @@ import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js
 
 const logger = createAppLogger({ name: 'code-routes' });
 
+/** Terminal task statuses eligible for archival, rate-limit recording, etc. */
+const TERMINAL_STATUSES: readonly TaskStatus[] = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'];
+
 /**
  * Track in-flight health probe requests per user for deduplication.
  * Prevents thundering herd when multiple concurrent requests arrive while health status is stale.
@@ -869,10 +872,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Record task completion for rate limiting (decrement concurrent, update cost)
       // Do this for terminal states: completed, failed, cancelled, interrupted
       /* v8 ignore start -- ts-type: optional chaining and array includes create type narrowing branches @preserve */
-      const terminalStatuses = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'] as const;
-      /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: terminal status includes check @preserve */
-      if (body.status !== undefined && terminalStatuses.includes(body.status)) {
+      if (body.status !== undefined && TERMINAL_STATUSES.includes(body.status)) {
       /* v8 ignore stop @preserve */
         const userId = result.value.userId; // @allow-result-access -- .ok checked at line 736
         // Fire and forget - don't await to avoid delaying response
@@ -2051,9 +2051,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       const task = findResult.value;
-      const terminalStatuses = ['failed', 'cancelled', 'interrupted', 'planned', 'implemented', 'reviewed'];
       /* v8 ignore start -- ts-type: array includes check creates type narrowing branch @preserve */
-      if (!terminalStatuses.includes(task.status)) {
+      if (!TERMINAL_STATUSES.includes(task.status)) {
       /* v8 ignore stop @preserve */
         return await reply.fail('INVALID_REQUEST', `Cannot archive task with status '${task.status}'`);
       }
