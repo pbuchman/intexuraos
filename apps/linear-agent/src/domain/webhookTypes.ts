@@ -5,6 +5,14 @@
 
 export type WebhookAction = 'create' | 'update' | 'remove';
 
+/** Webhook type constants for type-safe comparisons */
+export const WEBHOOK_TYPES = {
+  ISSUE: 'Issue',
+  COMMENT: 'Comment',
+} as const;
+
+export type WebhookType = typeof WEBHOOK_TYPES[keyof typeof WEBHOOK_TYPES];
+
 export interface LinearWebhookPayload {
   id: string;
   identifier: string;
