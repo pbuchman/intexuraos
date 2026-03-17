@@ -1,7 +1,7 @@
 import type { CodeTask, CodeTaskStatus } from '@/types';
 
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
-export type StepState = 'completed' | 'running' | 'failed' | 'waiting' | 'actionable';
+export type StepState = 'completed' | 'running' | 'queued' | 'failed' | 'waiting' | 'actionable';
 
 export interface PipelineStepData {
   agentType: string;
@@ -68,7 +68,10 @@ function deriveStepState(status: CodeTaskStatus): StepState {
   if (status === 'planned' || status === 'implemented' || status === 'reviewed') {
     return 'completed';
   }
-  if (status === 'running' || status === 'dispatched' || status === 'queued') {
+  if (status === 'queued') {
+    return 'queued';
+  }
+  if (status === 'running' || status === 'dispatched') {
     return 'running';
   }
   // failed | interrupted

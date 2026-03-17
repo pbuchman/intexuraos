@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, ScrollText, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2 } from 'lucide-react';
 import type { IssueGroup, StepState } from '@/utils/issueGroups';
 import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
@@ -40,6 +40,13 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
       </span>
     );
   }
+  if (state === 'queued') {
+    return (
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+        <Clock className="h-3 w-3" />
+      </span>
+    );
+  }
   if (state === 'failed') {
     return (
       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500/20 text-red-500">
@@ -65,6 +72,7 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
 function stepLabel(name: string, state: StepState): string {
   if (state === 'completed') return name;
   if (state === 'running') return `${name}...`;
+  if (state === 'queued') return `${name} (queued)`;
   if (state === 'failed') return `${name} Failed`;
   if (state === 'actionable') return 'Implement';
   return name;
