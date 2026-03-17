@@ -7,6 +7,7 @@ import {
   sendTaskMessage as sendTaskMessageApi,
   startImplementation as startImplementationApi,
   deleteCodeTask as deleteCodeTaskApi,
+  archiveCodeTask as archiveCodeTaskApi,
 } from '@/services/codeAgentApi';
 import { ApiError } from '@/services/apiClient';
 import type { CodeTask, CodeTaskWorkerType, RetryCodeTaskRequest } from '@/types';
@@ -37,6 +38,10 @@ export interface TaskViewState {
   startImplementation: (workerType?: string) => Promise<string>;
   deleteTask: () => Promise<void>;
   clearDeleteError: () => void;
+  archiving: boolean;
+  archiveError: string | null;
+  archiveTask: () => Promise<void>;
+  clearArchiveError: () => void;
 }
 
 export function useTaskView(taskId: string): TaskViewState {
@@ -61,6 +66,8 @@ export function useTaskView(taskId: string): TaskViewState {
   const [implementError, setImplementError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   const isMountedRef = useRef(true);
   const getAccessTokenRef = useRef(getAccessToken);
@@ -210,6 +217,29 @@ export function useTaskView(taskId: string): TaskViewState {
     setDeleteError(null);
   }, []);
 
+  const archiveTask = useCallback(async (): Promise<void> => {
+    if (task === null) return;
+    setArchiving(true);
+    setArchiveError(null);
+    try {
+      const token = await getAccessTokenRef.current();
+      await archiveCodeTaskApi(token, task.id);
+    } catch (err) {
+      if (isMountedRef.current) {
+        setArchiveError(getErrorMessage(err, 'Failed to archive task'));
+      }
+      throw err;
+    } finally {
+      if (isMountedRef.current) {
+        setArchiving(false);
+      }
+    }
+  }, [task]);
+
+  const clearArchiveError = useCallback((): void => {
+    setArchiveError(null);
+  }, []);
+
   return {
     task,
     logs,
@@ -233,5 +263,9 @@ export function useTaskView(taskId: string): TaskViewState {
     startImplementation,
     deleteTask,
     clearDeleteError,
+    archiving,
+    archiveError,
+    archiveTask,
+    clearArchiveError,
   };
 }
