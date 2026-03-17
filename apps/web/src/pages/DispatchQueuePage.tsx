@@ -29,7 +29,7 @@ export function DispatchQueuePage(): React.JSX.Element {
                 Dispatch Queue
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {String(totalQueued)} / {String(maxQueueSize)} slots used &middot; Tasks dispatched every minute
+                {String(totalQueued)} / {String(maxQueueSize)} slots used
               </p>
             </div>
           </div>
