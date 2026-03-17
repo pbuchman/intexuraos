@@ -52,6 +52,7 @@ const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
+const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30 seconds
 
 export interface DispatchError {
   type:
@@ -1645,8 +1646,7 @@ export class TaskDispatcher {
     this.claudeLogBuffers.delete(task.taskId);
     this.lastOutputAt.set(task.taskId, Date.now());
 
-    // Declared outside try so the catch block can attach a zombie-cleanup
-    // handler if the timeout fires before createWorker completes.
+    // Store promise to enable zombie cleanup if timeout fires mid-creation.
     let createPromise: Promise<WorkerHandle> | undefined;
 
     try {
@@ -1700,10 +1700,14 @@ export class TaskDispatcher {
             task.taskId,
             `Destroying zombie container created after timeout: ${handle.containerId}`
           );
-          return this.isolation.provider.destroyWorker(task.taskId);
+          return withTimeout(
+            this.isolation.provider.destroyWorker(task.taskId),
+            ZOMBIE_CLEANUP_TIMEOUT_MS,
+            'Zombie container cleanup timed out'
+          );
         })
         .catch(() => {
-          // createWorker itself failed — no container to clean up
+          // createWorker itself failed or cleanup timed out — best effort
         });
 
       this.appendOrchestratorTaskLog(
