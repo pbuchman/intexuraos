@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpDown, Plus } from 'lucide-react';
+import { ArrowUpDown, Clock, Plus } from 'lucide-react';
 import { Button, CodeTaskLogsModal, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useAuth } from '@/context';
@@ -121,12 +121,21 @@ function PageHeader({ issueGroups }: PageHeaderProps): React.JSX.Element {
           {parts.join(' \u00B7 ')}
         </p>
       </div>
-      <Link to="/code-tasks/new">
-        <Button>
-          <Plus className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">New Task</span>
-        </Button>
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          to="/code-tasks/dispatch-queue"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
+        >
+          <Clock className="h-4 w-4" />
+          Queue
+        </Link>
+        <Link to="/code-tasks/new">
+          <Button>
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">New Task</span>
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }

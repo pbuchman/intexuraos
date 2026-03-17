@@ -13,6 +13,7 @@ import {
   getGitHubEventLog,
   hydrateGitHubEventLogRows,
   startImplementation,
+  getDispatchQueue,
 } from '../codeAgentApi.js';
 import type { CodeTask, ListCodeTasksResponse, WorkersStatusResponse } from '../../types/index.js';
 
@@ -393,6 +394,32 @@ describe('codeAgentApi', () => {
         mockAccessToken
       );
       expect(result).toEqual(mockResponse);
+    });
+  });
+
+  describe('getDispatchQueue', () => {
+    it('fetches dispatch queue and unwraps response data', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockQueueResponse = {
+        success: true,
+        data: {
+          tasks: [
+            { id: 'task-1', prompt: 'Fix bug', workerType: 'opus', queuedAt: '2026-03-17T10:00:00Z', createdAt: '2026-03-17T09:55:00Z', position: 1 },
+          ],
+          totalQueued: 1,
+          maxQueueSize: 10,
+        },
+      };
+      vi.mocked(apiRequest).mockResolvedValue(mockQueueResponse);
+
+      const result = await getDispatchQueue(mockAccessToken);
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/queue',
+        mockAccessToken
+      );
+      expect(result).toEqual(mockQueueResponse.data);
     });
   });
 });
