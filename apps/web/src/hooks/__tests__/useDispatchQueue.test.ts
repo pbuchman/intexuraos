@@ -139,7 +139,10 @@ describe('useDispatchQueue', () => {
       expect(mockGetDispatchQueue).toHaveBeenCalledTimes(1);
     });
 
-    // Simulate a Firestore snapshot event
+    // First snapshot is skipped (initial snapshot, no refetch needed)
+    snapshotCallback?.();
+
+    // Simulate a subsequent Firestore snapshot event (actual change)
     mockGetDispatchQueue.mockResolvedValue({
       tasks: [{ id: 'task-2', prompt: 'New task', workerType: 'auto', queuedAt: '2026-03-17T11:00:00Z', createdAt: '2026-03-17T10:55:00Z', position: 1 }],
       totalQueued: 1,

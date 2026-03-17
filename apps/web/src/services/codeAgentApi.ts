@@ -1,5 +1,19 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
+import type {
+  CodeTask,
+  CodeTaskStatus,
+  GitHubEventLogResponse,
+  GitHubPREventsResponse,
+  GitHubPRSummariesResponse,
+  ListCodeTasksResponse,
+  RetryCodeTaskRequest,
+  RetryCodeTaskResponse,
+  StartImplementationResponse,
+  SubmitCodeTaskRequest,
+  SubmitCodeTaskResponse,
+  WorkersStatusResponse,
+} from '@/types';
 
 export interface QueuedTask {
   id: string;
@@ -17,21 +31,6 @@ export interface QueueResponse {
   totalQueued: number;
   maxQueueSize: number;
 }
-
-import type {
-  CodeTask,
-  CodeTaskStatus,
-  GitHubEventLogResponse,
-  GitHubPREventsResponse,
-  GitHubPRSummariesResponse,
-  ListCodeTasksResponse,
-  RetryCodeTaskRequest,
-  RetryCodeTaskResponse,
-  StartImplementationResponse,
-  SubmitCodeTaskRequest,
-  SubmitCodeTaskResponse,
-  WorkersStatusResponse,
-} from '@/types';
 
 /**
  * List code tasks for the current user

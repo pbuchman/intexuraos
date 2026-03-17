@@ -88,10 +88,16 @@ export function useDispatchQueue(): DispatchQueueState {
           orderBy('queuedAt', 'asc'),
         );
 
+        let isFirstSnapshot = true;
         unsub = onSnapshot(
           queueQuery,
           () => {
-            // On any change to queued tasks, refetch via API for full data
+            // Skip the initial snapshot — the initial load effect already fetches
+            if (isFirstSnapshot) {
+              isFirstSnapshot = false;
+              return;
+            }
+            // On subsequent changes to queued tasks, refetch via API for full data
             if (!cancelState.cancelled) {
               void fetchQueue();
             }
