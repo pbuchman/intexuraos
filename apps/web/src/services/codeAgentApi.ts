@@ -141,7 +141,7 @@ export async function startImplementation(
     accessToken,
     {
       method: 'POST',
-      body: workerType !== undefined ? { workerType } : undefined,
+      body: workerType !== undefined ? { workerType } : {},
     }
   );
 }
