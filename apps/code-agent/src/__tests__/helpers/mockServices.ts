@@ -40,7 +40,7 @@ import { createFirestoreEventDecisionRepository } from '../../infra/firestore/ev
 import { createFirestoreDispatchRetryRepository } from '../../infra/firestore/dispatchRetryRepository.js';
 import { createUnifiedEvaluator } from '../../domain/services/unifiedEvaluator.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
-import { TaskEnqueueServiceImpl } from '../../infra/services/taskEnqueueServiceImpl.js';
+import { createTaskEnqueueService } from '../../infra/services/taskEnqueueServiceImpl.js';
 
 /**
  * Mock UserServiceClient that returns empty results.
@@ -152,7 +152,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     linearIssueService,
     taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
-    taskEnqueueService: new TaskEnqueueServiceImpl({
+    taskEnqueueService: createTaskEnqueueService({
       logger,
       codeTaskRepo: createFirestoreCodeTaskRepository({ firestore: fakeFirestore, logger }),
       whatsappNotifier: createWhatsAppNotifier({
@@ -188,7 +188,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     } as unknown as WhatsAppSendPublisher,
   });
 
-  const taskEnqueueService = new TaskEnqueueServiceImpl({
+  const taskEnqueueService = createTaskEnqueueService({
     logger,
     codeTaskRepo,
     whatsappNotifier,

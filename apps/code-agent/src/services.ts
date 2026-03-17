@@ -75,7 +75,7 @@ import type { AutomationLog } from './domain/ports/automationLog.js';
 import { createGitHubPRAutomationLog } from './infra/services/gitHubPRAutomationLog.js';
 import { createFirestorePRAutomationCommentRepository } from './infra/firestore/prAutomationCommentRepository.js';
 import type { TaskEnqueueService } from './domain/services/taskEnqueueService.js';
-import { TaskEnqueueServiceImpl } from './infra/services/taskEnqueueServiceImpl.js';
+import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImpl.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
@@ -378,7 +378,7 @@ export function initServices(config: ServiceConfig): void {
   const gitHubEventLogEntryRepo = createFirestoreGitHubEventLogEntryRepository({ logger });
   const dispatchRetryRepo = createFirestoreDispatchRetryRepository({ logger });
 
-  const taskEnqueueService = new TaskEnqueueServiceImpl({
+  const taskEnqueueService = createTaskEnqueueService({
     logger: logger.child({ service: 'task-enqueue' }),
     codeTaskRepo,
     whatsappNotifier,

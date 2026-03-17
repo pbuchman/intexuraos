@@ -127,10 +127,10 @@ describe('TaskEnqueueServiceImpl', () => {
     }
   });
 
-  it('returns queue_full error and marks task as failed when queue exceeds maxSize', async () => {
+  it('returns queue_full error and marks task as failed when queue reaches maxSize', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.findById.mockResolvedValue(ok(task));
-    mockCodeTaskRepo.countQueued.mockResolvedValue(ok(11)); // > maxSize of 10
+    mockCodeTaskRepo.countQueued.mockResolvedValue(ok(10)); // >= maxSize of 10
     mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
     const service = createService();
@@ -244,9 +244,9 @@ describe('TaskEnqueueServiceImpl', () => {
     const task = createMockTask();
     const updatedTask = createMockTask({ queuedAt: Timestamp.now() });
     mockCodeTaskRepo.findById.mockResolvedValue(ok(task));
-    // count=10 is exactly maxSize (not greater), so not queue_full.
-    // 10 * 5 = 50 min, capped at min(50, 360) = 50
-    mockCodeTaskRepo.countQueued.mockResolvedValue(ok(10));
+    // count=9 is below maxSize (10), so not queue_full.
+    // 9 * 5 = 45 min, capped at min(45, 360) = 45
+    mockCodeTaskRepo.countQueued.mockResolvedValue(ok(9));
     mockCodeTaskRepo.update.mockResolvedValue(ok(updatedTask));
 
     const service = createService();
@@ -254,8 +254,8 @@ describe('TaskEnqueueServiceImpl', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // 10 * 5 = 50, min(50, 360) = 50
-      expect(result.value.estimatedWaitMinutes).toBe(50);
+      // 9 * 5 = 45, min(45, 360) = 45
+      expect(result.value.estimatedWaitMinutes).toBe(45);
     }
   });
 });
