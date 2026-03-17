@@ -27,6 +27,14 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 
+/*
+ * WhatsApp Brand Colors (used as Tailwind arbitrary values below):
+ *   Header:      #075e54
+ *   User bubble: #dcf8c6
+ *   Chat bg:     #ece5dd
+ *   Action:      #00a884
+ */
+
 // --- Sidebar Item ---
 
 function SbItem({ icon: Icon, label, active, chevron }: {
@@ -167,7 +175,7 @@ export function HeroShowcase(): React.JSX.Element {
         </div>
 
         {/* Content area */}
-        <div className="flex" style={{ minHeight: 280 }}>
+        <div className="flex min-h-[280px]">
           {/* Sidebar */}
           <div className="w-[130px] shrink-0 border-r border-slate-100 py-1.5">
             <SbItem icon={Inbox} label="Inbox" />
@@ -213,8 +221,8 @@ export function HeroShowcase(): React.JSX.Element {
                 { label: 'Done', count: '47', color: 'bg-emerald-500' },
                 { label: 'Failed', count: '0', color: 'bg-red-500' },
                 { label: 'Archived', count: '12', color: 'bg-slate-400' },
-              ].map((p) => (
-                <div key={p.label} className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[8px] font-semibold ${p.active === true ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>
+              ].map((p, idx) => (
+                <div key={idx} className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[8px] font-semibold ${p.active === true ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${p.color}`} />
                   {p.label} <span className="opacity-50">{p.count}</span>
                 </div>
@@ -265,9 +273,9 @@ export function HeroShowcase(): React.JSX.Element {
 
       {/* ─── SYNC Connector ─── */}
       <div className="hidden flex-col items-center justify-center gap-1 self-center md:flex">
-        <svg className="h-4 w-4 stroke-slate-300" viewBox="0 0 24 24" fill="none" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-        <span className="text-[8px] font-bold tracking-[3px] text-slate-300" style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)' }}>SYNC</span>
-        <svg className="h-4 w-4 stroke-slate-300" viewBox="0 0 24 24" fill="none" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+        <svg aria-hidden="true" className="h-4 w-4 stroke-slate-300" viewBox="0 0 24 24" fill="none" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+        <span className="text-[8px] font-bold tracking-[3px] text-slate-300 [writing-mode:vertical-lr] rotate-180">SYNC</span>
+        <svg aria-hidden="true" className="h-4 w-4 stroke-slate-300" viewBox="0 0 24 24" fill="none" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
       </div>
 
       {/* ─── WhatsApp Phone ─── */}
@@ -275,13 +283,13 @@ export function HeroShowcase(): React.JSX.Element {
         {/* Notch */}
         <div className="mx-auto h-4 w-16 rounded-b-xl bg-neutral-900" />
         {/* Status bar */}
-        <div className="-mt-4 flex items-center justify-between px-3 text-[8px] font-semibold text-neutral-500" style={{ height: 16 }}>
+        <div className="-mt-4 flex h-4 items-center justify-between px-3 text-[8px] font-semibold text-neutral-500">
           <span>9:41</span>
-          <span style={{ letterSpacing: -0.5 }}>●●●● ▲ 🔋</span>
+          <span className="tracking-[-0.5px]">●●●● ▲ 🔋</span>
         </div>
         {/* WA Header */}
         <div className="flex items-center gap-1.5 bg-[#075e54] px-2 py-1.5 text-white">
-          <svg className="h-3 w-3 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6" /></svg>
+          <svg aria-hidden="true" className="h-3 w-3 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6" /></svg>
           <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600">
             <span className="text-[8px] font-black">I</span>
           </div>
@@ -292,15 +300,16 @@ export function HeroShowcase(): React.JSX.Element {
         </div>
 
         {/* Chat area */}
-        <div className="flex flex-col gap-1 bg-[#ece5dd] p-1.5" style={{ minHeight: 300 }}>
+        <div className="flex min-h-[300px] flex-col gap-1 bg-[#ece5dd] p-1.5">
           {/* Voice note */}
           <WaUser>
             <div className="flex items-center gap-1 py-0.5">
               <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#075e54]">
-                <svg className="h-2 w-2 fill-white" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                <svg aria-hidden="true" className="h-2 w-2 fill-white" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
               </div>
               <div className="flex items-center gap-px h-3">
                 {[5,12,8,16,6,14,10,4].map((h, i) => (
+                  // eslint-disable-next-line no-restricted-syntax -- Dynamic waveform heights computed from array values require inline styles
                   <span key={i} className="w-[2px] rounded-sm bg-[#075e54]" style={{ height: h * 0.7, animationDelay: `${String(i * 0.08)}s` }} />
                 ))}
               </div>
@@ -343,7 +352,7 @@ export function HeroShowcase(): React.JSX.Element {
         <div className="flex items-center gap-1 bg-neutral-200 px-1.5 py-1">
           <div className="flex-1 rounded-full bg-white px-2 py-1 text-[8px] text-neutral-400">Message</div>
           <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#00a884]">
-            <svg className="h-2.5 w-2.5 fill-white" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="white" strokeWidth="2" /></svg>
+            <svg aria-hidden="true" className="h-2.5 w-2.5 fill-white" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="white" strokeWidth="2" /></svg>
           </div>
         </div>
       </div>

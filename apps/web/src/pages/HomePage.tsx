@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { motion } from 'framer-motion';
-import { HeroShowcase } from '@/components/home/HeroShowcase';
+import { HeroShowcase } from '@/components/home/HeroShowcase.js';
 
 // --- Brand Icons ---
 
