@@ -19,6 +19,7 @@ export function DispatchQueuePage(): React.JSX.Element {
           <div className="flex items-center gap-3">
             <Link
               to="/code-tasks"
+              aria-label="Back to code tasks"
               className="text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
             >
               <ArrowLeft className="h-5 w-5" />
