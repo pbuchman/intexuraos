@@ -108,8 +108,9 @@ export function useDispatchQueue(): DispatchQueueState {
             }
           },
           (err) => {
-            // eslint-disable-next-line no-console -- browser-only hook with no logger service available
-            console.warn('Firestore queue listener error', err);
+            if (!cancelState.cancelled) {
+              setError(getErrorMessage(err, 'Queue listener disconnected — showing last known state'));
+            }
           },
         );
       } catch {
