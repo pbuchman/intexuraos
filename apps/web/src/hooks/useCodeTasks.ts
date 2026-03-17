@@ -41,7 +41,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus[] }): {
   error: string | null;
   hasMore: boolean;
   loadMore: () => Promise<void>;
-  refresh: () => Promise<void>;
+  refresh: (showLoading?: boolean) => Promise<void>;
   submitTask: (request: SubmitCodeTaskRequest) => Promise<string>;
   deleteTask: (id: string) => Promise<void>;
 } {
