@@ -123,13 +123,6 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
             PR #{/\/pull\/(\d+)/.exec(task.result.prUrl)?.[1] ?? ''}
           </a>
         ) : null}
-
-        <a
-          href={`/#/code-tasks/${task.id}`}
-          className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-        >
-          Classic view
-        </a>
       </div>
     </div>
   );
