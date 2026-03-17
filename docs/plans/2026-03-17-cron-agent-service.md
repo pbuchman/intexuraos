@@ -45,7 +45,7 @@ interface CronSchedule {
   timezone: string;                  // IANA timezone (default: "UTC")
   action: {
     type: 'http';                    // extensible action type
-    serviceUrl: string;              // target service base URL env var name (e.g. "INTEXURAOS_CODE_AGENT_URL")
+    service: string;                 // allowlisted service key (e.g. "code-agent", "linear-agent") — resolved to URL at runtime
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     path: string;                    // endpoint path (e.g. "/internal/drain-queue")
     headers?: Record<string, string>;
@@ -104,7 +104,7 @@ This plan splits into **2 independent subtasks** by service boundary. Each subta
 
 ### Subtask 1: cron-agent backend service (`apps/cron-agent`)
 
-**Owns:** All backend code, Firestore collections, Terraform infrastructure, ecosystem config, `firestore-collections.json` updates, `packages/internal-clients` cron-agent client addition.
+**Owns:** All backend code, Firestore collections, Firestore composite index migrations, Terraform infrastructure, ecosystem config, `firestore-collections.json` updates.
 
 **API Contract (consumed by Subtask 2):**
 
@@ -192,7 +192,7 @@ All public endpoints use `Authorization: Bearer <JWT>` (Auth0). All responses wr
 
 - [ ] **Step 1: Scaffold package.json**
 
-Copy structure from an existing app (e.g., `apps/bookmarks-agent/package.json`). Set name to `@intexuraos/cron-agent`. Include dependencies: `fastify`, `@intexuraos/common-core`, `@intexuraos/common-http`, `@intexuraos/http-server`, `@intexuraos/http-contracts`, `@intexuraos/infra-firestore`, `@intexuraos/infra-sentry`, `@intexuraos/infra-gemini`, `cron-parser` (for cron expression parsing and next-execution calculation).
+Copy structure from an existing app (e.g., `apps/bookmarks-agent/package.json`). Set name to `@intexuraos/cron-agent`. Include dependencies: `fastify`, `@intexuraos/common-core`, `@intexuraos/common-http`, `@intexuraos/http-server`, `@intexuraos/http-contracts`, `@intexuraos/infra-firestore`, `@intexuraos/infra-sentry`, `@intexuraos/infra-gemini`, `cron-parser@^4.9.0` (for cron expression parsing and next-execution calculation — use the `cron-parser` npm package, not alternatives).
 
 - [ ] **Step 2: Scaffold tsconfig.json, vitest.config.ts, Dockerfile, .dockerignore**
 
@@ -206,15 +206,22 @@ export interface CronAgentConfig {
   gcpProjectId: string;
   internalAuthToken: string;
   authAudience: string;
-  serviceUrls: Record<string, string>; // map of env var name → URL
+  authIssuer: string;
+  authJwksUrl: string;
+  sentryDsn: string;
+  environment: string;
+  allowedServices: Record<string, string>; // allowlisted service key → URL (e.g. "code-agent" → "http://...")
   geminiApiKey: string;
 }
 
 export function loadConfig(): CronAgentConfig {
   // Read from INTEXURAOS_* env vars
-  // serviceUrls populated from all INTEXURAOS_*_URL env vars
+  // port from PORT env var, default 8080
+  // allowedServices built from known INTEXURAOS_*_URL env vars with fixed key mapping
 }
 ```
+
+**Important:** The `allowedServices` map uses human-readable service keys (e.g., `"code-agent"`, `"linear-agent"`) rather than raw env var names. This provides an allowlist — only services explicitly mapped can be targeted by schedules. The `action.service` field in `CronSchedule` references these keys.
 
 - [ ] **Step 4: Create services.ts with DI container**
 
@@ -231,14 +238,18 @@ const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_GEMINI_APP_API_KEY',
+  'INTEXURAOS_SENTRY_DSN',
+  'INTEXURAOS_ENVIRONMENT',
 ];
 const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_CODE_AGENT_URL',
 ];
 ```
 
-Validate env, load config, init services, build server, listen on port 8080.
+Initialize Sentry (`initSentry({ dsn, environment, serviceName: 'cron-agent' })`), validate env, load config, init services, build server, listen on `parseInt(process.env['PORT'] ?? '8080', 10)`.
 
 - [ ] **Step 7: Update firestore-collections.json**
 
@@ -256,7 +267,7 @@ Add:
 
 - [ ] **Step 8: Update ecosystem.config.cjs**
 
-Add `cron-agent` entry on port 8130 in Phase 1 (independent). Add `INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130'` to `COMMON_SERVICE_URLS`.
+Add `cron-agent` entry on port 8130 in Phase 1 (independent). Add `INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130'` to `COMMON_SERVICE_URLS`. No `waitForService` needed (cron-agent is independent, no startup dependencies on other services).
 
 - [ ] **Step 9: Run build to verify scaffolding compiles**
 
@@ -321,15 +332,7 @@ git commit -m "feat(cron-agent): add Firestore repositories for schedules and ex
 
 - [ ] **Step 1: Create the prompt for LLM cron parsing**
 
-```typescript
-import { PromptBuilder } from '@intexuraos/llm-prompts';
-
-export const parseSchedulePrompt = new PromptBuilder({
-  name: 'parse-schedule',
-  version: '1.0.0',
-  system: `You convert human-language schedule descriptions into standard cron expressions (5 fields: minute hour day-of-month month day-of-week). Return ONLY valid JSON: {"cronExpression": "<expression>", "humanSummary": "<readable summary>"}. If the description cannot be converted, return {"error": "<reason>"}.`,
-});
-```
+Read the `PromptBuilder` interface from `@intexuraos/llm-prompts` (`packages/llm-prompts/src/types.ts`) and implement a conforming object. The prompt must have `name: 'parse-schedule'`, `description`, `version: '1.0.0'`, and a `build()` method that returns the system prompt instructing the LLM to convert human-language schedule descriptions into standard cron expressions (5 fields: minute hour day-of-month month day-of-week) and return JSON: `{"cronExpression": "<expression>", "humanSummary": "<readable summary>"}` or `{"error": "<reason>"}` on failure.
 
 - [ ] **Step 2: Write failing tests for parse-schedule use case**
 
@@ -399,7 +402,7 @@ interface ExecuteScheduleDeps {
   executionRepo: ExecutionRepository;
   scheduleRepo: ScheduleRepository;
   internalAuthToken: string;
-  serviceUrls: Record<string, string>;
+  allowedServices: Record<string, string>; // service key → URL allowlist
 }
 
 export async function executeSchedule(
@@ -409,7 +412,7 @@ export async function executeSchedule(
 ): Promise<Result<CronExecution, ExecuteError>>
 ```
 
-Resolves the service URL from `schedule.action.serviceUrl` env var name → actual URL. Makes HTTP call with `X-Internal-Auth`. Records execution.
+Resolves the service URL from `schedule.action.service` key via the `allowedServices` map in config. Rejects unknown service keys. Makes HTTP call with `X-Internal-Auth`. Records execution.
 
 - [ ] **Step 3: Run tests, verify pass**
 
@@ -529,6 +532,8 @@ Each route: `logIncomingRequest`, validate JWT auth, extract userId, call schedu
 
 - [ ] **Step 5: Implement execution-routes.ts**
 
+Each route: `logIncomingRequest`, validate JWT auth, extract userId, call execution repo, return `reply.ok(data)` or `reply.fail(code, message)`.
+
 - [ ] **Step 6: Run tests, verify pass**
 
 - [ ] **Step 7: Write failing tests for internal routes**
@@ -540,7 +545,7 @@ Each route: `logIncomingRequest`, validate JWT auth, extract userId, call schedu
 
 - [ ] **Step 8: Implement internal-routes.ts**
 
-Follow the exact OIDC + X-Internal-Auth dual-auth pattern from code-agent's drain-queue endpoint.
+`logIncomingRequest` on every handler. Follow the exact OIDC + X-Internal-Auth dual-auth pattern from code-agent's drain-queue endpoint. The tick response is also wrapped in `{ success: true, data: { executed, skipped, errors } }`.
 
 - [ ] **Step 9: Run tests, verify pass**
 
@@ -558,7 +563,57 @@ Run: `pnpm --filter @intexuraos/cron-agent test`
 git commit -m "feat(cron-agent): add HTTP routes for schedules, executions, and internal tick"
 ```
 
-### Task 7: Terraform & Infrastructure
+### Task 7: Firestore Composite Index Migrations
+
+**Files:**
+- Create: `apps/cron-agent/migrations/001-composite-indexes.mjs`
+
+- [ ] **Step 1: Create composite index migration**
+
+The `findDueSchedules` query uses `status == 'active' AND nextExecutionAt <= now` — this requires a composite index. The `findByUserId` queries use `userId + status + createdAt` for ordering. Create migration file:
+
+```javascript
+// 001-composite-indexes.mjs
+export const indexes = [
+  {
+    collectionGroup: 'cron_schedules',
+    fields: [
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'nextExecutionAt', order: 'ASCENDING' },
+    ],
+  },
+  {
+    collectionGroup: 'cron_schedules',
+    fields: [
+      { fieldPath: 'userId', order: 'ASCENDING' },
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+  },
+  {
+    collectionGroup: 'cron_executions',
+    fields: [
+      { fieldPath: 'userId', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+  },
+  {
+    collectionGroup: 'cron_executions',
+    fields: [
+      { fieldPath: 'scheduleId', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+  },
+];
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git commit -m "feat(cron-agent): add Firestore composite index migrations"
+```
+
+### Task 8: Terraform & Infrastructure (renumbered from 7)
 
 **Files:**
 - Modify: `terraform/environments/dev/main.tf` — add cron-agent Cloud Run service and Cloud Scheduler job
@@ -578,7 +633,7 @@ cron_agent = {
 
 - [ ] **Step 2: Add Cloud Run module for cron-agent**
 
-Follow existing service module pattern. Include env vars: `INTEXURAOS_GCP_PROJECT_ID`, `INTEXURAOS_INTERNAL_AUTH_TOKEN`, `INTEXURAOS_AUTH_AUDIENCE`, `INTEXURAOS_GEMINI_APP_API_KEY`, `INTEXURAOS_CODE_AGENT_URL`, and other service URLs as needed.
+Follow existing service module pattern. Include env vars: `INTEXURAOS_GCP_PROJECT_ID`, `INTEXURAOS_INTERNAL_AUTH_TOKEN`, `INTEXURAOS_AUTH_AUDIENCE`, `INTEXURAOS_AUTH_ISSUER`, `INTEXURAOS_AUTH_JWKS_URL`, `INTEXURAOS_SENTRY_DSN`, `INTEXURAOS_ENVIRONMENT`, `INTEXURAOS_GEMINI_APP_API_KEY`, `INTEXURAOS_CODE_AGENT_URL`, and other service URLs as needed. Also add `INTEXURAOS_CRON_AGENT_URL` to the web app's Terraform env vars for production.
 
 - [ ] **Step 3: Add Cloud Scheduler job**
 
@@ -611,7 +666,7 @@ resource "google_cloud_scheduler_job" "cron_agent_tick" {
 resource "google_cloud_run_service_iam_member" "scheduler_invokes_cron_agent" {
   project  = var.project_id
   location = var.region
-  service  = local.services.cron_agent.name
+  service  = module.cron_agent.service_name  # Verify actual module output name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
 }
@@ -623,7 +678,7 @@ resource "google_cloud_run_service_iam_member" "scheduler_invokes_cron_agent" {
 git commit -m "infra(cron-agent): add Cloud Run service and Cloud Scheduler tick job"
 ```
 
-### Task 8: CI Verification
+### Task 9: CI Verification
 
 - [ ] **Step 1: Build all packages**
 
@@ -665,7 +720,7 @@ export interface CronSchedule {
   timezone: string;
   action: {
     type: 'http';
-    serviceUrl: string;
+    service: string;              // allowlisted service key (e.g. "code-agent")
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     path: string;
     headers?: Record<string, string>;
@@ -722,7 +777,7 @@ export interface CreateScheduleRequest {
 
 - [ ] **Step 2: Add cronAgentUrl to config.ts**
 
-Add `cronAgentUrl` to `AppConfig` interface and `getConfig()`:
+Add `cronAgentUrl` to the `AppConfig` interface (in `types/index.ts` or wherever it's defined) and `getConfig()`:
 ```typescript
 cronAgentUrl: getServiceUrl('INTEXURAOS_CRON_AGENT_URL', '/api/cron-agent'),
 ```
@@ -915,8 +970,9 @@ import { CronSchedulesPage, CronScheduleViewPage, CronScheduleNewPage, CronExecu
 <Route path="/cron-agent/:id" element={<ProtectedRoute><CronScheduleViewPage /></ProtectedRoute>} />
 ```
 
-- [ ] **Step 2: Add Vite proxy**
+- [ ] **Step 2: Add Vite proxy and production env var**
 
+Add dev proxy to `vite.config.ts`:
 ```typescript
 '/api/cron-agent': {
   target: 'http://localhost:8130',
@@ -924,6 +980,8 @@ import { CronSchedulesPage, CronScheduleViewPage, CronScheduleNewPage, CronExecu
   rewrite: (path) => path.replace(/^\/api\/cron-agent/, ''),
 },
 ```
+
+Ensure `INTEXURAOS_CRON_AGENT_URL` is included in the web app's Vite env config (the `envPrefix` or `define` section) so it's available in production builds.
 
 - [ ] **Step 3: Commit**
 
