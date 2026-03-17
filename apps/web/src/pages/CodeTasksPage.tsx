@@ -59,16 +59,15 @@ const SORT_STORAGE_KEY = 'code-tasks-sort';
 const DEFAULT_NON_ARCHIVED: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
-  { key: 'linear-id', label: 'Linear ID' },
-  { key: 'pr-number', label: 'PR #' },
-  { key: 'finished-time', label: 'Finished' },
+  { key: 'linear-id', label: 'Linear' },
+  { key: 'pr-number', label: 'PR#' },
   { key: 'created-time', label: 'Created' },
-  { key: 'started-time', label: 'Started At' },
+  { key: 'started-time', label: 'Dispatched' },
 ];
 
 function loadSortFromStorage(): SortOption {
   const stored = localStorage.getItem(SORT_STORAGE_KEY);
-  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'finished-time' || stored === 'started-time' || stored === 'created-time') {
+  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'started-time' || stored === 'created-time') {
     return stored;
   }
   return 'linear-id';

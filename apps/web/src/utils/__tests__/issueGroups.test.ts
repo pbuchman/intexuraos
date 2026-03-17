@@ -596,6 +596,75 @@ describe('groupByLinearIssue', () => {
     expect(groups[0]?.aggregateStatus).toBe('archived');
   });
 
+  it('mostRecentDispatchedAt returns max dispatchedAt across all tasks in group', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        dispatchedAt: '2026-03-07T10:00:00Z',
+        updatedAt: '2026-03-07T18:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        dispatchedAt: '2026-03-07T14:00:00Z',
+        createdAt: '2026-03-07T12:00:00Z',
+        updatedAt: '2026-03-07T15:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.mostRecentDispatchedAt).toBe('2026-03-07T14:00:00Z');
+  });
+
+  it('mostRecentDispatchedAt returns max of tasks that have dispatchedAt when some do not', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+        updatedAt: '2026-03-07T18:00:00Z',
+      }),
+      createMockTask({
+        id: 't2',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        dispatchedAt: '2026-03-07T14:00:00Z',
+        createdAt: '2026-03-07T12:00:00Z',
+        updatedAt: '2026-03-07T15:00:00Z',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.mostRecentDispatchedAt).toBe('2026-03-07T14:00:00Z');
+  });
+
+  it('mostRecentDispatchedAt is undefined when no tasks have dispatchedAt', () => {
+    const tasks = [
+      createMockTask({
+        id: 't1',
+        linearIssueId: 'INT-100',
+        agentType: 'planning',
+        status: 'planned',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.mostRecentDispatchedAt).toBeUndefined();
+  });
+
   it('cancelled tasks are treated as done', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'cancelled' }),
@@ -704,6 +773,7 @@ function makeGroup(overrides: {
   createdAt?: string;
   updatedAt?: string;
   dispatchedAt?: string;
+  mostRecentDispatchedAt?: string;
   aggregateStatus?: IssueGroup['aggregateStatus'];
 }): IssueGroup {
   const {
@@ -712,6 +782,7 @@ function makeGroup(overrides: {
     createdAt = '2024-01-01T00:00:00.000Z',
     updatedAt = '2024-01-01T00:00:00.000Z',
     dispatchedAt,
+    mostRecentDispatchedAt,
     aggregateStatus = 'done',
   } = overrides;
 
@@ -736,6 +807,7 @@ function makeGroup(overrides: {
     },
     latestTask,
     aggregateStatus,
+    mostRecentDispatchedAt,
   };
 }
 
@@ -833,87 +905,28 @@ describe('sortIssueGroups', () => {
     });
   });
 
-  describe('finished-time sort', () => {
-    it('sorts done groups first by updatedAt desc, non-done groups last', () => {
-      const groups: IssueGroup[] = [
-        makeGroup({ linearIssueId: 'INT-1', aggregateStatus: 'active', updatedAt: '2024-12-01T00:00:00.000Z' }),
-        makeGroup({ linearIssueId: 'INT-2', aggregateStatus: 'done', updatedAt: '2024-06-01T00:00:00.000Z' }),
-        makeGroup({ linearIssueId: 'INT-3', aggregateStatus: 'done', updatedAt: '2024-09-01T00:00:00.000Z' }),
-        makeGroup({ linearIssueId: 'INT-4', aggregateStatus: 'failed', updatedAt: '2024-01-01T00:00:00.000Z' }),
-      ];
-      const result = sortIssueGroups(groups, 'finished-time');
-      expect(result[0]?.linearIssueId).toBe('INT-3'); // done, 2024-09 (most recent done)
-      expect(result[1]?.linearIssueId).toBe('INT-2'); // done, 2024-06
-      expect(result[2]?.aggregateStatus).not.toBe('done');
-      expect(result[3]?.aggregateStatus).not.toBe('done');
-    });
-
-    it('sorts non-done groups by updatedAt desc among themselves', () => {
-      const groups: IssueGroup[] = [
-        makeGroup({ linearIssueId: 'INT-1', aggregateStatus: 'active', updatedAt: '2024-01-01T00:00:00.000Z' }),
-        makeGroup({ linearIssueId: 'INT-2', aggregateStatus: 'failed', updatedAt: '2024-06-01T00:00:00.000Z' }),
-      ];
-      const result = sortIssueGroups(groups, 'finished-time');
-      expect(result[0]?.linearIssueId).toBe('INT-2');
-      expect(result[1]?.linearIssueId).toBe('INT-1');
-    });
-
-    it('returns empty array for empty input', () => {
-      expect(sortIssueGroups([], 'finished-time')).toEqual([]);
-    });
-
-    it('handles all non-done groups', () => {
-      const groups: IssueGroup[] = [
-        makeGroup({ linearIssueId: 'INT-1', aggregateStatus: 'active' }),
-        makeGroup({ linearIssueId: 'INT-2', aggregateStatus: 'failed' }),
-      ];
-      const result = sortIssueGroups(groups, 'finished-time');
-      expect(result).toHaveLength(2);
-    });
-
-    it('handles all done groups sorted by updatedAt desc', () => {
-      const groups: IssueGroup[] = [
-        makeGroup({ linearIssueId: 'INT-1', aggregateStatus: 'done', updatedAt: '2024-01-01T00:00:00.000Z' }),
-        makeGroup({ linearIssueId: 'INT-2', aggregateStatus: 'done', updatedAt: '2024-06-01T00:00:00.000Z' }),
-      ];
-      const result = sortIssueGroups(groups, 'finished-time');
-      expect(result[0]?.linearIssueId).toBe('INT-2');
-      expect(result[1]?.linearIssueId).toBe('INT-1');
-    });
-
-    it('does not mutate the original array', () => {
-      const groups: IssueGroup[] = [
-        makeGroup({ linearIssueId: 'INT-1', aggregateStatus: 'active' }),
-        makeGroup({ linearIssueId: 'INT-2', aggregateStatus: 'done' }),
-      ];
-      const firstId = groups[0]?.linearIssueId;
-      sortIssueGroups(groups, 'finished-time');
-      expect(groups[0]?.linearIssueId).toBe(firstId);
-    });
-  });
-
   describe('started-time', () => {
-    it('sorts by most recent dispatchedAt desc', () => {
+    it('sorts by mostRecentDispatchedAt desc', () => {
       const groups: IssueGroup[] = [
-        makeGroup({ linearIssueId: 'INT-1', dispatchedAt: '2024-01-01T00:00:00.000Z' }),
-        makeGroup({ linearIssueId: 'INT-2', dispatchedAt: '2024-06-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-1', mostRecentDispatchedAt: '2024-01-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-2', mostRecentDispatchedAt: '2024-06-01T00:00:00.000Z' }),
       ];
       const result = sortIssueGroups(groups, 'started-time');
       expect(result[0]?.linearIssueId).toBe('INT-2');
       expect(result[1]?.linearIssueId).toBe('INT-1');
     });
 
-    it('groups with dispatchedAt sort before groups without dispatchedAt', () => {
+    it('groups with mostRecentDispatchedAt sort before groups without', () => {
       const groups: IssueGroup[] = [
         makeGroup({ linearIssueId: 'INT-1' }),
-        makeGroup({ linearIssueId: 'INT-2', dispatchedAt: '2024-06-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-2', mostRecentDispatchedAt: '2024-06-01T00:00:00.000Z' }),
       ];
       const result = sortIssueGroups(groups, 'started-time');
       expect(result[0]?.linearIssueId).toBe('INT-2');
       expect(result[1]?.linearIssueId).toBe('INT-1');
     });
 
-    it('falls back to createdAt desc when neither has dispatchedAt', () => {
+    it('falls back to createdAt desc when neither has mostRecentDispatchedAt', () => {
       const groups: IssueGroup[] = [
         makeGroup({ linearIssueId: 'INT-1', createdAt: '2024-01-01T00:00:00.000Z' }),
         makeGroup({ linearIssueId: 'INT-2', createdAt: '2024-06-01T00:00:00.000Z' }),
@@ -929,8 +942,8 @@ describe('sortIssueGroups', () => {
 
     it('does not mutate the original array', () => {
       const groups: IssueGroup[] = [
-        makeGroup({ linearIssueId: 'INT-1', dispatchedAt: '2024-01-01T00:00:00.000Z' }),
-        makeGroup({ linearIssueId: 'INT-2', dispatchedAt: '2024-06-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-1', mostRecentDispatchedAt: '2024-01-01T00:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-2', mostRecentDispatchedAt: '2024-06-01T00:00:00.000Z' }),
       ];
       const firstId = groups[0]?.linearIssueId;
       sortIssueGroups(groups, 'started-time');
@@ -975,7 +988,7 @@ describe('sortIssueGroups', () => {
 
   describe('type coverage for all sort options', () => {
     it('accepts all valid SortOption values without throwing', () => {
-      const sortOptions: SortOption[] = ['linear-id', 'pr-number', 'finished-time', 'started-time', 'created-time'];
+      const sortOptions: SortOption[] = ['linear-id', 'pr-number', 'started-time', 'created-time'];
       const groups: IssueGroup[] = [makeGroup({ linearIssueId: 'INT-1' })];
       for (const option of sortOptions) {
         expect(() => sortIssueGroups(groups, option)).not.toThrow();

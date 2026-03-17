@@ -249,7 +249,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
             </p>
             <p className="text-slate-400 dark:text-slate-500">
               <span className="text-slate-500 dark:text-slate-600">Dispatched</span>{' '}
-              {latestTask.dispatchedAt !== undefined ? formatRelative(latestTask.dispatchedAt) : 'Pending'}
+              {group.mostRecentDispatchedAt !== undefined ? formatRelative(group.mostRecentDispatchedAt) : 'Pending'}
             </p>
           </div>
 
@@ -475,6 +475,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   }) &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
+  prev.group.mostRecentDispatchedAt === next.group.mostRecentDispatchedAt &&
   prev.actioningTaskId === next.actioningTaskId &&
   prev.onAction === next.onAction &&
   prev.onOpenLogs === next.onOpenLogs,
