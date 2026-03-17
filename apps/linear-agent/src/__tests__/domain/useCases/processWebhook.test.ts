@@ -957,6 +957,38 @@ describe('processWebhook', () => {
       expect((result as { message: string }).message).toBe('Failed to sync comment');
     });
 
+    it('returns error when comment sync fails with missing comment id', async () => {
+      issueRepo.setIssue(createSyncedIssue());
+      issueRepo.setUserIdsForIssue('issue-123', ['user-1']);
+      connectionRepo.setWebhookSecretForTeam('team-1', { userId: 'user-1', webhookSecret });
+      commentRepo.setShouldFailSave(true);
+
+      const result = await processWebhook(
+        {
+          action: 'create',
+          type: 'Comment',
+          data: {
+            issueId: 'issue-123',
+            // Missing: id - to test the error logging fallback
+          },
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-1',
+          rawBody,
+        },
+        {
+          connectionRepository: connectionRepo,
+          issueRepository: issueRepo,
+          commentRepository: commentRepo,
+          codeAgentClient,
+          validateSignature: createValidSignatureValidator(),
+          logger,
+        }
+      );
+
+      expect(result.outcome).toBe('error');
+      expect((result as { message: string }).message).toBe('Failed to sync comment');
+    });
+
     it('returns error when issue lookup fails for comment', async () => {
       issueRepo.setShouldFailFindById(true);
 
