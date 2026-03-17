@@ -69,7 +69,8 @@ AFTER (1 path through queue):
 3. **`TaskEnqueueService` is a domain service**, not infrastructure. It encapsulates the queue-size check and Firestore write.
 4. **`drainTaskQueue` is the sole dispatcher.** All dispatch logic (worker probing, fallback, error handling, notifications) lives only here.
 5. **Store dispatch metadata on task document.** Fields like `planningPrBranch`, `planningPrUrl`, and `trackingCommentId` that are currently only passed at dispatch time must be persisted on the task so `drainTaskQueue` can reconstruct the full `DispatchRequest`.
-6. **`drainRetryQueue` is a legacy second dispatch path.** It dispatches entries from the `dispatch_retries` collection. After this refactoring, no new retry entries are created (the `createTaskForPR` retry-entry creation is removed). `drainRetryQueue` is kept intact to drain any existing entries created before deployment. Once the collection is empty, it becomes a no-op. A follow-up cleanup task can remove it entirely.
+7. **Per-resource concurrency guard at drain time.** Before dispatching a queued task, `drainTaskQueue` must check that no other task is already running (`status='dispatched'` or `status='running'`) for the same Linear issue (`linearIssueId`) or GitHub PR (`repository` + `prNumber`). If a conflict is found, skip that task (leave it queued) and try the next oldest queued task. This prevents two agents from working on the same issue/PR simultaneously. The existing `hasActiveTaskForLinearIssue()` and `findActiveReviewForPR()` repository methods can be reused for these checks.
+8. **`drainRetryQueue` is a legacy second dispatch path.** It dispatches entries from the `dispatch_retries` collection. After this refactoring, no new retry entries are created (the `createTaskForPR` retry-entry creation is removed). `drainRetryQueue` is kept intact to drain any existing entries created before deployment. Once the collection is empty, it becomes a no-op. A follow-up cleanup task can remove it entirely.
 
 ---
 
@@ -123,7 +124,7 @@ AFTER (1 path through queue):
 | `apps/code-agent/src/domain/usecases/submitToExecutionAgent.ts`         | Remove dispatch+queue logic, call `enqueue()`                                        |
 | `apps/code-agent/src/domain/usecases/detectMergeConflictsOnPush.ts`     | Remove dispatch+queue logic, call `enqueue()`                                        |
 | `apps/code-agent/src/domain/usecases/submitTaskFeedback.ts`             | Remove dispatch+queue logic, call `enqueue()`                                        |
-| `apps/code-agent/src/domain/usecases/drainTaskQueue.ts`                 | Reconstruct full `DispatchRequest` including new fields                              |
+| `apps/code-agent/src/domain/usecases/drainTaskQueue.ts`                 | Per-resource concurrency guard + reconstruct full `DispatchRequest` with new fields  |
 | `apps/code-agent/src/routes/codeRoutes.ts`                              | Refactor `POST /code/submit` inline dispatch + Add `GET /code/queue` endpoint        |
 | `apps/web/src/App.tsx`                                                  | Add route for `/#/code-tasks/dispatch-queue`                                         |
 | `apps/web/src/services/codeAgentApi.ts`                                 | Add `getDispatchQueue()` API function                                                |
@@ -135,7 +136,7 @@ AFTER (1 path through queue):
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | All test files for the 7 refactored usecases                           | Replace `taskDispatcher.dispatch()` mocks with `taskEnqueueService.enqueue()` mocks |
 | `apps/code-agent/src/routes/__tests__/codeRoutes.test.ts`              | Add tests for `GET /code/queue` endpoint                                            |
-| `apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts` | Update to test new field reconstruction                                             |
+| `apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts` | Update to test concurrency guard + new field reconstruction                         |
 
 ---
 
@@ -956,15 +957,129 @@ git commit -m "refactor(code-agent): submitTaskFeedback uses enqueue service (IN
 
 ---
 
-### Task 1.10: Update drainTaskQueue to Reconstruct Full DispatchRequest
+### Task 1.10: Update drainTaskQueue — Per-Resource Concurrency Guard & New Field Reconstruction
 
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/drainTaskQueue.ts`
 - Modify: `apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts`
+- Modify: `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`
+- Modify: `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`
 
-- [ ] **Step 1: Add new fields to DispatchRequest reconstruction**
+#### Per-Resource Concurrency Guard
 
-In `drainTaskQueue.ts`, find the `taskDispatcher.dispatch({...})` call (around line 165). Add the new fields from the task document:
+When all tasks go through the queue, multiple tasks for the same Linear issue or GitHub PR can be queued simultaneously (e.g., a planning task completes → execution task is enqueued, while a PR comment also triggers a new task for the same issue). Without a guard, `drainTaskQueue` would dispatch them back-to-back, resulting in two agents racing on the same resource.
+
+**Rule:** At most ONE task may be in `dispatched` or `running` status per Linear issue (`linearIssueId`) or GitHub PR (`repository` + `prNumber`). If a queued task's resource already has an active task, skip it and try the next queued task.
+
+- [ ] **Step 1: Add `listQueuedByAge` method to repository**
+
+The current `findOldestQueued()` returns a single task. The concurrency guard needs to try multiple candidates in case the oldest is blocked. Add a new method:
+
+In `codeTaskRepository.ts`:
+```typescript
+  /**
+   * List queued tasks ordered by queuedAt ascending (FIFO), limited to `limit`.
+   * Used by drainTaskQueue to find dispatchable candidates (INT-949).
+   */
+  listQueuedByAge(limit: number): Promise<Result<CodeTask[], RepositoryError>>;
+```
+
+In `firestoreCodeTaskRepository.ts`:
+```typescript
+listQueuedByAge: async (limit: number): Promise<Result<CodeTask[], RepositoryError>> => {
+  try {
+    const snapshot = await collection
+      .where('status', '==', 'queued')
+      .orderBy('queuedAt', 'asc')
+      .limit(limit)
+      .get();
+    return ok(snapshot.docs.map((doc) => toCodeTask(doc as { id: string; data(): Record<string, unknown> })));
+  } catch (error) {
+    return err({ code: 'FIRESTORE_ERROR', message: `Firestore error: ${getErrorMessage(error)}` });
+  }
+},
+```
+
+Also add `listQueuedByAge` to all test fakes (same search as Task 1.12):
+```typescript
+listQueuedByAge: async () => ok([]),
+```
+
+- [ ] **Step 2: Refactor drainTaskQueue to iterate candidates with concurrency check**
+
+Replace the current single-task approach:
+```typescript
+// OLD:
+const findResult = await codeTaskRepo.findOldestQueued();
+const task = findResult.value;
+if (task === null) return ok({ action: 'empty' });
+// ... dispatch task
+```
+
+With a candidate-iteration loop:
+```typescript
+// NEW: Fetch up to 10 queued candidates
+const candidatesResult = await codeTaskRepo.listQueuedByAge(10);
+if (!candidatesResult.ok) {
+  logger.error({ error: candidatesResult.error }, 'Failed to list queued tasks');
+  return err({ code: 'internal_error', message: candidatesResult.error.message });
+}
+
+const candidates = candidatesResult.value;
+if (candidates.length === 0) {
+  logger.info({ queue: 'empty' }, 'No queued tasks to drain');
+  return ok({ action: 'empty' });
+}
+
+// Find first dispatchable candidate (no active task for same resource)
+let task: CodeTask | null = null;
+for (const candidate of candidates) {
+  // Check Linear issue concurrency
+  if (candidate.linearIssueId !== undefined) {
+    const activeResult = await codeTaskRepo.hasActiveTaskForLinearIssue(candidate.linearIssueId);
+    if (activeResult.ok && activeResult.value.hasActive && activeResult.value.taskId !== candidate.id) {
+      logger.info({
+        taskId: candidate.id,
+        linearIssueId: candidate.linearIssueId,
+        activeTaskId: activeResult.value.taskId,
+      }, 'Skipping queued task — active task exists for same Linear issue');
+      continue;
+    }
+  }
+
+  // Check PR concurrency (for PR-scoped tasks like review/pull_request agents)
+  if (candidate.prNumber !== undefined && candidate.repository !== undefined) {
+    const prActiveResult = await codeTaskRepo.findActiveReviewForPR(candidate.repository, candidate.prNumber);
+    if (prActiveResult.ok && prActiveResult.value !== null && prActiveResult.value.id !== candidate.id) {
+      logger.info({
+        taskId: candidate.id,
+        repository: candidate.repository,
+        prNumber: candidate.prNumber,
+        activeTaskId: prActiveResult.value.id,
+      }, 'Skipping queued task — active task exists for same PR');
+      continue;
+    }
+  }
+
+  task = candidate;
+  break;
+}
+
+if (task === null) {
+  logger.info({ candidateCount: candidates.length }, 'All queued tasks blocked by active resources');
+  return ok({ action: 'still_busy' });
+}
+
+// ... rest of drain logic (TTL check, dispatch, etc.) uses `task`
+```
+
+**Important notes:**
+- `hasActiveTaskForLinearIssue` returns tasks with status in `['queued', 'dispatched', 'running']`. We only want to block on `dispatched`/`running`, NOT `queued`. Since the candidate itself is `queued`, compare `activeResult.value.taskId !== candidate.id` to avoid self-blocking. But queued-vs-queued conflicts are fine — both are waiting, only one will be dispatched.
+- The `findActiveReviewForPR` method filters `agentType === 'review'`. For broader PR concurrency (not just reviews), you may want a more general `hasActiveTaskForPR(repository, prNumber)` method. Check if the existing method suffices or a new one is needed.
+
+- [ ] **Step 3: Add new fields to DispatchRequest reconstruction**
+
+In the dispatch call (after the candidate loop), add the new fields from the task document:
 
 ```typescript
 const dispatchResult = await taskDispatcher.dispatch({
@@ -994,22 +1109,34 @@ const dispatchResult = await taskDispatcher.dispatch({
 });
 ```
 
-- [ ] **Step 2: Write tests for new field reconstruction**
+- [ ] **Step 4: Write tests**
 
-Add test cases to `drainTaskQueue.test.ts` that verify:
+Add test cases to `drainTaskQueue.test.ts`:
+
+**Concurrency guard tests:**
+- Task with `linearIssueId` is skipped when `hasActiveTaskForLinearIssue` returns `hasActive: true` for a different task
+- Task with `prNumber` is skipped when `findActiveReviewForPR` returns an active task for the same PR
+- Task without `linearIssueId` or `prNumber` is not subject to concurrency check (dispatches normally)
+- When first candidate is blocked, second candidate is dispatched
+- When all candidates are blocked, returns `still_busy`
+- Task is NOT self-blocked (its own ID doesn't count as a conflict)
+
+**New field reconstruction tests:**
 - A task with `planningPrBranch` set passes it through to the dispatch request
 - A task with `planningPrUrl` set passes it through
 - A task with `trackingCommentId` set passes it through
 - A task without these fields omits them from the dispatch request
 
-- [ ] **Step 3: Run tests and commit**
+- [ ] **Step 5: Run tests and commit**
 
 Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent`
 
 ```bash
 git add apps/code-agent/src/domain/usecases/drainTaskQueue.ts \
-        apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts
-git commit -m "refactor(code-agent): drainTaskQueue reconstructs full dispatch request (INT-949)"
+        apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts \
+        apps/code-agent/src/domain/repositories/codeTaskRepository.ts \
+        apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts
+git commit -m "refactor(code-agent): drainTaskQueue with concurrency guard and full dispatch request (INT-949)"
 ```
 
 ---
