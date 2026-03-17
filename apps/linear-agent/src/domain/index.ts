@@ -44,6 +44,8 @@ export {
   type ValidateIssueError,
 } from './useCases/validateIssue.js';
 export type { LinearWebhookEvent, LinearWebhookPayload, LinearWebhookUpdatedFrom, WebhookAction, LinearCommentWebhookEvent, LinearCommentWebhookPayload } from './webhookTypes.js';
+export type { IssueWebhookData, CommentWebhookData } from './webhookTypeGuards.js';
+export { isIssueWebhookData, isCommentWebhookData } from './webhookTypeGuards.js';
 export { mapWebhookToSyncedIssue, mapApiIssueToSyncedIssue } from './issueMapper.js';
 export {
   syncSingleIssue,
@@ -92,3 +94,9 @@ export {
   type GetIssueDetailRequest,
   type IssueDetailResponse,
 } from './useCases/getIssueDetail.js';
+export {
+  processWebhook,
+  type ProcessWebhookDeps,
+  type WebhookPayload,
+  type ProcessWebhookResult,
+} from './useCases/processWebhook.js';
