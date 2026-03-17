@@ -37,8 +37,8 @@ describe('submitTaskFeedback use case', () => {
     validateIssue: ReturnType<typeof vi.fn>;
     addComment: ReturnType<typeof vi.fn>;
   };
-  let mockTaskDispatcher: {
-    dispatch: ReturnType<typeof vi.fn>;
+  let mockTaskEnqueueService: {
+    enqueue: ReturnType<typeof vi.fn>;
   };
   let mockWhatsAppNotifier: {
     notifyTaskStarted: ReturnType<typeof vi.fn>;
@@ -95,9 +95,9 @@ describe('submitTaskFeedback use case', () => {
       addComment: vi.fn(),
     };
 
-    // Mock task dispatcher
-    mockTaskDispatcher = {
-      dispatch: vi.fn(),
+    // Mock task enqueue service
+    mockTaskEnqueueService = {
+      enqueue: vi.fn(),
     };
 
     // Mock WhatsApp notifier
@@ -162,8 +162,7 @@ describe('submitTaskFeedback use case', () => {
       logger: mockLogger,
       codeTaskRepo: mockCodeTaskRepo as unknown as SubmitTaskFeedbackDeps['codeTaskRepo'],
       linearAgentClient: mockLinearAgentClient as unknown as SubmitTaskFeedbackDeps['linearAgentClient'],
-      taskDispatcher: mockTaskDispatcher as unknown as SubmitTaskFeedbackDeps['taskDispatcher'],
-      whatsappNotifier: mockWhatsAppNotifier as unknown as SubmitTaskFeedbackDeps['whatsappNotifier'],
+      taskEnqueueService: mockTaskEnqueueService as unknown as SubmitTaskFeedbackDeps['taskEnqueueService'],
       metricsClient: mockMetricsClient as unknown as SubmitTaskFeedbackDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitTaskFeedbackDeps['workerSettingsRepo'],
       gitHubPRClient: mockGitHubPRClient as unknown as SubmitTaskFeedbackDeps['gitHubPRClient'],
@@ -339,8 +338,8 @@ describe('submitTaskFeedback use case', () => {
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
+      mockTaskEnqueueService.enqueue.mockResolvedValue(
+        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({
@@ -485,10 +484,8 @@ describe('submitTaskFeedback use case', () => {
       expect(result.ok).toBe(true);
       // createInput must use pull_request, not execution (even though code-task label exists)
       expect(createInputAgentType).toBe('pull_request');
-      // dispatchRequest must also carry pull_request
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ agentType: 'pull_request' })
-      );
+      // enqueue must have been called
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
 
     it('should infer pull_request agentType from pr-comment-auto on legacy tasks', async () => {
@@ -510,7 +507,6 @@ describe('submitTaskFeedback use case', () => {
       );
 
       let createInputAgentType: unknown;
-      let dispatchLabels: unknown;
       mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
         createInputAgentType = input['agentType'];
         return ok({
@@ -520,20 +516,16 @@ describe('submitTaskFeedback use case', () => {
           agentType: 'pull_request',
         });
       });
-      mockTaskDispatcher.dispatch.mockImplementation(async (input: Record<string, unknown>) => {
-        dispatchLabels = input['linearIssueLabels'];
-        return ok({ dispatched: true, workerLocation: 'home-mac' });
-      });
+      mockTaskEnqueueService.enqueue.mockResolvedValue(
+        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
+      );
 
       const deps = createDeps();
       const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
 
       expect(result.ok).toBe(true);
       expect(createInputAgentType).toBe('pull_request');
-      expect(dispatchLabels).toEqual(['bug', 'pr-comment']);
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ agentType: 'pull_request' })
-      );
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
 
     it('should fall back to label-based routing when original task is not pull_request', async () => {
@@ -571,9 +563,7 @@ describe('submitTaskFeedback use case', () => {
       expect(result.ok).toBe(true);
       // createInput must use label-based routing (execution) when no pull_request
       expect(createInputAgentType).toBe('execution');
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ agentType: 'execution' })
-      );
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
 
     it('should include feedback in follow-up prompt', async () => {
@@ -633,14 +623,10 @@ describe('submitTaskFeedback use case', () => {
         feedback,
       });
 
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: 'feedback-task-123',
-          parentTaskId: originalTaskId,
-          linearIssueLabels: ['feature', 'backend'],
-          hasChildren: false,
-        })
-      );
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalledWith({
+        taskId: 'feedback-task-123',
+        userId,
+      });
     });
 
     it('should send WhatsApp notification', async () => {
@@ -651,13 +637,11 @@ describe('submitTaskFeedback use case', () => {
         feedback,
       });
 
-      expect(mockWhatsAppNotifier.notifyTaskStarted).toHaveBeenCalledWith(
+      // WhatsApp notification is handled by the enqueue service internally
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalledWith({
+        taskId: 'feedback-task-123',
         userId,
-        expect.objectContaining({
-          id: 'feedback-task-123',
-          cancelNonce: expect.any(String),
-        })
-      );
+      });
     });
 
     it('should return follow-up task details', async () => {
@@ -673,7 +657,7 @@ describe('submitTaskFeedback use case', () => {
         expect(result.value).toEqual({
           codeTaskId: 'feedback-task-123',
           resourceUrl: '/#/code-tasks/feedback-task-123',
-          workerLocation: 'home-mac',
+          workerLocation: 'queued',
           followUpFor: originalTaskId,
         });
       }
@@ -729,12 +713,7 @@ describe('submitTaskFeedback use case', () => {
 
       expect(result.ok).toBe(true);
       expect(mockLinearAgentClient.validateIssue).not.toHaveBeenCalled();
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          linearIssueLabels: [],
-          hasChildren: false,
-        })
-      );
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
   });
 
@@ -771,8 +750,8 @@ describe('submitTaskFeedback use case', () => {
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
+      mockTaskEnqueueService.enqueue.mockResolvedValue(
+        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({
@@ -796,12 +775,7 @@ describe('submitTaskFeedback use case', () => {
         expect.objectContaining({ linearIssueId }),
         expect.stringContaining('Failed to fetch Linear issue labels')
       );
-      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          linearIssueLabels: [],
-          hasChildren: false,
-        })
-      );
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
     it('should continue if Linear issue update fails', async () => {
       const mockTask = createMockTask();
@@ -845,8 +819,8 @@ describe('submitTaskFeedback use case', () => {
         err({ code: 'LINEAR_ERROR', message: 'Failed to update' })
       );
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
+      mockTaskEnqueueService.enqueue.mockResolvedValue(
+        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({
@@ -917,8 +891,8 @@ describe('submitTaskFeedback use case', () => {
       mockLinearAgentClient.addComment.mockResolvedValue(
         err({ code: 'LINEAR_ERROR', message: 'Failed to comment' })
       );
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
+      mockTaskEnqueueService.enqueue.mockResolvedValue(
+        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({
@@ -987,8 +961,8 @@ describe('submitTaskFeedback use case', () => {
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
+      mockTaskEnqueueService.enqueue.mockResolvedValue(
+        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({
@@ -1057,14 +1031,8 @@ describe('submitTaskFeedback use case', () => {
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        err({ code: 'worker_unavailable', message: 'No workers available' })
-      );
-      mockCodeTaskRepo.update.mockResolvedValue(
-        ok({
-          ...mockTask,
-          id: 'feedback-task-123',
-        })
+      mockTaskEnqueueService.enqueue.mockResolvedValue(
+        err({ code: 'queue_full', message: 'Queue is full' })
       );
 
       const deps = createDeps();
@@ -1078,15 +1046,6 @@ describe('submitTaskFeedback use case', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('internal_error');
       }
-
-      // Verify task was updated with failed status and dispatch error
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
-        'feedback-task-123',
-        expect.objectContaining({
-          status: 'failed',
-          error: expect.objectContaining({ code: 'worker_unavailable' }),
-        })
-      );
     });
   });
 });

@@ -193,6 +193,7 @@ describe('POST /internal/code/process', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
+      taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1, estimatedWaitMinutes: 5 })) } as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -224,6 +225,7 @@ describe('POST /internal/code/process', () => {
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
     });
 
     // Set up worker settings for the test user
@@ -269,14 +271,7 @@ describe('POST /internal/code/process', () => {
   });
 
   it('creates task and returns 200 with resourceUrl for valid request', async () => {
-    // Mock taskDispatcher to succeed
-    vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-      ok: true,
-      value: {
-        dispatched: true,
-        workerLocation: 'mac',
-      },
-    });
+    // taskEnqueueService.enqueue is already mocked via setServices
 
     const response = await app.inject({
       method: 'POST',
@@ -399,13 +394,15 @@ describe('POST /internal/code/process', () => {
     expect(json.error.code).toBe('CONFLICT');
   });
 
-  it('returns 503 when all workers unavailable', async () => {
-    // Mock taskDispatcher to return error
-    const mockDispatch = vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
+  it('returns 500 when task queue is full', async () => {
+    // Mock taskEnqueueService to return queue_full error
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    const mockEnqueue = vi.spyOn(services.taskEnqueueService, 'enqueue').mockResolvedValueOnce({
       ok: false,
       error: {
-        code: 'worker_unavailable',
-        message: 'No workers available',
+        code: 'queue_full',
+        message: 'Task queue is at capacity',
       },
     });
 
@@ -416,8 +413,8 @@ describe('POST /internal/code/process', () => {
         'X-Internal-Auth': 'test-internal-token',
       },
       payload: {
-        actionId: 'action-no-worker',
-        approvalEventId: 'approval-no-worker',
+        actionId: 'action-queue-full',
+        approvalEventId: 'approval-queue-full',
         userId: 'user-123',
         payload: {
           prompt: 'Test prompt',
@@ -425,13 +422,12 @@ describe('POST /internal/code/process', () => {
       },
     });
 
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(500);
     const json = response.json() as { success: boolean; error: { code: string; message: string } };
     expect(json.success).toBe(false);
-    expect(json.error.code).toBe('MISCONFIGURED');
-    expect(json.error.message).toBe('Worker unavailable');
+    expect(json.error.code).toBe('INTERNAL_ERROR');
 
-    mockDispatch.mockRestore();
+    mockEnqueue.mockRestore();
   });
 
   it('returns 409 for duplicate_approval even with different linearIssueId', async () => {

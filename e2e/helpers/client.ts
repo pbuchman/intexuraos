@@ -77,6 +77,7 @@ export interface CodeTask {
   baseBranch: string;
   traceId: string;
   status:
+    | 'queued'
     | 'dispatched'
     | 'running'
     | 'planned'

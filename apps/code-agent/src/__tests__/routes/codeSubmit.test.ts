@@ -34,7 +34,8 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
-import { ok } from '@intexuraos/common-core';
+import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
+import { ok, err } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
@@ -57,6 +58,7 @@ describe('POST /code/submit', () => {
   let logger: Logger;
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
+  let taskEnqueueService: TaskEnqueueService;
   let logChunkRepo: LogChunkRepository;
 
   beforeEach(async () => {
@@ -85,6 +87,10 @@ describe('POST /code/submit', () => {
       logger,
       workerHealthProbe: mockWorkerHealthProbe,
     });
+
+    taskEnqueueService = {
+      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1, estimatedWaitMinutes: 5 })),
+    };
 
     const whatsappNotifier = createWhatsAppNotifier({
       whatsappPublisher: {
@@ -182,6 +188,7 @@ describe('POST /code/submit', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
+      taskEnqueueService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -213,6 +220,7 @@ describe('POST /code/submit', () => {
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
     });
 
     // Set up worker settings for the test user
@@ -287,15 +295,6 @@ describe('POST /code/submit', () => {
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
 
-      // Mock taskDispatcher to succeed
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
-        },
-      });
-
       const response = await app.inject({
         method: 'POST',
         url: '/code/submit',
@@ -313,10 +312,11 @@ describe('POST /code/submit', () => {
       expect(body.data.status).toBe('submitted');
       expect(body.data.codeTaskId).toBeDefined();
 
-      // Verify dispatch was called with default workerType
-      expect(taskDispatcher.dispatch).toHaveBeenCalledWith(
+      // Verify enqueue was called
+      expect(taskEnqueueService.enqueue).toHaveBeenCalledWith(
         expect.objectContaining({
-          workerType: 'auto',
+          taskId: body.data.codeTaskId,
+          userId: 'test-user-id',
         })
       );
     });
@@ -331,10 +331,6 @@ describe('POST /code/submit', () => {
         linearFallback: false,
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: true,
-        value: { dispatched: true, workerLocation: 'home-dev' },
-      });
       const createSpy = vi.spyOn(codeTaskRepo, 'create');
 
       const response = await app.inject({
@@ -380,13 +376,7 @@ describe('POST /code/submit', () => {
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
 
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
-        },
-      });
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
 
       const response = await app.inject({
         method: 'POST',
@@ -402,8 +392,8 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify the worker type was passed through
-      expect(taskDispatcher.dispatch).toHaveBeenCalledWith(
+      // Verify the worker type was passed through to task creation
+      expect(createSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           workerType: 'opus',
         })
@@ -422,14 +412,6 @@ describe('POST /code/submit', () => {
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
 
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
-        },
-      });
-
       const response = await app.inject({
         method: 'POST',
         url: '/code/submit',
@@ -443,13 +425,6 @@ describe('POST /code/submit', () => {
       });
 
       expect(response.statusCode).toBe(200);
-
-      // Verify the linear issue ID was passed through
-      expect(taskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          linearIssueId: 'INT-305',
-        })
-      );
 
       // Verify markInProgress was called with correct userId
       expect(linearService.markInProgress).toHaveBeenCalledWith('test-user-id', 'INT-305');
@@ -608,15 +583,6 @@ describe('POST /code/submit', () => {
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
 
-      // Mock successful dispatch
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
-        },
-      });
-
       const response = await app.inject({
         method: 'POST',
         url: '/code/submit',
@@ -672,15 +638,6 @@ describe('POST /code/submit', () => {
 
       const recordStartSpy = vi.spyOn(services.rateLimitService, 'recordTaskStart');
 
-      // Mock successful dispatch
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
-        },
-      });
-
       const response = await app.inject({
         method: 'POST',
         url: '/code/submit',
@@ -707,15 +664,6 @@ describe('POST /code/submit', () => {
         linearFallback: false,
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValue(undefined);
-
-      // Mock successful dispatch
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
-        },
-      } as const);
 
       // Submit first task
       const response1 = await app.inject({
@@ -750,15 +698,6 @@ describe('POST /code/submit', () => {
     });
 
     it('returns 409 when active task exists for Linear issue', async () => {
-      // Mock successful dispatch for first request
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
-        },
-      });
-
       const linearIssueId = 'INT-305';
 
       // Mock linearIssueService.ensureIssueExists
@@ -807,47 +746,7 @@ describe('POST /code/submit', () => {
   });
 
   describe('error handling', () => {
-    it('returns 503 when worker dispatch fails with non-capacity error', async () => {
-      // Mock linearIssueService to create a new Linear issue
-      const linearService = getServices().linearIssueService;
-      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValue({
-        linearIssueId: 'INT-123',
-        linearIssueTitle: 'Fix the bug',
-        linearIssueLabels: [],
-        hasChildren: false,
-        linearFallback: false,
-      });
-      vi.spyOn(linearService, 'markInProgress').mockResolvedValue(undefined);
-
-      // Mock dispatch to return a non-capacity dispatch failure
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: false,
-        error: { code: 'dispatch_failed', message: 'Network error connecting to worker' },
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'Fix the bug',
-        },
-      });
-
-      expect(response.statusCode).toBe(503);
-      const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        success: false,
-        error: {
-          code: 'MISCONFIGURED',
-          message: 'Failed to dispatch task to worker',
-        },
-      });
-    });
-
-    it('queues task and returns 200 when at_capacity and queue has room', async () => {
+    it('returns 503 when enqueue returns queue_full error', async () => {
       const linearService = getServices().linearIssueService;
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-123',
@@ -856,110 +755,11 @@ describe('POST /code/submit', () => {
         hasChildren: false,
         linearFallback: false,
       });
-      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
 
-      // Mock dispatch to return at_capacity error
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: false,
-        error: { code: 'at_capacity', message: 'All workers are at capacity' },
-      });
-
-      // Mock countQueued to return a count below maxSize (default maxSize is 10)
-      vi.spyOn(codeTaskRepo, 'countQueued').mockResolvedValueOnce({
-        ok: true,
-        value: 2,
-      });
-
-      const whatsappNotifierSpy = vi.spyOn(getServices().whatsappNotifier, 'notifyTaskQueued').mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Fix the bug' },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.status).toBe('submitted');
-      expect(body.data.codeTaskId).toBeDefined();
-
-      // WhatsApp notification should have been sent
-      expect(whatsappNotifierSpy).toHaveBeenCalledOnce();
-      expect(whatsappNotifierSpy).toHaveBeenCalledWith(
-        'test-user-id',
-        expect.objectContaining({ id: body.data.codeTaskId }),
-        2,
-        10
+      // Mock enqueue to return queue_full error
+      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+        err({ code: 'queue_full', message: 'Queue is full (11/10). Please try again later.' })
       );
-    });
-
-    it('queues task when at_capacity and queue count equals maxSize (boundary)', async () => {
-      const linearService = getServices().linearIssueService;
-      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
-        linearIssueId: 'INT-123',
-        linearIssueTitle: 'Fix the bug',
-        linearIssueLabels: [],
-        hasChildren: false,
-        linearFallback: false,
-      });
-      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
-
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: false,
-        error: { code: 'at_capacity', message: 'All workers are at capacity' },
-      });
-
-      // Count exactly equal to maxSize (10) should be treated as "has room" (condition is >)
-      vi.spyOn(codeTaskRepo, 'countQueued').mockResolvedValueOnce({
-        ok: true,
-        value: 10,
-      });
-
-      vi.spyOn(getServices().whatsappNotifier, 'notifyTaskQueued').mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Fix the bug' },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.status).toBe('submitted');
-    });
-
-    it('fails with queue_full when at_capacity and queue is full', async () => {
-      const linearService = getServices().linearIssueService;
-      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
-        linearIssueId: 'INT-123',
-        linearIssueTitle: 'Fix the bug',
-        linearIssueLabels: [],
-        hasChildren: false,
-        linearFallback: false,
-      });
-      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
-
-      // Mock dispatch to return at_capacity error
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: false,
-        error: { code: 'at_capacity', message: 'All workers are at capacity' },
-      });
-
-      // Mock countQueued to return a count exceeding maxSize (default maxSize is 10)
-      vi.spyOn(codeTaskRepo, 'countQueued').mockResolvedValueOnce({
-        ok: true,
-        value: 11,
-      });
 
       const response = await app.inject({
         method: 'POST',
@@ -972,10 +772,9 @@ describe('POST /code/submit', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('QUEUE_FULL');
-      expect(body.error.message).toContain('queue is full');
     });
 
-    it('treats countQueued failure as queue full', async () => {
+    it('returns 500 when enqueue returns internal_error', async () => {
       const linearService = getServices().linearIssueService;
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-123',
@@ -984,19 +783,11 @@ describe('POST /code/submit', () => {
         hasChildren: false,
         linearFallback: false,
       });
-      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
 
-      // Mock dispatch to return at_capacity error
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: false,
-        error: { code: 'at_capacity', message: 'All workers are at capacity' },
-      });
-
-      // Mock countQueued to return an error
-      vi.spyOn(codeTaskRepo, 'countQueued').mockResolvedValueOnce({
-        ok: false,
-        error: { code: 'FIRESTORE_ERROR', message: 'Connection failed' },
-      });
+      // Mock enqueue to return internal error
+      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+        err({ code: 'internal_error', message: 'Firestore connection failed' })
+      );
 
       const response = await app.inject({
         method: 'POST',
@@ -1005,15 +796,15 @@ describe('POST /code/submit', () => {
         payload: { prompt: 'Fix the bug' },
       });
 
-      // Should be treated as queue full and return 503
-      expect(response.statusCode).toBe(503);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('QUEUE_FULL');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('fails normally for non-capacity dispatch errors', async () => {
-      const linearService = getServices().linearIssueService;
+    it('does not call recordTaskStart when enqueue fails', async () => {
+      const services = getServices();
+      const linearService = services.linearIssueService;
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-123',
         linearIssueTitle: 'Fix the bug',
@@ -1021,15 +812,13 @@ describe('POST /code/submit', () => {
         hasChildren: false,
         linearFallback: false,
       });
-      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
 
-      // Mock dispatch to return a non-capacity error
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: false,
-        error: { code: 'dispatch_failed', message: 'Worker configuration invalid' },
-      });
+      const recordStartSpy = vi.spyOn(services.rateLimitService, 'recordTaskStart');
 
-      const countQueuedSpy = vi.spyOn(codeTaskRepo, 'countQueued');
+      // Mock enqueue to return queue_full error
+      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
+        err({ code: 'queue_full', message: 'Queue is full' })
+      );
 
       const response = await app.inject({
         method: 'POST',
@@ -1039,13 +828,7 @@ describe('POST /code/submit', () => {
       });
 
       expect(response.statusCode).toBe(503);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toBe('Failed to dispatch task to worker');
-
-      // countQueued should NOT have been called for non-capacity errors
-      expect(countQueuedSpy).not.toHaveBeenCalled();
+      expect(recordStartSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -1093,15 +876,6 @@ describe('POST /code/submit', () => {
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValue(undefined);
 
-      // Mock successful dispatch for all iterations
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
-        },
-      } as const);
-
       for (const workerType of workerTypes) {
         const response = await app.inject({
           method: 'POST',
@@ -1132,14 +906,7 @@ describe('POST /code/submit', () => {
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
 
-      // Mock successful dispatch
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
-        },
-      });
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
 
       const response = await app.inject({
         method: 'POST',
@@ -1154,10 +921,10 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify the prompt was sanitized in the dispatched request
-      expect(taskDispatcher.dispatch).toHaveBeenCalledWith(
+      // Verify the prompt was sanitized in task creation
+      expect(createSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          prompt: 'Fix the bug',  // Sanitized
+          sanitizedPrompt: 'Fix the bug',  // Sanitized
         })
       );
     });
