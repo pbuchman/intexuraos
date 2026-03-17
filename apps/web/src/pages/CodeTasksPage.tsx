@@ -298,6 +298,13 @@ export function CodeTasksPage(): React.JSX.Element {
     [deleteTask, getAccessToken, refresh],
   );
 
+  const fireAction = useCallback(
+    (taskId: string, action: 'delete' | 'retry' | 'implement'): void => {
+      void handleAction(taskId, action);
+    },
+    [handleAction],
+  );
+
   if (loading && tasks.length === 0) {
     return (
       <Layout>
@@ -362,7 +369,7 @@ export function CodeTasksPage(): React.JSX.Element {
               <IssueGroupRow
                 key={group.linearIssueId ?? group.latestTask.id}
                 group={group}
-                onAction={(taskId, action): void => { void handleAction(taskId, action); }}
+                onAction={fireAction}
                 onOpenLogs={setPreviewTaskId}
                 actioningTaskId={actioningTaskId}
               />

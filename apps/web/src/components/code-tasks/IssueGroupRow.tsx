@@ -186,7 +186,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
 
   const { latestTask, pipeline, aggregateStatus } = group;
   const hasActionable = pipeline.steps.some((s) => s.state === 'actionable');
-  const isActioning = actioningTaskId === latestTask.id || group.tasks.some((t) => t.id === actioningTaskId);
+  const isActioning = actioningTaskId !== null && actioningTaskId !== undefined && (actioningTaskId === latestTask.id || group.tasks.some((t) => t.id === actioningTaskId));
 
   const handleRowClick = (): void => {
     setExpanded((prev) => !prev);
@@ -286,7 +286,6 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   e.stopPropagation();
                   onAction(latestTask.id, 'retry');
                 }}
-                disabled={isActioning}
                 className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300"
               >
                 <RotateCcw className="h-3 w-3" />
