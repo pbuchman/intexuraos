@@ -8,6 +8,7 @@ import {
   getWorkersStatus as getWorkersStatusApi,
   refreshWorkersStatus as refreshWorkersStatusApi,
 } from '@/services/codeAgentApi';
+import { ACTIVE_STATUSES } from '@/utils/issueGroups';
 import type { CodeTask, CodeTaskStatus, SubmitCodeTaskRequest, WorkersStatusResponse } from '@/types';
 
 /**
@@ -119,9 +120,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus[] }): {
   }, [refresh]);
 
   useEffect(() => {
-    const hasActiveTasks = tasks.some(
-      (t) => t.status === 'running' || t.status === 'dispatched' || t.status === 'queued'
-    );
+    const hasActiveTasks = tasks.some((t) => ACTIVE_STATUSES.has(t.status));
     if (!hasActiveTasks) return;
 
     const pollId = setInterval(() => { void refresh(false); }, 30000);
