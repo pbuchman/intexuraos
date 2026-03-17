@@ -23,6 +23,10 @@ export interface TaskEnqueueServiceImplDeps {
   whatsappNotifier: WhatsAppNotifier;
 }
 
+export function createTaskEnqueueService(deps: TaskEnqueueServiceImplDeps): TaskEnqueueService {
+  return new TaskEnqueueServiceImpl(deps);
+}
+
 export class TaskEnqueueServiceImpl implements TaskEnqueueService {
   private readonly logger: Logger;
   private readonly codeTaskRepo: CodeTaskRepository;
@@ -54,7 +58,7 @@ export class TaskEnqueueServiceImpl implements TaskEnqueueService {
 
     const queueCount = countResult.value;
 
-    if (queueCount > config.queue.maxSize) {
+    if (queueCount >= config.queue.maxSize) {
       // Queue is full — mark task as failed
       await this.codeTaskRepo.update(taskId, {
         status: 'failed',

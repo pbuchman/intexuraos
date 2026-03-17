@@ -21,6 +21,9 @@ import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js'
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
 
+/** Max candidates fetched per drain cycle for the per-resource concurrency guard. */
+const DRAIN_CANDIDATE_BATCH_SIZE = 10;
+
 // In-memory guard for single-instance environments
 let isDraining = false;
 
@@ -64,7 +67,7 @@ export async function drainTaskQueue(
   isDraining = true;
   try {
     // Step 1: Fetch queued candidates (INT-949: per-resource concurrency guard)
-    const candidatesResult = await codeTaskRepo.listQueuedByAge(10);
+    const candidatesResult = await codeTaskRepo.listQueuedByAge(DRAIN_CANDIDATE_BATCH_SIZE);
     if (!candidatesResult.ok) {
       logger.error({ error: candidatesResult.error }, 'Failed to list queued tasks');
       return err({ code: 'internal_error', message: candidatesResult.error.message });
