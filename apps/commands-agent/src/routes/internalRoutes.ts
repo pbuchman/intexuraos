@@ -1,26 +1,10 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import type { CommandSourceType } from '../domain/models/command.js';
-
-interface PubSubMessage {
-  message: {
-    data: string;
-    messageId: string;
-    publishTime: string;
-  };
-  subscription: string;
-}
-
-interface CommandEvent {
-  type: 'command.ingest';
-  userId: string;
-  sourceType: CommandSourceType;
-  externalId: string;
-  text: string;
-  summary?: string;
-  timestamp: string;
-}
+import { decodePubSubMessage } from '../infra/pubsub/decoder.js';
+import { type PubSubMessage } from '../infra/pubsub/types.js';
+import { type CommandEvent } from '../domain/events/commandEvent.js';
+import { authenticateInternalPubSub, authenticateInternalScheduler } from './helpers/internalAuth.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post(
@@ -93,50 +77,40 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         bodyPreviewLength: 500,
       });
 
-      // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
-      // Direct service calls use x-internal-auth header
-      // Detection: Pub/Sub requests have from: noreply@google.com header
-      const fromHeader = request.headers.from;
-      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
+      const authResult = authenticateInternalPubSub(request);
 
-      if (isPubSubPush) {
-        // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
+      if (!authResult.authenticated) {
+        request.log.warn(
+          {
+            headers: {
+              'x-internal-auth':
+                request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
+            },
+          },
+          'Internal auth failed for router/commands endpoint'
+        );
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for router/commands endpoint');
+      }
+
+      if (authResult.strategy === 'pubsub-oidc') {
         request.log.info(
           {
-            from: fromHeader,
+            from: request.headers.from,
             userAgent: request.headers['user-agent'],
           },
           'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
         );
-      } else {
-        // Direct service call: validate x-internal-auth header
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn(
-            {
-              reason: authResult.reason,
-              headers: {
-                'x-internal-auth':
-                  request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
-              },
-            },
-            'Internal auth failed for router/commands endpoint'
-          );
-          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for router/commands endpoint');
-        }
       }
 
       const body = request.body as PubSubMessage;
 
-      let eventData: CommandEvent;
-      try {
-        const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-        eventData = JSON.parse(decoded) as CommandEvent;
-      } catch {
+      const decodedResult = decodePubSubMessage<CommandEvent>(body.message.data);
+      if (!decodedResult.ok) {
         request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
         return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
       }
 
+      const eventData = decodedResult.value;
       const parsedType = eventData.type as string;
       if (parsedType !== 'command.ingest') {
         request.log.warn(
@@ -237,20 +211,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         bodyPreviewLength: 200,
       });
 
-      // Cloud Scheduler uses OIDC tokens validated by Cloud Run at infrastructure level.
-      // If request has Authorization header, Cloud Run already validated the OIDC token.
-      // Direct service calls use x-internal-auth header.
-      const authHeader = request.headers.authorization;
-      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+      const authResult = authenticateInternalScheduler(request);
 
-      if (isOidcAuth) {
+      if (!authResult.authenticated) {
+        request.log.warn({ reason: 'auth_failed' }, 'Internal auth failed for retry-pending');
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for retry-pending');
+      }
+
+      if (authResult.strategy === 'scheduler-oidc') {
         request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn({ reason: authResult.reason }, 'Internal auth failed for retry-pending');
-          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for retry-pending');
-        }
       }
 
       const { retryPendingCommandsUseCase } = getServices();
