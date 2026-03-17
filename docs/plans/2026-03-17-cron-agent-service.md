@@ -221,7 +221,9 @@ export function loadConfig(): CronAgentConfig {
 }
 ```
 
-**Important:** The `allowedServices` map uses human-readable service keys (e.g., `"code-agent"`, `"linear-agent"`) rather than raw env var names. This provides an allowlist — only services explicitly mapped can be targeted by schedules. The `action.service` field in `CronSchedule` references these keys.
+**Important:** The `allowedServices` map uses human-readable service keys (e.g., `"code-agent"`, `"linear-agent"`) rather than raw env var names. This provides an allowlist — only services explicitly mapped can be targeted by schedules. The `action.service` field in `CronSchedule` references these keys. The map is built from known `INTEXURAOS_*_URL` env vars with a fixed key-to-env-var mapping (e.g., `"code-agent" → process.env['INTEXURAOS_CODE_AGENT_URL']`).
+
+**Env var three-location rule (CLAUDE.md):** Every new env var must appear in: (1) `apps/cron-agent/src/index.ts` `REQUIRED_ENV` / `PRODUCTION_ONLY_ENV`, (2) `terraform/environments/dev/main.tf` Cloud Run module env block, (3) `ecosystem.config.cjs` env section. The `INTEXURAOS_CRON_AGENT_URL` env var must additionally be added to: (a) `ecosystem.config.cjs` `COMMON_SERVICE_URLS`, (b) `terraform/environments/dev/main.tf` in the web app module env block.
 
 - [ ] **Step 4: Create services.ts with DI container**
 
@@ -332,7 +334,7 @@ git commit -m "feat(cron-agent): add Firestore repositories for schedules and ex
 
 - [ ] **Step 1: Create the prompt for LLM cron parsing**
 
-Read the `PromptBuilder` interface from `@intexuraos/llm-prompts` (`packages/llm-prompts/src/types.ts`) and implement a conforming object. The prompt must have `name: 'parse-schedule'`, `description`, `version: '1.0.0'`, and a `build()` method that returns the system prompt instructing the LLM to convert human-language schedule descriptions into standard cron expressions (5 fields: minute hour day-of-month month day-of-week) and return JSON: `{"cronExpression": "<expression>", "humanSummary": "<readable summary>"}` or `{"error": "<reason>"}` on failure.
+Read the `PromptBuilder` interface from `@intexuraos/llm-prompts` (`packages/llm-prompts/src/types.ts`) and implement a conforming object. The prompt must have `name: 'parse-schedule'`, `description`, `version: '1.0.0'`, and a `build()` method that returns the system prompt instructing the LLM to convert human-language schedule descriptions into standard cron expressions (5 fields: minute hour day-of-month month day-of-week) and return JSON: `{"cronExpression": "<expression>", "humanSummary": "<readable summary>"}` or `{"error": "<reason>"}` on failure. **Prompt versioning (CLAUDE.md rule):** All `PromptBuilder` prompts require a semver `version` field. Bump on edit: major = behavior change, minor = new examples, patch = typos.
 
 - [ ] **Step 2: Write failing tests for parse-schedule use case**
 
@@ -412,7 +414,7 @@ export async function executeSchedule(
 ): Promise<Result<CronExecution, ExecuteError>>
 ```
 
-Resolves the service URL from `schedule.action.service` key via the `allowedServices` map in config. Rejects unknown service keys. Makes HTTP call with `X-Internal-Auth`. Records execution.
+Resolves the service URL from `schedule.action.service` key via the `allowedServices` map in config. Rejects unknown service keys. Makes HTTP call with `X-Internal-Auth` using `@intexuraos/common-http` HTTP client (follow the `createWebAgentClient` pattern from `code-agent`). Records execution.
 
 - [ ] **Step 3: Run tests, verify pass**
 
@@ -423,7 +425,7 @@ Test cases:
 2. One due schedule → executes it, returns `{ executed: 1 }`
 3. Multiple due schedules → executes all
 4. Schedule execution fails → counts as error, continues with next
-5. Skips schedules already running (guard against overlapping ticks via execution check)
+5. Skips schedules already running (guard against overlapping ticks — see mechanism below)
 
 - [ ] **Step 5: Implement handle-tick**
 
@@ -431,10 +433,18 @@ Test cases:
 export async function handleTick(deps: HandleTickDeps): Promise<TickResult> {
   const now = new Date();
   const dueSchedules = await deps.scheduleRepo.findDueSchedules(now);
-  // For each: executeSchedule, then update nextExecutionAt using cron-parser
-  // Return summary counts
+  // For each due schedule:
+  //   1. Check for existing 'running' execution for this scheduleId (query executionRepo)
+  //   2. If running execution exists → skip (count as skipped), prevents overlapping ticks
+  //   3. Otherwise → create execution record with status 'running' FIRST (Firestore transaction)
+  //   4. Execute the schedule action via HTTP
+  //   5. Update execution record with result (success/failure)
+  //   6. Update schedule's nextExecutionAt using cron-parser
+  // Return summary counts { executed, skipped, errors }
 }
 ```
+
+**Overlapping execution guard:** Before executing a schedule, query `executionRepo` for any existing execution with `scheduleId` and `status === 'running'`. If found, skip the schedule for this tick. The execution record is created with `status: 'running'` inside a Firestore transaction before the HTTP call begins, ensuring atomicity. This prevents double-execution when Cloud Scheduler retries or ticks overlap.
 
 - [ ] **Step 6: Run tests, verify pass**
 
