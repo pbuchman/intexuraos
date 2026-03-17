@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, ScrollText, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2 } from 'lucide-react';
 import type { IssueGroup, StepState } from '@/utils/issueGroups';
 import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
@@ -9,6 +9,7 @@ interface IssueGroupRowProps {
   timeTick: number;
   onAction: (taskId: string, action: 'delete' | 'retry' | 'implement') => void;
   onOpenLogs: (taskId: string) => void;
+  actioningTaskId?: string | null;
 }
 
 // --- Left border accent color ---
@@ -41,6 +42,13 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
       </span>
     );
   }
+  if (state === 'queued') {
+    return (
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+        <Clock className="h-3 w-3" />
+      </span>
+    );
+  }
   if (state === 'failed') {
     return (
       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500/20 text-red-500">
@@ -66,6 +74,7 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
 function stepLabel(name: string, state: StepState): string {
   if (state === 'completed') return name;
   if (state === 'running') return `${name}...`;
+  if (state === 'queued') return `${name} (queued)`;
   if (state === 'failed') return `${name} Failed`;
   if (state === 'actionable') return 'Implement';
   return name;
@@ -171,12 +180,14 @@ const IssueGroupRow = memo(function IssueGroupRow({
   group,
   onAction,
   onOpenLogs,
+  actioningTaskId,
 }: IssueGroupRowProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { latestTask, pipeline, aggregateStatus } = group;
   const hasActionable = pipeline.steps.some((s) => s.state === 'actionable');
+  const isActioning = actioningTaskId !== null && actioningTaskId !== undefined && (actioningTaskId === latestTask.id || group.tasks.some((t) => t.id === actioningTaskId));
 
   const handleRowClick = (): void => {
     setExpanded((prev) => !prev);
@@ -244,7 +255,11 @@ const IssueGroupRow = memo(function IssueGroupRow({
 
           {/* Output column */}
           <div className="flex items-center justify-end gap-2">
-            {hasActionable ? (
+            {isActioning ? (
+              <span className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
+                <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+              </span>
+            ) : hasActionable ? (
               <button
                 onClick={(e): void => {
                   e.stopPropagation();
@@ -351,7 +366,11 @@ const IssueGroupRow = memo(function IssueGroupRow({
               >
                 <ScrollText className="h-3.5 w-3.5" />
               </button>
-              {hasActionable ? (
+              {isActioning ? (
+                <span className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+                </span>
+              ) : hasActionable ? (
                 <button
                   onClick={(e): void => {
                     e.stopPropagation();
@@ -456,6 +475,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   }) &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
+  prev.actioningTaskId === next.actioningTaskId &&
   prev.onAction === next.onAction &&
   prev.onOpenLogs === next.onOpenLogs,
 );

@@ -201,6 +201,7 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
 async function mapSingleIssueWithTeam(issue: Issue): Promise<LinearIssueWithTeam> {
   const state = (await issue.state) as IssueState | null | undefined;
   const team = (await issue.team) as { id: string } | null | undefined;
+  const parent = await issue.parent;
 
   // Fetch labels for the issue
   const labelsConnection = await issue.labels();
@@ -229,6 +230,7 @@ async function mapSingleIssueWithTeam(issue: Issue): Promise<LinearIssueWithTeam
     createdAt: issue.createdAt.toISOString(),
     updatedAt: issue.updatedAt.toISOString(),
     completedAt: issue.completedAt?.toISOString() ?? null,
+    parentId: parent?.id ?? null,
     teamId: team?.id ?? '',
     labels,
     childCount,

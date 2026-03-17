@@ -100,6 +100,7 @@ describe('internalRoutes', () => {
       createdAt: now,
       updatedAt: now,
       completedAt: null,
+      parentId: null,
       teamId: 'team-456',
       labels: [],
       childCount: 0,
@@ -212,6 +213,24 @@ describe('internalRoutes', () => {
       expect(body.data.url).toBe('https://linear.app/team/issue/INT-123');
       expect(body.data.labels).toEqual([]);
       expect(body.data.childCount).toBe(0);
+      expect(body.data.parentId).toBeNull();
+    });
+
+    it('returns parentId when issue is a subtask', async () => {
+      seedConnection('user-456');
+      const issue = createIssueWithTeam({ parentId: 'parent-uuid-789' });
+      fakeLinearClient.seedIssueWithTeam(issue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-123/validate?userId=user-456',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.parentId).toBe('parent-uuid-789');
     });
 
     it('handles connection repository errors', async () => {
