@@ -70,7 +70,7 @@ The response includes a `suggestedAction` with `awaitingConfirmation: true`:
 {
   "success": true,
   "data": {
-    "response": "I'll create a todo: 'review the quarterly report'. Say 'yes' to confirm.",
+    "response": "I'll create a todo: 'review the quarterly report'. Shall I create this for you?",
     "sources": [],
     "suggestedAction": {
       "type": "create_command",
