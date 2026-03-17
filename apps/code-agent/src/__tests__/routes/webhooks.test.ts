@@ -244,6 +244,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -275,6 +276,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
     });
 
     app = await buildServer();
@@ -4560,6 +4562,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4591,6 +4594,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
     });
 
     app = await buildServer();
@@ -4916,6 +4920,7 @@ describe('POST /internal/logs', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -4947,6 +4952,7 @@ describe('POST /internal/logs', () => {
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
     });
 
     app = await buildServer();
@@ -5495,6 +5501,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -5526,6 +5533,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
     });
 
     app = await buildServer();

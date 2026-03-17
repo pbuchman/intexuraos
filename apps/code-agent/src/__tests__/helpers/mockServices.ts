@@ -40,6 +40,7 @@ import { createFirestoreEventDecisionRepository } from '../../infra/firestore/ev
 import { createFirestoreDispatchRetryRepository } from '../../infra/firestore/dispatchRetryRepository.js';
 import { createUnifiedEvaluator } from '../../domain/services/unifiedEvaluator.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
+import { TaskEnqueueServiceImpl } from '../../infra/services/taskEnqueueServiceImpl.js';
 
 /**
  * Mock UserServiceClient that returns empty results.
@@ -151,6 +152,13 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     linearIssueService,
     taskDispatcher: createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe }),
+    taskEnqueueService: new TaskEnqueueServiceImpl({
+      logger,
+      codeTaskRepo: createFirestoreCodeTaskRepository({ firestore: fakeFirestore, logger }),
+      whatsappNotifier: createWhatsAppNotifier({
+        whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
+      }),
+    }),
     whatsappNotifier: createWhatsAppNotifier({
       whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher,
     }),
@@ -169,13 +177,27 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
 
   const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
 
+  const codeTaskRepo = createFirestoreCodeTaskRepository({
+    firestore: fakeFirestore,
+    logger,
+  });
+
+  const whatsappNotifier = createWhatsAppNotifier({
+    whatsappPublisher: {
+      publishSendMessage: async () => ok(undefined),
+    } as unknown as WhatsAppSendPublisher,
+  });
+
+  const taskEnqueueService = new TaskEnqueueServiceImpl({
+    logger,
+    codeTaskRepo,
+    whatsappNotifier,
+  });
+
   const container: ServiceContainer = {
     firestore: fakeFirestore,
     logger,
-    codeTaskRepo: createFirestoreCodeTaskRepository({
-      firestore: fakeFirestore,
-      logger,
-    }),
+    codeTaskRepo,
     logChunkRepo: createFirestoreLogChunkRepository({
       firestore: fakeFirestore,
       logger,
@@ -188,11 +210,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
       workerHealthProbe: mockWorkerHealthProbe,
     }),
-    whatsappNotifier: createWhatsAppNotifier({
-      whatsappPublisher: {
-        publishSendMessage: async () => ok(undefined),
-      } as unknown as WhatsAppSendPublisher,
-    }),
+    whatsappNotifier,
     actionsAgentClient,
     linearAgentClient,
     statusMirrorService: createStatusMirrorService({
@@ -261,6 +279,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       automationLog,
     }),
     automationLog,
+    taskEnqueueService,
   };
 
   setServices(container);

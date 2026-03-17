@@ -159,6 +159,7 @@ describe('OpenAPI contract', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
+      taskEnqueueService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -190,6 +191,7 @@ describe('OpenAPI contract', () => {
       dispatchRetryRepo: import('../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../domain/services/taskEnqueueService.js').TaskEnqueueService;
     });
 
     app = await buildServer();

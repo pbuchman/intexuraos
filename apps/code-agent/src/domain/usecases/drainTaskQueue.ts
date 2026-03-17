@@ -9,6 +9,7 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import type { CodeTask } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
@@ -62,17 +63,56 @@ export async function drainTaskQueue(
 
   isDraining = true;
   try {
-    // Step 1: Find oldest queued task
-    const findResult = await codeTaskRepo.findOldestQueued();
-    if (!findResult.ok) {
-      logger.error({ error: findResult.error }, 'Failed to find oldest queued task');
-      return err({ code: 'internal_error', message: findResult.error.message });
+    // Step 1: Fetch queued candidates (INT-949: per-resource concurrency guard)
+    const candidatesResult = await codeTaskRepo.listQueuedByAge(10);
+    if (!candidatesResult.ok) {
+      logger.error({ error: candidatesResult.error }, 'Failed to list queued tasks');
+      return err({ code: 'internal_error', message: candidatesResult.error.message });
     }
 
-    const task = findResult.value;
-    if (task === null) {
+    const candidates = candidatesResult.value;
+    if (candidates.length === 0) {
       logger.info({ queue: 'empty' }, 'No queued tasks to drain');
       return ok({ action: 'empty' });
+    }
+
+    // Find first dispatchable candidate (no active task for same resource)
+    let task: CodeTask | null = null;
+    for (const candidate of candidates) {
+      // Check Linear issue concurrency
+      if (candidate.linearIssueId !== undefined) {
+        const activeResult = await codeTaskRepo.hasActiveTaskForLinearIssue(candidate.linearIssueId);
+        if (activeResult.ok && activeResult.value.hasActive && activeResult.value.taskId !== candidate.id) {
+          logger.info({
+            taskId: candidate.id,
+            linearIssueId: candidate.linearIssueId,
+            activeTaskId: activeResult.value.taskId,
+          }, 'Skipping queued task — active task exists for same Linear issue');
+          continue;
+        }
+      }
+
+      // Check PR concurrency (for PR-scoped tasks like review/pull_request agents)
+      if (candidate.prNumber !== undefined) {
+        const prActiveResult = await codeTaskRepo.findActiveReviewForPR(candidate.repository, candidate.prNumber);
+        if (prActiveResult.ok && prActiveResult.value !== null && prActiveResult.value.id !== candidate.id) {
+          logger.info({
+            taskId: candidate.id,
+            repository: candidate.repository,
+            prNumber: candidate.prNumber,
+            activeTaskId: prActiveResult.value.id,
+          }, 'Skipping queued task — active task exists for same PR');
+          continue;
+        }
+      }
+
+      task = candidate;
+      break;
+    }
+
+    if (task === null) {
+      logger.info({ candidateCount: candidates.length }, 'All queued tasks blocked by active resources');
+      return ok({ action: 'still_busy' });
     }
 
     logger.info({ taskId: task.id }, 'Processing queued task');
@@ -181,6 +221,11 @@ export async function drainTaskQueue(
         continuationPrBranch: task.prBranch,
       }),
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+      // INT-949: Dispatch metadata fields from task document
+      ...(task.planningPrBranch !== undefined && { planningPrBranch: task.planningPrBranch }),
+      ...(task.planningPrUrl !== undefined && { planningPrUrl: task.planningPrUrl }),
+      ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
+      ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
     });
 
     if (!dispatchResult.ok) {
