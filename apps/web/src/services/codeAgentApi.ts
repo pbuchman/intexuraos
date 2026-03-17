@@ -128,7 +128,10 @@ export async function sendTaskMessage(
 }
 
 /**
- * Start execution-agent implementation from a completed planning task
+ * Start execution-agent implementation from a completed planning task.
+ * @param accessToken - Auth0 access token for authorization.
+ * @param taskId - ID of the planning task to implement.
+ * @param workerType - Optional worker type override. When omitted, the server uses its default.
  */
 export async function startImplementation(
   accessToken: string,
@@ -141,7 +144,7 @@ export async function startImplementation(
     accessToken,
     {
       method: 'POST',
-      body: workerType !== undefined ? { workerType } : undefined,
+      body: workerType !== undefined ? { workerType } : {},
     }
   );
 }
