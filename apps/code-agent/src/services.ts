@@ -74,6 +74,8 @@ import { createFirestoreGitHubEventLogEntryRepository } from './infra/firestore/
 import type { AutomationLog } from './domain/ports/automationLog.js';
 import { createGitHubPRAutomationLog } from './infra/services/gitHubPRAutomationLog.js';
 import { createFirestorePRAutomationCommentRepository } from './infra/firestore/prAutomationCommentRepository.js';
+import type { TaskEnqueueService } from './domain/services/taskEnqueueService.js';
+import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImpl.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
@@ -115,6 +117,7 @@ export interface ServiceContainer {
   unifiedEvaluator: UnifiedEvaluator;
   mergeConflictDetector?: MergeConflictDetector;
   automationLog: AutomationLog;
+  taskEnqueueService: TaskEnqueueService;
 }
 
 // Configuration required to initialize services
@@ -375,6 +378,12 @@ export function initServices(config: ServiceConfig): void {
   const gitHubEventLogEntryRepo = createFirestoreGitHubEventLogEntryRepository({ logger });
   const dispatchRetryRepo = createFirestoreDispatchRetryRepository({ logger });
 
+  const taskEnqueueService = createTaskEnqueueService({
+    logger: logger.child({ service: 'task-enqueue' }),
+    codeTaskRepo,
+    whatsappNotifier,
+  });
+
   const mergeConflictDetector = createDetectMergeConflictsOnPush({
     logger,
     gitHubPRClient,
@@ -384,12 +393,12 @@ export function initServices(config: ServiceConfig): void {
     gitHubPREventRepo,
     linearIssueService,
     taskDispatcher,
+    taskEnqueueService,
     logLineRepo,
     workerSettingsRepo,
     statusMirrorService,
     whatsappNotifier,
     allowedBots: ALLOWED_BOTS,
-    serviceUrl: config.serviceUrl,
     orchestratorSecret: config.orchestratorSecret,
   });
 
@@ -400,6 +409,7 @@ export function initServices(config: ServiceConfig): void {
     userLookupService,
     linearIssueService,
     taskDispatcher,
+    taskEnqueueService,
     whatsappNotifier,
     workerSettingsRepo,
     statusMirrorService,
@@ -434,13 +444,12 @@ export function initServices(config: ServiceConfig): void {
         codeTaskRepo,
         userLookupService,
         taskDispatcher,
+        taskEnqueueService,
         linearAgentClient,
         gitHubPRClient,
         userServiceClient,
         workerSettingsRepo,
-        whatsappNotifier,
         orchestratorSecret: config.orchestratorSecret,
-        serviceUrl: config.serviceUrl,
         automationLog,
       },
       request,
@@ -503,6 +512,7 @@ export function initServices(config: ServiceConfig): void {
     unifiedEvaluator,
     mergeConflictDetector,
     automationLog,
+    taskEnqueueService,
   };
 }
 

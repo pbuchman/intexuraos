@@ -7,12 +7,12 @@ import { ok, err, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { UserLookupService } from '../../domain/ports/userLookupService.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
+import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { createReviewTask, type CreateReviewTaskDeps } from '../../domain/usecases/createReviewTask.js';
-import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 
 function createFakeLogger(): Logger {
   return {
@@ -81,17 +81,13 @@ function createFakeWorkerSettingsRepo(): WorkerSettingsRepository {
   } as unknown as WorkerSettingsRepository;
 }
 
-function createFakeWhatsAppNotifier(): WhatsAppNotifier {
+function createFakeTaskEnqueueService(): TaskEnqueueService {
   return {
-    notifyTaskComplete: vi.fn().mockResolvedValue(ok(undefined)),
-    notifyTaskFailed: vi.fn().mockResolvedValue(ok(undefined)),
-    notifyTaskStarted: vi.fn().mockResolvedValue(ok(undefined)),
-    notifyTaskResumed: vi.fn().mockResolvedValue(ok(undefined)),
-    notifyResumedTaskComplete: vi.fn().mockResolvedValue(ok(undefined)),
-    notifyDesignComplete: vi.fn().mockResolvedValue(ok(undefined)),
-    notifyTaskQueued: vi.fn().mockResolvedValue(ok(undefined)),
-    notifyTaskQueueExpired: vi.fn().mockResolvedValue(ok(undefined)),
-    notifyDispatchRetryExhausted: vi.fn().mockResolvedValue(ok(undefined)),
+    enqueue: vi.fn().mockResolvedValue(ok({
+      taskId: 'task-review-1',
+      queuePosition: 1,
+      estimatedWaitMinutes: 5,
+    })),
   };
 }
 
@@ -128,20 +124,19 @@ function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateRe
       })),
       cancelOnWorker: vi.fn().mockResolvedValue(undefined),
     } as unknown as TaskDispatcherService,
+    taskEnqueueService: createFakeTaskEnqueueService(),
     linearAgentClient: createFakeLinearAgentClient(),
     gitHubPRClient: createFakeGitHubPRClient(),
     userServiceClient: createFakeUserServiceClient(),
     workerSettingsRepo: createFakeWorkerSettingsRepo(),
     orchestratorSecret: 'test-secret',
-    serviceUrl: 'https://code-agent.example.com',
-    whatsappNotifier: createFakeWhatsAppNotifier(),
     automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     ...overrides,
   };
 }
 
 describe('createReviewTask', () => {
-  it('creates task with agentType review and dispatches', async () => {
+  it('creates task with agentType review and enqueues', async () => {
     const deps = createFakeDeps();
     const result = await createReviewTask(deps, {
       repository: 'intexuraos/intexuraos',
@@ -153,26 +148,17 @@ describe('createReviewTask', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.status).toBe('created');
+      expect(result.value.status).toBe('queued');
       expect(result.value.taskId).toBe('task-review-1');
     }
 
-    expect(deps.taskDispatcher.dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agentType: 'review',
-        systemPromptHash: 'review-auto',
-        webhookUrl: 'https://code-agent.example.com/internal/webhooks/task-complete',
-      })
-    );
-
-    // Verify task status is updated to dispatched after successful dispatch
-    expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
-      'task-review-1',
-      { status: 'dispatched', dispatchedAt: expect.any(Date) }
-    );
+    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalledWith({
+      taskId: 'task-review-1',
+      userId: 'user-1',
+    });
   });
 
-  it('cancels and replaces active review task, returning created with new task ID', async () => {
+  it('cancels and replaces active review task, returning queued with new task ID', async () => {
     const gitHubPRClient = createFakeGitHubPRClient();
     const taskDispatcher = {
       dispatch: vi.fn().mockResolvedValue(ok({
@@ -181,9 +167,16 @@ describe('createReviewTask', () => {
       })),
       cancelOnWorker: vi.fn().mockResolvedValue(undefined),
     } as unknown as TaskDispatcherService;
+    const taskEnqueueService = createFakeTaskEnqueueService();
+    vi.mocked(taskEnqueueService.enqueue).mockResolvedValue(ok({
+      taskId: 'task-review-new',
+      queuePosition: 1,
+      estimatedWaitMinutes: 5,
+    }));
     const deps = createFakeDeps({
       gitHubPRClient,
       taskDispatcher,
+      taskEnqueueService,
       codeTaskRepo: {
         create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
         findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
@@ -211,9 +204,9 @@ describe('createReviewTask', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    // Always returns created with new task ID
+    // Always returns queued with new task ID
     expect(result.value).toEqual({
-      status: 'created',
+      status: 'queued',
       taskId: 'task-review-new',
       workerType: 'auto',
     });
@@ -245,9 +238,9 @@ describe('createReviewTask', () => {
       expect.objectContaining({ url: 'https://worker.example.com' })
     );
 
-    // Verify new task was created
+    // Verify new task was created and enqueued
     expect(deps.codeTaskRepo.create).toHaveBeenCalled();
-    expect(deps.taskDispatcher.dispatch).toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalled();
   });
 
   it('returns error if local cancel fails and does not create new task', async () => {
@@ -285,7 +278,7 @@ describe('createReviewTask', () => {
 
     // Verify new task was NOT created
     expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
-    expect(deps.taskDispatcher.dispatch).not.toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
   it('creates new review task even if worker cancellation fails', async () => {
@@ -326,12 +319,12 @@ describe('createReviewTask', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.value.status).toBe('created');
+    expect(result.value.status).toBe('queued');
     expect(result.value.taskId).toBe('task-review-new');
 
     // Verify new task was still created
     expect(deps.codeTaskRepo.create).toHaveBeenCalled();
-    expect(deps.taskDispatcher.dispatch).toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalled();
   });
 
   it('creates new review task when worker settings are null', async () => {
@@ -368,12 +361,12 @@ describe('createReviewTask', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.value.status).toBe('created');
+    expect(result.value.status).toBe('queued');
     expect(result.value.taskId).toBe('task-review-new');
 
     // Verify new task was still created
     expect(deps.codeTaskRepo.create).toHaveBeenCalled();
-    expect(deps.taskDispatcher.dispatch).toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalled();
   });
 
   it('creates new review task even if replacement comment fails to post', async () => {
@@ -409,7 +402,7 @@ describe('createReviewTask', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.value.status).toBe('created');
+    expect(result.value.status).toBe('queued');
 
     // Verify new task was still created
     expect(deps.codeTaskRepo.create).toHaveBeenCalled();
@@ -456,7 +449,7 @@ describe('createReviewTask', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.value.status).toBe('created');
+    expect(result.value.status).toBe('queued');
     expect(result.value.taskId).toBe('task-review-new');
 
     // Verify cancel still happened even without posting replacement comment
@@ -543,7 +536,7 @@ describe('createReviewTask', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.value.status).toBe('created');
+    expect(result.value.status).toBe('queued');
     expect(result.value.taskId).toBe('task-review-new');
 
     // Verify replacement was recorded in automation log without worker type
@@ -573,7 +566,7 @@ describe('createReviewTask', () => {
     if (!result.ok) return;
 
     expect(result.value).toEqual({
-      status: 'created',
+      status: 'queued',
       taskId: 'task-review-1',
       workerType: 'qwen',
     });
@@ -594,7 +587,7 @@ describe('createReviewTask', () => {
     if (!result.ok) return;
 
     expect(result.value).toEqual({
-      status: 'created',
+      status: 'queued',
       taskId: 'task-review-1',
       workerType: 'auto',
     });
@@ -671,10 +664,10 @@ describe('createReviewTask', () => {
     expect(result.error.message).toBe('Lookup failed');
     expect(deps.userLookupService.resolveByGitHubUsername).not.toHaveBeenCalled();
     expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
-    expect(deps.taskDispatcher.dispatch).not.toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
-  it('does not include pr-comment label', async () => {
+  it('creates task with agentType review', async () => {
     const deps = createFakeDeps();
     await createReviewTask(deps, {
       repository: 'intexuraos/intexuraos',
@@ -684,11 +677,11 @@ describe('createReviewTask', () => {
       eventId: 'evt-2',
     });
 
-    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
-    expect(dispatchCall).toBeDefined();
-    if (dispatchCall !== undefined) {
-      const dispatchRequest = dispatchCall[0];
-      expect(dispatchRequest.linearIssueLabels).not.toContain('pr-comment');
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+    expect(createCall).toBeDefined();
+    if (createCall !== undefined) {
+      expect(createCall[0].agentType).toBe('review');
+      expect(createCall[0].systemPromptHash).toBe('review-auto');
     }
   });
 
@@ -702,17 +695,16 @@ describe('createReviewTask', () => {
       eventId: 'evt-3',
     });
 
-    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
-    expect(dispatchCall).toBeDefined();
-    if (dispatchCall !== undefined) {
-      const dispatchRequest = dispatchCall[0];
-      expect(dispatchRequest.prompt).toContain('code_quality');
-      expect(dispatchRequest.prompt).toContain('security');
-      expect(dispatchRequest.prompt).toContain('architecture');
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+    expect(createCall).toBeDefined();
+    if (createCall !== undefined) {
+      expect(createCall[0].prompt).toContain('code_quality');
+      expect(createCall[0].prompt).toContain('security');
+      expect(createCall[0].prompt).toContain('architecture');
     }
   });
 
-  it('uses selected worker type for review task creation and dispatch', async () => {
+  it('uses selected worker type for review task creation', async () => {
     const deps = createFakeDeps();
 
     await createReviewTask(deps, {
@@ -730,11 +722,7 @@ describe('createReviewTask', () => {
       expect(createCall[0].workerType).toBe('qwen');
     }
 
-    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
-    expect(dispatchCall).toBeDefined();
-    if (dispatchCall !== undefined) {
-      expect(dispatchCall[0].workerType).toBe('qwen');
-    }
+    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalled();
   });
 
   it('includes review request comment in prompt when provided', async () => {
@@ -750,11 +738,11 @@ describe('createReviewTask', () => {
       eventId: 'evt-review-comment',
     });
 
-    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
-    expect(dispatchCall).toBeDefined();
-    if (dispatchCall !== undefined) {
-      expect(dispatchCall[0].prompt).toContain('Triggered by review request comment');
-      expect(dispatchCall[0].prompt).toContain('@review architecture');
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+    expect(createCall).toBeDefined();
+    if (createCall !== undefined) {
+      expect(createCall[0].prompt).toContain('Triggered by review request comment');
+      expect(createCall[0].prompt).toContain('@review architecture');
     }
   });
 
@@ -844,23 +832,17 @@ describe('createReviewTask', () => {
     if (createCall !== undefined) {
       expect(createCall[0].baseBranch).toBe('development');
     }
-
-    const dispatchCall = vi.mocked(deps.taskDispatcher.dispatch).mock.calls[0];
-    expect(dispatchCall).toBeDefined();
-    if (dispatchCall !== undefined) {
-      expect(dispatchCall[0].baseBranch).toBe('development');
-    }
   });
 
-  it('returns error when dispatch fails', async () => {
+  it('returns error when enqueue fails with internal_error', async () => {
     const gitHubPRClient = createFakeGitHubPRClient();
     const deps = createFakeDeps({
       gitHubPRClient,
-      taskDispatcher: {
-        dispatch: vi.fn().mockResolvedValue(
-          err({ code: 'QUEUE_FULL' as const, message: 'Queue full' })
+      taskEnqueueService: {
+        enqueue: vi.fn().mockResolvedValue(
+          err({ code: 'internal_error' as const, message: 'Enqueue failed' })
         ),
-      } as unknown as TaskDispatcherService,
+      } as unknown as TaskEnqueueService,
     });
 
     const result = await createReviewTask(deps, {
@@ -873,22 +855,11 @@ describe('createReviewTask', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe('dispatch_failed');
+      expect(result.error.code).toBe('internal_error');
       expect(result.error.taskId).toBe('task-review-1');
     }
 
-    // Verify task is marked as failed with error details
-    expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
-      'task-review-1',
-      {
-        status: 'failed',
-        error: { code: 'dispatch_failed', message: 'Queue full' },
-      }
-    );
-
-    // Verify NO separate dispatch failure comment is posted
-    // (error info is now surfaced via the triage decision comment in unifiedEvaluator)
-    expect(gitHubPRClient.postPRComment).not.toHaveBeenCalled();
+    // TaskEnqueueService handles task failure marking — usecase only returns error
   });
 
   describe('PR notification after dispatch', () => {
@@ -1443,65 +1414,17 @@ describe('createReviewTask', () => {
     });
   });
 
-  describe('queue support', () => {
-    it('queues task when dispatch returns at_capacity and queue has room', async () => {
-      const whatsappNotifier = createFakeWhatsAppNotifier();
+  describe('enqueue error handling', () => {
+    it('returns queue_full when enqueue returns queue_full', async () => {
       const deps = createFakeDeps({
-        taskDispatcher: {
-          dispatch: vi.fn().mockResolvedValue(err({ code: 'at_capacity', message: 'All workers busy' })),
-          cancelOnWorker: vi.fn().mockResolvedValue(undefined),
-        } as unknown as TaskDispatcherService,
-        codeTaskRepo: {
-          create: vi.fn().mockResolvedValue(ok({ id: 'task-queued-1' })),
-          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
-          findByPR: vi.fn().mockResolvedValue(ok(null)),
-          update: vi.fn().mockResolvedValue(ok(undefined)),
-          countQueued: vi.fn().mockResolvedValue(ok(2)),
-        } as unknown as CodeTaskRepository,
-        whatsappNotifier,
-      });
-
-      const result = await createReviewTask(deps, {
-        repository: 'intexuraos/intexuraos',
-        prNumber: 50,
-        senderLogin: 'dev-user',
-        reviewTypes: ['code_quality'],
-        eventId: 'evt-queue-1',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.status).toBe('queued');
-        expect(result.value.taskId).toBe('task-queued-1');
-      }
-
-      // Should set queuedAt, NOT status: 'failed'
-      expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
-        'task-queued-1',
-        { queuedAt: expect.any(Date) },
-      );
-
-      // Should notify user
-      expect(whatsappNotifier.notifyTaskQueued).toHaveBeenCalledWith(
-        'user-1',
-        { id: 'task-queued-1' },
-        2,
-        expect.any(Number),
-      );
-    });
-
-    it('fails with queue_full when dispatch returns at_capacity and queue is full', async () => {
-      const deps = createFakeDeps({
-        taskDispatcher: {
-          dispatch: vi.fn().mockResolvedValue(err({ code: 'at_capacity', message: 'All workers busy' })),
-          cancelOnWorker: vi.fn().mockResolvedValue(undefined),
-        } as unknown as TaskDispatcherService,
+        taskEnqueueService: {
+          enqueue: vi.fn().mockResolvedValue(err({ code: 'queue_full', message: 'Queue is full' })),
+        } as unknown as TaskEnqueueService,
         codeTaskRepo: {
           create: vi.fn().mockResolvedValue(ok({ id: 'task-full-1' })),
           findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockResolvedValue(ok(null)),
           update: vi.fn().mockResolvedValue(ok(undefined)),
-          countQueued: vi.fn().mockResolvedValue(ok(11)),
         } as unknown as CodeTaskRepository,
       });
 
@@ -1519,60 +1442,14 @@ describe('createReviewTask', () => {
         expect(result.error.taskId).toBe('task-full-1');
       }
 
-      // Should mark task as failed with queue_full error
-      expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
-        'task-full-1',
-        expect.objectContaining({
-          status: 'failed',
-          error: expect.objectContaining({ code: 'queue_full' }),
-        }),
-      );
+      // TaskEnqueueService handles task failure marking — usecase only returns error
     });
 
-    it('treats queue as full when countQueued fails', async () => {
+    it('returns internal_error when enqueue returns internal_error', async () => {
       const deps = createFakeDeps({
-        taskDispatcher: {
-          dispatch: vi.fn().mockResolvedValue(err({ code: 'at_capacity', message: 'All workers busy' })),
-          cancelOnWorker: vi.fn().mockResolvedValue(undefined),
-        } as unknown as TaskDispatcherService,
-        codeTaskRepo: {
-          create: vi.fn().mockResolvedValue(ok({ id: 'task-count-fail-1' })),
-          findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
-          findByPR: vi.fn().mockResolvedValue(ok(null)),
-          update: vi.fn().mockResolvedValue(ok(undefined)),
-          countQueued: vi.fn().mockResolvedValue(err({ code: 'internal_error', message: 'Firestore unavailable' })),
-        } as unknown as CodeTaskRepository,
-      });
-
-      const result = await createReviewTask(deps, {
-        repository: 'intexuraos/intexuraos',
-        prNumber: 53,
-        senderLogin: 'dev-user',
-        reviewTypes: ['code_quality'],
-        eventId: 'evt-count-fail-1',
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('queue_full');
-      }
-
-      // Should mark task as failed
-      expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
-        'task-count-fail-1',
-        expect.objectContaining({
-          status: 'failed',
-          error: expect.objectContaining({ code: 'queue_full' }),
-        }),
-      );
-    });
-
-    it('fails immediately on non-capacity dispatch errors', async () => {
-      const deps = createFakeDeps({
-        taskDispatcher: {
-          dispatch: vi.fn().mockResolvedValue(err({ code: 'network_error', message: 'Connection refused' })),
-          cancelOnWorker: vi.fn().mockResolvedValue(undefined),
-        } as unknown as TaskDispatcherService,
+        taskEnqueueService: {
+          enqueue: vi.fn().mockResolvedValue(err({ code: 'internal_error', message: 'Something went wrong' })),
+        } as unknown as TaskEnqueueService,
       });
 
       const result = await createReviewTask(deps, {
@@ -1580,23 +1457,16 @@ describe('createReviewTask', () => {
         prNumber: 52,
         senderLogin: 'dev-user',
         reviewTypes: ['code_quality'],
-        eventId: 'evt-net-1',
+        eventId: 'evt-internal-1',
       });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('dispatch_failed');
-        expect(result.error.message).toBe('Connection refused');
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Something went wrong');
       }
 
-      // Should mark task as failed with dispatch_failed
-      expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
-        'task-review-1',
-        expect.objectContaining({
-          status: 'failed',
-          error: expect.objectContaining({ code: 'dispatch_failed' }),
-        }),
-      );
+      // TaskEnqueueService handles task failure marking — usecase only returns error
     });
   });
 });

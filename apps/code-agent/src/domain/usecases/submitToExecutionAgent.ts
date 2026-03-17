@@ -9,16 +9,14 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
-import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../domain/services/taskDispatcher.js';
-import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { hasCodeTaskLabel, hasUnclearLabel } from '../../domain/utils/labelUtils.js';
 import { randomUUID } from 'node:crypto';
-import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
-import { loadConfig } from '../../config.js';
+import { generateWebhookSecret } from '../utils/secrets.js';
 
 export const EXECUTION_AGENT_PROMPT =
   'Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.';
@@ -73,12 +71,10 @@ export interface SubmitToExecutionAgentDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   linearAgentClient: LinearAgentClient;
-  taskDispatcher: TaskDispatcherService;
-  whatsappNotifier: WhatsAppNotifier;
+  taskEnqueueService: TaskEnqueueService;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
-  serviceUrl: string;
 }
 
 /**
@@ -103,7 +99,7 @@ export async function submitToExecutionAgent(
   deps: SubmitToExecutionAgentDeps,
   request: SubmitToExecutionAgentRequest
 ): Promise<Result<SubmitToExecutionAgentResult, SubmitToExecutionAgentError>> {
-  const { logger, codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, linearAgentClient, taskEnqueueService, workerSettingsRepo } = deps;
   const { originalTaskId, userId, workerType } = request;
 
   // Step 1: Fetch original task
@@ -198,16 +194,6 @@ export async function submitToExecutionAgent(
     });
   }
 
-  const workerCredentials: DispatchWorkerCredentials = {
-    workers: enabledWorkers.map((w) => ({
-      name: w.name,
-      url: w.url,
-      cfAccessClientId: w.cfAccessClientId,
-      cfAccessClientSecret: w.cfAccessClientSecret,
-      dispatchSigningSecret: w.dispatchSigningSecret,
-    })),
-  };
-
   // Step 7: Fetch fresh labels from Linear and validate
   const validateResult = await linearAgentClient.validateIssue({
     userId,
@@ -226,7 +212,6 @@ export async function submitToExecutionAgent(
   }
 
   const freshLabels = validateResult.value.labels;
-  const hasChildrenForDispatch = validateResult.value.childCount > 0;
 
   // Step 8: Check labels
   if (hasUnclearLabel(freshLabels)) {
@@ -269,9 +254,7 @@ export async function submitToExecutionAgent(
     sanitizedPrompt: EXECUTION_AGENT_PROMPT,
     systemPromptHash: originalTask.systemPromptHash,
     workerType: effectiveWorkerType,
-    /* v8 ignore start -- ts-type: optional chaining with null fallback creates type narrowing branch @preserve */
-    workerLocation: enabledWorkers[0]?.name ?? 'unknown',
-    /* v8 ignore stop @preserve */
+    workerLocation: 'queued' as const,
     repository: originalTask.repository,
     baseBranch: originalTask.baseBranch,
     traceId: `execution-${originalTask.traceId}`,
@@ -280,6 +263,8 @@ export async function submitToExecutionAgent(
     followUpReason: 'execution_implement' as const,
     agentType: 'execution' as const,
     linearIssueId,
+    ...(originalTask.result?.branch !== undefined && { planningPrBranch: originalTask.result.branch }),
+    ...(originalTask.result?.planning_pr_url !== undefined && { planningPrUrl: originalTask.result.planning_pr_url }),
   };
 
   const createResult = await codeTaskRepo.create(createInput);
@@ -340,190 +325,31 @@ export async function submitToExecutionAgent(
     );
   }
 
-  // Step 12: Build dispatch request and dispatch
-  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
-
-  const dispatchRequest = {
+  // Step 12: Enqueue for dispatch
+  const enqueueResult = await taskEnqueueService.enqueue({
     taskId: executionTaskId,
-    linearIssueId,
-    linearIssueLabels: freshLabels,
-    hasChildren: hasChildrenForDispatch,
-    prompt: executionTask.sanitizedPrompt,
-    systemPromptHash: executionTask.systemPromptHash,
-    repository: executionTask.repository,
-    baseBranch: executionTask.baseBranch,
-    workerType: executionTask.workerType,
-    webhookUrl,
-    /* v8 ignore start -- ts-type: nullish coalescing on webhookSecret which is always set at task creation @preserve */
-    webhookSecret: executionTask.webhookSecret ?? '',
-    /* v8 ignore stop @preserve */
-    traceId: executionTask.traceId,
-    workerCredentials,
-    /* v8 ignore start -- ts-type: nullish coalescing on narrowed union field @preserve */
-    agentType: executionTask.agentType ?? 'execution',
-    /* v8 ignore stop @preserve */
-    ...(originalTask.result?.branch !== undefined && { planningPrBranch: originalTask.result.branch }),
-    ...(originalTask.result?.planning_pr_url !== undefined && { planningPrUrl: originalTask.result.planning_pr_url }),
-  };
+    userId,
+  });
 
-  const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
-
-  if (!dispatchResult.ok) {
-    const dispatchError = dispatchResult.error;
-
-    // Step 13a: If at_capacity, try to queue instead of failing
-    if (dispatchError.code === 'at_capacity') {
-      const config = loadConfig();
-      const countResult = await codeTaskRepo.countQueued();
-
-      if (!countResult.ok) {
-        logger.error({ error: countResult.error }, 'Failed to count queued tasks, treating as queue full');
-      }
-
-      const queuedCount = countResult.ok ? countResult.value : config.queue.maxSize + 1;
-
-      if (queuedCount > config.queue.maxSize) {
-        // Queue is full — rollback and fail
-        logger.warn(
-          { taskId: executionTaskId, queuedCount, maxSize: config.queue.maxSize },
-          'Task queue full, cannot enqueue execution task'
-        );
-
-        const lockRollbackResult = await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
-        if (!lockRollbackResult.ok) {
-          logger.error(
-            { taskId: originalTask.id, executionTaskId, error: lockRollbackResult.error },
-            'Failed to rollback implementationTaskId after queue full'
-          );
-        }
-
-        const failMarkResult = await codeTaskRepo.update(executionTaskId, {
-          status: 'failed',
-          error: {
-            code: 'queue_full',
-            message: 'All workers at capacity and queue is full',
-          },
-        });
-        if (!failMarkResult.ok) {
-          logger.error(
-            { executionTaskId, error: failMarkResult.error },
-            'Failed to mark execution task as failed after queue full'
-          );
-        }
-
-        return err({
-          code: 'queue_full',
-          message: 'All workers are at capacity and the queue is full. Please try again later.',
-        });
-      }
-
-      // Queue has room — task is already in 'queued' status from creation
-      const position = queuedCount;
-      const estimatedWaitMinutes = position * 5;
-
-      logger.info(
-        { taskId: executionTaskId, position, estimatedWaitMinutes },
-        'Enqueueing execution task — workers at capacity'
-      );
-
-      const queueResult = await codeTaskRepo.update(executionTaskId, {
-        queuedAt: new Date(),
-      });
-
-      if (!queueResult.ok) {
-        logger.error(
-          { executionTaskId, error: queueResult.error },
-          'Failed to update execution task with queuedAt timestamp'
-        );
-      }
-
-      const queuedTask = queueResult.ok ? queueResult.value : executionTask;
-
-      // Best-effort WhatsApp notification
-      const notifyResult = await whatsappNotifier.notifyTaskQueued(userId, queuedTask, position, estimatedWaitMinutes);
-      if (!notifyResult.ok) {
-        logger.warn(
-          { taskId: executionTaskId, error: notifyResult.error },
-          'Failed to send task queued notification'
-        );
-      }
-
-      return ok({
-        codeTaskId: executionTaskId,
-        resourceUrl: `/#/code-tasks/${executionTaskId}`,
-        workerLocation: 'queued' as WorkerLocation,
-        implementationOf: originalTask.id,
-      });
+  if (!enqueueResult.ok) {
+    // Rollback implementationTaskId on planning task
+    await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
+    if (enqueueResult.error.code === 'queue_full') {
+      return err({ code: 'queue_full', message: enqueueResult.error.message });
     }
-
-    // Step 13b: Non-at_capacity errors — rollback and fail
-    logger.error({ taskId: executionTaskId, error: dispatchError }, 'Failed to dispatch Execution Agent task, rolling back');
-
-    // Roll back optimistic lock on planning task
-    const lockRollbackResult = await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
-    if (!lockRollbackResult.ok) {
-      logger.error(
-        { taskId: originalTask.id, executionTaskId, error: lockRollbackResult.error },
-        'Failed to rollback implementationTaskId after dispatch failure'
-      );
-    }
-
-    // Mark Execution Agent task as failed
-    const failMarkResult = await codeTaskRepo.update(executionTaskId, {
-      status: 'failed',
-      error: {
-        code: dispatchError.code,
-        message: dispatchError.message,
-      },
-    });
-    if (!failMarkResult.ok) {
-      logger.error(
-        { executionTaskId, error: failMarkResult.error },
-        'Failed to mark Execution Agent task as failed after dispatch failure'
-      );
-    }
-
-    return err({
-      code: 'internal_error',
-      message: dispatchError.message,
-    });
+    return err({ code: 'internal_error', message: enqueueResult.error.message });
   }
 
   logger.info(
-    { taskId: executionTaskId, workerLocation: dispatchResult.value.workerLocation },
-    'Execution Agent task dispatched'
+    { taskId: executionTaskId, queuePosition: enqueueResult.value.queuePosition },
+    'Execution Agent task enqueued'
   );
 
-  // Step 14: Generate cancel nonce and send WhatsApp notification
-  const cancelNonce = generateCancelNonce();
-  const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
-
-  const updateResult = await codeTaskRepo.update(executionTaskId, {
-    status: 'dispatched',
-    dispatchedAt: new Date(),
-    workerLocation: dispatchResult.value.workerLocation,
-    cancelNonce,
-    cancelNonceExpiresAt,
-  });
-
-  if (updateResult.ok) {
-    const updatedTask = updateResult.value;
-    const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
-    if (!notifyResult.ok) {
-      logger.warn(
-        { taskId: executionTaskId, error: notifyResult.error },
-        'Failed to send task started notification for Execution Agent'
-      );
-    }
-  } else {
-    logger.warn({ taskId: executionTaskId, error: updateResult.error }, 'Failed to update Execution Agent task with cancel nonce');
-  }
-
-  // Step 15: Return success
+  // Step 13: Return success
   return ok({
     codeTaskId: executionTaskId,
     resourceUrl: `/#/code-tasks/${executionTaskId}`,
-    workerLocation: dispatchResult.value.workerLocation,
+    workerLocation: 'queued' as WorkerLocation,
     implementationOf: originalTask.id,
   });
 }

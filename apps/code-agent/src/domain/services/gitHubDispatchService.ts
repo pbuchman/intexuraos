@@ -6,6 +6,7 @@ import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { LinearIssueService } from './linearIssueService.js';
 import type { TaskDispatcherService } from './taskDispatcher.js';
+import type { TaskEnqueueService } from './taskEnqueueService.js';
 import type { WhatsAppNotifier } from './whatsappNotifier.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { StatusMirrorService } from './statusMirrorService.js';
@@ -46,6 +47,7 @@ export interface WebhookDispatchServiceDeps {
   userLookupService?: UserLookupService;
   linearIssueService: LinearIssueService;
   taskDispatcher: TaskDispatcherService;
+  taskEnqueueService: TaskEnqueueService;
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
   statusMirrorService: StatusMirrorService;
@@ -162,10 +164,9 @@ async function handleNewTask(
       codeTaskRepo: deps.codeTaskRepo,
       userLookupService: deps.userLookupService,
       linearIssueService: deps.linearIssueService,
-      taskDispatcher: deps.taskDispatcher,
+      taskEnqueueService: deps.taskEnqueueService,
       whatsappNotifier: deps.whatsappNotifier,
       orchestratorSecret: deps.orchestratorSecret,
-      serviceUrl: deps.serviceUrl,
       gitHubPRClient: deps.gitHubPRClient,
       userServiceClient: deps.userServiceClient,
       firestore: deps.firestore,

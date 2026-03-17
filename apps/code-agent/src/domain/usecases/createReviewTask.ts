@@ -15,6 +15,7 @@ import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTa
 import type { WorkerType } from '../models/codeTask.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
+import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
@@ -22,8 +23,6 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 
 import { createHmac } from 'node:crypto';
 import type { AutomationLog } from '../ports/automationLog.js';
-import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
-import { loadConfig } from '../../config.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
 
 export interface CreateReviewTaskRequest {
@@ -52,13 +51,12 @@ export interface CreateReviewTaskDeps {
   codeTaskRepo: CodeTaskRepository;
   userLookupService: UserLookupService;
   taskDispatcher: TaskDispatcherService;
+  taskEnqueueService: TaskEnqueueService;
   linearAgentClient?: LinearAgentClient;
   gitHubPRClient: GitHubPRClient;
   userServiceClient: UserServiceClient;
   workerSettingsRepo: WorkerSettingsRepository;
-  whatsappNotifier: WhatsAppNotifier;
   orchestratorSecret: string;
-  serviceUrl: string;
   automationLog: AutomationLog;
 }
 
@@ -169,7 +167,7 @@ export async function createReviewTask(
   deps: CreateReviewTaskDeps,
   request: CreateReviewTaskRequest
 ): Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>> {
-  const { logger, codeTaskRepo, userLookupService, taskDispatcher, linearAgentClient, orchestratorSecret, serviceUrl, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, userLookupService, taskDispatcher, taskEnqueueService, linearAgentClient, orchestratorSecret, workerSettingsRepo } = deps;
   const { repository, prNumber, senderLogin, eventId } = request;
 
   logger.info(
@@ -258,7 +256,7 @@ export async function createReviewTask(
     });
   }
 
-  const { userId, worker } = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
+  const { userId } = userResult.value; // @allow-result-access -- narrowed by !userResult.ok
 
   // Resolution chain: explicit request > user setting > 'auto'
   let effectiveWorkerType: WorkerType = requestedWorkerType;
@@ -311,7 +309,7 @@ export async function createReviewTask(
     sanitizedPrompt: prompt,
     systemPromptHash: 'review-auto',
     workerType: effectiveWorkerType,
-    workerLocation: worker.name,
+    workerLocation: 'queued',
     repository,
     baseBranch,
     traceId: eventId,
@@ -329,81 +327,26 @@ export async function createReviewTask(
 
   const task = createResult.value; // @allow-result-access -- narrowed by !createResult.ok
 
-  // Dispatch
-  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
-
-  const dispatchResult = await taskDispatcher.dispatch({
+  // Enqueue for dispatch
+  const enqueueResult = await taskEnqueueService.enqueue({
     taskId: task.id,
-    linearIssueLabels: ['code-task'],
-    hasChildren: false,
-    prompt,
-    systemPromptHash: 'review-auto',
-    repository,
-    baseBranch,
-    workerType: effectiveWorkerType,
-    webhookUrl,
-    webhookSecret,
-    traceId: eventId,
-    agentType: 'review',
-    workerCredentials: {
-      workers: [{
-        name: worker.name,
-        url: worker.url,
-        cfAccessClientId: worker.cfAccessClientId,
-        cfAccessClientSecret: worker.cfAccessClientSecret,
-        dispatchSigningSecret: worker.dispatchSigningSecret,
-      }],
-    },
+    userId,
   });
 
-  if (!dispatchResult.ok) {
-    const dispatchError = dispatchResult.error;
+  if (!enqueueResult.ok) {
+    const enqueueError = enqueueResult.error;
+    logger.error({ taskId: task.id, error: enqueueError }, 'Failed to enqueue review task');
 
-    // Queue on at_capacity (matching processCodeAction pattern)
-    if (dispatchError.code === 'at_capacity') {
-      const config = loadConfig();
-      const queueCountResult = await codeTaskRepo.countQueued();
-      if (!queueCountResult.ok) {
-        logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
-      }
-      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
-
-      if (queueCount > config.queue.maxSize) {
-        await codeTaskRepo.update(task.id, {
-          status: 'failed',
-          error: {
-            code: 'queue_full',
-            message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
-          },
-        });
-        return err({ code: 'queue_full', message: 'All workers are busy and the queue is full.', taskId: task.id });
-      }
-
-      // Task already in 'queued' status from creation — just set queuedAt
-      await codeTaskRepo.update(task.id, { queuedAt: new Date() });
-
-      const queuePosition = queueCount;
-      const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
-      await deps.whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
-
-      logger.info({ taskId: task.id, queuePosition }, 'Review task queued due to worker capacity');
-      return ok({ status: 'queued', taskId: task.id, workerType: effectiveWorkerType });
+    // TaskEnqueueService already marks the task as failed for queue_full
+    if (enqueueError.code === 'queue_full') {
+      return err({ code: 'queue_full', message: enqueueError.message, taskId: task.id });
     }
-
-    // Non-capacity errors — fail immediately (existing behavior)
-    logger.error({ taskId: task.id, error: dispatchError }, 'Failed to dispatch review task');
-    await codeTaskRepo.update(task.id, {
-      status: 'failed',
-      error: { code: 'dispatch_failed', message: dispatchError.message },
-    });
-    return err({ code: 'dispatch_failed', message: dispatchError.message, taskId: task.id });
+    return err({ code: 'internal_error', message: enqueueError.message, taskId: task.id });
   }
 
-  await codeTaskRepo.update(task.id, { status: 'dispatched', dispatchedAt: new Date() });
-
   logger.info(
-    { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner },
-    'Review task created and dispatched'
+    { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner, queuePosition: enqueueResult.value.queuePosition },
+    'Review task created and enqueued'
   );
 
   // Best-effort: update PR title with Linear issue tag
@@ -429,6 +372,6 @@ export async function createReviewTask(
     logger.warn({ error, taskId: task.id }, 'Failed to record automation log for review task dispatch');
   });
 
-  return ok({ status: 'created', taskId: task.id, workerType: effectiveWorkerType });
+  return ok({ status: 'queued' as const, taskId: task.id, workerType: effectiveWorkerType });
 }
 
