@@ -23,9 +23,10 @@ export interface IssueGroup {
   pipeline: PipelineState;
   latestTask: CodeTask;
   aggregateStatus: GroupStatus;
+  mostRecentDispatchedAt?: string;
 }
 
-export type SortOption = 'linear-id' | 'pr-number' | 'finished-time' | 'started-time' | 'created-time';
+export type SortOption = 'linear-id' | 'pr-number' | 'started-time' | 'created-time';
 
 const PR_URL_REGEX = /\/pull\/(\d+)/;
 const LINEAR_ID_REGEX = /\w+-(\d+)/;
@@ -231,23 +232,32 @@ export function groupByLinearIssue(tasks: CodeTask[]): IssueGroup[] {
       continue;
     }
 
-    // linearIssue from any task in group that has it
+    // Derive linearIssue and mostRecentDispatchedAt in a single pass
     let linearIssue: CodeTask['linearIssue'] | undefined;
+    let mostRecentDispatchedAt: string | undefined;
     for (const task of group.tasks) {
-      if (task.linearIssue !== undefined) {
+      if (linearIssue === undefined && task.linearIssue !== undefined) {
         linearIssue = task.linearIssue;
-        break;
+      }
+      if (task.dispatchedAt !== undefined) {
+        if (mostRecentDispatchedAt === undefined || task.dispatchedAt > mostRecentDispatchedAt) {
+          mostRecentDispatchedAt = task.dispatchedAt;
+        }
       }
     }
 
-    groups.push({
+    const issueGroup: IssueGroup = {
       linearIssueId: group.linearIssueId,
       linearIssue,
       tasks: group.tasks,
       pipeline,
       latestTask,
       aggregateStatus,
-    });
+    };
+    if (mostRecentDispatchedAt !== undefined) {
+      issueGroup.mostRecentDispatchedAt = mostRecentDispatchedAt;
+    }
+    groups.push(issueGroup);
   }
 
   // Step 3: Sort groups by Linear issue number desc, then by latestTask.updatedAt desc
@@ -312,22 +322,6 @@ export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): Issue
     return sorted;
   }
 
-  // finished-time
-  if (sortBy === 'finished-time') {
-    sorted.sort((a, b) => {
-      const aDone = a.aggregateStatus === 'done';
-      const bDone = b.aggregateStatus === 'done';
-
-      // Done groups sort first, by updatedAt desc
-      if (aDone && bDone) return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
-      if (aDone) return -1;
-      if (bDone) return 1;
-      // Non-done: fall back to updatedAt desc
-      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
-    });
-    return sorted;
-  }
-
   // created-time: sort by createdAt desc
   if (sortBy === 'created-time') {
     sorted.sort((a, b) => b.latestTask.createdAt.localeCompare(a.latestTask.createdAt));
@@ -338,8 +332,8 @@ export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): Issue
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (sortBy === 'started-time') {
     sorted.sort((a, b) => {
-      const aDispatched = a.latestTask.dispatchedAt;
-      const bDispatched = b.latestTask.dispatchedAt;
+      const aDispatched = a.mostRecentDispatchedAt;
+      const bDispatched = b.mostRecentDispatchedAt;
 
       // Both have dispatchedAt: sort desc
       if (aDispatched !== undefined && bDispatched !== undefined) {
