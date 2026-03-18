@@ -247,10 +247,9 @@ export async function hydrateGitHubEventLogRows(
  * Get the current dispatch queue status
  */
 export async function getDispatchQueue(accessToken: string): Promise<QueueResponse> {
-  const response = await apiRequest<{ success: boolean; data: QueueResponse }>(
+  return await apiRequest<QueueResponse>(
     config.codeAgentUrl,
     '/code/queue',
     accessToken,
   );
-  return response.data;
 }
