@@ -89,6 +89,15 @@ export async function deleteCodeTask(accessToken: string, taskId: string): Promi
 }
 
 /**
+ * Archive a code task by ID
+ */
+export async function archiveCodeTask(accessToken: string, taskId: string): Promise<void> {
+  await apiRequest<{ archived: boolean }>(config.codeAgentUrl, `/code/tasks/${taskId}/archive`, accessToken, {
+    method: 'POST',
+  });
+}
+
+/**
  * Retry a failed code task
  */
 export async function retryCodeTask(
