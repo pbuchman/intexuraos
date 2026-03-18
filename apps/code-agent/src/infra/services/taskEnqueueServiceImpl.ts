@@ -88,25 +88,22 @@ export class TaskEnqueueServiceImpl implements TaskEnqueueService {
     // Step 4: Send WhatsApp notification (best-effort)
     // 1-indexed for user-facing display ("you are #1 in line")
     const queuePosition = queueCount + 1;
-    const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
 
     const notifyResult = await this.whatsappNotifier.notifyTaskQueued(
       userId,
       updateResult.value,
       queuePosition,
-      estimatedWaitMinutes,
     );
 
     if (!notifyResult.ok) {
       this.logger.warn({ taskId, error: notifyResult.error }, 'Failed to send queue notification');
     }
 
-    this.logger.info({ taskId, queuePosition, estimatedWaitMinutes }, 'Task enqueued for dispatch');
+    this.logger.info({ taskId, queuePosition }, 'Task enqueued for dispatch');
 
     return ok({
       taskId,
       queuePosition,
-      estimatedWaitMinutes,
     });
   }
 }

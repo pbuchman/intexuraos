@@ -117,7 +117,7 @@ describe('drainTaskQueue', () => {
     };
 
     mockTaskEnqueueService = {
-      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 0, estimatedWaitMinutes: 0 })),
+      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 0 })),
     };
 
   });

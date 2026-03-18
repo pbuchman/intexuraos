@@ -236,7 +236,6 @@ function createDeps(logger: Logger, options?: { includeSleep?: boolean }): TestD
       enqueue: vi.fn().mockResolvedValue(ok({
         taskId: 'task-created',
         queuePosition: 1,
-        estimatedWaitMinutes: 0,
       })),
     },
     logLineRepo: { storeBatch: vi.fn().mockResolvedValue(ok(undefined)) },
