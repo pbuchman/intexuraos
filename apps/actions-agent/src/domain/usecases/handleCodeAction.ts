@@ -18,6 +18,11 @@ export interface HandleCodeActionUseCase {
   execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>>;
 }
 
+interface CodeActionResult {
+  status: string;
+  message?: string;
+}
+
 export function createHandleCodeActionUseCase(deps: HandleCodeActionDeps): HandleCodeActionUseCase {
   return createHandleActionTemplate(
     {
@@ -34,6 +39,17 @@ export function createHandleCodeActionUseCase(deps: HandleCodeActionDeps): Handl
           reply: { id: `convert:${event.actionId}`, title: 'Convert to Issue' },
         },
       ],
+      onAutoExecuteSuccess: (result: unknown, event: ActionCreatedEvent, logger: Logger) => {
+        const codeResult = result as CodeActionResult;
+        if (codeResult.status === 'failed') {
+          logger.warn(
+            { actionId: event.actionId, message: codeResult.message },
+            'Code action auto-executed but resulted in failure'
+          );
+        } else {
+          logger.info({ actionId: event.actionId }, 'Code action auto-executed successfully');
+        }
+      },
     },
     {
       whatsappPublisher: deps.whatsappPublisher,

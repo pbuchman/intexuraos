@@ -14,7 +14,7 @@ export interface HandleActionConfig {
     event: ActionCreatedEvent,
     deps: Record<string, unknown>
   ) => Promise<Record<string, unknown> | undefined>;
-  onAutoExecuteResult?: (result: Result<unknown>, event: ActionCreatedEvent, logger: Logger) => void;
+  onAutoExecuteSuccess?: (result: unknown, event: ActionCreatedEvent, logger: Logger) => void;
 }
 
 export interface HandleActionTemplateDeps {
@@ -56,13 +56,8 @@ export function createHandleActionTemplate(
           return err(executeResult.error);
         }
 
-        // Special case: handle code action failed status
-        const resultValue = executeResult.value as Record<string, unknown> | undefined;
-        if (resultValue?.['status'] === 'failed') {
-          logger.warn(
-            { actionId: event.actionId, message: resultValue['message'] },
-            'Code action auto-executed but resulted in failure'
-          );
+        if (config.onAutoExecuteSuccess !== undefined) {
+          config.onAutoExecuteSuccess(executeResult.value, event, logger);
         } else {
           logger.info({ actionId: event.actionId }, `${config.actionType} action auto-executed successfully`);
         }
