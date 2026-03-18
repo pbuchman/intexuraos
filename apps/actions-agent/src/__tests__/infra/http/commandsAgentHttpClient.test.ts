@@ -5,6 +5,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
 import { createCommandsAgentHttpClient } from '../../../infra/http/commandsAgentHttpClient.js';
+import type { CommandsAgentClient } from '../../../domain/ports/commandsAgentClient.js';
+import { createMockLogger } from '../../fakes.js';
 
 describe('createCommandsAgentHttpClient', () => {
   const baseUrl = 'http://commands-agent.local';
@@ -17,6 +19,13 @@ describe('createCommandsAgentHttpClient', () => {
   afterEach(() => {
     nock.cleanAll();
   });
+
+  const createClient = (): CommandsAgentClient =>
+    createCommandsAgentHttpClient({
+      baseUrl,
+      internalAuthToken,
+      logger: createMockLogger(),
+    });
 
   describe('getCommand', () => {
     it('returns command with text on successful fetch', async () => {
@@ -34,7 +43,7 @@ describe('createCommandsAgentHttpClient', () => {
           },
         });
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
       const result = await client.getCommand('cmd-123');
 
       expect(result).not.toBeNull();
@@ -48,7 +57,7 @@ describe('createCommandsAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(404);
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
       const result = await client.getCommand('nonexistent');
 
       expect(result).toBeNull();
@@ -60,7 +69,7 @@ describe('createCommandsAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(500, { error: 'Internal server error' });
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
 
       await expect(client.getCommand('cmd-500')).rejects.toThrow('HTTP 500');
     });
@@ -68,7 +77,7 @@ describe('createCommandsAgentHttpClient', () => {
     it('throws error on HTTP 401', async () => {
       nock(baseUrl).get('/internal/commands/cmd-401').reply(401, { error: 'Unauthorized' });
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
 
       await expect(client.getCommand('cmd-401')).rejects.toThrow('HTTP 401');
     });
@@ -76,7 +85,7 @@ describe('createCommandsAgentHttpClient', () => {
     it('throws error on HTTP 403', async () => {
       nock(baseUrl).get('/internal/commands/cmd-403').reply(403, { error: 'Forbidden' });
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
 
       await expect(client.getCommand('cmd-403')).rejects.toThrow('HTTP 403');
     });
@@ -89,7 +98,7 @@ describe('createCommandsAgentHttpClient', () => {
           error: { message: 'Command processing failed' },
         });
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
 
       await expect(client.getCommand('cmd-fail')).rejects.toThrow('Invalid response');
     });
@@ -99,7 +108,7 @@ describe('createCommandsAgentHttpClient', () => {
         success: true,
       });
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
 
       await expect(client.getCommand('cmd-nodata')).rejects.toThrow('Invalid response');
     });
@@ -109,7 +118,7 @@ describe('createCommandsAgentHttpClient', () => {
         .get('/internal/commands/cmd-network')
         .replyWithError('Connection refused');
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
 
       await expect(client.getCommand('cmd-network')).rejects.toThrow();
     });
@@ -127,6 +136,7 @@ describe('createCommandsAgentHttpClient', () => {
       const client = createCommandsAgentHttpClient({
         baseUrl,
         internalAuthToken: customToken,
+        logger: createMockLogger(),
       });
       await client.getCommand('cmd-auth');
 
@@ -142,7 +152,7 @@ describe('createCommandsAgentHttpClient', () => {
           data: { command: { id: commandId, text: 'Test command' } },
         });
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
       await client.getCommand(commandId);
 
       expect(scope.isDone()).toBe(true);
@@ -159,7 +169,7 @@ describe('createCommandsAgentHttpClient', () => {
           },
         });
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
       const result = await client.getCommand('cmd-long');
 
       expect(result?.text).toBe(longText);
@@ -176,7 +186,7 @@ describe('createCommandsAgentHttpClient', () => {
           },
         });
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
       const result = await client.getCommand('cmd-special');
 
       expect(result?.text).toBe(specialText);
@@ -194,6 +204,7 @@ describe('createCommandsAgentHttpClient', () => {
       const client = createCommandsAgentHttpClient({
         baseUrl: customBaseUrl,
         internalAuthToken,
+        logger: createMockLogger(),
       });
       const result = await client.getCommand('cmd-prod');
 
@@ -204,7 +215,7 @@ describe('createCommandsAgentHttpClient', () => {
     it('throws error on HTTP 502 Bad Gateway', async () => {
       nock(baseUrl).get('/internal/commands/cmd-502').reply(502, 'Bad Gateway');
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
 
       await expect(client.getCommand('cmd-502')).rejects.toThrow('HTTP 502');
     });
@@ -212,7 +223,7 @@ describe('createCommandsAgentHttpClient', () => {
     it('throws error on HTTP 503 Service Unavailable', async () => {
       nock(baseUrl).get('/internal/commands/cmd-503').reply(503, 'Service Unavailable');
 
-      const client = createCommandsAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createClient();
 
       await expect(client.getCommand('cmd-503')).rejects.toThrow('HTTP 503');
     });
