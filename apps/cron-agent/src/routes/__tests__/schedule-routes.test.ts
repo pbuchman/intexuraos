@@ -96,6 +96,7 @@ function createFakeServices(overrides: Partial<ServiceContainer> = {}): ServiceC
       update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
         ok({ ...testSchedule, ...updates }),
       ),
+      incrementCounters: vi.fn(async () => ok(undefined)),
     },
     executionRepo: {
       create: vi.fn(async () => ok(testExecution)),
@@ -258,6 +259,7 @@ describe('Schedule Routes', () => {
         update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
           ok({ ...testSchedule, ...updates }),
         ),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -285,6 +287,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(async () => err({ code: 'INTERNAL_ERROR' as const, message: 'DB error' })),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -475,6 +478,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -499,6 +503,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -522,6 +527,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -581,6 +587,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -606,6 +613,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -721,6 +729,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(async () => err({ code: 'INTERNAL_ERROR' as const, message: 'DB error' })),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -780,6 +789,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -804,6 +814,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -827,6 +838,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -850,6 +862,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(async () => err({ code: 'INTERNAL_ERROR' as const, message: 'DB error' })),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -896,6 +909,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -920,6 +934,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -943,6 +958,7 @@ describe('Schedule Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -967,6 +983,7 @@ describe('Schedule Routes', () => {
         findByScheduleId: vi.fn(),
         findRunningByScheduleId: vi.fn(async () => ok(null)),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();

@@ -23,6 +23,7 @@ function createFakeServices(): ServiceContainer {
       ),
       findDueSchedules: vi.fn(async () => ok([])),
       update: vi.fn(async () => ok({} as CronSchedule)),
+      incrementCounters: vi.fn(async () => ok(undefined)),
     },
     executionRepo: {
       create: vi.fn(async () => ok({} as CronExecution)),

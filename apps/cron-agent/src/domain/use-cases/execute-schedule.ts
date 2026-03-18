@@ -57,12 +57,13 @@ export async function executeSchedule(
       });
 
       // Update schedule failure count
-      await scheduleRepo.update(schedule.id, {
-        lastExecutedAt: completedAt,
-        nextExecutionAt: computeNextExecution(schedule.cronExpression, schedule.timezone),
-        executionCount: schedule.executionCount + 1,
-        failureCount: schedule.failureCount + 1,
-      });
+      const scheduleUpdateResult = await scheduleRepo.incrementCounters(schedule.id,
+        { executionCount: true, failureCount: true },
+        { lastExecutedAt: completedAt, nextExecutionAt: computeNextExecution(schedule.cronExpression, schedule.timezone) },
+      );
+      if (!scheduleUpdateResult.ok) {
+        logger.warn({ scheduleId: schedule.id, error: scheduleUpdateResult.error.message }, 'Failed to update schedule after execution failure');
+      }
 
       if (failedUpdate.ok) {
         return ok(failedUpdate.value);
@@ -89,11 +90,13 @@ export async function executeSchedule(
     });
 
     // Update schedule counters
-    await scheduleRepo.update(schedule.id, {
-      lastExecutedAt: completedAt,
-      nextExecutionAt: computeNextExecution(schedule.cronExpression, schedule.timezone),
-      executionCount: schedule.executionCount + 1,
-    });
+    const scheduleUpdateResult = await scheduleRepo.incrementCounters(schedule.id,
+      { executionCount: true },
+      { lastExecutedAt: completedAt, nextExecutionAt: computeNextExecution(schedule.cronExpression, schedule.timezone) },
+    );
+    if (!scheduleUpdateResult.ok) {
+      logger.warn({ scheduleId: schedule.id, error: scheduleUpdateResult.error.message }, 'Failed to update schedule after execution success');
+    }
 
     if (successUpdate.ok) {
       return ok(successUpdate.value);
@@ -118,12 +121,13 @@ export async function executeSchedule(
       error: errorMsg,
     });
 
-    await scheduleRepo.update(schedule.id, {
-      lastExecutedAt: new Date().toISOString(),
-      nextExecutionAt: computeNextExecution(schedule.cronExpression, schedule.timezone),
-      executionCount: schedule.executionCount + 1,
-      failureCount: schedule.failureCount + 1,
-    });
+    const scheduleUpdateResult = await scheduleRepo.incrementCounters(schedule.id,
+      { executionCount: true, failureCount: true },
+      { lastExecutedAt: new Date().toISOString(), nextExecutionAt: computeNextExecution(schedule.cronExpression, schedule.timezone) },
+    );
+    if (!scheduleUpdateResult.ok) {
+      logger.warn({ scheduleId: schedule.id, error: scheduleUpdateResult.error.message }, 'Failed to update schedule after execution exception');
+    }
 
     logger.error({ error: errorMsg, scheduleId: schedule.id }, 'Schedule execution threw');
     return err({ code: 'EXECUTION_FAILED', message: errorMsg });

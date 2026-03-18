@@ -96,6 +96,7 @@ function createFakeServices(overrides: Partial<ServiceContainer> = {}): ServiceC
       update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
         ok({ ...testSchedule, ...updates }),
       ),
+      incrementCounters: vi.fn(async () => ok(undefined)),
     },
     executionRepo: {
       create: vi.fn(async () => ok(testExecution)),
