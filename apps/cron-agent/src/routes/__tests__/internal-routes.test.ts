@@ -61,6 +61,7 @@ function createFakeServices(overrides: Partial<ServiceContainer> = {}): ServiceC
       update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
         ok({ ...testSchedule, ...updates }),
       ),
+      incrementCounters: vi.fn(async () => ok(undefined)),
     },
     executionRepo: {
       create: vi.fn(async () => ok(testExecution)),
@@ -207,6 +208,7 @@ describe('Internal Routes', () => {
         update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
           ok({ ...testSchedule, ...updates }),
         ),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -243,6 +245,7 @@ describe('Internal Routes', () => {
         update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
           ok({ ...testSchedule, ...updates }),
         ),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
       const fakeExecutionRepo = {
         create: vi.fn(async () => ok(testExecution)),
@@ -289,6 +292,7 @@ describe('Internal Routes', () => {
         findByUserId: vi.fn(),
         findDueSchedules: vi.fn(async () => err({ code: 'INTERNAL_ERROR' as const, message: 'DB error' })),
         update: vi.fn(),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
 
       await app.close();
@@ -322,6 +326,7 @@ describe('Internal Routes', () => {
         update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
           ok({ ...testSchedule, ...updates }),
         ),
+        incrementCounters: vi.fn(async () => ok(undefined)),
       };
       const fakeExecutionRepo = {
         create: vi.fn(async () => err({ code: 'INTERNAL_ERROR' as const, message: 'Exec failed' })),

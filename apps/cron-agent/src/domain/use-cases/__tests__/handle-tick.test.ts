@@ -43,6 +43,7 @@ describe('handleTick', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([]),
         update: async () => ok({} as CronSchedule),
+        incrementCounters: async () => ok(undefined),
       },
       executionRepo: {
         create: async () => ok({} as never),
@@ -73,6 +74,7 @@ describe('handleTick', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([schedule]),
         update: async () => ok(schedule),
+        incrementCounters: async () => ok(undefined),
       },
       executionRepo: {
         create: async () => ok({} as never),
@@ -104,6 +106,7 @@ describe('handleTick', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([schedule]),
         update: async () => ok(schedule),
+        incrementCounters: async () => ok(undefined),
       },
       executionRepo: {
         create: async () => ok({} as never),
@@ -144,6 +147,7 @@ describe('handleTick', () => {
           findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
           findDueSchedules: async () => ok([]),
           update: async () => ok(schedule),
+          incrementCounters: async () => ok(undefined),
         },
         actionDeps: {
           logger: createTestLogger(),
@@ -185,6 +189,7 @@ describe('handleTick', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([schedule]),
         update: async () => ok(schedule),
+        incrementCounters: async () => ok(undefined),
       },
       executionRepo: {
         create: async () => ok({} as never),
@@ -213,6 +218,7 @@ describe('handleTick', () => {
           findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
           findDueSchedules: async () => ok([]),
           update: async () => ok(schedule),
+          incrementCounters: async () => ok(undefined),
         },
         actionDeps: {} as never,
       },
@@ -233,6 +239,7 @@ describe('handleTick', () => {
           error: { code: 'INTERNAL_ERROR' as const, message: 'DB error' },
         }),
         update: async () => ok({} as CronSchedule),
+        incrementCounters: async () => ok(undefined),
       },
       executionRepo: {
         create: async () => ok({} as never),

@@ -140,6 +140,7 @@ describe('executeSchedule', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([]),
         update: async () => ok(testSchedule),
+        incrementCounters: async () => ok(undefined),
       },
       actionDeps: createSuccessActionDeps(),
     };
@@ -176,6 +177,7 @@ describe('executeSchedule', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([]),
         update: async () => ok(testSchedule),
+        incrementCounters: async () => ok(undefined),
       },
       actionDeps: createSuccessActionDeps(),
     };
@@ -203,6 +205,7 @@ describe('executeSchedule', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([]),
         update: async () => ok(testSchedule),
+        incrementCounters: async () => ok(undefined),
       },
       actionDeps: createSuccessActionDeps(),
     };
@@ -239,6 +242,7 @@ describe('executeSchedule', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([]),
         update: async () => ok(testSchedule),
+        incrementCounters: async () => ok(undefined),
       },
       actionDeps: createFailingActionDeps(),
     };
@@ -266,6 +270,7 @@ describe('executeSchedule', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([]),
         update: async () => ok(testSchedule),
+        incrementCounters: async () => ok(undefined),
       },
       actionDeps: createFailingActionDeps(),
     };
@@ -294,6 +299,7 @@ describe('executeSchedule', () => {
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([]),
         update: async () => ok(testSchedule),
+        incrementCounters: async () => ok(undefined),
       },
       actionDeps: createThrowingActionDeps(),
     };
@@ -303,6 +309,129 @@ describe('executeSchedule', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('EXECUTION_FAILED');
     expect(result.error.message).toContain('Unexpected failure');
+  });
+
+  it('logs warning when schedule counter update fails after success', async () => {
+    const warnCalls: unknown[] = [];
+    const warnLogger = {
+      info: () => { /* noop */ },
+      warn: (...args: unknown[]) => { warnCalls.push(args); },
+      error: () => { /* noop */ },
+      debug: () => { /* noop */ },
+      child: () => warnLogger,
+    } as never;
+
+    const updatedExecution: CronExecution = {
+      ...testExecution,
+      status: 'success',
+      completedAt: new Date().toISOString(),
+      durationMs: 100,
+    };
+
+    const deps: ExecuteScheduleDeps = {
+      logger: warnLogger,
+      executionRepo: {
+        create: async () => ok(testExecution),
+        findById: async () => ok(updatedExecution),
+        findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findRunningByScheduleId: async () => ok(null),
+        update: async () => ok(updatedExecution),
+      },
+      scheduleRepo: {
+        create: async () => ok(testSchedule),
+        findById: async () => ok(testSchedule),
+        findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
+        findDueSchedules: async () => ok([]),
+        update: async () => ok(testSchedule),
+        incrementCounters: async () => err({ code: 'INTERNAL_ERROR' as const, message: 'Firestore write failed' }),
+      },
+      actionDeps: createSuccessActionDeps(),
+    };
+
+    const result = await executeSchedule(deps, testSchedule, 'scheduled');
+    expect(result.ok).toBe(true);
+    expect(warnCalls.length).toBe(1);
+  });
+
+  it('logs warning when schedule counter update fails after action failure', async () => {
+    const warnCalls: unknown[] = [];
+    const warnLogger = {
+      info: () => { /* noop */ },
+      warn: (...args: unknown[]) => { warnCalls.push(args); },
+      error: () => { /* noop */ },
+      debug: () => { /* noop */ },
+      child: () => warnLogger,
+    } as never;
+
+    const failedExecution: CronExecution = {
+      ...testExecution,
+      status: 'failure',
+      completedAt: new Date().toISOString(),
+      durationMs: 50,
+      error: 'LLM failed',
+    };
+
+    const deps: ExecuteScheduleDeps = {
+      logger: warnLogger,
+      executionRepo: {
+        create: async () => ok(testExecution),
+        findById: async () => ok(failedExecution),
+        findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findRunningByScheduleId: async () => ok(null),
+        update: async () => ok(failedExecution),
+      },
+      scheduleRepo: {
+        create: async () => ok(testSchedule),
+        findById: async () => ok(testSchedule),
+        findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
+        findDueSchedules: async () => ok([]),
+        update: async () => ok(testSchedule),
+        incrementCounters: async () => err({ code: 'INTERNAL_ERROR' as const, message: 'Firestore write failed' }),
+      },
+      actionDeps: createFailingActionDeps(),
+    };
+
+    const result = await executeSchedule(deps, testSchedule, 'scheduled');
+    expect(result.ok).toBe(true);
+    expect(warnCalls.length).toBe(1);
+  });
+
+  it('logs warning when schedule counter update fails after thrown exception', async () => {
+    const warnCalls: unknown[] = [];
+    const warnLogger = {
+      info: () => { /* noop */ },
+      warn: (...args: unknown[]) => { warnCalls.push(args); },
+      error: () => { /* noop */ },
+      debug: () => { /* noop */ },
+      child: () => warnLogger,
+    } as never;
+
+    const deps: ExecuteScheduleDeps = {
+      logger: warnLogger,
+      executionRepo: {
+        create: async () => ok(testExecution),
+        findById: async () => ok(null),
+        findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findRunningByScheduleId: async () => ok(null),
+        update: async () => ok(testExecution),
+      },
+      scheduleRepo: {
+        create: async () => ok(testSchedule),
+        findById: async () => ok(testSchedule),
+        findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
+        findDueSchedules: async () => ok([]),
+        update: async () => ok(testSchedule),
+        incrementCounters: async () => err({ code: 'INTERNAL_ERROR' as const, message: 'Firestore write failed' }),
+      },
+      actionDeps: createThrowingActionDeps(),
+    };
+
+    const result = await executeSchedule(deps, testSchedule, 'scheduled');
+    expect(result.ok).toBe(false);
+    expect(warnCalls.length).toBe(1);
   });
 
   it('computes next execution with invalid cron expression gracefully', async () => {
@@ -318,7 +447,7 @@ describe('executeSchedule', () => {
       durationMs: 100,
     };
 
-    const updateCalls: Partial<CronSchedule>[] = [];
+    const incrementCalls: { counters: { executionCount?: boolean; failureCount?: boolean }; metadata: { lastExecutedAt: string; nextExecutionAt: string | null } }[] = [];
     const deps: ExecuteScheduleDeps = {
       logger: createTestLogger(),
       executionRepo: {
@@ -334,9 +463,10 @@ describe('executeSchedule', () => {
         findById: async () => ok(scheduleWithBadCron),
         findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
         findDueSchedules: async () => ok([]),
-        update: async (_id: string, updates: Partial<CronSchedule>) => {
-          updateCalls.push(updates);
-          return ok(scheduleWithBadCron);
+        update: async () => ok(scheduleWithBadCron),
+        incrementCounters: async (_id: string, counters: { executionCount?: boolean; failureCount?: boolean }, metadata: { lastExecutedAt: string; nextExecutionAt: string | null }) => {
+          incrementCalls.push({ counters, metadata });
+          return ok(undefined);
         },
       },
       actionDeps: createSuccessActionDeps(),
@@ -345,7 +475,7 @@ describe('executeSchedule', () => {
     const result = await executeSchedule(deps, scheduleWithBadCron, 'manual');
     expect(result.ok).toBe(true);
     // The schedule update should have nextExecutionAt as null for invalid cron
-    expect(updateCalls.length).toBeGreaterThan(0);
-    expect(updateCalls[0]?.nextExecutionAt).toBeNull();
+    expect(incrementCalls.length).toBeGreaterThan(0);
+    expect(incrementCalls[0]?.metadata.nextExecutionAt).toBeNull();
   });
 });

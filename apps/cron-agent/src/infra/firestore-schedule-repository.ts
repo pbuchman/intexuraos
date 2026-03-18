@@ -2,7 +2,7 @@ import { ok, err, type Result } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { ScheduleRepository, ScheduleRepositoryError } from '../domain/ports/schedule-repository.js';
 import type { CronSchedule, CreateScheduleInput, ListOptions, ListSchedulesResponse } from '../domain/types.js';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
 
 const COLLECTION = 'cron_schedules';
 
@@ -132,6 +132,32 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
       return ok({ id: updated.id, ...updated.data() } as CronSchedule);
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to update schedule: ${getErrorMessage(error, 'Unknown error')}` });
+    }
+  }
+
+  async incrementCounters(
+    id: string,
+    counters: { executionCount?: boolean; failureCount?: boolean },
+    metadata: { lastExecutedAt: string; nextExecutionAt: string | null },
+  ): Promise<Result<void, ScheduleRepositoryError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION).doc(id);
+      const updateData: Record<string, unknown> = {
+        lastExecutedAt: metadata.lastExecutedAt,
+        nextExecutionAt: metadata.nextExecutionAt,
+        updatedAt: new Date().toISOString(),
+      };
+      if (counters.executionCount === true) {
+        updateData['executionCount'] = FieldValue.increment(1);
+      }
+      if (counters.failureCount === true) {
+        updateData['failureCount'] = FieldValue.increment(1);
+      }
+      await docRef.update(updateData);
+      return ok(undefined);
+    } catch (error: unknown) {
+      return err({ code: 'INTERNAL_ERROR', message: `Failed to increment counters: ${getErrorMessage(error, 'Unknown error')}` });
     }
   }
 }

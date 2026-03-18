@@ -41,6 +41,7 @@ function createFakeScheduleRepo(): ScheduleRepository {
     findDueSchedules: async (): Promise<Result<CronSchedule[], ScheduleRepositoryError>> => ok([]),
     update: async (_id: string, updates: Partial<CronSchedule>): Promise<Result<CronSchedule, ScheduleRepositoryError>> =>
       ok({ ...testSchedule, ...updates }),
+    incrementCounters: async (): Promise<Result<void, ScheduleRepositoryError>> => ok(undefined),
   };
 }
 

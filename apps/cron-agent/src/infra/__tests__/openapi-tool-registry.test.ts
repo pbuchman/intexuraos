@@ -467,6 +467,24 @@ describe('OpenApiToolRegistry', () => {
     expect(result).toBe(normalBody);
   });
 
+  it('returns error string when fetch fails in run callback', async () => {
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    nock('http://code-agent:8128')
+      .get('/internal/tasks')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .replyWithError('ECONNREFUSED');
+
+    const tools = await registry.getToolsForService('code-agent');
+    const getTasks = tools.find((t) => t.name === 'code_agent__getRunningTasks');
+    if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
+
+    const result = await getTasks.run({});
+    expect(result).toContain('Error: Request failed');
+  });
+
   it('handles parameter without schema', async () => {
     const specNoParamSchema = {
       openapi: '3.1.1',

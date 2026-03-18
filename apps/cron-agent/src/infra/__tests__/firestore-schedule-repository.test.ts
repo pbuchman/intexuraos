@@ -399,6 +399,62 @@ describe('FirestoreScheduleRepository', () => {
     initTestFirestore();
   });
 
+  it('incrementCounters with both counters', async () => {
+    const createResult = await repo.create('user-1', {
+      name: 'Test',
+      description: 'test',
+      cronExpression: '* * * * *',
+      timezone: 'UTC',
+      action: { services: ['code-agent'], instruction: 'test' },
+      nextExecutionAt: null,
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await repo.incrementCounters(
+      createResult.value.id,
+      { executionCount: true, failureCount: true },
+      { lastExecutedAt: '2026-01-01T00:00:00Z', nextExecutionAt: '2026-01-01T00:01:00Z' },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('incrementCounters with only executionCount', async () => {
+    const createResult = await repo.create('user-1', {
+      name: 'Test',
+      description: 'test',
+      cronExpression: '* * * * *',
+      timezone: 'UTC',
+      action: { services: ['code-agent'], instruction: 'test' },
+      nextExecutionAt: null,
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await repo.incrementCounters(
+      createResult.value.id,
+      { executionCount: true },
+      { lastExecutedAt: '2026-01-01T00:00:00Z', nextExecutionAt: null },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('incrementCounters returns error when Firestore throws', async () => {
+    cleanupTestFirestore();
+    const savedProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
+    delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
+    const result = await repo.incrementCounters(
+      'some-id',
+      { executionCount: true },
+      { lastExecutedAt: '2026-01-01T00:00:00Z', nextExecutionAt: null },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+    process.env['INTEXURAOS_GCP_PROJECT_ID'] = savedProjectId ?? '';
+    initTestFirestore();
+  });
+
   it('handles cursor for non-existent doc in findByUserId', async () => {
     await repo.create('user-1', {
       name: 'Test',

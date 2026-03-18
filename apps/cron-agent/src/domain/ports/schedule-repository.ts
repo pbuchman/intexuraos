@@ -12,4 +12,9 @@ export interface ScheduleRepository {
   findByUserId(userId: string, options: ListOptions): Promise<Result<ListSchedulesResponse, ScheduleRepositoryError>>;
   findDueSchedules(now: Date): Promise<Result<CronSchedule[], ScheduleRepositoryError>>;
   update(id: string, updates: Partial<CronSchedule>): Promise<Result<CronSchedule, ScheduleRepositoryError>>;
+  incrementCounters(
+    id: string,
+    counters: { executionCount?: boolean; failureCount?: boolean },
+    metadata: { lastExecutedAt: string; nextExecutionAt: string | null },
+  ): Promise<Result<void, ScheduleRepositoryError>>;
 }

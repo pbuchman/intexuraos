@@ -210,17 +210,26 @@ export class OpenApiToolRegistry implements ToolRegistry {
         'Content-Type': 'application/json',
       };
 
-      const response = await fetch(url, {
-        method: method.toUpperCase(),
-        headers,
-        ...(bodyData !== undefined && { body: JSON.stringify(bodyData) }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => { controller.abort(); }, 30_000);
+      try {
+        const response = await fetch(url, {
+          method: method.toUpperCase(),
+          headers,
+          signal: controller.signal,
+          ...(bodyData !== undefined && { body: JSON.stringify(bodyData) }),
+        });
 
-      const MAX_RESPONSE_SIZE = 50_000;
-      const responseText = await response.text();
-      return responseText.length > MAX_RESPONSE_SIZE
-        ? responseText.slice(0, MAX_RESPONSE_SIZE) + `... [RESPONSE TRUNCATED - original size: ${String(responseText.length)} bytes]`
-        : responseText;
+        const MAX_RESPONSE_SIZE = 50_000;
+        const responseText = await response.text();
+        return responseText.length > MAX_RESPONSE_SIZE
+          ? responseText.slice(0, MAX_RESPONSE_SIZE) + `... [RESPONSE TRUNCATED - original size: ${String(responseText.length)} bytes]`
+          : responseText;
+      } catch (fetchError: unknown) {
+        return `Error: Request failed — ${String(fetchError)}`;
+      } finally {
+        clearTimeout(timeout);
+      }
     };
   }
 }
