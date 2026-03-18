@@ -1,7 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
-import type { GeminiClient } from '@intexuraos/infra-gemini';
+import type { LLMClient } from '@intexuraos/llm-contract';
 import cronParser from 'cron-parser';
 import { parseSchedulePrompt } from '../../prompts/parse-schedule-prompt.js';
 
@@ -17,7 +17,7 @@ export interface ParseScheduleResult {
 
 export interface ParseScheduleDeps {
   logger: Logger;
-  geminiClient: GeminiClient;
+  geminiClient: LLMClient;
 }
 
 export async function parseSchedule(
