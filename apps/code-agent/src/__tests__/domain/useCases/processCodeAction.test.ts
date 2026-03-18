@@ -43,7 +43,7 @@ describe('processCodeAction', () => {
     } as unknown as CodeTaskRepository;
 
     taskEnqueueService = {
-      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 0, estimatedWaitMinutes: 0 })),
+      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 0 })),
     } as unknown as TaskEnqueueService;
 
     linearIssueService = {

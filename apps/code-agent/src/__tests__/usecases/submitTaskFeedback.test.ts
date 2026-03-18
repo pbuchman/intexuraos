@@ -339,7 +339,7 @@ describe('submitTaskFeedback use case', () => {
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
+        ok({ taskId: 'feedback-task-123', queuePosition: 1 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({
@@ -517,7 +517,7 @@ describe('submitTaskFeedback use case', () => {
         });
       });
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
+        ok({ taskId: 'feedback-task-123', queuePosition: 1 })
       );
 
       const deps = createDeps();
@@ -751,7 +751,7 @@ describe('submitTaskFeedback use case', () => {
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
+        ok({ taskId: 'feedback-task-123', queuePosition: 1 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({
@@ -820,7 +820,7 @@ describe('submitTaskFeedback use case', () => {
       );
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
+        ok({ taskId: 'feedback-task-123', queuePosition: 1 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({
@@ -892,7 +892,7 @@ describe('submitTaskFeedback use case', () => {
         err({ code: 'LINEAR_ERROR', message: 'Failed to comment' })
       );
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
+        ok({ taskId: 'feedback-task-123', queuePosition: 1 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({
@@ -962,7 +962,7 @@ describe('submitTaskFeedback use case', () => {
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'feedback-task-123', queuePosition: 1, estimatedWaitMinutes: 0 })
+        ok({ taskId: 'feedback-task-123', queuePosition: 1 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({

@@ -117,7 +117,7 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
 function createMockTaskEnqueueService(): TaskEnqueueService {
   return {
     async enqueue(): ReturnType<TaskEnqueueService['enqueue']> {
-      return ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 });
+      return ok({ taskId: 'task_mock', queuePosition: 1 });
     },
   };
 }
@@ -757,7 +757,7 @@ describe('createTaskForPR', () => {
     deps.taskEnqueueService = {
       async enqueue(input): ReturnType<TaskEnqueueService['enqueue']> {
         capturedInput = input;
-        return ok({ taskId: input.taskId, queuePosition: 1, estimatedWaitMinutes: 5 });
+        return ok({ taskId: input.taskId, queuePosition: 1 });
       },
     };
 

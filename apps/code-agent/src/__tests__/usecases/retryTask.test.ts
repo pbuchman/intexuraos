@@ -145,7 +145,7 @@ describe('retryTask use case', () => {
 
     // Mock task enqueue service
     mockTaskEnqueueService = {
-      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })),
+      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'task_mock', queuePosition: 1 })),
     };
 
     mockGitHubPRClient = {
@@ -273,7 +273,7 @@ describe('retryTask use case', () => {
       });
 
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
       mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
@@ -332,7 +332,7 @@ describe('retryTask use case', () => {
       });
 
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
       mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
@@ -383,7 +383,7 @@ describe('retryTask use case', () => {
       });
 
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
       mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
@@ -447,7 +447,7 @@ describe('retryTask use case', () => {
 
       // Setup successful dispatch
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
 
       // Setup Linear state update
@@ -522,7 +522,7 @@ describe('retryTask use case', () => {
 
       // Setup successful enqueue
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
 
       // Setup Linear state update
@@ -1156,7 +1156,7 @@ describe('retryTask use case', () => {
         ok({ hasActive: false })
       );
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(
         err({ code: 'UNAVAILABLE', message: 'Linear unavailable' })
@@ -1331,7 +1331,7 @@ describe('retryTask use case', () => {
         ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
       );
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
       mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
@@ -1374,7 +1374,7 @@ describe('retryTask use case', () => {
         ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
       );
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
       mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
@@ -1423,7 +1423,7 @@ describe('retryTask use case', () => {
         ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
       );
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
       mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
@@ -1460,7 +1460,7 @@ describe('retryTask use case', () => {
         ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
       );
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
       mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
@@ -1503,7 +1503,7 @@ describe('retryTask use case', () => {
         ok(createMockTask({ id: 'retry-task-persisted' }) as unknown as CodeTask)
       );
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
       mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
@@ -1564,7 +1564,7 @@ describe('retryTask use case', () => {
         ok({ ...mockTask, id: retryTaskId, status: 'dispatched' } as CodeTask)
       );
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockCodeTaskRepo.update.mockResolvedValue(
         ok({ ...mockTask, id: retryTaskId, status: 'dispatched' } as CodeTask)
@@ -1598,7 +1598,7 @@ describe('retryTask use case', () => {
         ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
       );
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_mock', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_mock', queuePosition: 1 })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
       // addComment fails

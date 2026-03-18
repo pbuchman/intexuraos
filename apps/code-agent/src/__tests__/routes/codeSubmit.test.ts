@@ -89,7 +89,7 @@ describe('POST /code/submit', () => {
     });
 
     taskEnqueueService = {
-      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1, estimatedWaitMinutes: 5 })),
+      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })),
     };
 
     const whatsappNotifier = createWhatsAppNotifier({

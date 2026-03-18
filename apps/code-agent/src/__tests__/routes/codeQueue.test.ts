@@ -146,7 +146,7 @@ describe('GET /code/queue', () => {
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
       taskEnqueueService: {
-        enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1, estimatedWaitMinutes: 5 })),
+        enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })),
       },
     } as never);
 
