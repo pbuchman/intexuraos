@@ -20,6 +20,11 @@ import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { sanitizePromptForInjection } from '../../domain/utils/promptInjectionSanitizer.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { backLinkPlanningTask } from './backLinkPlanningTask.js';
+import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
+import type { LinearAgentClient } from '../ports/linearAgentClient.js';
+
+// TODO: Compute from actual system prompt content instead of using a static placeholder.
+const SYSTEM_PROMPT_HASH_PLACEHOLDER = 'system-prompt-hash-v1';
 
 /**
  * Request to process a code action.
@@ -75,6 +80,7 @@ export interface ProcessCodeActionDeps {
   codeTaskRepo: CodeTaskRepository;
   taskEnqueueService: TaskEnqueueService;
   linearIssueService: LinearIssueService;
+  linearAgentClient: LinearAgentClient;
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
@@ -172,6 +178,102 @@ export async function processCodeAction(
     'Linear issue processed'
   );
 
+  // Step 3b: Fan-out check (INT-962) — if parent issue has children with code-task labels,
+  // create separate child tasks instead of dispatching the parent.
+  if (finalLinearIssueId !== undefined && shouldFanOut(hasChildren, linearIssueLabels)) {
+    logger.info({ linearIssueId: finalLinearIssueId }, 'Fan-out triggered: parent issue has code-task children');
+
+    // Pre-generate parent task to use as a template for child tasks
+    const parentTaskId = `task_${randomUUID()}`;
+    const parentWebhookSecret = generateWebhookSecret(deps.orchestratorSecret, parentTaskId);
+
+    const parentCreateResult = await codeTaskRepo.create({
+      id: parentTaskId,
+      userId,
+      prompt,
+      sanitizedPrompt: sanitizedPromptText,
+      systemPromptHash: SYSTEM_PROMPT_HASH_PLACEHOLDER,
+      workerType: effectiveWorkerType,
+      /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
+      workerLocation: enabledWorkers[0]?.name ?? 'unknown',
+      /* v8 ignore stop @preserve */
+      repository: repository ?? 'pbuchman/intexuraos',
+      baseBranch: baseBranch ?? 'development',
+      traceId: traceId ?? `trace-${String(Date.now())}`,
+      actionId,
+      approvalEventId,
+      webhookSecret: parentWebhookSecret,
+      linearIssueId: finalLinearIssueId,
+      agentType: 'execution',
+    });
+
+    if (!parentCreateResult.ok) {
+      const error = parentCreateResult.error;
+      if (
+        error.code === 'DUPLICATE_APPROVAL' ||
+        error.code === 'DUPLICATE_ACTION' ||
+        error.code === 'DUPLICATE_PROMPT' ||
+        error.code === 'ACTIVE_TASK_EXISTS'
+      ) {
+        return err({
+          code: error.code.toLowerCase() as
+            | 'duplicate_approval'
+            | 'duplicate_action'
+            | 'duplicate_prompt'
+            | 'active_task_exists',
+          message: error.message,
+          existingTaskId: error.existingTaskId,
+        });
+      }
+      return err({ code: 'internal_error', message: error.message });
+    }
+
+    const parentTask = parentCreateResult.value;
+
+    const fanOutResult = await fanOutChildTasks(
+      {
+        logger,
+        codeTaskRepo,
+        linearAgentClient: deps.linearAgentClient,
+        taskEnqueueService: deps.taskEnqueueService,
+        orchestratorSecret: deps.orchestratorSecret,
+      },
+      {
+        parentTask,
+        userId,
+        linearIssueId: finalLinearIssueId,
+      },
+    );
+
+    // Fan-out failed — fall back to normal dispatch regardless of error type.
+    // The parent task was already created; enqueue it for dispatch.
+    if (!fanOutResult.ok) {
+      const isNoChildren = fanOutResult.error.code === 'no_qualifying_children';
+      if (isNoChildren) {
+        logger.info({ linearIssueId: finalLinearIssueId }, 'Fan-out found no qualifying children, falling back to normal dispatch');
+      } else {
+        logger.warn({ linearIssueId: finalLinearIssueId, error: fanOutResult.error }, 'Fan-out failed, falling back to normal dispatch');
+      }
+
+      await backLinkPlanningTask(codeTaskRepo, logger, parentTask);
+
+      const enqueueResult = await deps.taskEnqueueService.enqueue({ taskId: parentTask.id, userId });
+      if (!enqueueResult.ok) {
+        if (enqueueResult.error.code === 'queue_full') {
+          return err({ code: 'queue_full', message: enqueueResult.error.message });
+        }
+        return err({ code: 'internal_error', message: enqueueResult.error.message });
+      }
+    }
+
+    // Fan-out succeeded or fell back to normal enqueue — return the parent task ID
+    return ok({
+      codeTaskId: parentTask.id,
+      resourceUrl: `/#/code-tasks/${parentTask.id}`,
+      workerLocation: 'queued' as WorkerLocation,
+    });
+  }
+
   // Step 4: Pre-generate task ID and derive deterministic webhook secret
   const taskId = `task_${randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, taskId);
@@ -198,7 +300,7 @@ export async function processCodeAction(
     userId,
     prompt,
     sanitizedPrompt: sanitizedPromptText,
-    systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system prompt
+    systemPromptHash: SYSTEM_PROMPT_HASH_PLACEHOLDER,
     workerType: effectiveWorkerType,
     /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown', // Use first worker as default
