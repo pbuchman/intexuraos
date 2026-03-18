@@ -394,6 +394,45 @@ describe('OpenApiToolRegistry', () => {
     expect(tools[0]?.name).toBe('code_agent__getItems');
   });
 
+  it('truncates response text exceeding 50000 characters', async () => {
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    const largeBody = 'x'.repeat(60_000);
+    nock('http://code-agent:8128')
+      .get('/internal/tasks')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, largeBody);
+
+    const tools = await registry.getToolsForService('code-agent');
+    const getTasks = tools.find((t) => t.name === 'code_agent__getRunningTasks');
+    if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
+
+    const result = await getTasks.run({});
+    expect(result.length).toBe(50_000 + '... [truncated]'.length);
+    expect(result.endsWith('... [truncated]')).toBe(true);
+  });
+
+  it('does not truncate response text within 50000 characters', async () => {
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, TEST_OPENAPI_SPEC);
+
+    const normalBody = 'y'.repeat(1000);
+    nock('http://code-agent:8128')
+      .get('/internal/tasks')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, normalBody);
+
+    const tools = await registry.getToolsForService('code-agent');
+    const getTasks = tools.find((t) => t.name === 'code_agent__getRunningTasks');
+    if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
+
+    const result = await getTasks.run({});
+    expect(result).toBe(normalBody);
+  });
+
   it('handles parameter without schema', async () => {
     const specNoParamSchema = {
       openapi: '3.1.1',

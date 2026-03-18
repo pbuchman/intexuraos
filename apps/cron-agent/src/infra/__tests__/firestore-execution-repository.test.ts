@@ -279,7 +279,7 @@ describe('FirestoreExecutionRepository', () => {
     expect(result.value.nextCursor).toBeNull();
   });
 
-  it('returns total matching executions count', async () => {
+  it('returns count matching executions length', async () => {
     await repo.create({
       scheduleId: 'schedule-1',
       scheduleName: 'A',
@@ -297,7 +297,7 @@ describe('FirestoreExecutionRepository', () => {
     const result = await repo.findByUserId('user-1', { limit: 50 });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.total).toBe(result.value.executions.length);
+    expect(result.value.count).toBe(result.value.executions.length);
   });
 
   it('handles pagination with limit in findByScheduleId', async () => {

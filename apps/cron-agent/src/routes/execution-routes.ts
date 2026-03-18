@@ -56,7 +56,7 @@ export const executionRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
                 properties: {
                   executions: { type: 'array', items: executionResponseSchema },
                   nextCursor: { type: ['string', 'null'] },
-                  total: { type: 'number' },
+                  count: { type: 'number' },
                 },
               },
             },
@@ -70,9 +70,10 @@ export const executionRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
       if (auth === null) return;
 
       const { executionRepo } = getServices();
+      const validExecutionStatuses = new Set<string>(['running', 'success', 'failure', 'skipped']);
       const statusFilter =
         request.query.status !== undefined
-          ? (request.query.status.split(',') as ExecutionStatus[])
+          ? request.query.status.split(',').filter((s): s is ExecutionStatus => validExecutionStatuses.has(s))
           : undefined;
       const parsedLimit =
         request.query.limit !== undefined ? parseInt(request.query.limit, 10) : 20;

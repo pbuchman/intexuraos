@@ -19,7 +19,7 @@ function createFakeServices(): ServiceContainer {
       create: vi.fn(async () => ok({} as CronSchedule)),
       findById: vi.fn(async () => ok(null)),
       findByUserId: vi.fn(async () =>
-        ok({ schedules: [], nextCursor: null, total: 0 }),
+        ok({ schedules: [], nextCursor: null, count: 0 }),
       ),
       findDueSchedules: vi.fn(async () => ok([])),
       update: vi.fn(async () => ok({} as CronSchedule)),
@@ -28,10 +28,10 @@ function createFakeServices(): ServiceContainer {
       create: vi.fn(async () => ok({} as CronExecution)),
       findById: vi.fn(async () => ok(null)),
       findByUserId: vi.fn(async () =>
-        ok({ executions: [], nextCursor: null, total: 0 }),
+        ok({ executions: [], nextCursor: null, count: 0 }),
       ),
       findByScheduleId: vi.fn(async () =>
-        ok({ executions: [], nextCursor: null, total: 0 }),
+        ok({ executions: [], nextCursor: null, count: 0 }),
       ),
       findRunningByScheduleId: vi.fn(async () => ok(null)),
       update: vi.fn(async () => ok({} as CronExecution)),

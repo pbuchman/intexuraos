@@ -88,7 +88,7 @@ export class FirestoreScheduleRepository implements ScheduleRepository {
       return ok({
         schedules,
         nextCursor: hasMore && lastDoc !== undefined ? lastDoc.id : null,
-        total: schedules.length,
+        count: schedules.length,
       });
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to find schedules: ${getErrorMessage(error, 'Unknown error')}` });

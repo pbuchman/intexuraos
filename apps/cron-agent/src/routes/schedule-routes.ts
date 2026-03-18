@@ -232,7 +232,7 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 properties: {
                   schedules: { type: 'array', items: scheduleResponseSchema },
                   nextCursor: { type: ['string', 'null'] },
-                  total: { type: 'number' },
+                  count: { type: 'number' },
                 },
               },
             },
@@ -246,9 +246,10 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (auth === null) return;
 
       const manager = getScheduleManager();
+      const validScheduleStatuses = new Set<string>(['active', 'paused', 'deleted']);
       const statusFilter =
         request.query.status !== undefined
-          ? (request.query.status.split(',') as ScheduleStatus[])
+          ? request.query.status.split(',').filter((s): s is ScheduleStatus => validScheduleStatuses.has(s))
           : undefined;
       const parsedLimit =
         request.query.limit !== undefined ? parseInt(request.query.limit, 10) : 20;

@@ -216,8 +216,11 @@ export class OpenApiToolRegistry implements ToolRegistry {
         ...(bodyData !== undefined && { body: JSON.stringify(bodyData) }),
       });
 
+      const MAX_RESPONSE_SIZE = 50_000;
       const responseText = await response.text();
-      return responseText;
+      return responseText.length > MAX_RESPONSE_SIZE
+        ? responseText.slice(0, MAX_RESPONSE_SIZE) + '... [truncated]'
+        : responseText;
     };
   }
 }
