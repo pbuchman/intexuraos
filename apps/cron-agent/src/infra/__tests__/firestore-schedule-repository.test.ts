@@ -257,7 +257,7 @@ describe('FirestoreScheduleRepository', () => {
     expect(result.value.schedules.length).toBe(1);
   });
 
-  it('returns total count matching schedules length', async () => {
+  it('returns count matching schedules length', async () => {
     await repo.create('user-1', {
       name: 'A',
       description: 'test',
@@ -279,7 +279,7 @@ describe('FirestoreScheduleRepository', () => {
     const result = await repo.findByUserId('user-1', { limit: 50 });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.total).toBe(result.value.schedules.length);
+    expect(result.value.count).toBe(result.value.schedules.length);
   });
 
   it('returns null nextCursor when all results fit in limit', async () => {

@@ -99,13 +99,13 @@ export interface ExecutionListOptions {
 export interface ListSchedulesResponse {
   schedules: CronSchedule[];
   nextCursor: string | null;
-  total: number;
+  count: number;
 }
 
 export interface ListExecutionsResponse {
   executions: CronExecution[];
   nextCursor: string | null;
-  total: number;
+  count: number;
 }
 
 export interface ActionResult {

@@ -37,7 +37,7 @@ function createFakeScheduleRepo(): ScheduleRepository {
     findById: async (id: string): Promise<Result<CronSchedule | null, ScheduleRepositoryError>> =>
       ok(id === testSchedule.id ? testSchedule : null),
     findByUserId: async (): Promise<Result<ListSchedulesResponse, ScheduleRepositoryError>> =>
-      ok({ schedules: [testSchedule], nextCursor: null, total: 1 }),
+      ok({ schedules: [testSchedule], nextCursor: null, count: 1 }),
     findDueSchedules: async (): Promise<Result<CronSchedule[], ScheduleRepositoryError>> => ok([]),
     update: async (_id: string, updates: Partial<CronSchedule>): Promise<Result<CronSchedule, ScheduleRepositoryError>> =>
       ok({ ...testSchedule, ...updates }),
@@ -692,8 +692,8 @@ describe('createScheduleManager', () => {
         executionRepo: {
           create: async () => ok(testExec),
           findById: async () => ok(null),
-          findByUserId: async () => ok({ executions: [], nextCursor: null, total: 0 }),
-          findByScheduleId: async () => ok({ executions: [], nextCursor: null, total: 0 }),
+          findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+          findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
           findRunningByScheduleId: async () => ok(null),
           update: async () => ok(testExec),
         },
@@ -743,8 +743,8 @@ describe('createScheduleManager', () => {
             error: { code: 'INTERNAL_ERROR' as const, message: 'DB error' },
           }),
           findById: async () => ok(null),
-          findByUserId: async () => ok({ executions: [], nextCursor: null, total: 0 }),
-          findByScheduleId: async () => ok({ executions: [], nextCursor: null, total: 0 }),
+          findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+          findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
           findRunningByScheduleId: async () => ok(null),
           update: async () => ok({} as never),
         },

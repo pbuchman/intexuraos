@@ -89,7 +89,7 @@ export class FirestoreExecutionRepository implements ExecutionRepository {
       return ok({
         executions,
         nextCursor: hasMore && lastDoc !== undefined ? lastDoc.id : null,
-        total: executions.length,
+        count: executions.length,
       });
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to find executions: ${getErrorMessage(error, 'Unknown error')}` });
@@ -131,7 +131,7 @@ export class FirestoreExecutionRepository implements ExecutionRepository {
       return ok({
         executions,
         nextCursor: hasMore && lastDoc !== undefined ? lastDoc.id : null,
-        total: executions.length,
+        count: executions.length,
       });
     } catch (error: unknown) {
       return err({ code: 'INTERNAL_ERROR', message: `Failed to find executions by schedule: ${getErrorMessage(error, 'Unknown error')}` });

@@ -55,7 +55,7 @@ function createFakeServices(overrides: Partial<ServiceContainer> = {}): ServiceC
       create: vi.fn(async () => ok(testSchedule)),
       findById: vi.fn(async () => ok(testSchedule)),
       findByUserId: vi.fn(async () =>
-        ok({ schedules: [testSchedule], nextCursor: null, total: 1 }),
+        ok({ schedules: [testSchedule], nextCursor: null, count: 1 }),
       ),
       findDueSchedules: vi.fn(async () => ok([])),
       update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
@@ -66,10 +66,10 @@ function createFakeServices(overrides: Partial<ServiceContainer> = {}): ServiceC
       create: vi.fn(async () => ok(testExecution)),
       findById: vi.fn(async () => ok(testExecution)),
       findByUserId: vi.fn(async () =>
-        ok({ executions: [testExecution], nextCursor: null, total: 1 }),
+        ok({ executions: [testExecution], nextCursor: null, count: 1 }),
       ),
       findByScheduleId: vi.fn(async () =>
-        ok({ executions: [testExecution], nextCursor: null, total: 1 }),
+        ok({ executions: [testExecution], nextCursor: null, count: 1 }),
       ),
       findRunningByScheduleId: vi.fn(async () => ok(null)),
       update: vi.fn(async (_id: string, updates: Partial<CronExecution>) =>
@@ -201,7 +201,7 @@ describe('Internal Routes', () => {
         create: vi.fn(async () => ok(testSchedule)),
         findById: vi.fn(async () => ok(testSchedule)),
         findByUserId: vi.fn(async () =>
-          ok({ schedules: [testSchedule], nextCursor: null, total: 1 }),
+          ok({ schedules: [testSchedule], nextCursor: null, count: 1 }),
         ),
         findDueSchedules: vi.fn(async () => ok([testSchedule])),
         update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
@@ -237,7 +237,7 @@ describe('Internal Routes', () => {
         create: vi.fn(async () => ok(testSchedule)),
         findById: vi.fn(async () => ok(testSchedule)),
         findByUserId: vi.fn(async () =>
-          ok({ schedules: [testSchedule], nextCursor: null, total: 1 }),
+          ok({ schedules: [testSchedule], nextCursor: null, count: 1 }),
         ),
         findDueSchedules: vi.fn(async () => ok([testSchedule])),
         update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
@@ -248,10 +248,10 @@ describe('Internal Routes', () => {
         create: vi.fn(async () => ok(testExecution)),
         findById: vi.fn(async () => ok(testExecution)),
         findByUserId: vi.fn(async () =>
-          ok({ executions: [testExecution], nextCursor: null, total: 1 }),
+          ok({ executions: [testExecution], nextCursor: null, count: 1 }),
         ),
         findByScheduleId: vi.fn(async () =>
-          ok({ executions: [testExecution], nextCursor: null, total: 1 }),
+          ok({ executions: [testExecution], nextCursor: null, count: 1 }),
         ),
         findRunningByScheduleId: vi.fn(async () => ok(runningExecution)),
         update: vi.fn(async (_id: string, updates: Partial<CronExecution>) =>
@@ -316,7 +316,7 @@ describe('Internal Routes', () => {
         create: vi.fn(async () => ok(testSchedule)),
         findById: vi.fn(async () => ok(testSchedule)),
         findByUserId: vi.fn(async () =>
-          ok({ schedules: [testSchedule], nextCursor: null, total: 1 }),
+          ok({ schedules: [testSchedule], nextCursor: null, count: 1 }),
         ),
         findDueSchedules: vi.fn(async () => ok([testSchedule])),
         update: vi.fn(async (_id: string, updates: Partial<CronSchedule>) =>
