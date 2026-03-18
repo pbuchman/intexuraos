@@ -49,12 +49,14 @@ describe('drainTaskQueue', () => {
     findById: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
   };
   let mockTaskDispatcher: {
     dispatch: ReturnType<typeof vi.fn>;
   };
   let mockLinearAgentClient: {
     validateIssue: ReturnType<typeof vi.fn>;
+    fetchIssueTree: ReturnType<typeof vi.fn>;
   };
   let mockWhatsappNotifier: {
     notifyTaskStarted: ReturnType<typeof vi.fn>;
@@ -62,6 +64,9 @@ describe('drainTaskQueue', () => {
   };
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
+  };
+  let mockTaskEnqueueService: {
+    enqueue: ReturnType<typeof vi.fn>;
   };
   const workerConfig = {
     name: 'home-mac',
@@ -89,6 +94,7 @@ describe('drainTaskQueue', () => {
       findById: vi.fn(),
       update: vi.fn(),
       countQueued: vi.fn(),
+      create: vi.fn(),
     };
 
     mockTaskDispatcher = {
@@ -97,6 +103,7 @@ describe('drainTaskQueue', () => {
 
     mockLinearAgentClient = {
       validateIssue: vi.fn(),
+      fetchIssueTree: vi.fn(),
     };
 
     mockWhatsappNotifier = {
@@ -106,6 +113,10 @@ describe('drainTaskQueue', () => {
 
     mockWorkerSettingsRepo = {
       getSettings: vi.fn(),
+    };
+
+    mockTaskEnqueueService = {
+      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 0, estimatedWaitMinutes: 0 })),
     };
 
   });
@@ -153,6 +164,7 @@ describe('drainTaskQueue', () => {
       linearAgentClient: mockLinearAgentClient as unknown as DrainTaskQueueDeps['linearAgentClient'],
       whatsappNotifier: mockWhatsappNotifier as unknown as DrainTaskQueueDeps['whatsappNotifier'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainTaskQueueDeps['workerSettingsRepo'],
+      taskEnqueueService: mockTaskEnqueueService as unknown as DrainTaskQueueDeps['taskEnqueueService'],
     };
   }
 
@@ -1038,6 +1050,122 @@ describe('drainTaskQueue', () => {
       if (result.ok) {
         expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
       }
+    });
+  });
+
+  describe('fan-out check (INT-962)', () => {
+    it('triggers fan-out when parent has code-task children and returns dispatched', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-956', agentType: 'execution' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      // validateIssue returns code-task label and children
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-956',
+          labels: ['code-task'],
+          childCount: 2,
+          parentId: null,
+        })
+      );
+
+      // fetchIssueTree returns children with code-task labels
+      mockLinearAgentClient.fetchIssueTree.mockResolvedValue(
+        ok({
+          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          descendants: [
+            { id: 'child-uuid-1', identifier: 'INT-957', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+            { id: 'child-uuid-2', identifier: 'INT-958', url: '', parentId: 'parent-uuid', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          ],
+        })
+      );
+
+      mockCodeTaskRepo.create.mockResolvedValue(ok(createMockTask({ id: 'child-task' })));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'implemented' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+      }
+
+      // Verify child tasks were created
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('falls back to normal dispatch when fan-out finds no qualifying children', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-956' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-956',
+          labels: ['code-task'],
+          childCount: 1,
+          parentId: null,
+        })
+      );
+
+      mockLinearAgentClient.fetchIssueTree.mockResolvedValue(
+        ok({
+          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          descendants: [
+            { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
+          ],
+        })
+      );
+
+      // Normal dispatch should proceed
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+      }
+
+      // Verify normal dispatch was called (fan-out failed, fell through)
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
+    });
+
+    it('does not trigger fan-out when hasChildren=false', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-956' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'issue-id',
+          identifier: 'INT-956',
+          title: 'Test',
+          url: 'https://linear.app',
+          labels: ['code-task'],
+          childCount: 0,
+          parentId: null,
+        })
+      );
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      await drainTaskQueue(createDeps());
+
+      // Normal dispatch should proceed (no fan-out)
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
     });
   });
 
