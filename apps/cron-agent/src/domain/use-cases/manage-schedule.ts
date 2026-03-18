@@ -17,7 +17,7 @@ import { computeNextExecution } from '../cron-utils.js';
 import { parseSchedule, type ParseScheduleDeps } from './parse-schedule.js';
 
 export interface ScheduleError {
-  code: 'NOT_FOUND' | 'VALIDATION_ERROR' | 'PARSE_FAILED' | 'INTERNAL_ERROR';
+  code: 'NOT_FOUND' | 'VALIDATION_ERROR' | 'PARSE_FAILED' | 'INTERNAL_ERROR' | 'CONFLICT';
   message: string;
 }
 
@@ -216,6 +216,12 @@ export function createScheduleManager(deps: ManageScheduleDeps): ScheduleManager
       }
       if (existing.value?.userId !== userId) {
         return err({ code: 'NOT_FOUND', message: 'Schedule not found' });
+      }
+
+      // Check for overlapping execution to prevent concurrent triggers
+      const runningResult = await executeDeps.executionRepo.findRunningByScheduleId(id);
+      if (runningResult.ok && runningResult.value !== null) {
+        return err({ code: 'CONFLICT', message: 'Schedule is already running' });
       }
 
       const result = await executeSchedule(executeDeps, existing.value, 'manual');

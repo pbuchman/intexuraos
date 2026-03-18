@@ -227,6 +227,67 @@ describe('handleTick', () => {
     expect(result.executed).toBe(0);
   });
 
+  it('logs saturation warning when 100 or more schedules are due', async () => {
+    const warnCalls: unknown[] = [];
+    const saturationLogger = {
+      info: () => { /* noop */ },
+      warn: (...args: unknown[]) => { warnCalls.push(args); },
+      error: () => { /* noop */ },
+      debug: () => { /* noop */ },
+      child: () => saturationLogger,
+    } as never;
+
+    // Create 100 schedules
+    const schedules = Array.from({ length: 100 }, (_, i) =>
+      createTestSchedule({ id: `schedule-${String(i)}` }),
+    );
+
+    const result = await handleTick({
+      logger: saturationLogger,
+      scheduleRepo: {
+        create: async () => ok({} as CronSchedule),
+        findById: async () => ok(null),
+        findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
+        findDueSchedules: async () => ok(schedules),
+        update: async () => ok({} as CronSchedule),
+        incrementCounters: async () => ok(undefined),
+      },
+      executionRepo: {
+        create: async () => ok({} as never),
+        findById: async () => ok(null),
+        findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+        findRunningByScheduleId: async () => ok(null),
+        update: async () => ok({} as never),
+      },
+      executeDeps: {
+        logger: saturationLogger,
+        executionRepo: {
+          create: async () => ({
+            ok: false as const,
+            error: { code: 'INTERNAL_ERROR' as const, message: 'DB error' },
+          }),
+          findById: async () => ok(null),
+          findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+          findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+          findRunningByScheduleId: async () => ok(null),
+          update: async () => ok({} as never),
+        },
+        scheduleRepo: {
+          create: async () => ok({} as CronSchedule),
+          findById: async () => ok(null),
+          findByUserId: async () => ok({ schedules: [], nextCursor: null, count: 0 }),
+          findDueSchedules: async () => ok([]),
+          update: async () => ok({} as CronSchedule),
+          incrementCounters: async () => ok(undefined),
+        },
+        actionDeps: {} as never,
+      },
+    });
+    expect(result.errors).toBe(100);
+    expect(warnCalls.length).toBe(1);
+  });
+
   it('handles findDueSchedules failure', async () => {
     const result = await handleTick({
       logger: createTestLogger(),

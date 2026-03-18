@@ -27,6 +27,9 @@ export async function handleTick(deps: HandleTickDeps): Promise<TickResult> {
   }
 
   const dueSchedules = dueResult.value;
+  if (dueSchedules.length >= 100) {
+    logger.warn({ count: dueSchedules.length }, 'Schedule saturation — limit reached, some due schedules may be deferred to next tick');
+  }
   logger.info({ count: dueSchedules.length }, 'Found due schedules');
 
   let executed = 0;

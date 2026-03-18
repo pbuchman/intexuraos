@@ -160,13 +160,15 @@ function getScheduleManager(): ReturnType<typeof createScheduleManager> {
   });
 }
 
-function mapErrorCode(code: ScheduleError['code']): 'NOT_FOUND' | 'INVALID_REQUEST' | 'INTERNAL_ERROR' {
+function mapErrorCode(code: ScheduleError['code']): 'NOT_FOUND' | 'INVALID_REQUEST' | 'INTERNAL_ERROR' | 'CONFLICT' {
   switch (code) {
     case 'NOT_FOUND':
       return 'NOT_FOUND';
     case 'VALIDATION_ERROR':
     case 'PARSE_FAILED':
       return 'INVALID_REQUEST';
+    case 'CONFLICT':
+      return 'CONFLICT';
     case 'INTERNAL_ERROR':
       return 'INTERNAL_ERROR';
   }
