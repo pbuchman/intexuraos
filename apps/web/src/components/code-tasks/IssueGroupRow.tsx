@@ -102,7 +102,7 @@ function stepLabel(name: string, state: StepState, compact?: boolean): string {
 
 function PulsingDot(): React.JSX.Element {
   return (
-    <span role="status" aria-label="Loading" className="flex h-5 w-5 items-center justify-center">
+    <span role="status" aria-label="Loading" className="inline-flex items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1">
       <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
     </span>
   );
