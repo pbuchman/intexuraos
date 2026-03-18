@@ -113,17 +113,18 @@ export async function executeSchedule(
   } catch (error: unknown) {
     const durationMs = Date.now() - startTime;
     const errorMsg = String(error);
+    const failedAt = new Date().toISOString();
 
     await executionRepo.update(execution.id, {
       status: 'failure',
-      completedAt: new Date().toISOString(),
+      completedAt: failedAt,
       durationMs,
       error: errorMsg,
     });
 
     const scheduleUpdateResult = await scheduleRepo.incrementCounters(schedule.id,
       { executionCount: true, failureCount: true },
-      { lastExecutedAt: new Date().toISOString(), nextExecutionAt: computeNextExecution(schedule.cronExpression, schedule.timezone) },
+      { lastExecutedAt: failedAt, nextExecutionAt: computeNextExecution(schedule.cronExpression, schedule.timezone) },
     );
     if (!scheduleUpdateResult.ok) {
       logger.warn({ scheduleId: schedule.id, error: scheduleUpdateResult.error.message }, 'Failed to update schedule after execution exception');
