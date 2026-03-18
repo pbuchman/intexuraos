@@ -1,8 +1,9 @@
 /**
  * Use case: Start Execution Agent implementation from a completed planning design task.
  *
- * Validates that the Linear issue has the 'code-task' label (set by planning),
- * then dispatches an Execution Agent strict-execution task.
+ * Validates that the Linear issue has either:
+ * - 'code-task' label → dispatches a single Execution Agent task
+ * - 'complex-task' label → fans out child tasks via fanOutChildTasks
  */
 
 import { err, ok, type Result } from '@intexuraos/common-core';
@@ -14,9 +15,10 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
-import { hasCodeTaskLabel, hasUnclearLabel } from '../../domain/utils/labelUtils.js';
+import { hasCodeTaskLabel, hasComplexTaskLabel, hasUnclearLabel } from '../../domain/utils/labelUtils.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../utils/secrets.js';
+import { fanOutChildTasks } from './fanOutChildTasks.js';
 
 export const EXECUTION_AGENT_PROMPT =
   'Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.';
@@ -41,6 +43,8 @@ export interface SubmitToExecutionAgentResult {
   resourceUrl: string;
   workerLocation: WorkerLocation;
   implementationOf: string;
+  /** Child task IDs created by fan-out for complex tasks */
+  childTaskIds?: string[];
 }
 
 /**
@@ -212,6 +216,7 @@ export async function submitToExecutionAgent(
   }
 
   const freshLabels = validateResult.value.labels;
+  const isComplexTask = hasComplexTaskLabel(freshLabels);
 
   // Step 8: Check labels
   if (hasUnclearLabel(freshLabels)) {
@@ -220,7 +225,7 @@ export async function submitToExecutionAgent(
       code: 'label_not_ready',
       message: 'The planning agent flagged questions that need resolution. Review the Linear issue, address open questions, then retry the planning agent.',
     });
-  } else if (!hasCodeTaskLabel(freshLabels)) {
+  } else if (!isComplexTask && !hasCodeTaskLabel(freshLabels)) {
     logger.warn({ linearIssueId, labels: freshLabels }, 'Linear issue missing code-task label, planning may not have completed successfully');
     return err({
       code: 'label_not_ready',
@@ -325,7 +330,44 @@ export async function submitToExecutionAgent(
     );
   }
 
-  // Step 12: Enqueue for dispatch
+  // Step 12: Complex-task fan-out or normal enqueue
+  if (isComplexTask) {
+    logger.info({ linearIssueId, executionTaskId }, 'Complex task detected, triggering fan-out of child tasks');
+
+    const fanOutResult = await fanOutChildTasks(
+      { logger, codeTaskRepo, linearAgentClient, taskEnqueueService, orchestratorSecret: deps.orchestratorSecret },
+      {
+        parentTask: executionTask,
+        userId,
+        linearIssueId,
+        parentIssueUuid: validateResult.value.id,
+      },
+    );
+
+    if (!fanOutResult.ok) {
+      logger.error(
+        { linearIssueId, error: fanOutResult.error },
+        'Fan-out failed for complex task, rolling back'
+      );
+      await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
+      return err({ code: 'internal_error', message: `Fan-out failed: ${fanOutResult.error.message}` });
+    }
+
+    logger.info(
+      { executionTaskId, childTaskIds: fanOutResult.value.childTaskIds },
+      'Complex task fan-out completed'
+    );
+
+    return ok({
+      codeTaskId: executionTaskId,
+      resourceUrl: `/#/code-tasks/${executionTaskId}`,
+      workerLocation: 'queued' as WorkerLocation,
+      implementationOf: originalTask.id,
+      childTaskIds: fanOutResult.value.childTaskIds,
+    });
+  }
+
+  // Step 12b: Normal enqueue for single tasks
   const enqueueResult = await taskEnqueueService.enqueue({
     taskId: executionTaskId,
     userId,
