@@ -96,17 +96,26 @@ export function CronSchedulesPage(): React.JSX.Element {
     [triggerSchedule],
   );
 
-  const handleDelete = useCallback(
-    (id: string, name: string): void => {
-      const confirmed = window.confirm(
-        `Are you sure you want to delete the schedule "${name}"? This action cannot be undone.`,
-      );
-      if (confirmed) {
-        void deleteSchedule(id);
-      }
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleDeleteRequest = useCallback(
+    (id: string): void => {
+      setConfirmDeleteId(id);
+    },
+    [],
+  );
+
+  const handleDeleteConfirm = useCallback(
+    (id: string): void => {
+      void deleteSchedule(id);
+      setConfirmDeleteId(null);
     },
     [deleteSchedule],
   );
+
+  const handleDeleteCancel = useCallback((): void => {
+    setConfirmDeleteId(null);
+  }, []);
 
   const handleRowClick = useCallback(
     (id: string): void => {
@@ -221,7 +230,10 @@ export function CronSchedulesPage(): React.JSX.Element {
               onRowClick={handleRowClick}
               onPauseResume={handlePauseResume}
               onTrigger={handleTrigger}
-              onDelete={handleDelete}
+              onDeleteRequest={handleDeleteRequest}
+              onDeleteConfirm={handleDeleteConfirm}
+              onDeleteCancel={handleDeleteCancel}
+              showDeleteConfirm={confirmDeleteId === schedule.id}
             />
           ))}
         </div>
