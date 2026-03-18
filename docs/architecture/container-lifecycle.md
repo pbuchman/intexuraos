@@ -252,9 +252,9 @@ private async teardownAttempt(taskId: string, keepSession: boolean): Promise<voi
 }
 ```
 
-Most internal call sites pass `keepSession=true` (between managed attempts). The actual container destruction happens in `finalizeTask()`, which calls `teardownAttempt(taskId, false)` — unless `preserveFailedContainers` is enabled, in which case it calls `preserveWorker()` instead.
+Most internal call sites pass `keepSession=true` (between managed attempts). The actual container destruction happens in `finalizeTask()`, which calls `teardownAttempt(taskId, false)` — unless `preserveWorkerContainers` is enabled, in which case it calls `preserveWorker()` instead.
 
-If `preserveFailedContainers` is `true`, containers are preserved on `failed`, `interrupted`, **and** `completed` statuses.
+If `preserveWorkerContainers` is `true`, containers are preserved on `failed`, `interrupted`, **and** `completed` statuses.
 
 ### 2. Cancellation
 

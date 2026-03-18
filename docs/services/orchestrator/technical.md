@@ -688,21 +688,21 @@ Appends LLM audit records to a local JSONL file:
 
 #### Optional
 
-| Variable                                       | Default                            | Description                                          |
-| ---------------------------------------------- | ---------------------------------- | ---------------------------------------------------- |
-| `INTEXURAOS_REPOSITORY_PATH`                   | `~/.claude-orchestrator/repo`      | Local repo clone path                                |
-| `INTEXURAOS_WORKER_CAPACITY`                   | `2`                                | Max concurrent tasks                                 |
-| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`           | `3`                                | Max auto-continue attempts before terminal failure   |
-| `INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS` | `1`                                | Keep containers alive after failure for debugging    |
-| `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | (GCR latest)                       | Override the Docker image used for workers           |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS`           | `0`                                | `1` = enable forensics mode (core dumps, crash data) |
-| `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH`      | `~/.claude-orchestrator/forensics` | Forensics data output directory                      |
-| `INTEXURAOS_GIT_USER_NAME`                     | host git config                    | Git user.name for commits inside worker containers   |
-| `INTEXURAOS_GIT_USER_EMAIL`                    | host git config                    | Git user.email for commits inside worker containers  |
-| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`            | (Secret Manager)                   | PEM key override for testing without Secret Manager  |
-| `KEEP_CONTAINERS_ALIVE`                        | `0`                                | `1` = never remove containers (debug mode)           |
-| `PORT`                                         | `8199`                             | HTTP server port                                     |
-| `LOG_LEVEL`                                    | `info`                             | Pino log level                                       |
+| Variable                                       | Default                            | Description                                                |
+| ---------------------------------------------- | ---------------------------------- | ---------------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_PATH`                   | `~/.claude-orchestrator/repo`      | Local repo clone path                                      |
+| `INTEXURAOS_WORKER_CAPACITY`                   | `2`                                | Max concurrent tasks                                       |
+| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`           | `3`                                | Max auto-continue attempts before terminal failure         |
+| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`        | `1`                                | Keep worker containers after task completion for debugging |
+| `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | (GCR latest)                       | Override the Docker image used for workers                 |
+| `INTEXURAOS_CLAUDE_WORKER_FORENSICS`           | `0`                                | `1` = enable forensics mode (core dumps, crash data)       |
+| `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH`      | `~/.claude-orchestrator/forensics` | Forensics data output directory                            |
+| `INTEXURAOS_GIT_USER_NAME`                     | host git config                    | Git user.name for commits inside worker containers         |
+| `INTEXURAOS_GIT_USER_EMAIL`                    | host git config                    | Git user.email for commits inside worker containers        |
+| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`            | (Secret Manager)                   | PEM key override for testing without Secret Manager        |
+| `KEEP_CONTAINERS_ALIVE`                        | `0`                                | `1` = never remove containers (debug mode)                 |
+| `PORT`                                         | `8199`                             | HTTP server port                                           |
+| `LOG_LEVEL`                                    | `info`                             | Pino log level                                             |
 
 ### Docker Container Defaults
 

@@ -2893,7 +2893,7 @@ describe('TaskDispatcher', () => {
       );
     });
 
-    it('preserves failed worker container when preserveFailedContainers is enabled', async () => {
+    it('preserves worker container when preserveWorkerContainers is enabled', async () => {
       vi.useFakeTimers();
       const preserveState = createStatePersistence();
       const localDestroyWorker = vi.fn(async () => undefined);
@@ -2926,7 +2926,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
-          preserveFailedContainers: true,
+          preserveWorkerContainers: true,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: true }),
@@ -2985,7 +2985,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
-          preserveFailedContainers: true,
+          preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
               passed: true,
@@ -3068,7 +3068,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
-          preserveFailedContainers: true,
+          preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
               passed: true,
@@ -3085,7 +3085,7 @@ describe('TaskDispatcher', () => {
       return { destroyWorker, preserveWorker, dispatcher };
     }
 
-    it('does not preserve review agent containers even when preserveFailedContainers is enabled', async () => {
+    it('does not preserve review agent containers when preserveWorkerContainers is enabled', async () => {
       const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
 
       const taskId = 'review-no-preserve';
@@ -3123,7 +3123,7 @@ describe('TaskDispatcher', () => {
       expect(destroyWorker).toHaveBeenCalledWith(taskId);
     });
 
-    it('does not preserve pull_request agent containers even when preserveFailedContainers is enabled', async () => {
+    it('does not preserve pull_request agent containers when preserveWorkerContainers is enabled', async () => {
       const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
 
       const taskId = 'pr-no-preserve';
