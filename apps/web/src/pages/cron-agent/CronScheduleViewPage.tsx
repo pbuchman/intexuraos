@@ -229,6 +229,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
     executions,
     loading: executionsLoading,
     error: executionsError,
+    refresh: refreshExecutions,
   } = useCronExecutions(id !== undefined ? { scheduleId: id } : undefined);
 
   const recentExecutions = executions.slice(0, 20);
@@ -285,8 +286,9 @@ export function CronScheduleViewPage(): React.JSX.Element {
       const token = await getAccessToken();
       await triggerScheduleApi(token, id);
       if (isMountedRef.current) {
-        // Refresh schedule to get updated execution counts
+        // Refresh schedule to get updated execution counts and executions list
         void fetchSchedule();
+        void refreshExecutions(false);
       }
     } catch (err) {
       if (isMountedRef.current) {
@@ -297,7 +299,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
         setTriggering(false);
       }
     }
-  }, [getAccessToken, id, fetchSchedule]);
+  }, [getAccessToken, id, fetchSchedule, refreshExecutions]);
 
   const handleDelete = useCallback(async (): Promise<void> => {
     if (id === undefined) return;

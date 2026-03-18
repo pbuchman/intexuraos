@@ -51,6 +51,9 @@ export function useCronSchedules(options?: { status?: CronScheduleStatus[] }): {
   const [hasMore, setHasMore] = useState(true);
   const isMountedRef = useRef(true);
 
+  // Serialize status array to a stable string for dependency tracking
+  const statusKey = options?.status?.join(',') ?? '';
+
   const refresh = useCallback(
     async (showLoading?: boolean): Promise<void> => {
       const shouldShowLoading = showLoading !== false;
@@ -61,9 +64,10 @@ export function useCronSchedules(options?: { status?: CronScheduleStatus[] }): {
 
       try {
         const token = await getAccessToken();
+        const statusValues = statusKey !== '' ? statusKey.split(',') as CronScheduleStatus[] : undefined;
         const listOptions: { status?: CronScheduleStatus[]; limit: number } = { limit: 50 };
-        if (options?.status !== undefined && options.status.length > 0) {
-          listOptions.status = options.status;
+        if (statusValues !== undefined && statusValues.length > 0) {
+          listOptions.status = statusValues;
         }
         const data = await listSchedulesApi(token, listOptions);
         if (isMountedRef.current) {
@@ -81,7 +85,7 @@ export function useCronSchedules(options?: { status?: CronScheduleStatus[] }): {
         }
       }
     },
-    [getAccessToken, options?.status]
+    [getAccessToken, statusKey]
   );
 
   const loadMore = useCallback(async (): Promise<void> => {
@@ -90,12 +94,13 @@ export function useCronSchedules(options?: { status?: CronScheduleStatus[] }): {
 
     try {
       const token = await getAccessToken();
+      const statusValues = statusKey !== '' ? statusKey.split(',') as CronScheduleStatus[] : undefined;
       const listOptions: { status?: CronScheduleStatus[]; limit: number; cursor: string } = {
         limit: 50,
         cursor,
       };
-      if (options?.status !== undefined && options.status.length > 0) {
-        listOptions.status = options.status;
+      if (statusValues !== undefined && statusValues.length > 0) {
+        listOptions.status = statusValues;
       }
       const data = await listSchedulesApi(token, listOptions);
       if (isMountedRef.current) {
@@ -112,7 +117,7 @@ export function useCronSchedules(options?: { status?: CronScheduleStatus[] }): {
         setLoadingMore(false);
       }
     }
-  }, [cursor, loadingMore, getAccessToken, options?.status]);
+  }, [cursor, loadingMore, getAccessToken, statusKey]);
 
   const createScheduleAction = useCallback(
     async (request: CreateScheduleRequest): Promise<string> => {
