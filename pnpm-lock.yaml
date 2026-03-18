@@ -587,6 +587,73 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  apps/cron-agent:
+    dependencies:
+      '@fastify/cors':
+        specifier: ^10.0.1
+        version: 10.1.0
+      '@fastify/swagger':
+        specifier: ^9.4.2
+        version: 9.6.1
+      '@fastify/swagger-ui':
+        specifier: ^5.2.1
+        version: 5.2.4
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../../packages/common-core
+      '@intexuraos/common-http':
+        specifier: workspace:*
+        version: link:../../packages/common-http
+      '@intexuraos/http-contracts':
+        specifier: workspace:*
+        version: link:../../packages/http-contracts
+      '@intexuraos/http-server':
+        specifier: workspace:*
+        version: link:../../packages/http-server
+      '@intexuraos/infra-firestore':
+        specifier: workspace:*
+        version: link:../../packages/infra-firestore
+      '@intexuraos/infra-gemini':
+        specifier: workspace:*
+        version: link:../../packages/infra-gemini
+      '@intexuraos/infra-otel':
+        specifier: workspace:*
+        version: link:../../packages/infra-otel
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../../packages/llm-contract
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
+      cron-parser:
+        specifier: ^4.9.0
+        version: 4.9.0
+      fastify:
+        specifier: ^5.1.0
+        version: 5.6.2
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.0.16
+        version: 4.0.17(vitest@4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
+      nock:
+        specifier: ^14.0.3
+        version: 14.0.10
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
+
   apps/data-insights-agent:
     dependencies:
       '@fastify/cors':
@@ -8422,6 +8489,13 @@ packages:
         integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==,
       }
 
+  cron-parser@4.9.0:
+    resolution:
+      {
+        integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==,
+      }
+    engines: { node: '>=12.0.0' }
+
   croner@4.1.97:
     resolution:
       {
@@ -11821,6 +11895,13 @@ packages:
       }
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  luxon@3.7.2:
+    resolution:
+      {
+        integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==,
+      }
+    engines: { node: '>=12' }
 
   lz-string@1.5.0:
     resolution:
@@ -21038,6 +21119,10 @@ snapshots:
 
   create-require@1.1.1: {}
 
+  cron-parser@4.9.0:
+    dependencies:
+      luxon: 3.7.2
+
   croner@4.1.97: {}
 
   cross-env@7.0.3:
@@ -23422,6 +23507,8 @@ snapshots:
   lucide-react@0.561.0(react@19.2.3):
     dependencies:
       react: 19.2.3
+
+  luxon@3.7.2: {}
 
   lz-string@1.5.0: {}
 
