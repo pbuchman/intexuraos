@@ -1550,6 +1550,89 @@ describe('processCodeAction', () => {
       });
     });
 
+    it('logs warning but continues when status reset to queued fails during fallback (INT-977)', async () => {
+      vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+        linearIssueId: 'INT-956',
+        linearIssueTitle: 'Parent Issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: true,
+        linearFallback: false,
+      });
+
+      const parentTask = {
+        id: 'task-parent-123',
+        userId: 'user-789',
+        prompt: 'Implement all sub-tasks',
+        sanitizedPrompt: 'Implement all sub-tasks',
+        systemPromptHash: 'system-prompt-hash-v1',
+        workerType: 'auto' as const,
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        status: 'queued' as const,
+        dedupKey: 'dedup-parent',
+        callbackReceived: false,
+        traceId: 'trace-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-956',
+        agentType: 'execution' as const,
+      };
+      vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(ok(parentTask));
+
+      // Fan-out returns no qualifying children
+      vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-956',
+          title: 'Parent',
+          url: 'https://linear.app',
+          labels: ['code-task'],
+          childCount: 1,
+          parentId: null,
+        })
+      );
+      vi.mocked(linearAgentClient.fetchIssueTree).mockResolvedValueOnce(
+        ok({
+          root: { id: 'parent-uuid', identifier: 'INT-956', url: '', parentId: null, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          descendants: [
+            { id: 'child-uuid-1', identifier: 'INT-959', url: '', parentId: 'parent-uuid', labels: ['feature'], assigneeId: null, state: 'Backlog' },
+          ],
+        })
+      );
+
+      vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: status reset fails
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+        err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
+      );
+
+      const result = await processCodeAction(
+        { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+        {
+          actionId: 'action-123',
+          approvalEventId: 'approval-456',
+          userId: 'user-789',
+          prompt: 'Implement all sub-tasks',
+          workerType: 'auto',
+          linearIssueId: 'INT-956',
+        }
+      );
+
+      // Still succeeds — status reset failure is best-effort
+      expect(result.ok).toBe(true);
+
+      // Warning was logged
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-parent-123' }),
+        expect.stringContaining('Failed to reset parent status'),
+      );
+
+      // Enqueue was still called
+      expect(taskEnqueueService.enqueue).toHaveBeenCalled();
+    });
+
     it('returns queue_full when enqueue fails with queue_full during no_qualifying_children fallback', async () => {
       vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
         linearIssueId: 'INT-956',
