@@ -9,6 +9,7 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { CodeAgentClient, CodeAgentError, CancelTaskError, CancelTaskWithNonceInput, CancelTaskWithNonceOutput, SubmitToPhase2Input, SubmitToPhase2Output, SubmitToPhase2Error } from '../../domain/ports/codeAgentClient.js';
 import type { CodeActionPayload } from '../../domain/models/action.js';
+
 type LogMethod = (obj: unknown, msg?: string) => void;
 
 interface HttpLogger {
