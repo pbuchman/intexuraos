@@ -2,6 +2,8 @@ import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { useCronSchedules } from '@/hooks';
+import { useTimeTick } from '@/hooks';
+import { formatRelativeNullable } from '@/utils/dateFormat';
 import { Plus, Play, Pause, Trash2, Zap, RefreshCw } from 'lucide-react';
 import type { CronScheduleStatus } from '@/types';
 
@@ -16,32 +18,15 @@ const FILTER_OPTIONS: { key: FilterOption; label: string }[] = [
 ];
 
 function loadFilterFromStorage(): FilterOption {
-  const stored = localStorage.getItem(FILTER_STORAGE_KEY);
-  if (stored === 'active' || stored === 'paused' || stored === 'all') {
-    return stored;
+  try {
+    const stored = localStorage.getItem(FILTER_STORAGE_KEY);
+    if (stored === 'active' || stored === 'paused' || stored === 'all') {
+      return stored;
+    }
+  } catch {
+    // localStorage unavailable
   }
   return 'active';
-}
-
-function formatRelativeTime(dateStr: string | null): string {
-  if (dateStr === null) return 'Never';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const absDiffMs = Math.abs(diffMs);
-  const isFuture = diffMs < 0;
-
-  if (absDiffMs < 60000) return isFuture ? 'in < 1m' : '< 1m ago';
-  if (absDiffMs < 3600000) {
-    const mins = Math.floor(absDiffMs / 60000);
-    return isFuture ? `in ${String(mins)}m` : `${String(mins)}m ago`;
-  }
-  if (absDiffMs < 86400000) {
-    const hours = Math.floor(absDiffMs / 3600000);
-    return isFuture ? `in ${String(hours)}h` : `${String(hours)}h ago`;
-  }
-  const days = Math.floor(absDiffMs / 86400000);
-  return isFuture ? `in ${String(days)}d` : `${String(days)}d ago`;
 }
 
 function getStatusFilterValues(filter: FilterOption): CronScheduleStatus[] | undefined {
@@ -64,6 +49,8 @@ const FILTER_ACTIVE_CLASSES: Record<FilterOption, string> = {
 
 export function CronSchedulesPage(): React.JSX.Element {
   const navigate = useNavigate();
+  // Keep relative timestamps fresh
+  useTimeTick(30000);
   const [activeFilter, setActiveFilter] = useState<FilterOption>(loadFilterFromStorage);
 
   const statusFilter = useMemo(() => getStatusFilterValues(activeFilter), [activeFilter]);
@@ -88,7 +75,11 @@ export function CronSchedulesPage(): React.JSX.Element {
 
   const handleFilterChange = useCallback((filter: FilterOption): void => {
     setActiveFilter(filter);
-    localStorage.setItem(FILTER_STORAGE_KEY, filter);
+    try {
+      localStorage.setItem(FILTER_STORAGE_KEY, filter);
+    } catch {
+      // localStorage unavailable
+    }
   }, []);
 
   const handlePauseResume = useCallback(
@@ -274,10 +265,10 @@ export function CronSchedulesPage(): React.JSX.Element {
                     <span className="font-mono">{schedule.cronExpression}</span>
                     <span>{schedule.timezone}</span>
                     <span>
-                      Next: {formatRelativeTime(schedule.nextExecutionAt)}
+                      Next: {formatRelativeNullable(schedule.nextExecutionAt)}
                     </span>
                     <span>
-                      Last: {formatRelativeTime(schedule.lastExecutedAt)}
+                      Last: {formatRelativeNullable(schedule.lastExecutedAt)}
                     </span>
                     <span>
                       {String(schedule.executionCount)} run{schedule.executionCount !== 1 ? 's' : ''}

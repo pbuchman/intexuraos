@@ -11,9 +11,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
-import { useCronExecutions } from '@/hooks';
-import { useTimeTick } from '@/hooks';
-import { formatRelative } from '@/utils/dateFormat';
+import { useCronExecutions, useTimeTick } from '@/hooks';
+import { formatRelative, formatDurationMs } from '@/utils/dateFormat';
 import type { CronExecution, CronExecutionStatus } from '@/types';
 
 const STATUS_FILTERS: { label: string; value: CronExecutionStatus | 'all' }[] = [
@@ -42,12 +41,6 @@ function getInitialFilter(): CronExecutionStatus | 'all' {
     // localStorage unavailable
   }
   return 'all';
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms === null) return '-';
-  if (ms < 1000) return `${String(ms)}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function formatCost(cost: number): string {
@@ -161,7 +154,7 @@ function ExecutionDetails({ execution }: { execution: CronExecution }): React.JS
                           {call.toolName}
                         </span>
                         <span className="text-xs text-slate-400 dark:text-slate-500">
-                          {formatDuration(call.durationMs)}
+                          {formatDurationMs(call.durationMs)}
                         </span>
                       </div>
                       {isExpanded ? (
@@ -381,7 +374,7 @@ export function CronExecutionsPage(): React.JSX.Element {
 
                       {/* Duration */}
                       <span className="text-sm text-slate-600 dark:text-slate-400">
-                        {formatDuration(execution.durationMs)}
+                        {formatDurationMs(execution.durationMs)}
                       </span>
 
                       {/* Tool Calls Count */}
