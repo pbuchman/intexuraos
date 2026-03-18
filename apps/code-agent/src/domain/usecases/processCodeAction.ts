@@ -23,6 +23,9 @@ import { backLinkPlanningTask } from './backLinkPlanningTask.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 
+// TODO: Compute from actual system prompt content instead of using a static placeholder.
+const SYSTEM_PROMPT_HASH_PLACEHOLDER = 'system-prompt-hash-v1';
+
 /**
  * Request to process a code action.
  */
@@ -189,7 +192,7 @@ export async function processCodeAction(
       userId,
       prompt,
       sanitizedPrompt: sanitizedPromptText,
-      systemPromptHash: 'system-prompt-hash-v1',
+      systemPromptHash: SYSTEM_PROMPT_HASH_PLACEHOLDER,
       workerType: effectiveWorkerType,
       /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
       workerLocation: enabledWorkers[0]?.name ?? 'unknown',
@@ -297,7 +300,7 @@ export async function processCodeAction(
     userId,
     prompt,
     sanitizedPrompt: sanitizedPromptText,
-    systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system prompt
+    systemPromptHash: SYSTEM_PROMPT_HASH_PLACEHOLDER,
     workerType: effectiveWorkerType,
     /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown', // Use first worker as default
