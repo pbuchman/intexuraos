@@ -263,7 +263,10 @@ export async function processCodeAction(
 
       // INT-977: Parent was created with 'dispatched' status to avoid polluting queue count
       // during fan-out. Reset to 'queued' before enqueue so it enters the queue properly.
-      await codeTaskRepo.update(parentTask.id, { status: 'queued' });
+      const statusResetResult = await codeTaskRepo.update(parentTask.id, { status: 'queued' });
+      if (!statusResetResult.ok) {
+        logger.warn({ taskId: parentTask.id, error: statusResetResult.error }, 'Failed to reset parent status to queued before fallback enqueue');
+      }
 
       const enqueueResult = await deps.taskEnqueueService.enqueue({ taskId: parentTask.id, userId });
       if (!enqueueResult.ok) {
