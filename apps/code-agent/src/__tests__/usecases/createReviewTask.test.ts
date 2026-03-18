@@ -86,7 +86,6 @@ function createFakeTaskEnqueueService(): TaskEnqueueService {
     enqueue: vi.fn().mockResolvedValue(ok({
       taskId: 'task-review-1',
       queuePosition: 1,
-      estimatedWaitMinutes: 5,
     })),
   };
 }
@@ -171,7 +170,6 @@ describe('createReviewTask', () => {
     vi.mocked(taskEnqueueService.enqueue).mockResolvedValue(ok({
       taskId: 'task-review-new',
       queuePosition: 1,
-      estimatedWaitMinutes: 5,
     }));
     const deps = createFakeDeps({
       gitHubPRClient,

@@ -1012,13 +1012,12 @@ describe('WhatsAppNotifier', () => {
       const notifier = createWhatsAppNotifier(createMockConfig());
       getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
-      const result = await notifier.notifyTaskQueued('user-123', task, 2, 10);
+      const result = await notifier.notifyTaskQueued('user-123', task, 2);
 
       expect(result.ok).toBe(true);
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('🕐 Fix login bug');
-      expect(callArgs.message).toContain('Position: 2');
-      expect(callArgs.message).toContain('Estimated wait: ~10 minutes');
+      expect(callArgs.message).toContain('Queued. Position: 2');
       expect(callArgs.correlationId).toBe('trace-123');
       expect(callArgs.ctaUrl).toEqual({
         displayText: 'View Progress',
@@ -1034,7 +1033,7 @@ describe('WhatsAppNotifier', () => {
       const notifier = createWhatsAppNotifier(createMockConfig());
       getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
-      const result = await notifier.notifyTaskQueued('user-123', task, 1, 5);
+      const result = await notifier.notifyTaskQueued('user-123', task, 1);
 
       expect(result.ok).toBe(true);
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
@@ -1051,7 +1050,7 @@ describe('WhatsAppNotifier', () => {
         err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
       );
 
-      const result = await notifier.notifyTaskQueued('user-123', task, 1, 5);
+      const result = await notifier.notifyTaskQueued('user-123', task, 1);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

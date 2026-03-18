@@ -173,7 +173,7 @@ describe('submitToExecutionAgent', () => {
     mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
     mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
     mockTaskEnqueueService.enqueue.mockResolvedValue(
-      ok({ taskId: 'task_execution', queuePosition: 1, estimatedWaitMinutes: 5 })
+      ok({ taskId: 'task_execution', queuePosition: 1 })
     );
 
     return mockTask;
@@ -969,7 +969,7 @@ describe('submitToExecutionAgent', () => {
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
       mockTaskEnqueueService.enqueue.mockResolvedValue(
-        ok({ taskId: 'task_execution', queuePosition: 1, estimatedWaitMinutes: 5 })
+        ok({ taskId: 'task_execution', queuePosition: 1 })
       );
 
       const result = await submitToExecutionAgent(createDeps(), {

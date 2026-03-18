@@ -20,7 +20,6 @@ export interface EnqueueTaskInput {
 export interface EnqueueResult {
   taskId: string;
   queuePosition: number;
-  estimatedWaitMinutes: number;
 }
 
 export interface EnqueueError {

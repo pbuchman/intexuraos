@@ -107,14 +107,12 @@ export interface WhatsAppNotifier {
    * @param userId - User ID to send notification to
    * @param task - Queued task
    * @param position - Position in queue (1-based)
-   * @param estimatedWaitMinutes - Estimated wait time in minutes
    * @returns Ok(undefined) on success, Err on failure
    */
   notifyTaskQueued(
     userId: string,
     task: CodeTask,
-    position: number,
-    estimatedWaitMinutes: number
+    position: number
   ): Promise<Result<void, NotificationError>>;
 
   /**
