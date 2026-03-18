@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   collection,
+  limit,
   onSnapshot,
   query,
   where,
@@ -17,6 +18,9 @@ import {
   initializeFirebase,
   isFirebaseAuthenticated,
 } from '@/services/firebase';
+
+/** 💰 CostGuard: Firestore security rules enforce query.limit <= 100 */
+const MAX_QUERY_LIMIT = 100;
 
 export interface DispatchQueueState {
   tasks: QueuedTask[];
@@ -90,7 +94,9 @@ export function useDispatchQueue(): DispatchQueueState {
         const queueQuery = query(
           collection(db, 'code_tasks'),
           where('status', '==', 'queued'),
+          where('userId', '==', user.sub),
           orderBy('queuedAt', 'asc'),
+          limit(MAX_QUERY_LIMIT),
         );
 
         let isFirstSnapshot = true;
