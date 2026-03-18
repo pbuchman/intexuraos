@@ -143,6 +143,7 @@ export function CronSchedulesPage(): React.JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={handleRefresh}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
             title="Refresh"
@@ -150,6 +151,7 @@ export function CronSchedulesPage(): React.JSX.Element {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
+            type="button"
             onClick={(): void => {
               void navigate('/cron-agent/new');
             }}
@@ -167,6 +169,7 @@ export function CronSchedulesPage(): React.JSX.Element {
           const isActive = activeFilter === key;
           return (
             <button
+              type="button"
               key={key}
               onClick={(): void => {
                 handleFilterChange(key);
@@ -199,6 +202,7 @@ export function CronSchedulesPage(): React.JSX.Element {
             </p>
             {schedules.length === 0 ? (
               <button
+                type="button"
                 onClick={(): void => {
                   void navigate('/cron-agent/new');
                 }}
@@ -307,6 +311,7 @@ export function CronSchedulesPage(): React.JSX.Element {
                   role="toolbar"
                 >
                   <button
+                    type="button"
                     onClick={(): void => {
                       handlePauseResume(schedule.id, schedule.status);
                     }}
@@ -320,6 +325,7 @@ export function CronSchedulesPage(): React.JSX.Element {
                     )}
                   </button>
                   <button
+                    type="button"
                     onClick={(): void => {
                       handleTrigger(schedule.id);
                     }}
@@ -329,6 +335,7 @@ export function CronSchedulesPage(): React.JSX.Element {
                     <Zap className="h-4 w-4" />
                   </button>
                   <button
+                    type="button"
                     onClick={(): void => {
                       handleDelete(schedule.id, schedule.name);
                     }}
