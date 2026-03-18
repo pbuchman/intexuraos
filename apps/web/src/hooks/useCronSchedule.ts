@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
-import { getSchedule, updateSchedule as updateScheduleApi } from '@/services/cronAgentApi';
+import {
+  getSchedule,
+  updateSchedule as updateScheduleApi,
+  deleteSchedule as deleteScheduleApi,
+  triggerSchedule as triggerScheduleApi,
+} from '@/services/cronAgentApi';
 import { ApiError } from '@/services/apiClient';
 import type { CronSchedule, CronScheduleStatus } from '@/types';
 
@@ -12,6 +17,8 @@ export function useCronSchedule(id: string | undefined): {
   notFound: boolean;
   refresh: () => Promise<void>;
   update: (updates: Partial<{ name: string; status: CronScheduleStatus; action: CronSchedule['action'] }>) => Promise<void>;
+  remove: () => Promise<void>;
+  trigger: () => Promise<void>;
 } {
   const { getAccessToken } = useAuth();
   const [schedule, setSchedule] = useState<CronSchedule | null>(null);
@@ -71,5 +78,17 @@ export function useCronSchedule(id: string | undefined): {
     [getAccessToken, id, schedule],
   );
 
-  return { schedule, loading, error, notFound, refresh, update };
+  const remove = useCallback(async (): Promise<void> => {
+    if (id === undefined) return;
+    const token = await getAccessToken();
+    await deleteScheduleApi(token, id);
+  }, [getAccessToken, id]);
+
+  const trigger = useCallback(async (): Promise<void> => {
+    if (id === undefined) return;
+    const token = await getAccessToken();
+    await triggerScheduleApi(token, id);
+  }, [getAccessToken, id]);
+
+  return { schedule, loading, error, notFound, refresh, update, remove, trigger };
 }
