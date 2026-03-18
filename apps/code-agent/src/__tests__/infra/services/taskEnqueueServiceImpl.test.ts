@@ -108,7 +108,7 @@ describe('TaskEnqueueServiceImpl', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.taskId).toBe('task-123');
-      expect(result.value.queuePosition).toBe(4); // 1-indexed: queueCount(3) + 1
+      expect(result.value.queuePosition).toBe(3); // countQueued already includes self (INT-977)
     }
   });
 
@@ -175,7 +175,7 @@ describe('TaskEnqueueServiceImpl', () => {
     expect(mockWhatsappNotifier.notifyTaskQueued).toHaveBeenCalledWith(
       'user-456',
       updatedTask,
-      5,   // queuePosition: 1-indexed (queueCount 4 + 1)
+      4,   // countQueued already includes self (INT-977)
     );
   });
 
@@ -228,7 +228,7 @@ describe('TaskEnqueueServiceImpl', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.taskId).toBe('task-123');
-      expect(result.value.queuePosition).toBe(2); // 1-indexed: queueCount(1) + 1
+      expect(result.value.queuePosition).toBe(1); // countQueued already includes self (INT-977)
     }
 
     // Warning was logged
@@ -250,7 +250,7 @@ describe('TaskEnqueueServiceImpl', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.queuePosition).toBe(10); // 1-indexed: queueCount(9) + 1
+      expect(result.value.queuePosition).toBe(9); // countQueued already includes self (INT-977)
       expect(result.value).not.toHaveProperty('estimatedWaitMinutes');
     }
   });
