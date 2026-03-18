@@ -1051,6 +1051,107 @@ describe('createReviewTask', () => {
       expect(deps.linearAgentClient?.createIssue).not.toHaveBeenCalled();
     });
 
+    it('extracts linearIssueId from PR body when title has no INT tag', async () => {
+      const deps = createFakeDeps();
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-body-1',
+        prTitle: 'Fix bug',
+        prBody: '## Summary\nFixes INT-500\n\nSome description',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].linearIssueId).toBe('INT-500');
+      }
+      expect(deps.linearAgentClient?.createIssue).not.toHaveBeenCalled();
+    });
+
+    it('extracts linearIssueId from Linear URL in PR body when no INT-XXX text match', async () => {
+      const deps = createFakeDeps();
+
+      // Use a non-INT team prefix so Tier 2b regex doesn't match, forcing Tier 2c
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-body-2',
+        prTitle: 'Fix bug',
+        prBody: '## Summary\n- Linear: https://linear.app/pbuchman/issue/TEAM-600/some-title\n\nDetails here',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].linearIssueId).toBe('TEAM-600');
+      }
+      expect(deps.linearAgentClient?.createIssue).not.toHaveBeenCalled();
+    });
+
+    it('PR title match takes precedence over PR body match', async () => {
+      const deps = createFakeDeps();
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-body-3',
+        prTitle: '[INT-200] Fix bug',
+        prBody: 'Fixes INT-500\nhttps://linear.app/pbuchman/issue/INT-600/title',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].linearIssueId).toBe('INT-200');
+      }
+      expect(deps.linearAgentClient?.createIssue).not.toHaveBeenCalled();
+    });
+
+    it('PR body INT-XXX takes precedence over Linear URL in body', async () => {
+      const deps = createFakeDeps();
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-body-4',
+        prTitle: 'Fix bug',
+        prBody: 'Fixes INT-500\nhttps://linear.app/pbuchman/issue/INT-600/title',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].linearIssueId).toBe('INT-500');
+      }
+      expect(deps.linearAgentClient?.createIssue).not.toHaveBeenCalled();
+    });
+
+    it('PR body check is skipped when prBody is undefined', async () => {
+      const deps = createFakeDeps();
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        eventId: 'evt-body-5',
+        prTitle: 'Fix bug',
+      });
+
+      // Should fall through to Tier 3 (create new Linear issue)
+      expect(deps.linearAgentClient?.createIssue).toHaveBeenCalled();
+    });
+
     it('creates new Linear issue when no existing task and no title match', async () => {
       const deps = createFakeDeps();
 

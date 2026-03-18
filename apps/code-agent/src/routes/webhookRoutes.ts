@@ -10,23 +10,9 @@ import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
+import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
 
-
-export const parseLinearIdentifierFromUrl = (url: string): string | null => {
-  const mdMatch = /\[.*?\]\((.*?)\)/.exec(url);
-  const cleanUrl = mdMatch?.[1] ?? url;
-
-  try {
-    const parsed = new URL(cleanUrl);
-    if (parsed.hostname !== 'linear.app') return null;
-    const segments = parsed.pathname.split('/').filter(Boolean);
-    const identifier = segments[2];
-    if (segments.length < 3 || segments[1] !== 'issue' || identifier === undefined) return null;
-    return identifier;
-  } catch {
-    return null;
-  }
-};
+export { parseLinearIdentifierFromUrl };
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
