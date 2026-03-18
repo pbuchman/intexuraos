@@ -897,15 +897,8 @@ describe('submitToExecutionAgent', () => {
 
   describe('complex-task fan-out', () => {
     function setupComplexTaskMocks(taskOverrides: Partial<CodeTask> = {}): CodeTask {
-      const mockTask = createMockTask(taskOverrides);
-
-      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: false })
-      );
-      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
-        ok({ workers: [enabledWorker] })
-      );
+      const mockTask = setupHappyPathMocks(taskOverrides);
+      // Override validateIssue to return complex-task label instead of code-task
       mockLinearAgentClient.validateIssue.mockResolvedValue(
         ok({
           id: 'uuid-parent-123',
@@ -917,20 +910,6 @@ describe('submitToExecutionAgent', () => {
           parentId: null,
         })
       );
-      // Optimistic lock succeeds
-      mockCodeTaskRepo.update.mockResolvedValue(ok(mockTask));
-      // Create parent execution task succeeds
-      mockCodeTaskRepo.create.mockResolvedValue(
-        ok({
-          ...mockTask,
-          id: 'task_parent_exec',
-          agentType: 'execution' as const,
-        })
-      );
-      // Linear best-effort updates
-      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
-      mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
-
       return mockTask;
     }
 
@@ -1007,8 +986,6 @@ describe('submitToExecutionAgent', () => {
 
     it('still updates Linear issue state and adds comment for complex tasks', async () => {
       setupComplexTaskMocks();
-      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
-      mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
       mockFanOutChildTasks.mockResolvedValue(
         ok({ childTaskIds: ['task_child_1'], parentTaskId: 'task_parent_exec' })
       );
@@ -1027,30 +1004,8 @@ describe('submitToExecutionAgent', () => {
     });
 
     it('returns internal_error when parent task creation fails for complex task', async () => {
-      const mockTask = createMockTask();
-      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
-      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
-        ok({ hasActive: false })
-      );
-      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
-        ok({ workers: [enabledWorker] })
-      );
-      mockLinearAgentClient.validateIssue.mockResolvedValue(
-        ok({
-          id: 'uuid-parent-123',
-          identifier: linearIssueId,
-          title: 'Complex Feature',
-          url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
-          labels: ['complex-task'],
-          childCount: 3,
-          parentId: null,
-        })
-      );
-      // Optimistic lock succeeds
-      mockCodeTaskRepo.update.mockImplementation(
-        createSequentialUpdateMock([ok(mockTask), ok(mockTask)])
-      );
-      // Create fails
+      setupComplexTaskMocks();
+      // Override create to fail
       mockCodeTaskRepo.create.mockResolvedValue(
         err({ code: 'FIRESTORE_ERROR', message: 'Create failed' })
       );
