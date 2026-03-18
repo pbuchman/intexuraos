@@ -398,19 +398,16 @@ describe('codeAgentApi', () => {
   });
 
   describe('getDispatchQueue', () => {
-    it('fetches dispatch queue and unwraps response data', async () => {
+    it('fetches dispatch queue status', async () => {
       const { apiRequest } = await import('../apiClient.js');
-      const mockQueueResponse = {
-        success: true,
-        data: {
-          tasks: [
-            { id: 'task-1', prompt: 'Fix bug', workerType: 'opus', queuedAt: '2026-03-17T10:00:00Z', createdAt: '2026-03-17T09:55:00Z', position: 1 },
-          ],
-          totalQueued: 1,
-          maxQueueSize: 10,
-        },
+      const mockQueueData = {
+        tasks: [
+          { id: 'task-1', prompt: 'Fix bug', workerType: 'opus', queuedAt: '2026-03-17T10:00:00Z', createdAt: '2026-03-17T09:55:00Z', position: 1 },
+        ],
+        totalQueued: 1,
+        maxQueueSize: 10,
       };
-      vi.mocked(apiRequest).mockResolvedValue(mockQueueResponse);
+      vi.mocked(apiRequest).mockResolvedValue(mockQueueData);
 
       const result = await getDispatchQueue(mockAccessToken);
 
@@ -419,7 +416,7 @@ describe('codeAgentApi', () => {
         '/code/queue',
         mockAccessToken
       );
-      expect(result).toEqual(mockQueueResponse.data);
+      expect(result).toEqual(mockQueueData);
     });
   });
 });
