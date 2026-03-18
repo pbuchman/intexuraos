@@ -212,6 +212,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
       },
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -243,6 +244,7 @@ describe('POST /code/tasks/:taskId/archive', () => {
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
     });
 
     // Set up worker settings for the test user
