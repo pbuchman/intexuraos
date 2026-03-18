@@ -1,6 +1,7 @@
 import { Play, Pause, Trash2, Zap } from 'lucide-react';
 import { formatRelativeNullable } from '@/utils/dateFormat.js';
 import type { CronSchedule, CronScheduleStatus } from '@/types';
+import { ScheduleStatusBadge } from './ScheduleStatusBadge.js';
 
 interface ScheduleListItemProps {
   schedule: CronSchedule;
@@ -39,21 +40,7 @@ export function ScheduleListItem({
             <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
               {schedule.name}
             </h3>
-            {/* Status badge */}
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                schedule.status === 'active'
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-              }`}
-            >
-              <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${
-                  schedule.status === 'active' ? 'bg-green-500' : 'bg-yellow-500'
-                }`}
-              />
-              {schedule.status}
-            </span>
+            <ScheduleStatusBadge status={schedule.status} />
           </div>
 
           {/* Description */}

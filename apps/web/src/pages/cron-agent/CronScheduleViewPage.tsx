@@ -7,6 +7,7 @@ import { formatDateTime } from '@/utils/dateFormat';
 import { AvailableToolsPanel } from './AvailableToolsPanel.js';
 import { InlineEditText } from './InlineEditText.js';
 import { RecentExecutionsTable } from './RecentExecutionsTable.js';
+import { ScheduleStatusBadge } from './ScheduleStatusBadge.js';
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -190,20 +191,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
             </div>
 
             {/* Status badge */}
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                schedule.status === 'active'
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-              }`}
-            >
-              <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${
-                  schedule.status === 'active' ? 'bg-green-500' : 'bg-yellow-500'
-                }`}
-              />
-              {schedule.status}
-            </span>
+            <ScheduleStatusBadge status={schedule.status} />
 
             {/* Timestamps */}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 dark:text-slate-500">
