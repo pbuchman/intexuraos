@@ -44,8 +44,8 @@ export function useCronExecutions(options?: {
   const [hasMore, setHasMore] = useState(true);
   const isMountedRef = useRef(true);
 
-  // Serialize options to stable strings for dependency tracking
-  const scheduleIdKey = options?.scheduleId ?? '';
+  // Serialize status array to a stable string for dependency tracking
+  const scheduleId = options?.scheduleId;
   const statusKey = options?.status?.join(',') ?? '';
 
   const refresh = useCallback(
@@ -64,8 +64,8 @@ export function useCronExecutions(options?: {
           status?: CronExecutionStatus[];
           limit: number;
         } = { limit: 50 };
-        if (scheduleIdKey !== '') {
-          listOptions.scheduleId = scheduleIdKey;
+        if (scheduleId !== undefined) {
+          listOptions.scheduleId = scheduleId;
         }
         if (statusValues !== undefined && statusValues.length > 0) {
           listOptions.status = statusValues;
@@ -86,7 +86,7 @@ export function useCronExecutions(options?: {
         }
       }
     },
-    [getAccessToken, scheduleIdKey, statusKey]
+    [getAccessToken, scheduleId, statusKey]
   );
 
   const loadMore = useCallback(async (): Promise<void> => {
@@ -102,8 +102,8 @@ export function useCronExecutions(options?: {
         limit: number;
         cursor: string;
       } = { limit: 50, cursor };
-      if (scheduleIdKey !== '') {
-        listOptions.scheduleId = scheduleIdKey;
+      if (scheduleId !== undefined) {
+        listOptions.scheduleId = scheduleId;
       }
       if (statusValues !== undefined && statusValues.length > 0) {
         listOptions.status = statusValues;
@@ -123,7 +123,7 @@ export function useCronExecutions(options?: {
         setLoadingMore(false);
       }
     }
-  }, [cursor, loadingMore, getAccessToken, scheduleIdKey, statusKey]);
+  }, [cursor, loadingMore, getAccessToken, scheduleId, statusKey]);
 
   useEffect(() => {
     isMountedRef.current = true;
