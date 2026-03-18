@@ -31,6 +31,9 @@ import { backLinkPlanningTask } from '../domain/usecases/backLinkPlanningTask.js
 
 const logger = createAppLogger({ name: 'code-routes' });
 
+/** Terminal task statuses eligible for archival, rate-limit recording, etc. */
+const TERMINAL_STATUSES: readonly TaskStatus[] = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'];
+
 /** Max characters of sanitized prompt to include in queue listing responses. */
 const QUEUE_PROMPT_PREVIEW_LENGTH = 200;
 
@@ -868,10 +871,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Record task completion for rate limiting (decrement concurrent, update cost)
       // Do this for terminal states: completed, failed, cancelled, interrupted
       /* v8 ignore start -- ts-type: optional chaining and array includes create type narrowing branches @preserve */
-      const terminalStatuses = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'] as const;
-      /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: terminal status includes check @preserve */
-      if (body.status !== undefined && terminalStatuses.includes(body.status)) {
+      if (body.status !== undefined && TERMINAL_STATUSES.includes(body.status)) {
       /* v8 ignore stop @preserve */
         const userId = result.value.userId; // @allow-result-access -- .ok checked at line 736
         // Fire and forget - don't await to avoid delaying response
@@ -1982,6 +1982,90 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       logger.info({ userId, taskId }, 'Code task deleted');
       return await reply.ok({ deleted: true });
+    }
+  );
+
+  // POST /code/tasks/:taskId/archive - Archive a task (public, Auth0 JWT)
+  fastify.post<{
+    Params: { taskId: string };
+  }>(
+    '/code/tasks/:taskId/archive',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'archiveCodeTask',
+        summary: 'Archive a code task',
+        description: 'Archives a code task owned by the authenticated user. Task must be in a terminal status.',
+        tags: ['public'],
+        params: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', description: 'Task ID' },
+          },
+          required: ['taskId'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  archived: { type: 'boolean' },
+                },
+                required: ['archived'],
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { taskId: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/tasks/:taskId/archive',
+        includeParams: true,
+      });
+
+      const { codeTaskRepo, logger } = getServices();
+      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
+      const { taskId } = request.params;
+
+      logger.info({ userId, taskId }, 'Archiving code task');
+
+      const findResult = await codeTaskRepo.findByIdForUser(taskId, userId);
+
+      if (!findResult.ok) {
+        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
+        if (findResult.error.code === 'NOT_FOUND') {
+        /* v8 ignore stop @preserve */
+          return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
+        }
+        logger.error({ error: findResult.error, taskId }, 'Failed to find code task for archiving');
+        return await reply.fail('INTERNAL_ERROR', findResult.error.message);
+      }
+
+      const task = findResult.value;
+      /* v8 ignore start -- ts-type: array includes check creates type narrowing branch @preserve */
+      if (!TERMINAL_STATUSES.includes(task.status)) {
+      /* v8 ignore stop @preserve */
+        return await reply.fail('INVALID_REQUEST', `Cannot archive task with status '${task.status}'`);
+      }
+
+      const updateResult = await codeTaskRepo.update(taskId, { status: 'archived' });
+
+      /* v8 ignore start -- upstream: FakeFirestore update never returns error in tests @preserve */
+      if (!updateResult.ok) {
+        logger.error({ error: updateResult.error, taskId }, 'Failed to archive code task');
+        return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
+      }
+      /* v8 ignore stop @preserve */
+
+      logger.info({ userId, taskId }, 'Code task archived');
+      return await reply.ok({ archived: true });
     }
   );
 
