@@ -237,15 +237,17 @@ const MemoActiveProgressCard = memo(function ActiveProgressCard({ task }: { task
   if (!isActiveStatus(task.status)) return null;
   if (task.error !== undefined) return null;
 
+  const isQueued = task.status === 'queued';
+
   return (
     <Card className={`mb-6 ${task.status === 'queued' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30' : 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/30'}`}>
       <div className="flex items-center gap-3">
-        {task.status === 'queued'
+        {isQueued
           ? <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           : <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />}
         <div className="flex-1">
-          <p className={`font-medium ${task.status === 'queued' ? 'text-amber-900 dark:text-amber-200' : 'text-blue-900 dark:text-blue-200'}`}>
-            {task.status === 'queued' ? 'Queued for execution...' : task.status === 'dispatched' ? 'Task dispatched...' : 'Working on your task...'}
+          <p className={`font-medium ${isQueued ? 'text-amber-900 dark:text-amber-200' : 'text-blue-900 dark:text-blue-200'}`}>
+            {isQueued ? 'Queued for execution...' : task.status === 'dispatched' ? 'Task dispatched...' : 'Working on your task...'}
           </p>
           <ElapsedTimer createdAt={task.createdAt} />
         </div>
