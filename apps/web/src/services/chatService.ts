@@ -16,6 +16,9 @@ import type {
 const LOCAL_STORAGE_KEY = 'intex-chat-session';
 const GUEST_SESSION_KEY = 'intex-guest-session-id';
 
+/** Timeout for chat message requests — longer than default to handle Cloud Run cold starts. */
+export const CHAT_MESSAGE_TIMEOUT_MS = 60000;
+
 // Re-export ApiError for consumers
 export { ApiError };
 
@@ -63,6 +66,7 @@ export async function sendMessage(
         conversationHistory,
         ...(pendingAction !== undefined && { pendingAction }),
       },
+      timeout: CHAT_MESSAGE_TIMEOUT_MS,
     }
   );
 }
