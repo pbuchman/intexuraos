@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2, Pause, Play, Trash2, Zap } from 'lucide-react';
 import { Card, Layout } from '@/components';
@@ -71,10 +71,10 @@ export function CronScheduleViewPage(): React.JSX.Element {
   } = useScheduleActions(schedule, actionHooks);
 
   // Handle delete with navigation
-  const handleDeleteAndNavigate = async (): Promise<void> => {
+  const handleDeleteAndNavigate = useCallback(async (): Promise<void> => {
     await handleDelete();
     void navigate('/cron-agent');
-  };
+  }, [handleDelete, navigate]);
 
   // ---------------------------------------------------------------------------
   // Render: loading
