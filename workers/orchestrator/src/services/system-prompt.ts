@@ -2,6 +2,26 @@ import { hasCodeTaskLabel } from '@intexuraos/common-core';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { WorkerType } from './isolation/types.js';
 
+const WORKER_INSTRUCTIONS = `
+### Git CLI (MANDATORY — NON-NEGOTIABLE)
+Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, diff, log, branching, PRs, and any operation \`gh\` supports. Fall back to \`git\` only when \`gh\` has no equivalent (e.g., \`git add\`, \`git commit\`).
+
+### GCP Service Account Credentials
+GCP service account credentials are mounted at \`/secrets/gcp-sa.json\` and pre-activated via \`gcloud auth activate-service-account\`. Use these credentials to check production logs when investigating issues:
+
+\`\`\`bash
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="<service>"' --project=intexuraos-dev-pbuchman --limit=50 --format=json
+\`\`\`
+
+### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)
+When asked to debug or investigate a code task from \`dev.intexuraos.cloud\` (dev environment), you MUST immediately exit with a clear message:
+> "Dev environment code tasks cannot be debugged from the Claude worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
+
+For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
+- Skill definition: \`.claude/skills/debug-code-task/SKILL.md\`
+- Fetch script: \`.claude/skills/debug-code-task/scripts/fetch-task.cjs\`
+- Usage: \`node .claude/skills/debug-code-task/scripts/fetch-task.cjs <taskId> [--logs] [--logs-only]\``;
+
 export interface SystemPromptParams {
   taskId: string;
   linearIssueId?: string;
@@ -31,24 +51,7 @@ Task ID: ${taskId}
 Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
-### Git CLI (MANDATORY — NON-NEGOTIABLE)
-Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, diff, log, branching, PRs, and any operation \`gh\` supports. Fall back to \`git\` only when \`gh\` has no equivalent (e.g., \`git add\`, \`git commit\`).
-
-### GCP Service Account Credentials
-GCP service account credentials are mounted at \`/secrets/gcp-sa.json\` and pre-activated via \`gcloud auth activate-service-account\`. Use these credentials to check production logs when investigating issues:
-
-\`\`\`bash
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="<service>"' --project=intexuraos-dev-pbuchman --limit=50 --format=json
-\`\`\`
-
-### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)
-When asked to debug or investigate a code task from \`dev.intexuraos.cloud\` (dev environment), you MUST immediately exit with a clear message:
-> "Dev environment code tasks cannot be debugged from the Claude worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
-
-For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
-- Skill definition: \`.claude/skills/debug-code-task/SKILL.md\`
-- Fetch script: \`.claude/skills/debug-code-task/scripts/fetch-task.cjs\`
-- Usage: \`node .claude/skills/debug-code-task/scripts/fetch-task.cjs <taskId> [--logs] [--logs-only]\`
+${WORKER_INSTRUCTIONS}
 
 [PLANNING AGENT MODE]
 You are an autonomous Planning Agent.
@@ -217,24 +220,7 @@ Task ID: ${taskId}
 Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
-### Git CLI (MANDATORY — NON-NEGOTIABLE)
-Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, diff, log, branching, PRs, and any operation \`gh\` supports. Fall back to \`git\` only when \`gh\` has no equivalent (e.g., \`git add\`, \`git commit\`).
-
-### GCP Service Account Credentials
-GCP service account credentials are mounted at \`/secrets/gcp-sa.json\` and pre-activated via \`gcloud auth activate-service-account\`. Use these credentials to check production logs when investigating issues:
-
-\`\`\`bash
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="<service>"' --project=intexuraos-dev-pbuchman --limit=50 --format=json
-\`\`\`
-
-### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)
-When asked to debug or investigate a code task from \`dev.intexuraos.cloud\` (dev environment), you MUST immediately exit with a clear message:
-> "Dev environment code tasks cannot be debugged from the Claude worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
-
-For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
-- Skill definition: \`.claude/skills/debug-code-task/SKILL.md\`
-- Fetch script: \`.claude/skills/debug-code-task/scripts/fetch-task.cjs\`
-- Usage: \`node .claude/skills/debug-code-task/scripts/fetch-task.cjs <taskId> [--logs] [--logs-only]\`
+${WORKER_INSTRUCTIONS}
 
 [EXECUTION AGENT MODE]
 You are in NON-INTERACTIVE MODE. Execute the task autonomously.
@@ -366,24 +352,7 @@ Task ID: ${taskId}
 Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
-### Git CLI (MANDATORY — NON-NEGOTIABLE)
-Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, diff, log, branching, PRs, and any operation \`gh\` supports. Fall back to \`git\` only when \`gh\` has no equivalent (e.g., \`git add\`, \`git commit\`).
-
-### GCP Service Account Credentials
-GCP service account credentials are mounted at \`/secrets/gcp-sa.json\` and pre-activated via \`gcloud auth activate-service-account\`. Use these credentials to check production logs when investigating issues:
-
-\`\`\`bash
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="<service>"' --project=intexuraos-dev-pbuchman --limit=50 --format=json
-\`\`\`
-
-### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)
-When asked to debug or investigate a code task from \`dev.intexuraos.cloud\` (dev environment), you MUST immediately exit with a clear message:
-> "Dev environment code tasks cannot be debugged from the Claude worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
-
-For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
-- Skill definition: \`.claude/skills/debug-code-task/SKILL.md\`
-- Fetch script: \`.claude/skills/debug-code-task/scripts/fetch-task.cjs\`
-- Usage: \`node .claude/skills/debug-code-task/scripts/fetch-task.cjs <taskId> [--logs] [--logs-only]\`
+${WORKER_INSTRUCTIONS}
 
 [PULL REQUEST AGENT MODE]
 You are a senior software architect working on codebase improvements in IntexuraOS. Your job runs in a Docker container where you receive feedback from the user.
@@ -606,24 +575,7 @@ Task ID: ${taskId}
 Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
-### Git CLI (MANDATORY — NON-NEGOTIABLE)
-Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, diff, log, branching, PRs, and any operation \`gh\` supports. Fall back to \`git\` only when \`gh\` has no equivalent (e.g., \`git add\`, \`git commit\`).
-
-### GCP Service Account Credentials
-GCP service account credentials are mounted at \`/secrets/gcp-sa.json\` and pre-activated via \`gcloud auth activate-service-account\`. Use these credentials to check production logs when investigating issues:
-
-\`\`\`bash
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="<service>"' --project=intexuraos-dev-pbuchman --limit=50 --format=json
-\`\`\`
-
-### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)
-When asked to debug or investigate a code task from \`dev.intexuraos.cloud\` (dev environment), you MUST immediately exit with a clear message:
-> "Dev environment code tasks cannot be debugged from the Claude worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
-
-For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
-- Skill definition: \`.claude/skills/debug-code-task/SKILL.md\`
-- Fetch script: \`.claude/skills/debug-code-task/scripts/fetch-task.cjs\`
-- Usage: \`node .claude/skills/debug-code-task/scripts/fetch-task.cjs <taskId> [--logs] [--logs-only]\`
+${WORKER_INSTRUCTIONS}
 
 [REVIEW AGENT MODE]
 You are a senior code reviewer performing an automated, read-only PR review in IntexuraOS. Your job runs in a Docker container. You do NOT implement changes — you only analyze code and post review comments.
