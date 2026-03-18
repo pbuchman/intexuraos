@@ -78,7 +78,19 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
   );
 }
 
-function stepLabel(name: string, state: StepState): string {
+const compactNames: Record<string, string> = {
+  Planning: 'Plan',
+  Execution: 'Exec',
+  Review: 'Rev',
+  'PR Task': 'PR',
+};
+
+function stepLabel(name: string, state: StepState, compact?: boolean): string {
+  if (compact === true) {
+    const short = compactNames[name] ?? name.slice(0, 4);
+    if (state === 'actionable') return 'Run';
+    return short;
+  }
   if (state === 'completed') return name;
   if (state === 'running') return `${name}...`;
   if (state === 'dispatched') return `${name} (dispatched)`;
@@ -99,20 +111,21 @@ function PipelineConnectorVertical(): React.JSX.Element {
 interface PipelineStepProps {
   name: string;
   state: StepState;
+  compact?: boolean | undefined;
 }
 
-function PipelineStep({ name, state }: PipelineStepProps): React.JSX.Element {
+function PipelineStep({ name, state, compact }: PipelineStepProps): React.JSX.Element {
   return (
     <span className="flex items-center gap-1">
       <StepDot state={state} />
       <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
-        {stepLabel(name, state)}
+        {stepLabel(name, state, compact)}
       </span>
     </span>
   );
 }
 
-function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Element {
+function PipelineVisualization({ group, compact }: { group: IssueGroup; compact?: boolean }): React.JSX.Element {
   const { pipeline } = group;
   const totalCount = pipeline.steps.length + (pipeline.pr !== null ? 1 : 0);
 
@@ -145,6 +158,7 @@ function PipelineVisualization({ group }: { group: IssueGroup }): React.JSX.Elem
         key={step.agentType}
         name={displayLabel}
         state={step.state}
+        compact={compact}
       />,
     );
   }
@@ -418,7 +432,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
             </div>
           </div>
           <div className="flex items-center gap-3 pl-6 text-xs text-slate-500 dark:text-slate-400">
-            <PipelineVisualization group={group} />
+            <PipelineVisualization group={group} compact />
             <span>{formatRelative(latestTask.createdAt)}</span>
           </div>
         </div>
