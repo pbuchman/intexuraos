@@ -34,6 +34,9 @@ const logger = createAppLogger({ name: 'code-routes' });
 /** Terminal task statuses eligible for archival, rate-limit recording, etc. */
 const TERMINAL_STATUSES: readonly TaskStatus[] = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'];
 
+/** Max characters of sanitized prompt to include in queue listing responses. */
+const QUEUE_PROMPT_PREVIEW_LENGTH = 200;
+
 /**
  * Track in-flight health probe requests per user for deduplication.
  * Prevents thundering herd when multiple concurrent requests arrive while health status is stale.
@@ -557,13 +560,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         {
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
-          taskDispatcher: services.taskDispatcher,
+          taskEnqueueService: services.taskEnqueueService,
           linearIssueService: services.linearIssueService,
           whatsappNotifier: services.whatsappNotifier,
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
-          serviceUrl: loadConfig().serviceUrl,
         },
         processRequest
       );
@@ -608,10 +610,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         if (error.code === 'worker_not_configured') {
         /* v8 ignore stop @preserve */
           return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
-        }
-
-        if (error.code === 'worker_unavailable') {
-          return await reply.fail('MISCONFIGURED', 'Worker unavailable');
         }
 
         /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
@@ -1224,7 +1222,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo, whatsappNotifier } = getServices();
+      const { codeTaskRepo, rateLimitService, linearIssueService, workerSettingsRepo, taskEnqueueService } = getServices();
       const body = request.body as {
         prompt: string;
         workerType?: WorkerType;
@@ -1335,7 +1333,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Back-link planning task to this execution task (INT-725, best-effort)
       await backLinkPlanningTask(codeTaskRepo, request.log, task);
 
-      // Fetch user's worker settings
+      // Fetch user's worker settings to validate workers are configured
       const settingsResult = await workerSettingsRepo.getSettings(userId);
       if (!settingsResult.ok) {
         request.log.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
@@ -1356,8 +1354,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
       }
 
-      // Validate workerLocation and compute worker ordering if provided
-      let orderedWorkers = enabledWorkers;
+      // Validate workerLocation if provided
       if (body.workerLocation !== undefined) {
         const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
 
@@ -1365,135 +1362,135 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           request.log.warn({ userId, workerLocation: body.workerLocation }, 'Requested worker not found');
           return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
         }
-
-        // Move the requested worker to the front of the list
-        orderedWorkers = [
-          requestedWorker,
-          ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
-        ];
-
-        // Health is checked live via WorkerHealthProbe at dispatch time (capacity-aware dispatch, INT-741).
-        // No cached health check needed here — the dispatcher probes all workers and excludes unhealthy ones.
       }
 
-      const workerCredentials = {
-        workers: orderedWorkers.map((w) => ({
-          name: w.name,
-          url: w.url,
-          cfAccessClientId: w.cfAccessClientId,
-          cfAccessClientSecret: w.cfAccessClientSecret,
-          dispatchSigningSecret: w.dispatchSigningSecret,
-        })),
-      };
-
-      // Dispatch to worker (use stored webhook secret from task)
-      const dispatchInput: {
-        taskId: string;
-        linearIssueId?: string;
-        prompt: string;
-        systemPromptHash: string;
-        repository: string;
-        baseBranch: string;
-        workerType: WorkerType;
-        webhookUrl: string;
-        webhookSecret: string;
-        linearIssueLabels: string[];
-        hasChildren: boolean;
-        agentType: 'planning' | 'execution' | 'pull_request' | 'review';
-        workerCredentials: { workers: Array<{ name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }> };
-      } = {
+      // Enqueue task for dispatch (INT-949)
+      const enqueueResult = await taskEnqueueService.enqueue({
         taskId: task.id,
-        prompt: task.sanitizedPrompt,
-        systemPromptHash: task.systemPromptHash,
-        repository: task.repository,
-        baseBranch: task.baseBranch,
-        workerType: task.workerType,
-        webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
-        webhookSecret,
-        linearIssueLabels: issueResult.linearIssueLabels,
-        hasChildren: issueResult.hasChildren,
-        /* v8 ignore start -- ts-type: nullish coalescing on optional agentType with label fallback @preserve */
-        agentType: task.agentType ?? (hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning'),
-        /* v8 ignore stop @preserve */
-        workerCredentials,
-      };
-
-      if (task.linearIssueId !== undefined) {
-        dispatchInput.linearIssueId = task.linearIssueId;
-      }
-
-      const dispatchResult = await taskDispatcher.dispatch(dispatchInput);
-
-      if (!dispatchResult.ok) {
-        const dispatchError = dispatchResult.error;
-
-        // Queue task when all workers are at capacity (matching processCodeAction pattern)
-        if (dispatchError.code === 'at_capacity') {
-          const queueCountResult = await codeTaskRepo.countQueued();
-          if (!queueCountResult.ok) {
-            request.log.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
-          }
-          const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
-
-          if (queueCount > config.queue.maxSize) {
-            await codeTaskRepo.update(task.id, {
-              status: 'failed',
-              error: {
-                code: 'queue_full',
-                message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
-              },
-            });
-            return await reply.fail('QUEUE_FULL', 'All workers are busy and the queue is full. Please try again in a few minutes.');
-          }
-
-          // Task is already in 'queued' status from creation — no status update needed
-          const queuePosition = queueCount;
-          const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
-
-          await whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
-
-          request.log.info({ taskId: task.id, queuePosition }, 'Task queued due to worker capacity');
-
-          return await reply.ok({
-            status: 'submitted',
-            codeTaskId: task.id,
-          });
-        }
-
-        // Other dispatch errors - fail as before
-        request.log.error({ error: dispatchError, taskId: task.id }, 'Failed to dispatch code task');
-        await codeTaskRepo.update(task.id, {
-          status: 'failed',
-          error: {
-            code: dispatchError.code,
-            message: dispatchError.message,
-          },
-        });
-
-        return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker');
-      }
-
-      // Save the actual worker location returned by the dispatcher
-      const actualWorkerLocation = dispatchResult.value.workerLocation;
-      await codeTaskRepo.update(task.id, {
-        status: 'dispatched',
-        workerLocation: actualWorkerLocation,
-        dispatchedAt: new Date(),
+        userId,
       });
+
+      if (!enqueueResult.ok) {
+        if (enqueueResult.error.code === 'queue_full') {
+          return await reply.fail('QUEUE_FULL', enqueueResult.error.message);
+        }
+        return await reply.fail('INTERNAL_ERROR', enqueueResult.error.message);
+      }
 
       // Record task start for rate limiting
       await rateLimitService.recordTaskStart(userId);
 
-      // Mark Linear issue as In Progress after successful dispatch
+      // Mark Linear issue as In Progress after successful enqueue
       if (issueResult.linearIssueId !== undefined) {
         await linearIssueService.markInProgress(userId, issueResult.linearIssueId);
       }
 
-      request.log.info({ taskId: task.id, workerLocation: actualWorkerLocation }, 'Code task submitted successfully');
+      request.log.info({ taskId: task.id }, 'Code task submitted and enqueued successfully');
 
       return await reply.ok({
         status: 'submitted',
         codeTaskId: task.id,
+      });
+    }
+  );
+
+  // GET /code/queue - List currently queued tasks (public, Auth0 JWT) (INT-949)
+  fastify.get(
+    '/code/queue',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'listQueuedTasks',
+        summary: 'List currently queued tasks',
+        description: 'Public endpoint for listing all currently queued tasks. Requires Auth0 JWT.',
+        tags: ['public'],
+        response: {
+          200: {
+            description: 'Queue listing',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['tasks', 'totalQueued', 'maxQueueSize'],
+                properties: {
+                  tasks: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        prompt: { type: 'string' },
+                        linearIssueId: { type: 'string' },
+                        workerType: workerTypeSchema,
+                        agentType: { type: 'string' },
+                        queuedAt: { type: 'string' },
+                        createdAt: { type: 'string' },
+                        position: { type: 'number' },
+                      },
+                      required: ['id', 'prompt', 'queuedAt', 'createdAt', 'position'],
+                    },
+                  },
+                  totalQueued: { type: 'number' },
+                  maxQueueSize: { type: 'number' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'Received request to GET /code/queue' });
+      const { codeTaskRepo } = getServices();
+      const config = loadConfig();
+
+      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
+
+      const result = await codeTaskRepo.listQueued();
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch queue');
+      }
+
+      // Scope to requesting user's tasks only — prevents cross-user data leakage
+      const userTasks = result.value.filter((task) => task.userId === userId);
+
+      const tasks = userTasks.map((task, index) => ({
+        id: task.id,
+        prompt: task.sanitizedPrompt.slice(0, QUEUE_PROMPT_PREVIEW_LENGTH),
+        linearIssueId: task.linearIssueId,
+        workerType: task.workerType,
+        agentType: task.agentType,
+        /* v8 ignore start -- ts-type: queuedAt is always set by TaskEnqueueService before task enters queue @preserve */
+        queuedAt: task.queuedAt !== undefined ? task.queuedAt.toDate().toISOString() : task.createdAt.toDate().toISOString(),
+        /* v8 ignore stop @preserve */
+        createdAt: task.createdAt.toDate().toISOString(),
+        position: index + 1,
+      }));
+
+      return await reply.ok({
+        tasks,
+        totalQueued: tasks.length,
+        maxQueueSize: config.queue.maxSize,
       });
     }
   );
@@ -3015,12 +3012,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
           linearAgentClient: services.linearAgentClient,
-          taskDispatcher: services.taskDispatcher,
-          whatsappNotifier: services.whatsappNotifier,
+          taskEnqueueService: services.taskEnqueueService,
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
-          serviceUrl: loadConfig().serviceUrl,
         },
         { originalTaskId: taskId, userId }
       );
@@ -3340,10 +3335,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const {
         codeTaskRepo,
         linearAgentClient,
-        taskDispatcher,
-        whatsappNotifier,
+        taskEnqueueService,
         metricsClient,
-        workerSettingsRepo,
         gitHubPRClient,
         userServiceClient,
         automationLog,
@@ -3385,14 +3378,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: request.log,
           codeTaskRepo,
           linearAgentClient,
-          taskDispatcher,
-          whatsappNotifier,
+          taskEnqueueService,
           metricsClient,
-          workerSettingsRepo,
           gitHubPRClient,
           userServiceClient,
           orchestratorSecret: loadConfig().orchestratorSecret,
-          serviceUrl: loadConfig().serviceUrl,
           automationLog,
         },
         retryRequest
@@ -3563,8 +3553,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const {
         codeTaskRepo,
         linearAgentClient,
-        taskDispatcher,
-        whatsappNotifier,
+        taskEnqueueService,
         metricsClient,
         workerSettingsRepo,
         gitHubPRClient,
@@ -3590,8 +3579,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: request.log,
           codeTaskRepo,
           linearAgentClient,
-          taskDispatcher,
-          whatsappNotifier,
+          taskEnqueueService,
           metricsClient,
           workerSettingsRepo,
           gitHubPRClient,
@@ -3771,7 +3759,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /code/tasks/:taskId/implement',
       });
 
-      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo, rateLimitService } =
+      const { codeTaskRepo, linearAgentClient, taskEnqueueService, metricsClient, workerSettingsRepo, rateLimitService } =
         getServices();
       const userId = request.user?.userId;
 
@@ -3809,12 +3797,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: request.log,
           codeTaskRepo,
           linearAgentClient,
-          taskDispatcher,
-          whatsappNotifier,
+          taskEnqueueService,
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
-          serviceUrl: loadConfig().serviceUrl,
         },
         executionAgentRequest
       );

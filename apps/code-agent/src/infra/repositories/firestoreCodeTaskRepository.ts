@@ -235,6 +235,15 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.agentType !== undefined) {
           taskData.agentType = input.agentType;
         }
+        if (input.planningPrBranch !== undefined) {
+          taskData.planningPrBranch = input.planningPrBranch;
+        }
+        if (input.planningPrUrl !== undefined) {
+          taskData.planningPrUrl = input.planningPrUrl;
+        }
+        if (input.trackingCommentId !== undefined) {
+          taskData.trackingCommentId = input.trackingCommentId;
+        }
         /* v8 ignore stop @preserve */
 
         const docRef = collection.doc(taskId);
@@ -359,9 +368,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.statusSummary !== undefined) {
           updateData['statusSummary'] = input.statusSummary;
         }
+        /* v8 ignore start -- test-infra: workerLocation set by drainTaskQueue which mocks CodeTaskRepository @preserve */
         if (input.workerLocation !== undefined) {
           updateData['workerLocation'] = input.workerLocation;
         }
+        /* v8 ignore stop @preserve */
         if (input.callbackReceived !== undefined) {
           updateData['callbackReceived'] = input.callbackReceived;
         }
@@ -382,9 +393,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
         }
         /* v8 ignore stop @preserve */
-        if (input.workerLocation !== undefined) {
-          updateData['workerLocation'] = input.workerLocation;
-        }
         if (input.cancelNonce !== undefined) {
           updateData['cancelNonce'] = input.cancelNonce === null
             ? FieldValue.delete()
@@ -740,30 +748,37 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
-    findOldestQueued: async (): Promise<Result<CodeTask | null, RepositoryError>> => {
+    listQueuedByAge: async (limit: number): Promise<Result<CodeTask[], RepositoryError>> => {
       try {
+        // Order by createdAt (not queuedAt) because createdAt is always present and
+        // queuedAt is optional — pre-migration tasks may lack it. Both are set nearly
+        // simultaneously for new tasks, so createdAt is a reliable FIFO proxy.
         const snapshot = await collection
           .where('status', '==', 'queued')
           .orderBy('createdAt', 'asc')
-          .limit(1)
+          .limit(limit)
           .get();
-
-        if (snapshot.empty) {
-          return ok(null);
-        }
-
-        const doc = snapshot.docs[0]!;
-        const data = doc.data();
-        const task: CodeTask = {
-          ...data,
-          id: doc.id,
-          createdAt: data['createdAt'],
-          updatedAt: data['updatedAt'],
-        } as CodeTask;
-
-        return ok(task);
+        return ok(snapshot.docs.map((doc) => toCodeTask(doc as { id: string; data(): Record<string, unknown> })));
       } catch (error) {
-        logger.error({ error }, 'Failed to find oldest queued task');
+        logger.error({ error }, 'Failed to list queued tasks by age');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    listQueued: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        // Cap at 200 to avoid unbounded reads; queue should never grow this large
+        const snapshot = await collection
+          .where('status', '==', 'queued')
+          .orderBy('createdAt', 'asc')
+          .limit(200)
+          .get();
+        return ok(snapshot.docs.map((doc) => toCodeTask(doc as { id: string; data(): Record<string, unknown> })));
+      } catch (error) {
+        logger.error({ error }, 'Failed to list queued tasks');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

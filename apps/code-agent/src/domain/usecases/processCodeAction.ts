@@ -7,19 +7,18 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
-import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../domain/services/taskDispatcher.js';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel, getWorkerTypeFromLabels } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { sanitizePromptForInjection } from '../../domain/utils/promptInjectionSanitizer.js';
-import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
-import { loadConfig } from '../../config.js';
+import { generateWebhookSecret } from '../utils/secrets.js';
 import { backLinkPlanningTask } from './backLinkPlanningTask.js';
 
 /**
@@ -56,7 +55,6 @@ export type ProcessCodeActionErrorCode =
   | 'duplicate_action'
   | 'duplicate_prompt'
   | 'active_task_exists'
-  | 'worker_unavailable'
   | 'worker_not_configured'
   | 'queue_full'          // Queue at max capacity (INT-619)
   | 'queue_timeout'       // Task expired in queue (INT-619)
@@ -75,13 +73,12 @@ export interface ProcessCodeActionError {
 export interface ProcessCodeActionDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
-  taskDispatcher: TaskDispatcherService;
+  taskEnqueueService: TaskEnqueueService;
   linearIssueService: LinearIssueService;
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
-  serviceUrl: string;
 }
 
 /**
@@ -98,7 +95,7 @@ export async function processCodeAction(
   deps: ProcessCodeActionDeps,
   request: ProcessCodeActionRequest
 ): Promise<Result<ProcessCodeActionResult, ProcessCodeActionError>> {
-  const { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, linearIssueService, workerSettingsRepo } = deps;
   const { actionId, approvalEventId, userId, prompt, workerType, linearIssueId, repository, baseBranch, traceId } =
     request;
 
@@ -124,16 +121,6 @@ export async function processCodeAction(
       message: 'Please configure your workers in Settings before submitting code tasks',
     });
   }
-
-  const workerCredentials: DispatchWorkerCredentials = {
-    workers: enabledWorkers.map((w) => ({
-      name: w.name,
-      url: w.url,
-      cfAccessClientId: w.cfAccessClientId,
-      cfAccessClientSecret: w.cfAccessClientSecret,
-      dispatchSigningSecret: w.dispatchSigningSecret,
-    })),
-  };
 
   // Step 2: Sanitize prompt — secret redaction first, then injection prevention
   const secretRedacted = sanitizePrompt(prompt);
@@ -263,109 +250,20 @@ export async function processCodeAction(
   // Step 5b: Back-link planning task to this execution task (INT-725, best-effort)
   await backLinkPlanningTask(codeTaskRepo, logger, task);
 
-  // Step 6: Build webhook URL for callback
-  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
-
-  // Step 7: Dispatch to worker with per-user credentials
-  const dispatchRequest: {
-    taskId: string;
-    linearIssueId?: string;
-    linearIssueLabels: string[];
-    hasChildren: boolean;
-    prompt: string;
-    systemPromptHash: string;
-    repository: string;
-    baseBranch: string;
-    workerType: WorkerType;
-    webhookUrl: string;
-    webhookSecret: string;
-    traceId?: string;
-    workerCredentials: DispatchWorkerCredentials;
-    agentType: 'planning' | 'execution';
-  } = {
+  // Step 6: Enqueue task for dispatch (INT-949)
+  const enqueueResult = await deps.taskEnqueueService.enqueue({
     taskId: task.id,
-    linearIssueLabels,
-    hasChildren,
-    prompt: task.sanitizedPrompt,
-    systemPromptHash: task.systemPromptHash,
-    repository: task.repository,
-    baseBranch: task.baseBranch,
-    workerType: task.workerType,
-    webhookUrl,
-    webhookSecret,
-    workerCredentials,
-    agentType: task.agentType === 'execution' ? 'execution' : 'planning',
-  };
+    userId,
+  });
 
-  // Only include linearIssueId if it exists
-  if (task.linearIssueId !== undefined) {
-    dispatchRequest.linearIssueId = task.linearIssueId;
-  }
-
-  // Include traceId from task
-  dispatchRequest.traceId = task.traceId;
-
-  const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
-
-  const config = loadConfig();
-
-  if (!dispatchResult.ok) {
-    const dispatchError = dispatchResult.error;
-
-    // INT-619: Queue task when all workers are at capacity
-    if (dispatchError.code === 'at_capacity') {
-      const queueCountResult = await codeTaskRepo.countQueued();
-      if (!queueCountResult.ok) {
-        logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
-      }
-      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize + 1;
-
-      if (queueCount > config.queue.maxSize) {
-        await codeTaskRepo.update(task.id, {
-          status: 'failed',
-          error: {
-            code: 'queue_full',
-            message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
-          },
-        });
-        return err({
-          code: 'queue_full',
-          message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
-        });
-      }
-
-      // Task is already in 'queued' status from creation — no status update needed
-      const queuePosition = queueCount;
-      const estimatedWaitMinutes = Math.min(queuePosition * 5, config.queue.ttlMinutes);
-      await whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
-
-      logger.info({ taskId: task.id, queuePosition }, 'Task queued due to worker capacity');
-
-      return ok({
-        codeTaskId: task.id,
-        resourceUrl: `/#/code-tasks/${task.id}`,
-        workerLocation: 'queued' as WorkerLocation,
-      });
+  if (!enqueueResult.ok) {
+    if (enqueueResult.error.code === 'queue_full') {
+      return err({ code: 'queue_full', message: enqueueResult.error.message });
     }
-
-    // Other dispatch errors - fail as before
-    await codeTaskRepo.update(task.id, {
-      status: 'failed',
-      error: {
-        code: dispatchError.code,
-        message: dispatchError.message,
-      },
-    });
-
-    return err({
-      code: 'worker_unavailable',
-      message: dispatchError.message,
-    });
+    return err({ code: 'internal_error', message: enqueueResult.error.message });
   }
 
-  const dispatchValue = dispatchResult.value;
-
-  // Step 8: Record metrics for task submission
+  // Step 7: Record metrics for task submission
   const source = request.source ?? 'web';
   try {
     await deps.metricsClient.incrementTasksSubmitted(effectiveWorkerType, source);
@@ -373,32 +271,10 @@ export async function processCodeAction(
     logger.error({ error, taskId: task.id, workerType: effectiveWorkerType, source }, 'Failed to record task submission metric');
   }
 
-  // Step 9: Generate cancel nonce and send task started notification (INT-379)
-  const cancelNonce = generateCancelNonce();
-  const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
-
-  const updateResult = await codeTaskRepo.update(task.id, {
-    status: 'dispatched',
-    dispatchedAt: new Date(),
-    workerLocation: dispatchValue.workerLocation,
-    cancelNonce,
-    cancelNonceExpiresAt,
-  });
-
-  if (updateResult.ok) {
-    const updatedTask = updateResult.value;
-    const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
-    if (!notifyResult.ok) {
-      logger.warn({ taskId: task.id, error: notifyResult.error }, 'Failed to send task started notification');
-    }
-  } else {
-    logger.warn({ taskId: task.id, error: updateResult.error }, 'Failed to update task with cancel nonce');
-  }
-
-  // Step 10: Return success
+  // Step 8: Return success — task is in queue, drainTaskQueue will dispatch it
   return ok({
     codeTaskId: task.id,
     resourceUrl: `/#/code-tasks/${task.id}`,
-    workerLocation: dispatchValue.workerLocation,
+    workerLocation: 'queued' as WorkerLocation,
   });
 }

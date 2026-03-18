@@ -226,6 +226,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       },
       unifiedEvaluator: {} as never,
       automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1, estimatedWaitMinutes: 5 })) } as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -257,6 +258,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
       automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
     });
 
     // Set up worker settings for the test user
@@ -1439,28 +1441,12 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('CONFLICT');
     });
 
-    it('returns 503 when dispatch fails', async () => {
-      const mockTaskDispatcher = {
-        async dispatch(): Promise<Result<DispatchResult, DispatchError>> {
-          return {
-            ok: false as const,
-            error: {
-              code: 'dispatch_failed' as const,
-              message: 'No workers available',
-            },
-          };
-        },
-        async cancelOnWorker(): Promise<void> {
-          // No-op for test
-        },
-        async sendMessageToWorker(): Promise<Result<{ action: 'queued' | 'resumed' }, { code: string; message: string }>> {
-          return ok({ action: 'queued' });
-        },
-      } satisfies TaskDispatcherService;
-
+    it('returns 503 when enqueue returns queue_full error', async () => {
       setServices({
         ...getServices(),
-        taskDispatcher: mockTaskDispatcher,
+        taskEnqueueService: {
+          enqueue: vi.fn().mockResolvedValue(err({ code: 'queue_full', message: 'Queue is full' })),
+        },
       });
 
       const response = await server.inject({
@@ -1477,7 +1463,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(503);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.code).toBe('QUEUE_FULL');
     });
 
     it('returns 500 when getSettings fails with Firestore error', async () => {
@@ -3877,7 +3863,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.retryAfterMs).toBeGreaterThan(0);
     });
 
-    it('should return 400 when user has no enabled workers', async () => {
+    it('should enqueue retry even when user has no enabled workers', async () => {
       const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
       mockFindByIdForUser.mockResolvedValue(
         ok({
@@ -3901,7 +3887,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         } as never)
       );
 
-      // Mock settings with disabled workers
+      // Mock settings with disabled workers — enqueue still succeeds (queue handles dispatch later)
       mockGetSettings.mockResolvedValue(
         ok({
           userId: 'test-user-id',
@@ -3931,11 +3917,11 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
 
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('worker_not_configured');
+      expect(body.success).toBe(true);
+      expect(body.data.workerLocation).toBe('queued');
     });
 
     it('should return 401 when user is not authenticated', async () => {
@@ -4104,7 +4090,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.data.codeTaskId).toMatch(/^task_/);
       expect(body.data.implementationOf).toBe(created.value.id);
       expect(body.data.resourceUrl).toContain('/#/code-tasks/');
-      expect(body.data.workerLocation).toBe('mac');
+      expect(body.data.workerLocation).toBe('queued');
     });
 
     it('accepts kimi as workerType without 400 validation error', async () => {
@@ -4403,7 +4389,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       const services = getServices();
       const failingRepo = {
         ...services.codeTaskRepo,
-        findOldestQueued: async (): Promise<Result<null, { code: 'FIRESTORE_ERROR'; message: string }>> => err({ code: 'FIRESTORE_ERROR' as const, message: 'DB unavailable' }),
+        listQueuedByAge: async (): Promise<Result<never[], { code: 'FIRESTORE_ERROR'; message: string }>> => err({ code: 'FIRESTORE_ERROR' as const, message: 'DB unavailable' }),
       };
       setServices({
         ...services,

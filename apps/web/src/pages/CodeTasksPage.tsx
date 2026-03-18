@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpDown, Plus } from 'lucide-react';
+import { ArrowUpDown, Clock, Plus } from 'lucide-react';
 import { Button, CodeTaskLogsModal, Layout } from '@/components';
 import { IssueGroupRow } from '@/components/code-tasks/IssueGroupRow';
 import { useAuth } from '@/context';
@@ -59,16 +59,15 @@ const SORT_STORAGE_KEY = 'code-tasks-sort';
 const DEFAULT_NON_ARCHIVED: GroupStatus[] = ['active', 'needs-action', 'done', 'failed'];
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
-  { key: 'linear-id', label: 'Linear ID' },
-  { key: 'pr-number', label: 'PR #' },
-  { key: 'finished-time', label: 'Finished' },
+  { key: 'linear-id', label: 'Linear' },
+  { key: 'pr-number', label: 'PR#' },
   { key: 'created-time', label: 'Created' },
-  { key: 'started-time', label: 'Started At' },
+  { key: 'started-time', label: 'Dispatched' },
 ];
 
 function loadSortFromStorage(): SortOption {
   const stored = localStorage.getItem(SORT_STORAGE_KEY);
-  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'finished-time' || stored === 'started-time' || stored === 'created-time') {
+  if (stored === 'linear-id' || stored === 'pr-number' || stored === 'started-time' || stored === 'created-time') {
     return stored;
   }
   return 'linear-id';
@@ -121,12 +120,21 @@ function PageHeader({ issueGroups }: PageHeaderProps): React.JSX.Element {
           {parts.join(' \u00B7 ')}
         </p>
       </div>
-      <Link to="/code-tasks/new">
-        <Button>
-          <Plus className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">New Task</span>
-        </Button>
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          to="/code-tasks/dispatch-queue"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
+        >
+          <Clock className="h-4 w-4" />
+          Queue
+        </Link>
+        <Link to="/code-tasks/new">
+          <Button>
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">New Task</span>
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }

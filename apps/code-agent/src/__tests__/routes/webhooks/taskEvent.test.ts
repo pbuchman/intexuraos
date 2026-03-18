@@ -125,6 +125,7 @@ describe('POST /internal/webhooks/task-event', () => {
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
+      taskEnqueueService: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();
