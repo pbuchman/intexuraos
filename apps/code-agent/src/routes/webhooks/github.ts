@@ -403,17 +403,19 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         void (async (): Promise<void> => {
           // Resolve sender login → platform userId so the automation log can post PR comments
           let tokenUserId: string | undefined;
-          try {
-            const login = resolveLoginForTaskCreation(senderDetails.senderLogin ?? 'unknown', webhookReceivedRepo, ALLOWED_BOTS);
-            const userResult = await userServiceClient.resolveGitHubUsername(login);
-            if (userResult.ok) {
-              const resolvedUser = userResult.value; // @allow-result-access -- narrowed by userResult.ok
-              if (resolvedUser !== null) {
-                tokenUserId = resolvedUser.userId;
+          if (senderDetails.senderLogin !== null) {
+            try {
+              const login = resolveLoginForTaskCreation(senderDetails.senderLogin, webhookReceivedRepo, ALLOWED_BOTS);
+              const userResult = await userServiceClient.resolveGitHubUsername(login);
+              if (userResult.ok) {
+                const resolvedUser = userResult.value; // @allow-result-access -- narrowed by userResult.ok
+                if (resolvedUser !== null) {
+                  tokenUserId = resolvedUser.userId;
+                }
               }
+            } catch {
+              // Best-effort — userId resolution failure must not block automation logging
             }
-          } catch {
-            // Best-effort — userId resolution failure must not block automation logging
           }
           await automationLog.record(
             { repository: webhookReceivedRepo, prNumber: webhookReceivedPrNumber },
