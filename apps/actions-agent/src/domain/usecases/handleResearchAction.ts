@@ -1,11 +1,10 @@
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import type { ExecuteResearchActionUseCase } from './executeResearchAction.js';
-import { shouldAutoExecute } from './shouldAutoExecute.js';
-import { buildApprovalButtons } from '../utils/approvalButtons.js';
+import { createHandleActionTemplate, type HandleActionTemplateDeps } from './handleActionTemplate.js';
 
 export interface HandleResearchActionDeps {
   actionRepository: ActionRepository;
@@ -19,72 +18,20 @@ export interface HandleResearchActionUseCase {
   execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>>;
 }
 
-export function createHandleResearchActionUseCase(
-  deps: HandleResearchActionDeps
-): HandleResearchActionUseCase {
-  const { actionRepository: _actionRepository, whatsappPublisher, webAppUrl, logger, executeResearchAction } = deps;
-
-  return {
-    async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
-      logger.info(
-        {
-          actionId: event.actionId,
-          userId: event.userId,
-          commandId: event.commandId,
-          title: event.title,
-          actionType: event.actionType,
-        },
-        'Processing research action'
-      );
-
-      if (shouldAutoExecute(event) && executeResearchAction !== undefined) {
-        logger.info({ actionId: event.actionId }, 'Auto-executing research action');
-
-        const executeResult = await executeResearchAction(event.actionId);
-
-        if (!executeResult.ok) {
-          logger.error(
-            { actionId: event.actionId, error: getErrorMessage(executeResult.error) },
-            'Failed to auto-execute research action'
-          );
-          return err(executeResult.error);
-        }
-
-        logger.info({ actionId: event.actionId }, 'Research action auto-executed successfully');
-        return ok({ actionId: event.actionId });
-      }
-
-      // Idempotency check and status update handled by registerActionHandler decorator
-      const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `📚 New research request ready for approval\n\nReview: ${actionLink}`;
-      const buttons = buildApprovalButtons({ actionId: event.actionId });
-
-      logger.info(
-        { actionId: event.actionId, userId: event.userId },
-        'Sending WhatsApp approval notification'
-      );
-
-      const publishResult = await whatsappPublisher.publishSendMessage({
-        userId: event.userId,
-        message,
-        buttons,
-        correlationId: `action-approval-${event.actionId}`,
-      });
-
-      if (!publishResult.ok) {
-        logger.warn(
-          {
-            actionId: event.actionId,
-            userId: event.userId,
-            error: publishResult.error.message,
-          },
-          'Failed to publish WhatsApp message (non-fatal, best-effort notification)'
-        );
-      } else {
-        logger.info({ actionId: event.actionId }, 'WhatsApp approval notification sent');
-      }
-
-      return ok({ actionId: event.actionId });
+export function createHandleResearchActionUseCase(deps: HandleResearchActionDeps): HandleResearchActionUseCase {
+  return createHandleActionTemplate(
+    {
+      actionType: 'research',
+      buildMessage: (event, webAppUrl) => {
+        const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
+        return `📚 New research request ready for approval\n\nReview: ${actionLink}`;
+      },
     },
-  };
+    {
+      whatsappPublisher: deps.whatsappPublisher,
+      webAppUrl: deps.webAppUrl,
+      logger: deps.logger,
+      executeAction: deps.executeResearchAction,
+    } as HandleActionTemplateDeps & Record<string, unknown>
+  );
 }
