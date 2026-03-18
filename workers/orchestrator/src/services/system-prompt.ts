@@ -2,8 +2,7 @@ import { hasCodeTaskLabel } from '@intexuraos/common-core';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { WorkerType } from './isolation/types.js';
 
-const WORKER_INSTRUCTIONS = `
-### Git CLI (MANDATORY — NON-NEGOTIABLE)
+const WORKER_INSTRUCTIONS = `### Git CLI (MANDATORY — NON-NEGOTIABLE)
 Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, diff, log, branching, PRs, and any operation \`gh\` supports. Fall back to \`git\` only when \`gh\` has no equivalent (e.g., \`git add\`, \`git commit\`).
 
 ### GCP Service Account Credentials
