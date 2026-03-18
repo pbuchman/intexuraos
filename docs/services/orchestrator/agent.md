@@ -431,7 +431,7 @@ On startup, the orchestrator:
 | `INTEXURAOS_REPOSITORY_PATH`                   | No       | `~/.claude-orchestrator/repo`      |
 | `INTEXURAOS_WORKER_CAPACITY`                   | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`           | No       | `3`                                |
-| `INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS` | No       | `1`                                |
+| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`        | No       | `1`                                |
 | `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | No       | (GCR Artifact Registry)            |
 | `INTEXURAOS_CLAUDE_WORKER_FORENSICS`           | No       | `0`                                |
 | `INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH`      | No       | `~/.claude-orchestrator/forensics` |

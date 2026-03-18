@@ -89,7 +89,7 @@ export interface IsolationConfig {
 export interface CompletionControlConfig {
   maxAttempts: number;
   verifier: CompletionVerifier;
-  preserveFailedContainers?: boolean;
+  preserveWorkerContainers?: boolean;
 }
 
 export class TaskDispatcher {
@@ -105,7 +105,7 @@ export class TaskDispatcher {
   private readonly lastOutputAt = new Map<string, number>();
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
-  private readonly preserveFailedContainers: boolean;
+  private readonly preserveWorkerContainers: boolean;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -122,7 +122,7 @@ export class TaskDispatcher {
   ) {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
-    this.preserveFailedContainers = completionControl.preserveFailedContainers ?? false;
+    this.preserveWorkerContainers = completionControl.preserveWorkerContainers ?? false;
   }
 
   private checkDockerAvailability(): Result<void, DispatchError> | null {
@@ -1758,8 +1758,11 @@ export class TaskDispatcher {
     keepLogForwarderOpen = false
   ): Promise<void> {
     const finalStatus = statusParam;
+    const isNonPreservableAgentType =
+      task.agentType === 'review' || task.agentType === 'pull_request';
     const shouldPreserve =
-      this.preserveFailedContainers &&
+      this.preserveWorkerContainers &&
+      !isNonPreservableAgentType &&
       (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
     if (shouldPreserve) {
       this.appendOrchestratorTaskLog(
