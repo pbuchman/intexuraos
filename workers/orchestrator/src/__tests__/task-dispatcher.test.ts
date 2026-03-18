@@ -2893,7 +2893,7 @@ describe('TaskDispatcher', () => {
       );
     });
 
-    it('preserves failed worker container when preserveFailedContainers is enabled', async () => {
+    it('preserves worker container when preserveWorkerContainers is enabled', async () => {
       vi.useFakeTimers();
       const preserveState = createStatePersistence();
       const localDestroyWorker = vi.fn(async () => undefined);
@@ -2926,7 +2926,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
-          preserveFailedContainers: true,
+          preserveWorkerContainers: true,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: true }),
@@ -2985,7 +2985,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
-          preserveFailedContainers: true,
+          preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
               passed: true,
@@ -3035,6 +3035,128 @@ describe('TaskDispatcher', () => {
         taskId,
         expect.stringContaining('Preserving worker container for debugging')
       );
+    });
+
+    function createPreserveTestFixture(): {
+      destroyWorker: ReturnType<typeof vi.fn>;
+      preserveWorker: ReturnType<typeof vi.fn>;
+      dispatcher: TaskDispatcher;
+    } {
+      const state = createStatePersistence();
+      const destroyWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => undefined);
+      const cleanupTaskSession = vi.fn(async () => undefined);
+      const isolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker,
+        preserveWorker,
+        cleanupTaskSession,
+      };
+      const isolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: isolationProvider,
+      };
+
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolation,
+        {
+          maxAttempts: 1,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      return { destroyWorker, preserveWorker, dispatcher };
+    }
+
+    it('does not preserve review agent containers when preserveWorkerContainers is enabled', async () => {
+      const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
+
+      const taskId = 'review-no-preserve';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'Review task should not preserve',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'completed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'completed',
+        {}
+      );
+
+      expect(preserveWorker).not.toHaveBeenCalled();
+      expect(destroyWorker).toHaveBeenCalledWith(taskId);
+    });
+
+    it('does not preserve pull_request agent containers when preserveWorkerContainers is enabled', async () => {
+      const { destroyWorker, preserveWorker, dispatcher } = createPreserveTestFixture();
+
+      const taskId = 'pr-no-preserve';
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'PR task should not preserve',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+      });
+      await flushAsync();
+
+      const task = await dispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const internalDispatcher = dispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'failed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internalDispatcher.finalizeTask(task as unknown as Record<string, unknown>, 'failed', {
+        error: { code: 'TEST', message: 'test', remediation: { action: 'retry' as const } },
+      });
+
+      expect(preserveWorker).not.toHaveBeenCalled();
+      expect(destroyWorker).toHaveBeenCalledWith(taskId);
     });
 
     it('uses fallback attempt metadata when persisted task is missing fields', async () => {
