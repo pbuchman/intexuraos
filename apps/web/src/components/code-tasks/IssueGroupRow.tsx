@@ -78,7 +78,7 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
   );
 }
 
-const COMPACT_NAMES: Record<string, string> = {
+const compactNames: Record<string, string> = {
   Planning: 'Plan',
   Execution: 'Exec',
   Review: 'Rev',
@@ -87,7 +87,7 @@ const COMPACT_NAMES: Record<string, string> = {
 
 function stepLabel(name: string, state: StepState, compact?: boolean): string {
   if (compact === true) {
-    const short = COMPACT_NAMES[name] ?? name.slice(0, 4);
+    const short = compactNames[name] ?? name.slice(0, 4);
     if (state === 'actionable') return 'Run';
     return short;
   }
