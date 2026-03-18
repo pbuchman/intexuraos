@@ -560,7 +560,7 @@ describe('calendarServiceHttpClient', () => {
       expect(isOk(result)).toBe(true);
     });
 
-    it('uses default logger when none provided', async () => {
+    it('requires logger in config', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
         .post('/internal/calendar/process-action')
@@ -574,7 +574,11 @@ describe('calendarServiceHttpClient', () => {
           },
         });
 
-      const client = createCalendarServiceHttpClient({ baseUrl, internalAuthToken });
+      const client = createCalendarServiceHttpClient({
+        baseUrl,
+        internalAuthToken,
+        logger: createMockLogger(),
+      });
       const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
