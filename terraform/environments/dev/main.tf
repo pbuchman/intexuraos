@@ -248,6 +248,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    cron_agent = {
+      name      = "intexuraos-cron-agent"
+      app_path  = "apps/cron-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -283,6 +290,7 @@ locals {
     INTEXURAOS_LINEAR_AGENT_URL                 = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_CHAT_AGENT_URL                   = "https://${local.services.chat_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_API_DOCS_HUB_URL                 = "https://${local.services.api_docs_hub.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_CRON_AGENT_URL                   = "https://${local.services.cron_agent.name}-${local.cloud_run_url_suffix}"
   }
 }
 
@@ -1019,6 +1027,7 @@ module "api_docs_hub" {
     INTEXURAOS_CODE_AGENT_OPENAPI_URL                   = "${module.code_agent.service_url}/openapi.json"
     INTEXURAOS_LINEAR_AGENT_OPENAPI_URL                 = "${module.linear_agent.service_url}/openapi.json"
     INTEXURAOS_WEB_AGENT_OPENAPI_URL                    = "${module.web_agent.service_url}/openapi.json"
+    INTEXURAOS_CRON_AGENT_OPENAPI_URL                   = "${module.cron_agent.service_url}/openapi.json"
   })
 
   depends_on = [
@@ -1039,6 +1048,7 @@ module "api_docs_hub" {
     module.bookmarks_agent,
     module.calendar_agent,
     module.chat_agent,
+    module.cron_agent,
   ]
 }
 
@@ -1607,6 +1617,76 @@ module "web_agent" {
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+  ]
+}
+
+# Cron Agent - LLM-driven recurring schedule execution
+module "cron_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.cron_agent.name
+  service_account = module.iam.service_accounts["cron_agent"]
+  port            = local.services.cron_agent.port
+  min_scale       = local.services.cron_agent.min_scale
+  max_scale       = local.services.cron_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/cron-agent:latest"
+
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_GEMINI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
+  })
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Cron Agent Tick (Every Minute)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_cron_agent" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.cron_agent.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.cron_agent]
+}
+
+resource "google_cloud_scheduler_job" "cron_agent_tick" {
+  name        = "intexuraos-cron-agent-tick-${var.environment}"
+  description = "Trigger cron-agent tick every minute to evaluate due schedules"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.cron_agent.service_url}/internal/cron/tick"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.cron_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_cron_agent,
+    module.cron_agent,
   ]
 }
 
