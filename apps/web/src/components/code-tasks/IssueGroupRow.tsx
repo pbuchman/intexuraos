@@ -120,7 +120,7 @@ interface PipelineStepProps {
 
 function PipelineStep({ name, state, compact }: PipelineStepProps): React.JSX.Element {
   return (
-    <span className={compact === true ? 'flex w-14 items-center gap-1' : 'flex w-24 items-center gap-1'}>
+    <span className={compact === true ? 'flex w-14 items-center gap-1' : 'flex items-center gap-1'}>
       <StepDot state={state} />
       <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
         {stepLabel(name, state, compact)}
