@@ -526,7 +526,7 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
     });
 
-    it('uses default logger when none provided', async () => {
+    it('requires logger in config', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -535,8 +535,11 @@ describe('linearAgentHttpClient', () => {
           data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
-      // Create client without logger to test default logger path
-      const client = createLinearAgentHttpClient({ baseUrl, internalAuthToken });
+      const client = createLinearAgentHttpClient({
+        baseUrl,
+        internalAuthToken,
+        logger: createMockLogger(),
+      });
       const result = await client.processAction('action-123', 'user-456', 'Test');
 
       expect(scope.isDone()).toBe(true);
