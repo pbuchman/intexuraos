@@ -86,8 +86,9 @@ export class TaskEnqueueServiceImpl implements TaskEnqueueService {
     }
 
     // Step 4: Send WhatsApp notification (best-effort)
-    // 1-indexed for user-facing display ("you are #1 in line")
-    const queuePosition = queueCount + 1;
+    // countQueued() already includes the current task (created with status:'queued' before enqueue),
+    // so queueCount IS the 1-indexed position (INT-977: fix off-by-one).
+    const queuePosition = queueCount;
 
     const notifyResult = await this.whatsappNotifier.notifyTaskQueued(
       userId,

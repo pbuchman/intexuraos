@@ -1518,6 +1518,9 @@ describe('processCodeAction', () => {
       // findPlannedTaskByLinearIssue for backLinkPlanningTask
       vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
 
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
       const result = await processCodeAction(
         { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
@@ -1536,6 +1539,9 @@ describe('processCodeAction', () => {
         expect(result.value.codeTaskId).toBe('task-parent-123');
         expect(result.value.workerLocation).toBe('queued');
       }
+
+      // Verify parent status was reset to 'queued' before enqueue (INT-977)
+      expect(codeTaskRepo.update).toHaveBeenCalledWith('task-parent-123', { status: 'queued' });
 
       // Verify enqueue was called (fallback to normal path)
       expect(taskEnqueueService.enqueue).toHaveBeenCalledWith({
@@ -1596,6 +1602,9 @@ describe('processCodeAction', () => {
       );
 
       vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
 
       // Enqueue fails with queue_full
       vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
@@ -1672,6 +1681,9 @@ describe('processCodeAction', () => {
 
       vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
 
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
       vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
         err({ code: 'internal_error', message: 'Enqueue internal failure' })
       );
@@ -1731,6 +1743,9 @@ describe('processCodeAction', () => {
 
       vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
 
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
       const result = await processCodeAction(
         { logger, codeTaskRepo, taskEnqueueService, linearIssueService, linearAgentClient, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
         {
@@ -1749,6 +1764,8 @@ describe('processCodeAction', () => {
         expect(result.value.codeTaskId).toBe('task-parent-123');
       }
 
+      // Verify parent status was reset to 'queued' before enqueue (INT-977)
+      expect(codeTaskRepo.update).toHaveBeenCalledWith('task-parent-123', { status: 'queued' });
       expect(taskEnqueueService.enqueue).toHaveBeenCalled();
     });
 
@@ -1852,6 +1869,9 @@ describe('processCodeAction', () => {
 
       vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
 
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
+
       // Enqueue fails with queue_full
       vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
         err({ code: 'queue_full', message: 'Queue is full' })
@@ -1911,6 +1931,9 @@ describe('processCodeAction', () => {
       );
 
       vi.mocked(codeTaskRepo.findPlannedTaskByLinearIssue).mockResolvedValueOnce(ok(null));
+
+      // INT-977: fallback resets parent status to 'queued' before enqueue
+      vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok(parentTask));
 
       // Enqueue fails with internal_error
       vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
