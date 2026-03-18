@@ -22,7 +22,6 @@ export function createHandleResearchActionUseCase(deps: HandleResearchActionDeps
   return createHandleActionTemplate(
     {
       actionType: 'research',
-      emoji: '📚',
       buildMessage: (event, webAppUrl) => {
         const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
         return `📚 New research request ready for approval\n\nReview: ${actionLink}`;

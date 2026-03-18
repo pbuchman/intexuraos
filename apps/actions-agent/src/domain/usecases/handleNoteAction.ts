@@ -22,7 +22,6 @@ export function createHandleNoteActionUseCase(deps: HandleNoteActionDeps): Handl
   return createHandleActionTemplate(
     {
       actionType: 'note',
-      emoji: '📒',
       buildMessage: (event, webAppUrl) => {
         const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
         return `📒 New note ready for approval: "${event.title}"\n\nReview: ${actionLink}`;

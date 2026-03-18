@@ -22,7 +22,6 @@ export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): Handl
   return createHandleActionTemplate(
     {
       actionType: 'link',
-      emoji: '📑',
       buildMessage: (event, webAppUrl) => {
         const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
         return `📑 New link ready to save: "${event.title}"\n\nReview: ${actionLink}`;
