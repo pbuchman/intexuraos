@@ -53,6 +53,7 @@ export interface DrainTaskQueueDeps {
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
   taskEnqueueService: TaskEnqueueService;
+  orchestratorSecret: string;
 }
 
 export async function drainTaskQueue(
@@ -218,6 +219,7 @@ export async function drainTaskQueue(
           codeTaskRepo,
           linearAgentClient,
           taskEnqueueService: deps.taskEnqueueService,
+          orchestratorSecret: deps.orchestratorSecret,
         },
         {
           parentTask: task,
