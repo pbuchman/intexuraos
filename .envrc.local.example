@@ -196,7 +196,6 @@ export INTEXURAOS_CHAT_AGENT_URL=http://localhost:8129
 # Preserve failed/interrupted containers for postmortem debugging (1=on, 0=off)
 export INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS=1
 # Only set if source vars are defined (preserves .envrc defaults otherwise)
-[ -n "$ZAI_API_KEY" ] && export INTEXURAOS_ZAI_APP_API_KEY=$ZAI_API_KEY
 [ -n "$GEMINI_APP_API_KEY" ] && export INTEXURAOS_GEMINI_APP_API_KEY=$GEMINI_APP_API_KEY
 [ -n "$DASHSCOPE_API_KEY" ] && export INTEXURAOS_DASHSCOPE_APP_API_KEY=$DASHSCOPE_API_KEY
 # OpenAI key for embeddings
