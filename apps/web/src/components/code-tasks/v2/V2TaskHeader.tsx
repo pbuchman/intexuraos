@@ -49,10 +49,12 @@ export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): Reac
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {task.linearIssue?.title ?? 'Code Task'}
         </h2>
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}>
-          <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
-          {status.label}
-        </span>
+        {task.status !== 'queued' ? (
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}>
+            <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
+            {status.label}
+          </span>
+        ) : null}
       </div>
 
       <div className="min-h-[1.75rem] mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
