@@ -2694,7 +2694,7 @@ describe('POST /webhooks/github', () => {
   });
 
   describe('automation log recording', () => {
-    it('records webhook_received for pull_request events with PR context', async () => {
+    it('records webhook_received for pull_request events with PR context and resolved userId', async () => {
       const prPayload = createPullRequestPayload();
       const { payload, signature } = signPayload(prPayload);
 
@@ -2724,6 +2724,86 @@ describe('POST /webhooks/github', () => {
           deliveryId: 'delivery-wh-1',
           summary: 'Test PR',
         },
+        'user-1',
+      );
+
+      // Verify the sender login was resolved via userServiceClient
+      expect(mockServices.userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('testuser');
+    });
+
+    it('records webhook_received with undefined userId when resolveGitHubUsername fails', async () => {
+      vi.mocked(mockServices.userServiceClient.resolveGitHubUsername).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'User not found' })
+      );
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-wh-noid-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      expect(mockServices.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        {
+          type: 'webhook_received',
+          eventType: 'pull_request',
+          action: 'opened',
+          sender: 'testuser',
+          deliveryId: 'delivery-wh-noid-1',
+          summary: 'Test PR',
+        },
+        undefined,
+      );
+    });
+
+    it('records webhook_received with undefined userId when resolveGitHubUsername throws', async () => {
+      vi.mocked(mockServices.userServiceClient.resolveGitHubUsername).mockRejectedValue(
+        new Error('network error')
+      );
+
+      const prPayload = createPullRequestPayload();
+      const { payload, signature } = signPayload(prPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request',
+          'x-github-delivery': 'delivery-wh-throw-1',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 1);
+
+      expect(mockServices.automationLog.record).toHaveBeenCalledWith(
+        { repository: 'pbuchman/intexuraos', prNumber: 123 },
+        {
+          type: 'webhook_received',
+          eventType: 'pull_request',
+          action: 'opened',
+          sender: 'testuser',
+          deliveryId: 'delivery-wh-throw-1',
+          summary: 'Test PR',
+        },
+        undefined,
       );
     });
 
@@ -2803,10 +2883,12 @@ describe('POST /webhooks/github', () => {
 
       await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 2);
 
-      // Should have recorded webhook_received first, then skipped
+      // Both webhook_received and skipped should be recorded (order may vary due to async userId resolution)
       const recordCalls = vi.mocked(mockServices.automationLog.record).mock.calls;
       expect(recordCalls.length).toBe(2);
-      expect(recordCalls[0]).toEqual([
+      const webhookReceivedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'webhook_received');
+      const skippedCall = recordCalls.find((c) => (c[1] as { type: string }).type === 'skipped');
+      expect(webhookReceivedCall).toEqual([
         { repository: 'someone/other-repo', prNumber: 123 },
         {
           type: 'webhook_received',
@@ -2816,8 +2898,9 @@ describe('POST /webhooks/github', () => {
           deliveryId: 'delivery-oos-1',
           summary: 'Test PR',
         },
+        'user-1',
       ]);
-      expect(recordCalls[1]).toEqual([
+      expect(skippedCall).toEqual([
         { repository: 'someone/other-repo', prNumber: 123 },
         { type: 'skipped', decidedBy: 'webhook_route', reason: 'repository_out_of_scope' },
       ]);
@@ -2861,6 +2944,7 @@ describe('POST /webhooks/github', () => {
           deliveryId: 'delivery-dup-1',
           summary: 'Test PR',
         },
+        'user-1',
       ]);
       expect(recordCalls[1]).toEqual([
         { repository: 'pbuchman/intexuraos', prNumber: 123 },
@@ -2919,6 +3003,7 @@ describe('POST /webhooks/github', () => {
           type: 'webhook_received',
           deliveryId: 'unknown',
         }),
+        'user-1',
       );
     });
 
