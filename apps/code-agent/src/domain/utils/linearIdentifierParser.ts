@@ -30,6 +30,20 @@ export const parseLinearIdentifierFromUrl = (url: string): string | null => {
 };
 
 /**
+ * Extract an INT-XXX identifier from text using a regex match.
+ *
+ * Returns the first INT-XXX match (e.g. "INT-123") or null if none found.
+ * Case-insensitive to handle "int-123" or "INT-123".
+ */
+export function extractIntIssueId(text: string | undefined): string | null {
+  const match = text?.match(/\bINT-(\d+)\b/i);
+  if (match !== null && match !== undefined) {
+    return `INT-${String(match[1])}`;
+  }
+  return null;
+}
+
+/**
  * Extract the first Linear issue identifier from free-form text (e.g. a PR body).
  *
  * Scans for Linear URLs (plain or markdown) and returns the first valid identifier found.

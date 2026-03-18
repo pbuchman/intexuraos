@@ -24,7 +24,7 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 import { createHmac } from 'node:crypto';
 import type { AutomationLog } from '../ports/automationLog.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
-import { extractLinearIdentifierFromText } from '../utils/linearIdentifierParser.js';
+import { extractIntIssueId, extractLinearIdentifierFromText } from '../utils/linearIdentifierParser.js';
 
 export interface CreateReviewTaskRequest {
   repository: string;
@@ -82,20 +82,18 @@ async function resolveLinearIssueId(
   }
 
   // Tier 2a: Extract INT-XXX from PR title
-  const linearIssueMatch = prTitle?.match(/\bINT-(\d+)\b/i);
-  if (linearIssueMatch !== null && linearIssueMatch !== undefined) {
-    const issueId = `INT-${String(linearIssueMatch[1])}`;
-    logger.info({ linearIssueId: issueId, prNumber }, 'Extracted linearIssueId from PR title');
-    return ok(issueId);
+  const titleIssueId = extractIntIssueId(prTitle);
+  if (titleIssueId !== null) {
+    logger.info({ linearIssueId: titleIssueId, prNumber }, 'Extracted linearIssueId from PR title');
+    return ok(titleIssueId);
   }
 
   // Tier 2b: Extract INT-XXX from PR body
   const { prBody } = request;
-  const bodyIssueMatch = prBody?.match(/\bINT-(\d+)\b/i);
-  if (bodyIssueMatch !== null && bodyIssueMatch !== undefined) {
-    const issueId = `INT-${String(bodyIssueMatch[1])}`;
-    logger.info({ linearIssueId: issueId, prNumber }, 'Extracted linearIssueId from PR body');
-    return ok(issueId);
+  const bodyIssueId = extractIntIssueId(prBody);
+  if (bodyIssueId !== null) {
+    logger.info({ linearIssueId: bodyIssueId, prNumber }, 'Extracted linearIssueId from PR body');
+    return ok(bodyIssueId);
   }
 
   // Tier 2c: Extract from Linear URL in PR body

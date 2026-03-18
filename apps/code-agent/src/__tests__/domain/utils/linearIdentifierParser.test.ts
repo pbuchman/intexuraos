@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseLinearIdentifierFromUrl, extractLinearIdentifierFromText } from '../../../domain/utils/linearIdentifierParser.js';
+import { parseLinearIdentifierFromUrl, extractIntIssueId, extractLinearIdentifierFromText } from '../../../domain/utils/linearIdentifierParser.js';
 
 describe('parseLinearIdentifierFromUrl', () => {
   it('extracts identifier from plain Linear URL', () => {
@@ -24,6 +24,28 @@ describe('parseLinearIdentifierFromUrl', () => {
 
   it('returns null for invalid URL', () => {
     expect(parseLinearIdentifierFromUrl('not-a-url')).toBeNull();
+  });
+});
+
+describe('extractIntIssueId', () => {
+  it('extracts INT-XXX from text', () => {
+    expect(extractIntIssueId('Fixes INT-123')).toBe('INT-123');
+  });
+
+  it('extracts first INT-XXX match', () => {
+    expect(extractIntIssueId('INT-100 and INT-200')).toBe('INT-100');
+  });
+
+  it('is case-insensitive', () => {
+    expect(extractIntIssueId('int-456')).toBe('INT-456');
+  });
+
+  it('returns null when no match', () => {
+    expect(extractIntIssueId('no issue here')).toBeNull();
+  });
+
+  it('returns null for undefined input', () => {
+    expect(extractIntIssueId(undefined)).toBeNull();
   });
 });
 
