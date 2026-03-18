@@ -1758,8 +1758,11 @@ export class TaskDispatcher {
     keepLogForwarderOpen = false
   ): Promise<void> {
     const finalStatus = statusParam;
+    const nonPreservableAgentType =
+      task.agentType === 'review' || task.agentType === 'pull_request';
     const shouldPreserve =
       this.preserveFailedContainers &&
+      !nonPreservableAgentType &&
       (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
     if (shouldPreserve) {
       this.appendOrchestratorTaskLog(
