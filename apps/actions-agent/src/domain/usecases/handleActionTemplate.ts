@@ -5,56 +5,23 @@ import type { Logger } from 'pino';
 import { shouldAutoExecute } from './shouldAutoExecute.js';
 import { buildApprovalButtons } from '../utils/approvalButtons.js';
 
-/**
- * Configuration for the handle action template factory.
- * Defines action-specific behavior while the template handles the common flow.
- */
+/** Configuration for the handle action template factory. */
 export interface HandleActionConfig {
-  /** The action type identifier (e.g., 'note', 'todo', 'calendar') */
   actionType: string;
-  /** Function to build the approval message. Receives the event, web app URL, and optional pre-process data. */
   buildMessage: (event: ActionCreatedEvent, webAppUrl: string, preProcessData?: Record<string, unknown>) => string;
-  /** Optional function to provide additional buttons beyond Approve/Reject */
   extraButtons?: (event: ActionCreatedEvent) => WhatsAppInteractiveButton[];
-  /** Optional async function to run before building the message (e.g., fetching calendar preview) */
-  preProcess?: (
-    event: ActionCreatedEvent,
-    deps: Record<string, unknown>
-  ) => Promise<Record<string, unknown> | undefined>;
-  /** Optional callback invoked after successful auto-execution. Use for custom logging or handling special cases. */
+  preProcess?: (event: ActionCreatedEvent, deps: Record<string, unknown>) => Promise<Record<string, unknown> | undefined>;
   onAutoExecuteSuccess?: (result: unknown, event: ActionCreatedEvent, logger: Logger) => void;
 }
 
-/**
- * Dependencies required by the handle action template.
- * Handlers may extend this with additional dependencies via Record<string, unknown>.
- */
+/** Dependencies for the handle action template. */
 export interface HandleActionTemplateDeps {
   whatsappPublisher: WhatsAppSendPublisher;
-  webAppUrl: string;
-  logger: Logger;
+  webAppUrl: string; logger: Logger;
   executeAction?: (actionId: string) => Promise<Result<unknown>>;
 }
 
-/**
- * Factory function that creates a handle action use case.
- * Extracts common logic: logging, auto-execution check, WhatsApp notification, approval flow.
- *
- * @param config - Action-specific configuration
- * @param deps - Template dependencies including WhatsApp publisher, logger, and optional execute function
- * @returns Use case with execute method
- *
- * @example
- * ```typescript
- * return createHandleActionTemplate(
- *   {
- *     actionType: 'note',
- *     buildMessage: (event, webAppUrl) => `Note: ${event.title}\n${webAppUrl}`,
- *   },
- *   { whatsappPublisher, webAppUrl, logger, executeAction: deps.executeNoteAction }
- * );
- * ```
- */
+/** Factory for handle action use cases. Extracts common logic: logging, auto-execution, WhatsApp notification. */
 export function createHandleActionTemplate(
   config: HandleActionConfig,
   deps: HandleActionTemplateDeps & Record<string, unknown>
@@ -63,27 +30,14 @@ export function createHandleActionTemplate(
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
-      logger.info(
-        {
-          actionId: event.actionId,
-          userId: event.userId,
-          commandId: event.commandId,
-          title: event.title,
-          actionType: event.actionType,
-        },
-        `Processing ${config.actionType} action`
-      );
+      logger.info({ actionId: event.actionId, userId: event.userId, commandId: event.commandId, title: event.title, actionType: event.actionType }, `Processing ${config.actionType} action`);
 
       if (shouldAutoExecute(event) && executeAction !== undefined) {
         logger.info({ actionId: event.actionId }, `Auto-executing ${config.actionType} action`);
-
         const executeResult = await executeAction(event.actionId);
 
         if (!executeResult.ok) {
-          logger.error(
-            { actionId: event.actionId, error: getErrorMessage(executeResult.error) },
-            `Failed to auto-execute ${config.actionType} action`
-          );
+          logger.error({ actionId: event.actionId, error: getErrorMessage(executeResult.error) }, `Failed to auto-execute ${config.actionType} action`);
           return err(executeResult.error);
         }
 
@@ -92,28 +46,20 @@ export function createHandleActionTemplate(
         } else {
           logger.info({ actionId: event.actionId }, `${config.actionType} action auto-executed successfully`);
         }
-
         return ok({ actionId: event.actionId });
       }
 
       const preProcessData = await config.preProcess?.(event, deps);
-
       const message = config.buildMessage(event, webAppUrl, preProcessData);
       const extraButtons = config.extraButtons?.(event);
 
-      const buttonConfig: { actionId: string; extraButtons?: WhatsAppInteractiveButton[] } = {
-        actionId: event.actionId,
-      };
+      const buttonConfig: { actionId: string; extraButtons?: WhatsAppInteractiveButton[] } = { actionId: event.actionId };
       if (extraButtons !== undefined) {
         buttonConfig.extraButtons = extraButtons;
       }
 
       const buttons = buildApprovalButtons(buttonConfig);
-
-      logger.info(
-        { actionId: event.actionId, userId: event.userId },
-        `Sending WhatsApp approval notification for ${config.actionType}`
-      );
+      logger.info({ actionId: event.actionId, userId: event.userId }, `Sending WhatsApp approval notification for ${config.actionType}`);
 
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: event.userId,
@@ -123,18 +69,10 @@ export function createHandleActionTemplate(
       });
 
       if (!publishResult.ok) {
-        logger.warn(
-          {
-            actionId: event.actionId,
-            userId: event.userId,
-            error: publishResult.error.message,
-          },
-          'Failed to publish WhatsApp message (non-fatal, best-effort notification)'
-        );
+        logger.warn({ actionId: event.actionId, userId: event.userId, error: publishResult.error.message }, 'Failed to publish WhatsApp message (non-fatal, best-effort notification)');
       } else {
         logger.info({ actionId: event.actionId }, `WhatsApp approval notification sent for ${config.actionType}`);
       }
-
       return ok({ actionId: event.actionId });
     },
   };
