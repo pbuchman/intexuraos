@@ -6,6 +6,7 @@ import type {
   CalendarPreview,
   GeneratePreviewRequest,
 } from '../../domain/ports/calendarServiceClient.js';
+
 type LogMethod = (obj: unknown, msg?: string) => void;
 
 interface HttpLogger {

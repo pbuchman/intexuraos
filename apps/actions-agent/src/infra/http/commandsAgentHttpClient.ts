@@ -3,14 +3,21 @@ import type {
   CommandsAgentClient,
   CommandWithText,
 } from '../../domain/ports/commandsAgentClient.js';
-import { createAppLogger } from '@intexuraos/infra-sentry';
+
+type LogMethod = (obj: unknown, msg?: string) => void;
+
+interface HttpLogger {
+  info: LogMethod;
+  warn: LogMethod;
+  error: LogMethod;
+  debug: LogMethod;
+}
 
 export interface CommandsAgentHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
+  logger: HttpLogger;
 }
-
-const logger = createAppLogger({ name: 'commandsAgentHttpClient' });
 
 interface GetCommandResponse {
   success: boolean;
@@ -26,6 +33,8 @@ interface GetCommandResponse {
 export function createCommandsAgentHttpClient(
   config: CommandsAgentHttpClientConfig
 ): CommandsAgentClient {
+  const logger = config.logger;
+
   return {
     async getCommand(commandId: string): Promise<CommandWithText | null> {
       const url = `${config.baseUrl}/internal/commands/${commandId}`;
