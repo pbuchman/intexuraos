@@ -20,6 +20,7 @@ const mockQuery = vi.fn();
 const mockWhere = vi.fn();
 const mockOrderBy = vi.fn();
 const mockOnSnapshot = vi.fn();
+const mockLimit = vi.fn();
 
 vi.mock('../../context/index.js', () => ({
   useAuth: (): {
@@ -46,6 +47,7 @@ vi.mock('../../services/firebase.js', () => ({
 
 vi.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]): unknown => mockCollection(...args),
+  limit: (...args: unknown[]): unknown => mockLimit(...args),
   onSnapshot: (...args: unknown[]): unknown => mockOnSnapshot(...args),
   orderBy: (...args: unknown[]): unknown => mockOrderBy(...args),
   query: (...args: unknown[]): unknown => mockQuery(...args),
@@ -61,6 +63,7 @@ describe('useDispatchQueue', () => {
     mockQuery.mockImplementation((...args: unknown[]) => ({ kind: 'query', args }));
     mockWhere.mockImplementation((...args: unknown[]) => ({ kind: 'where', args }));
     mockOrderBy.mockImplementation((...args: unknown[]) => ({ kind: 'orderBy', args }));
+    mockLimit.mockImplementation((...args: unknown[]) => ({ kind: 'limit', args }));
     mockIsFirebaseAuthenticated.mockReturnValue(true);
     mockOnSnapshot.mockReturnValue(vi.fn());
   });
@@ -117,7 +120,9 @@ describe('useDispatchQueue', () => {
 
     expect(mockQuery).toHaveBeenCalled();
     expect(mockWhere).toHaveBeenCalledWith('status', '==', 'queued');
+    expect(mockWhere).toHaveBeenCalledWith('userId', '==', 'user-123');
     expect(mockOrderBy).toHaveBeenCalledWith('queuedAt', 'asc');
+    expect(mockLimit).toHaveBeenCalledWith(100);
   });
 
   it('refetches via API when Firestore snapshot fires', async () => {
