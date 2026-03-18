@@ -1,11 +1,10 @@
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import type { ExecuteNoteActionUseCase } from './executeNoteAction.js';
-import { shouldAutoExecute } from './shouldAutoExecute.js';
-import { buildApprovalButtons } from '../utils/approvalButtons.js';
+import { createHandleActionTemplate, type HandleActionTemplateDeps } from './handleActionTemplate.js';
 
 export interface HandleNoteActionDeps {
   actionRepository: ActionRepository;
@@ -20,69 +19,19 @@ export interface HandleNoteActionUseCase {
 }
 
 export function createHandleNoteActionUseCase(deps: HandleNoteActionDeps): HandleNoteActionUseCase {
-  const { actionRepository: _actionRepository, whatsappPublisher, webAppUrl, logger, executeNoteAction } = deps;
-
-  return {
-    async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
-      logger.info(
-        {
-          actionId: event.actionId,
-          userId: event.userId,
-          commandId: event.commandId,
-          title: event.title,
-          actionType: event.actionType,
-        },
-        'Processing note action'
-      );
-
-      if (shouldAutoExecute(event) && executeNoteAction !== undefined) {
-        logger.info({ actionId: event.actionId }, 'Auto-executing note action');
-
-        const executeResult = await executeNoteAction(event.actionId);
-
-        if (!executeResult.ok) {
-          logger.error(
-            { actionId: event.actionId, error: getErrorMessage(executeResult.error) },
-            'Failed to auto-execute note action'
-          );
-          return err(executeResult.error);
-        }
-
-        logger.info({ actionId: event.actionId }, 'Note action auto-executed successfully');
-        return ok({ actionId: event.actionId });
-      }
-
-      // Idempotency check and status update handled by registerActionHandler decorator
-      const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `📒 New note ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
-      const buttons = buildApprovalButtons({ actionId: event.actionId });
-
-      logger.info(
-        { actionId: event.actionId, userId: event.userId },
-        'Sending WhatsApp approval notification for note'
-      );
-
-      const publishResult = await whatsappPublisher.publishSendMessage({
-        userId: event.userId,
-        message,
-        buttons,
-        correlationId: `action-note-approval-${event.actionId}`,
-      });
-
-      if (!publishResult.ok) {
-        logger.warn(
-          {
-            actionId: event.actionId,
-            userId: event.userId,
-            error: publishResult.error.message,
-          },
-          'Failed to publish WhatsApp message (non-fatal, best-effort notification)'
-        );
-      } else {
-        logger.info({ actionId: event.actionId }, 'WhatsApp approval notification sent for note');
-      }
-
-      return ok({ actionId: event.actionId });
+  return createHandleActionTemplate(
+    {
+      actionType: 'note',
+      buildMessage: (event, webAppUrl) => {
+        const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
+        return `📒 New note ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
+      },
     },
-  };
+    {
+      whatsappPublisher: deps.whatsappPublisher,
+      webAppUrl: deps.webAppUrl,
+      logger: deps.logger,
+      executeAction: deps.executeNoteAction,
+    } as HandleActionTemplateDeps & Record<string, unknown>
+  );
 }

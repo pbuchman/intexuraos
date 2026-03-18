@@ -1,11 +1,10 @@
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import type { ExecuteLinkActionUseCase } from './executeLinkAction.js';
-import { shouldAutoExecute } from './shouldAutoExecute.js';
-import { buildApprovalButtons } from '../utils/approvalButtons.js';
+import { createHandleActionTemplate, type HandleActionTemplateDeps } from './handleActionTemplate.js';
 
 export interface HandleLinkActionDeps {
   actionRepository: ActionRepository;
@@ -20,69 +19,19 @@ export interface HandleLinkActionUseCase {
 }
 
 export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): HandleLinkActionUseCase {
-  const { actionRepository: _actionRepository, whatsappPublisher, webAppUrl, logger, executeLinkAction } = deps;
-
-  return {
-    async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
-      logger.info(
-        {
-          actionId: event.actionId,
-          userId: event.userId,
-          commandId: event.commandId,
-          title: event.title,
-          actionType: event.actionType,
-        },
-        'Processing link action'
-      );
-
-      if (shouldAutoExecute(event) && executeLinkAction !== undefined) {
-        logger.info({ actionId: event.actionId }, 'Auto-executing link action');
-
-        const executeResult = await executeLinkAction(event.actionId);
-
-        if (!executeResult.ok) {
-          logger.error(
-            { actionId: event.actionId, error: getErrorMessage(executeResult.error) },
-            'Failed to auto-execute link action'
-          );
-          return err(executeResult.error);
-        }
-
-        logger.info({ actionId: event.actionId }, 'Link action auto-executed successfully');
-        return ok({ actionId: event.actionId });
-      }
-
-      // Idempotency check and status update handled by registerActionHandler decorator
-      const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `📑 New link ready to save: "${event.title}"\n\nReview: ${actionLink}`;
-      const buttons = buildApprovalButtons({ actionId: event.actionId });
-
-      logger.info(
-        { actionId: event.actionId, userId: event.userId },
-        'Sending WhatsApp approval notification for link'
-      );
-
-      const publishResult = await whatsappPublisher.publishSendMessage({
-        userId: event.userId,
-        message,
-        buttons,
-        correlationId: `action-link-approval-${event.actionId}`,
-      });
-
-      if (!publishResult.ok) {
-        logger.warn(
-          {
-            actionId: event.actionId,
-            userId: event.userId,
-            error: publishResult.error.message,
-          },
-          'Failed to publish WhatsApp message (non-fatal, best-effort notification)'
-        );
-      } else {
-        logger.info({ actionId: event.actionId }, 'WhatsApp approval notification sent for link');
-      }
-
-      return ok({ actionId: event.actionId });
+  return createHandleActionTemplate(
+    {
+      actionType: 'link',
+      buildMessage: (event, webAppUrl) => {
+        const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
+        return `📑 New link ready to save: "${event.title}"\n\nReview: ${actionLink}`;
+      },
     },
-  };
+    {
+      whatsappPublisher: deps.whatsappPublisher,
+      webAppUrl: deps.webAppUrl,
+      logger: deps.logger,
+      executeAction: deps.executeLinkAction,
+    } as HandleActionTemplateDeps & Record<string, unknown>
+  );
 }
