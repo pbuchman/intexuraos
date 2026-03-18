@@ -3,6 +3,7 @@ import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import { listExecutions as listExecutionsApi } from '@/services/cronAgentApi';
 import type { CronExecution, CronExecutionStatus } from '@/types';
+import { parseStatusFilter } from '@/utils/parseStatusFilter.js';
 
 /**
  * Merge incoming executions with previous state, preserving object references
@@ -58,7 +59,7 @@ export function useCronExecutions(options?: {
 
       try {
         const token = await getAccessToken();
-        const statusValues = statusKey !== '' ? statusKey.split(',') as CronExecutionStatus[] : undefined;
+        const statusValues = parseStatusFilter(statusKey) as CronExecutionStatus[] | undefined;
         const listOptions: {
           scheduleId?: string;
           status?: CronExecutionStatus[];
@@ -95,7 +96,7 @@ export function useCronExecutions(options?: {
 
     try {
       const token = await getAccessToken();
-      const statusValues = statusKey !== '' ? statusKey.split(',') as CronExecutionStatus[] : undefined;
+      const statusValues = parseStatusFilter(statusKey) as CronExecutionStatus[] | undefined;
       const listOptions: {
         scheduleId?: string;
         status?: CronExecutionStatus[];

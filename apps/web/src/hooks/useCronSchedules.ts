@@ -9,6 +9,7 @@ import {
   triggerSchedule as triggerScheduleApi,
 } from '@/services/cronAgentApi';
 import type { CronSchedule, CronScheduleStatus, CreateScheduleRequest } from '@/types';
+import { parseStatusFilter } from '@/utils/parseStatusFilter.js';
 
 /**
  * Merge incoming schedules with previous state, preserving object references
@@ -64,7 +65,7 @@ export function useCronSchedules(options?: { status?: CronScheduleStatus[] }): {
 
       try {
         const token = await getAccessToken();
-        const statusValues = statusKey !== '' ? statusKey.split(',') as CronScheduleStatus[] : undefined;
+        const statusValues = parseStatusFilter(statusKey) as CronScheduleStatus[] | undefined;
         const listOptions: { status?: CronScheduleStatus[]; limit: number } = { limit: 50 };
         if (statusValues !== undefined && statusValues.length > 0) {
           listOptions.status = statusValues;
@@ -94,7 +95,7 @@ export function useCronSchedules(options?: { status?: CronScheduleStatus[] }): {
 
     try {
       const token = await getAccessToken();
-      const statusValues = statusKey !== '' ? statusKey.split(',') as CronScheduleStatus[] : undefined;
+      const statusValues = parseStatusFilter(statusKey) as CronScheduleStatus[] | undefined;
       const listOptions: { status?: CronScheduleStatus[]; limit: number; cursor: string } = {
         limit: 50,
         cursor,

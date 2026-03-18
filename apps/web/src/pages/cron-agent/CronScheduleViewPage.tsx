@@ -1,42 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  Pause,
-  Play,
-  Trash2,
-  Zap,
-} from 'lucide-react';
+import { ArrowLeft, Loader2, Pause, Play, Trash2, Zap } from 'lucide-react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { Card, Layout } from '@/components';
 import { useAuth } from '@/context';
-import { useCronExecutions, useCronServices } from '@/hooks';
+import { useCronExecutions, useCronSchedule, useCronServices } from '@/hooks';
 import {
-  getSchedule,
-  updateSchedule as updateScheduleApi,
   deleteSchedule as deleteScheduleApi,
   triggerSchedule as triggerScheduleApi,
 } from '@/services/cronAgentApi';
-import { formatDateTime, formatDurationMs } from '@/utils/dateFormat';
-import { ApiError } from '@/services/apiClient';
-import type { CronExecution, CronSchedule, CronScheduleStatus } from '@/types';
+import { formatDateTime } from '@/utils/dateFormat';
+import type { CronScheduleStatus } from '@/types';
+import { AvailableToolsPanel } from './AvailableToolsPanel.js';
 import { InlineEditText } from './InlineEditText.js';
-
-function executionStatusColor(status: CronExecution['status']): string {
-  switch (status) {
-    case 'running':
-      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
-    case 'success':
-      return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-    case 'failure':
-      return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-    case 'skipped':
-      return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400';
-  }
-}
+import { RecentExecutionsTable } from './RecentExecutionsTable.js';
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -47,11 +24,8 @@ export function CronScheduleViewPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { getAccessToken } = useAuth();
 
-  // Schedule state
-  const [schedule, setSchedule] = useState<CronSchedule | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  // Schedule hook
+  const { schedule, loading, error, notFound, refresh: refreshSchedule, update: updateSchedule } = useCronSchedule(id);
 
   // Action states
   const [updating, setUpdating] = useState(false);
@@ -59,9 +33,6 @@ export function CronScheduleViewPage(): React.JSX.Element {
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  // Tools panel
-  const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
 
   const isMountedRef = useRef(true);
 
@@ -71,38 +42,6 @@ export function CronScheduleViewPage(): React.JSX.Element {
       isMountedRef.current = false;
     };
   }, []);
-
-  // Fetch schedule
-  const fetchSchedule = useCallback(async (): Promise<void> => {
-    if (id === undefined) return;
-    setLoading(true);
-    setError(null);
-    setNotFound(false);
-
-    try {
-      const token = await getAccessToken();
-      const data = await getSchedule(token, id);
-      if (isMountedRef.current) {
-        setSchedule(data);
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        if (err instanceof ApiError && err.status === 404) {
-          setNotFound(true);
-        } else {
-          setError(getErrorMessage(err));
-        }
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [getAccessToken, id]);
-
-  useEffect(() => {
-    void fetchSchedule();
-  }, [fetchSchedule]);
 
   // Executions hook
   const {
@@ -127,17 +66,12 @@ export function CronScheduleViewPage(): React.JSX.Element {
   // ---------------------------------------------------------------------------
 
   const handleUpdate = useCallback(
-    async (updates: Partial<{ name: string; status: CronScheduleStatus; action: CronSchedule['action'] }>): Promise<void> => {
-      if (id === undefined || schedule === null) return;
+    async (updates: Parameters<typeof updateSchedule>[0]): Promise<void> => {
       setUpdating(true);
       setActionError(null);
 
       try {
-        const token = await getAccessToken();
-        const updated = await updateScheduleApi(token, id, updates);
-        if (isMountedRef.current) {
-          setSchedule(updated);
-        }
+        await updateSchedule(updates);
       } catch (err) {
         if (isMountedRef.current) {
           setActionError(getErrorMessage(err));
@@ -148,7 +82,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
         }
       }
     },
-    [getAccessToken, id, schedule],
+    [updateSchedule],
   );
 
   const handlePauseResume = useCallback((): void => {
@@ -167,7 +101,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
       await triggerScheduleApi(token, id);
       if (isMountedRef.current) {
         // Refresh schedule to get updated execution counts and executions list
-        void fetchSchedule();
+        void refreshSchedule();
         void refreshExecutions(false);
       }
     } catch (err) {
@@ -179,7 +113,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
         setTriggering(false);
       }
     }
-  }, [getAccessToken, id, fetchSchedule, refreshExecutions]);
+  }, [getAccessToken, id, refreshSchedule, refreshExecutions]);
 
   const handleDelete = useCallback(async (): Promise<void> => {
     if (id === undefined) return;
@@ -473,122 +407,17 @@ export function CronScheduleViewPage(): React.JSX.Element {
       </Card>
 
       {/* Available tools panel (expandable) */}
-      {selectedServiceTools.length > 0 ? (
-        <Card className="mb-6">
-          <button
-            type="button"
-            onClick={(): void => {
-              setToolsPanelOpen(!toolsPanelOpen);
-            }}
-            className="flex w-full items-center justify-between text-left"
-          >
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Available Tools
-            </h3>
-            {toolsPanelOpen ? (
-              <ChevronDown className="h-5 w-5 text-slate-400" />
-            ) : (
-              <ChevronRight className="h-5 w-5 text-slate-400" />
-            )}
-          </button>
-
-          {toolsPanelOpen ? (
-            <div className="mt-4 space-y-4">
-              {selectedServiceTools.map((service) => (
-                <div key={service.key}>
-                  <h4 className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {service.name}
-                  </h4>
-                  <div className="space-y-1.5">
-                    {service.tools.map((tool) => (
-                      <div
-                        key={tool.name}
-                        className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50"
-                      >
-                        <span className="text-xs font-medium text-slate-800 dark:text-slate-200">
-                          {tool.name}
-                        </span>
-                        {tool.description !== '' ? (
-                          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                            {tool.description}
-                          </p>
-                        ) : null}
-                      </div>
-                    ))}
-                    {service.tools.length === 0 ? (
-                      <p className="text-xs text-slate-400 dark:text-slate-500">No tools</p>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </Card>
-      ) : null}
+      <AvailableToolsPanel services={selectedServiceTools} />
 
       {/* Recent executions */}
-      <Card className="mb-6">
-        <h3 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Recent Executions
-        </h3>
-
-        {executionsLoading && recentExecutions.length === 0 ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-          </div>
-        ) : executionsError !== null ? (
-          <p className="text-sm text-red-600 dark:text-red-400">{executionsError}</p>
-        ) : recentExecutions.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">
-            No executions yet
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs font-medium uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                  <th className="pb-2 pr-4">Timestamp</th>
-                  <th className="pb-2 pr-4">Status</th>
-                  <th className="pb-2 pr-4">Duration</th>
-                  <th className="pb-2 pr-4">Trigger</th>
-                  <th className="pb-2">Tool Calls</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentExecutions.map((execution) => (
-                  <tr
-                    key={execution.id}
-                    onClick={(): void => {
-                      void navigate('/cron-agent/executions');
-                    }}
-                    className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/50 dark:hover:bg-slate-800/50"
-                  >
-                    <td className="whitespace-nowrap py-2 pr-4 text-xs text-slate-600 dark:text-slate-300">
-                      {formatDateTime(execution.startedAt)}
-                    </td>
-                    <td className="py-2 pr-4">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${executionStatusColor(execution.status)}`}
-                      >
-                        {execution.status}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap py-2 pr-4 text-xs text-slate-600 dark:text-slate-300">
-                      {formatDurationMs(execution.durationMs)}
-                    </td>
-                    <td className="py-2 pr-4 text-xs text-slate-500 dark:text-slate-400">
-                      {execution.trigger}
-                    </td>
-                    <td className="py-2 text-xs text-slate-600 dark:text-slate-300">
-                      {String(execution.toolCalls.length)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+      <RecentExecutionsTable
+        executions={recentExecutions}
+        loading={executionsLoading}
+        error={executionsError}
+        onRowClick={(): void => {
+          void navigate('/cron-agent/executions');
+        }}
+      />
     </Layout>
   );
 }
