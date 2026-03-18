@@ -20,6 +20,8 @@ import { generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
+import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
+import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 
 /** Max candidates fetched per drain cycle for the per-resource concurrency guard. */
 const DRAIN_CANDIDATE_BATCH_SIZE = 10;
@@ -50,6 +52,7 @@ export interface DrainTaskQueueDeps {
   linearAgentClient: LinearAgentClient;
   whatsappNotifier: WhatsAppNotifier;
   workerSettingsRepo: WorkerSettingsRepository;
+  taskEnqueueService: TaskEnqueueService;
 }
 
 export async function drainTaskQueue(
@@ -188,6 +191,7 @@ export async function drainTaskQueue(
     // Step 4: Fetch FRESH Linear issue metadata
     let linearIssueLabels: string[] = [];
     let hasChildren = false;
+    let linearIssueUuid: string | undefined;
 
     if (task.linearIssueId !== undefined) {
       const validateResult = await linearAgentClient.validateIssue({
@@ -198,10 +202,46 @@ export async function drainTaskQueue(
       if (validateResult.ok) {
         linearIssueLabels = validateResult.value.labels;
         hasChildren = validateResult.value.childCount > 0;
+        linearIssueUuid = validateResult.value.id;
       } else {
         logger.warn({ linearIssueId: task.linearIssueId }, 'Failed to refresh Linear labels during drain');
       }
     }
+    // Step 4b: Fan-out check (INT-962) — if parent issue has children with code-task labels,
+    // create separate child tasks instead of dispatching the parent.
+    if (shouldFanOut(hasChildren, linearIssueLabels) && task.linearIssueId !== undefined) {
+      logger.info({ taskId: task.id, linearIssueId: task.linearIssueId }, 'Drain fan-out triggered: parent issue has code-task children');
+
+      const fanOutResult = await fanOutChildTasks(
+        {
+          logger,
+          codeTaskRepo,
+          linearAgentClient,
+          taskEnqueueService: deps.taskEnqueueService,
+        },
+        {
+          parentTask: task,
+          userId: task.userId,
+          linearIssueId: task.linearIssueId,
+          ...(linearIssueUuid !== undefined && { parentIssueUuid: linearIssueUuid }),
+        },
+      );
+
+      if (fanOutResult.ok) {
+        logger.info(
+          { taskId: task.id, childTaskIds: fanOutResult.value.childTaskIds },
+          'Drain fan-out completed, parent task marked as implemented',
+        );
+        return ok({ action: 'dispatched', taskId: task.id });
+      }
+
+      // Fan-out failed — fall through to normal dispatch
+      logger.warn(
+        { taskId: task.id, error: fanOutResult.error },
+        'Drain fan-out failed, falling back to normal dispatch',
+      );
+    }
+
     const agentType = resolveTaskAgentType(task, linearIssueLabels);
     const dispatchLabels = ensureDispatchLabelsForAgentType(linearIssueLabels, agentType);
 

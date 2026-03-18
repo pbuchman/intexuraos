@@ -559,6 +559,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           codeTaskRepo: services.codeTaskRepo,
           taskEnqueueService: services.taskEnqueueService,
           linearIssueService: services.linearIssueService,
+          linearAgentClient: services.linearAgentClient,
           whatsappNotifier: services.whatsappNotifier,
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
@@ -3976,6 +3977,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearAgentClient: services.linearAgentClient,
         whatsappNotifier: services.whatsappNotifier,
         workerSettingsRepo: services.workerSettingsRepo,
+        taskEnqueueService: services.taskEnqueueService,
       });
 
       if (!result.ok) {
