@@ -11,13 +11,15 @@ interface IssueTimelineProps {
 
 // --- Dot color ---
 
-type DotColor = 'green' | 'red' | 'blue' | 'violet' | 'slate';
+type DotColor = 'green' | 'red' | 'blue' | 'violet' | 'slate' | 'amber';
 
 function getDotColor(task: CodeTask): DotColor {
   const { status, agentType } = task;
 
   if (status === 'archived' || status === 'cancelled') return 'slate';
-  if (status === 'running' || status === 'dispatched' || status === 'queued') return 'blue';
+  if (status === 'queued') return 'amber';
+  if (status === 'dispatched') return 'slate';
+  if (status === 'running') return 'blue';
   if (status === 'failed' || status === 'interrupted') return 'red';
   if (status === 'planned' && agentType === 'planning') return 'violet';
   // planned (non-planning) or implemented
@@ -30,6 +32,7 @@ const DOT_CLASSES: Record<DotColor, string> = {
   blue: 'bg-blue-500',
   violet: 'bg-violet-500',
   slate: 'bg-slate-500',
+  amber: 'bg-amber-500',
 };
 
 // --- Action label ---
@@ -40,25 +43,33 @@ function getActionLabel(task: CodeTask): string {
   if (agentType === 'execution') {
     if (status === 'implemented') return 'Execution completed';
     if (status === 'failed') return 'Execution failed';
-    if (status === 'running' || status === 'dispatched' || status === 'queued') return 'Execution running';
+    if (status === 'running') return 'Execution running';
+    if (status === 'dispatched') return 'Execution dispatched';
+    if (status === 'queued') return 'Execution queued';
   }
 
   if (agentType === 'planning') {
     if (status === 'planned') return 'Planning completed';
     if (status === 'failed') return 'Planning failed';
-    if (status === 'running' || status === 'dispatched' || status === 'queued') return 'Planning running';
+    if (status === 'running') return 'Planning running';
+    if (status === 'dispatched') return 'Planning dispatched';
+    if (status === 'queued') return 'Planning queued';
   }
 
   if (agentType === 'pull_request') {
     if (status === 'implemented') return 'PR Task completed';
     if (status === 'failed') return 'PR Task failed';
-    if (status === 'running' || status === 'dispatched' || status === 'queued') return 'PR Task running';
+    if (status === 'running') return 'PR Task running';
+    if (status === 'dispatched') return 'PR Task dispatched';
+    if (status === 'queued') return 'PR Task queued';
   }
 
   if (agentType === 'review') {
     if (status === 'reviewed') return 'Review completed';
     if (status === 'failed') return 'Review failed';
-    if (status === 'running' || status === 'dispatched' || status === 'queued') return 'Review running';
+    if (status === 'running') return 'Review running';
+    if (status === 'dispatched') return 'Review dispatched';
+    if (status === 'queued') return 'Review queued';
   }
 
   // Default: capitalize status
