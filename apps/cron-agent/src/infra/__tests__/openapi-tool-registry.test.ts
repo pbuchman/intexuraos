@@ -348,6 +348,39 @@ describe('OpenApiToolRegistry', () => {
     expect(result).toContain('task-123');
   });
 
+  it('encodes path parameters to prevent path traversal', async () => {
+    const specWithPathParam = {
+      openapi: '3.1.1',
+      info: { title: 'Test', version: '1.0.0' },
+      paths: {
+        '/internal/tasks/{taskId}': {
+          get: {
+            operationId: 'getTask',
+            summary: 'Get a task by ID',
+            parameters: [
+              { name: 'taskId', in: 'path', schema: { type: 'string' }, required: true },
+            ],
+          },
+        },
+      },
+    };
+
+    nock('http://code-agent:8128')
+      .get('/openapi.json')
+      .reply(200, specWithPathParam);
+
+    nock('http://code-agent:8128')
+      .get('/internal/tasks/..%2F..%2Fadmin%2Fsecret')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, JSON.stringify({ blocked: true }));
+
+    const tools = await registry.getToolsForService('code-agent');
+    const tool = tools[0];
+    if (tool === undefined) { expect(tool).toBeDefined(); return; }
+    const result = await tool.run({ taskId: '../../admin/secret' });
+    expect(result).toContain('blocked');
+  });
+
   it('uses method and path as description fallback', async () => {
     const specNoDesc = {
       openapi: '3.1.1',
@@ -410,8 +443,9 @@ describe('OpenApiToolRegistry', () => {
     if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
 
     const result = await getTasks.run({});
-    expect(result.length).toBe(50_000 + '... [truncated]'.length);
-    expect(result.endsWith('... [truncated]')).toBe(true);
+    const expectedSuffix = `... [RESPONSE TRUNCATED - original size: ${String(60_000)} bytes]`;
+    expect(result).toContain(expectedSuffix);
+    expect(result.length).toBe(50_000 + expectedSuffix.length);
   });
 
   it('does not truncate response text within 50000 characters', async () => {

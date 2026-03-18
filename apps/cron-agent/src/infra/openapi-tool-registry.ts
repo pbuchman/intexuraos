@@ -193,7 +193,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
         if (key === 'body') {
           bodyData = value;
         } else if (resolvedPath.includes(`{${key}}`)) {
-          resolvedPath = resolvedPath.replace(`{${key}}`, String(value));
+          resolvedPath = resolvedPath.replace(`{${key}}`, encodeURIComponent(String(value)));
         } else {
           queryParams[key] = String(value);
         }
@@ -219,7 +219,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
       const MAX_RESPONSE_SIZE = 50_000;
       const responseText = await response.text();
       return responseText.length > MAX_RESPONSE_SIZE
-        ? responseText.slice(0, MAX_RESPONSE_SIZE) + '... [truncated]'
+        ? responseText.slice(0, MAX_RESPONSE_SIZE) + `... [RESPONSE TRUNCATED - original size: ${String(responseText.length)} bytes]`
         : responseText;
     };
   }
