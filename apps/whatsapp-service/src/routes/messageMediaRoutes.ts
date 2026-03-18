@@ -320,6 +320,11 @@ export const messageMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       },
     },
     async (request: FastifyRequest<{ Params: MessageParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to DELETE /whatsapp/messages/:message_id',
+        includeParams: true,
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
