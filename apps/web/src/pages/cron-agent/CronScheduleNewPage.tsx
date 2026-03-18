@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { Button, Card, Layout } from '@/components';
-import { useCronSchedules, useCronServices } from '@/hooks';
+import { useAuth } from '@/context';
+import { useCronServices } from '@/hooks';
+import { createSchedule as createScheduleApi } from '@/services/cronAgentApi';
 import type { ServiceInfo } from '@/types';
 
 const TIMEZONES = [
@@ -25,7 +27,7 @@ const TIMEZONES = [
 
 export function CronScheduleNewPage(): React.JSX.Element {
   const navigate = useNavigate();
-  const { createSchedule } = useCronSchedules();
+  const { getAccessToken } = useAuth();
   const { services, loading: servicesLoading, error: servicesError } = useCronServices();
 
   const [name, setName] = useState('');
@@ -66,7 +68,8 @@ export function CronScheduleNewPage(): React.JSX.Element {
     setError(null);
 
     try {
-      const scheduleId = await createSchedule({
+      const token = await getAccessToken();
+      const schedule = await createScheduleApi(token, {
         name: name.trim(),
         description: description.trim(),
         action: {
@@ -75,7 +78,7 @@ export function CronScheduleNewPage(): React.JSX.Element {
         },
         timezone,
       });
-      void navigate(`/cron-agent/${scheduleId}`);
+      void navigate(`/cron-agent/${schedule.id}`);
     } catch (err) {
       setError(getErrorMessage(err));
       setSubmitting(false);

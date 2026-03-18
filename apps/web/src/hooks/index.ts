@@ -37,3 +37,4 @@ export { useCronSchedule } from './useCronSchedule.js';
 export { useCronSchedules } from './useCronSchedules.js';
 export { useCronExecutions } from './useCronExecutions.js';
 export { useCronServices } from './useCronServices.js';
+export { useScheduleActions } from './useScheduleActions.js';

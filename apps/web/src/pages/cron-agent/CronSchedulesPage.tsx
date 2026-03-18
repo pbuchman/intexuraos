@@ -1,8 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { useCronSchedules } from '@/hooks';
-import { useTimeTick } from '@/hooks';
+import { useCronSchedules, useTimeTick } from '@/hooks';
 import { Plus, RefreshCw } from 'lucide-react';
 import type { CronScheduleStatus } from '@/types';
 import { ScheduleListItem } from './ScheduleListItem.js';

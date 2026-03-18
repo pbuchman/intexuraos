@@ -1,16 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2, Pause, Play, Trash2, Zap } from 'lucide-react';
-import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { Card, Layout } from '@/components';
-import { useAuth } from '@/context';
-import { useCronExecutions, useCronSchedule, useCronServices } from '@/hooks';
-import {
-  deleteSchedule as deleteScheduleApi,
-  triggerSchedule as triggerScheduleApi,
-} from '@/services/cronAgentApi';
+import { useCronExecutions, useCronSchedule, useCronServices, useScheduleActions } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
-import type { CronScheduleStatus } from '@/types';
 import { AvailableToolsPanel } from './AvailableToolsPanel.js';
 import { InlineEditText } from './InlineEditText.js';
 import { RecentExecutionsTable } from './RecentExecutionsTable.js';
@@ -22,26 +15,18 @@ import { RecentExecutionsTable } from './RecentExecutionsTable.js';
 export function CronScheduleViewPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getAccessToken } = useAuth();
 
   // Schedule hook
-  const { schedule, loading, error, notFound, refresh: refreshSchedule, update: updateSchedule } = useCronSchedule(id);
-
-  // Action states
-  const [updating, setUpdating] = useState(false);
-  const [triggering, setTriggering] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return (): void => {
-      isMountedRef.current = false;
-    };
-  }, []);
+  const {
+    schedule,
+    loading,
+    error,
+    notFound,
+    refresh: refreshSchedule,
+    update,
+    remove,
+    trigger,
+  } = useCronSchedule(id);
 
   // Executions hook
   const {
@@ -61,96 +46,34 @@ export function CronScheduleViewPage(): React.JSX.Element {
     ? allServices.filter((s) => schedule.action.services.includes(s.key))
     : [];
 
-  // ---------------------------------------------------------------------------
-  // Actions
-  // ---------------------------------------------------------------------------
+  // Action state management
+  const actionHooks = useMemo(() => ({
+    update,
+    trigger,
+    remove,
+    refreshSchedule,
+    refreshExecutions,
+  }), [update, trigger, remove, refreshSchedule, refreshExecutions]);
 
-  const handleUpdate = useCallback(
-    async (updates: Parameters<typeof updateSchedule>[0]): Promise<void> => {
-      setUpdating(true);
-      setActionError(null);
+  const {
+    updating,
+    triggering,
+    deleting,
+    showDeleteConfirm,
+    actionError,
+    handlePauseResume,
+    handleTrigger,
+    handleDelete,
+    handleNameSave,
+    handleInstructionSave,
+    setShowDeleteConfirm,
+  } = useScheduleActions(schedule, actionHooks);
 
-      try {
-        await updateSchedule(updates);
-      } catch (err) {
-        if (isMountedRef.current) {
-          setActionError(getErrorMessage(err));
-        }
-      } finally {
-        if (isMountedRef.current) {
-          setUpdating(false);
-        }
-      }
-    },
-    [updateSchedule],
-  );
-
-  const handlePauseResume = useCallback((): void => {
-    if (schedule === null) return;
-    const newStatus: CronScheduleStatus = schedule.status === 'active' ? 'paused' : 'active';
-    void handleUpdate({ status: newStatus });
-  }, [schedule, handleUpdate]);
-
-  const handleTrigger = useCallback(async (): Promise<void> => {
-    if (id === undefined) return;
-    setTriggering(true);
-    setActionError(null);
-
-    try {
-      const token = await getAccessToken();
-      await triggerScheduleApi(token, id);
-      if (isMountedRef.current) {
-        // Refresh schedule to get updated execution counts and executions list
-        void refreshSchedule();
-        void refreshExecutions(false);
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        setActionError(getErrorMessage(err));
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setTriggering(false);
-      }
-    }
-  }, [getAccessToken, id, refreshSchedule, refreshExecutions]);
-
-  const handleDelete = useCallback(async (): Promise<void> => {
-    if (id === undefined) return;
-    setDeleting(true);
-    setActionError(null);
-
-    try {
-      const token = await getAccessToken();
-      await deleteScheduleApi(token, id);
-      if (isMountedRef.current) {
-        void navigate('/cron-agent');
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        setActionError(getErrorMessage(err));
-        setDeleting(false);
-        setShowDeleteConfirm(false);
-      }
-    }
-  }, [getAccessToken, id, navigate]);
-
-  const handleNameSave = useCallback(
-    (newName: string): void => {
-      void handleUpdate({ name: newName });
-    },
-    [handleUpdate],
-  );
-
-  const handleInstructionSave = useCallback(
-    (newInstruction: string): void => {
-      if (schedule === null) return;
-      void handleUpdate({
-        action: { ...schedule.action, instruction: newInstruction },
-      });
-    },
-    [schedule, handleUpdate],
-  );
+  // Handle delete with navigation
+  const handleDeleteAndNavigate = async (): Promise<void> => {
+    await handleDelete();
+    void navigate('/cron-agent');
+  };
 
   // ---------------------------------------------------------------------------
   // Render: loading
@@ -329,7 +252,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
                 <button
                   type="button"
                   onClick={(): void => {
-                    void handleDelete();
+                    void handleDeleteAndNavigate();
                   }}
                   disabled={deleting}
                   className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
