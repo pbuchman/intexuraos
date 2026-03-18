@@ -115,6 +115,28 @@ describe('groupByLinearIssue', () => {
     expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('queued');
   });
 
+  it('derives step as dispatched for dispatched status', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'dispatched' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(findStep(groups[0]?.pipeline, 'execution')?.state).toBe('dispatched');
+  });
+
+  it('dispatched task still results in active aggregateStatus', () => {
+    const tasks = [
+      createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'dispatched' }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.aggregateStatus).toBe('active');
+  });
+
   it('queued task still results in active aggregateStatus', () => {
     const tasks = [
       createMockTask({ id: 't1', linearIssueId: 'INT-100', agentType: 'execution', status: 'queued' }),
