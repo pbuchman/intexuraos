@@ -24,6 +24,7 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 import { createHmac } from 'node:crypto';
 import type { AutomationLog } from '../ports/automationLog.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
+import { extractIntIssueId, extractLinearIdentifierFromText } from '../utils/linearIdentifierParser.js';
 
 export interface CreateReviewTaskRequest {
   repository: string;
@@ -80,12 +81,28 @@ async function resolveLinearIssueId(
     logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing PR task for Linear linking');
   }
 
-  // Tier 2: Extract INT-XXX from PR title
-  const linearIssueMatch = prTitle?.match(/\bINT-(\d+)\b/i);
-  if (linearIssueMatch !== null && linearIssueMatch !== undefined) {
-    const issueId = `INT-${String(linearIssueMatch[1])}`;
-    logger.info({ linearIssueId: issueId, prNumber }, 'Extracted linearIssueId from PR title');
-    return ok(issueId);
+  // Tier 2a: Extract INT-XXX from PR title
+  const titleIssueId = extractIntIssueId(prTitle);
+  if (titleIssueId !== null) {
+    logger.info({ linearIssueId: titleIssueId, prNumber }, 'Extracted linearIssueId from PR title');
+    return ok(titleIssueId);
+  }
+
+  // Tier 2b: Extract INT-XXX from PR body
+  const { prBody } = request;
+  const bodyIssueId = extractIntIssueId(prBody);
+  if (bodyIssueId !== null) {
+    logger.info({ linearIssueId: bodyIssueId, prNumber }, 'Extracted linearIssueId from PR body');
+    return ok(bodyIssueId);
+  }
+
+  // Tier 2c: Extract from Linear URL in PR body
+  if (prBody !== undefined) {
+    const linearUrlId = extractLinearIdentifierFromText(prBody);
+    if (linearUrlId !== null) {
+      logger.info({ linearIssueId: linearUrlId, prNumber }, 'Extracted linearIssueId from Linear URL in PR body');
+      return ok(linearUrlId);
+    }
   }
 
   // Tier 3: Create new Linear issue
@@ -350,7 +367,7 @@ export async function createReviewTask(
   );
 
   // Best-effort: update PR title with Linear issue tag
-  const titleAlreadyTagged = request.prTitle !== undefined && /\bINT-\d+\b/i.test(request.prTitle);
+  const titleAlreadyTagged = extractIntIssueId(request.prTitle) !== null;
   await updatePRTitleWithLinearTag(deps, {
     repository, prNumber, userId,
     ...(linearIssueId !== undefined && { linearIssueId }),
