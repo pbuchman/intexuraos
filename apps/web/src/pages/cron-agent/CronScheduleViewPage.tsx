@@ -23,33 +23,9 @@ import {
   deleteSchedule as deleteScheduleApi,
   triggerSchedule as triggerScheduleApi,
 } from '@/services/cronAgentApi';
+import { formatDateTime, formatDurationMs } from '@/utils/dateFormat';
+import { ApiError } from '@/services/apiClient';
 import type { CronExecution, CronSchedule, CronScheduleStatus } from '@/types';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatTimestamp(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms === null) return '--';
-  if (ms < 1000) return `${String(ms)}ms`;
-  const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remaining = Math.round(seconds % 60);
-  return `${String(minutes)}m ${String(remaining)}s`;
-}
 
 function executionStatusColor(status: CronExecution['status']): string {
   switch (status) {
@@ -231,11 +207,10 @@ export function CronScheduleViewPage(): React.JSX.Element {
       }
     } catch (err) {
       if (isMountedRef.current) {
-        const msg = getErrorMessage(err);
-        if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+        if (err instanceof ApiError && err.status === 404) {
           setNotFound(true);
         } else {
-          setError(msg);
+          setError(getErrorMessage(err));
         }
       }
     } finally {
@@ -493,8 +468,8 @@ export function CronScheduleViewPage(): React.JSX.Element {
 
             {/* Timestamps */}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 dark:text-slate-500">
-              <span>Created: {formatTimestamp(schedule.createdAt)}</span>
-              <span>Updated: {formatTimestamp(schedule.updatedAt)}</span>
+              <span>Created: {formatDateTime(schedule.createdAt)}</span>
+              <span>Updated: {formatDateTime(schedule.updatedAt)}</span>
             </div>
           </div>
 
@@ -707,7 +682,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
                     className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/50 dark:hover:bg-slate-800/50"
                   >
                     <td className="whitespace-nowrap py-2 pr-4 text-xs text-slate-600 dark:text-slate-300">
-                      {formatTimestamp(execution.startedAt)}
+                      {formatDateTime(execution.startedAt)}
                     </td>
                     <td className="py-2 pr-4">
                       <span
@@ -717,7 +692,7 @@ export function CronScheduleViewPage(): React.JSX.Element {
                       </span>
                     </td>
                     <td className="whitespace-nowrap py-2 pr-4 text-xs text-slate-600 dark:text-slate-300">
-                      {formatDuration(execution.durationMs)}
+                      {formatDurationMs(execution.durationMs)}
                     </td>
                     <td className="py-2 pr-4 text-xs text-slate-500 dark:text-slate-400">
                       {execution.trigger}
