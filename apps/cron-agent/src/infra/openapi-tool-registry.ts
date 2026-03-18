@@ -28,7 +28,10 @@ export class OpenApiToolRegistry implements ToolRegistry {
     }
 
     const tools = await this.fetchAndGenerateTools(service);
-    this.cache.set(serviceKey, tools);
+    // Only cache non-empty results to avoid permanently disabling a service after transient failures
+    if (tools.length > 0) {
+      this.cache.set(serviceKey, tools);
+    }
     return tools;
   }
 
