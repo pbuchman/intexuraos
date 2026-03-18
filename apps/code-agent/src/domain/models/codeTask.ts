@@ -184,4 +184,9 @@ export interface CodeTask {
   // WhatsApp cancel nonce (INT-379)
   cancelNonce?: string;           // 4-char hex nonce for WhatsApp cancel button
   cancelNonceExpiresAt?: string;  // ISO timestamp (15 min TTL)
+
+  // Dispatch metadata for queue reconstruction (INT-949)
+  planningPrBranch?: string;     // Planning PR branch to merge into execution worktree
+  planningPrUrl?: string;        // Planning PR URL to close after execution
+  trackingCommentId?: string;    // PR tracking comment ID to reuse for pull_request tasks
 }
