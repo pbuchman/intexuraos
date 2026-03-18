@@ -1,4 +1,4 @@
-import type { Logger } from '@intexuraos/common-core';
+import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { ToolDefinition } from '@intexuraos/llm-contract';
 import type { ServiceDefinition } from '../config.js';
 import type { ToolRegistry, ServiceToolInfo } from '../domain/ports/tool-registry.js';
@@ -226,7 +226,7 @@ export class OpenApiToolRegistry implements ToolRegistry {
           ? responseText.slice(0, MAX_RESPONSE_SIZE) + `... [RESPONSE TRUNCATED - original size: ${String(responseText.length)} bytes]`
           : responseText;
       } catch (fetchError: unknown) {
-        return `Error: Request failed — ${String(fetchError)}`;
+        return `Error: Request to ${service.key} failed — ${getErrorMessage(fetchError, 'unknown error')}`;
       } finally {
         clearTimeout(timeout);
       }

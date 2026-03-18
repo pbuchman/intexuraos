@@ -975,6 +975,30 @@ describe('Schedule Routes', () => {
       expect(response.statusCode).toBe(500);
     });
 
+    it('returns 409 when schedule is already running', async () => {
+      const fakeExecutionRepo = {
+        create: vi.fn(async () => ok(testExecution)),
+        findById: vi.fn(async () => ok(testExecution)),
+        findByUserId: vi.fn(),
+        findByScheduleId: vi.fn(),
+        findRunningByScheduleId: vi.fn(async () => ok(testExecution)),
+        update: vi.fn(),
+      };
+
+      await app.close();
+      resetServices();
+      setServices(createFakeServices({ executionRepo: fakeExecutionRepo }));
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/cron/schedules/schedule-1/trigger',
+        headers: { authorization: AUTH_HEADER },
+      });
+
+      expect(response.statusCode).toBe(409);
+    });
+
     it('returns 500 when execution fails', async () => {
       const fakeExecutionRepo = {
         create: vi.fn(async () => err({ code: 'INTERNAL_ERROR' as const, message: 'Exec failed' })),

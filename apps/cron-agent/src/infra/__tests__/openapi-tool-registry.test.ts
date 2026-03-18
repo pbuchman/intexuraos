@@ -482,7 +482,8 @@ describe('OpenApiToolRegistry', () => {
     if (getTasks === undefined) { expect(getTasks).toBeDefined(); return; }
 
     const result = await getTasks.run({});
-    expect(result).toContain('Error: Request failed');
+    expect(result).toContain('Error: Request to code-agent failed');
+    expect(result).not.toContain('http://code-agent:8128');
   });
 
   it('handles parameter without schema', async () => {

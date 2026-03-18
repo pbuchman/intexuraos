@@ -730,6 +730,51 @@ describe('createScheduleManager', () => {
     expect(result.value.trigger).toBe('manual');
   });
 
+  it('returns CONFLICT when schedule is already running', async () => {
+    const runningExec = {
+      id: 'exec-running',
+      scheduleId: 'schedule-1',
+      scheduleName: 'Test',
+      userId: 'user-1',
+      status: 'running' as const,
+      trigger: 'scheduled' as const,
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+      durationMs: null,
+      toolCalls: [],
+      agentResponse: null,
+      tokenUsage: null,
+      error: null,
+      createdAt: new Date().toISOString(),
+    };
+
+    const manager = createScheduleManager({
+      logger: createTestLogger(),
+      scheduleRepo: createFakeScheduleRepo(),
+      parseDeps: createFakeParseDeps(),
+      toolRegistry: createFakeToolRegistry(),
+      executeDeps: {
+        logger: createTestLogger(),
+        executionRepo: {
+          create: async () => ok(runningExec),
+          findById: async () => ok(runningExec),
+          findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+          findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
+          findRunningByScheduleId: async () => ok(runningExec),
+          update: async () => ok(runningExec),
+        },
+        scheduleRepo: createFakeScheduleRepo(),
+        actionDeps: {} as never,
+      },
+    });
+
+    const result = await manager.trigger('user-1', 'schedule-1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('CONFLICT');
+    expect(result.error.message).toContain('already running');
+  });
+
   it('returns INTERNAL_ERROR when trigger executeSchedule fails', async () => {
     const manager = createScheduleManager({
       logger: createTestLogger(),
