@@ -32,6 +32,10 @@ export const parseLinearIdentifierFromUrl = (url: string): string | null => {
 /**
  * Extract an INT-XXX identifier from text using a regex match.
  *
+ * Intentionally limited to the `INT-` team prefix to avoid false positives
+ * from other team prefixes in free-form text. For identifiers with other
+ * prefixes, use `extractLinearIdentifierFromText` which parses actual Linear URLs.
+ *
  * Returns the first INT-XXX match (e.g. "INT-123") or null if none found.
  * Case-insensitive to handle "int-123" or "INT-123".
  */

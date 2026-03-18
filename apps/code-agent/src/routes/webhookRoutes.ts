@@ -12,8 +12,6 @@ import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.
 import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
 
-export { parseLinearIdentifierFromUrl };
-
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
  * Encapsulates the repeated guard + fire-and-forget pattern used across enforcement checks.

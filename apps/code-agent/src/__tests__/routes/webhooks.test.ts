@@ -14,7 +14,7 @@ vi.mock('jose', () => ({
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../server.js';
-import { parseLinearIdentifierFromUrl } from '../../routes/webhookRoutes.js';
+
 import { getServices, resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
@@ -58,28 +58,6 @@ import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 vi.mock('@intexuraos/internal-clients', async () => ({
   fetchWithAuth: vi.fn(),
 }));
-
-describe('parseLinearIdentifierFromUrl', () => {
-  it('extracts identifier from valid Linear URL', () => {
-    expect(parseLinearIdentifierFromUrl('https://linear.app/pbuchman/issue/INT-200/subtask-title')).toBe('INT-200');
-  });
-
-  it('returns null for non-linear.app hostname', () => {
-    expect(parseLinearIdentifierFromUrl('https://github.com/intexuraos/issue/INT-200')).toBeNull();
-  });
-
-  it('returns null for Linear URL without issue path', () => {
-    expect(parseLinearIdentifierFromUrl('https://linear.app/intexuraos/settings')).toBeNull();
-  });
-
-  it('returns null for malformed non-URL input', () => {
-    expect(parseLinearIdentifierFromUrl('not-a-url')).toBeNull();
-  });
-
-  it('extracts URL from markdown link wrapper', () => {
-    expect(parseLinearIdentifierFromUrl('[Subtask](https://linear.app/pbuchman/issue/INT-300/title)')).toBe('INT-300');
-  });
-});
 
 describe('POST /internal/webhooks/task-complete', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;

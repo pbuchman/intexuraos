@@ -367,7 +367,7 @@ export async function createReviewTask(
   );
 
   // Best-effort: update PR title with Linear issue tag
-  const titleAlreadyTagged = request.prTitle !== undefined && /\bINT-\d+\b/i.test(request.prTitle);
+  const titleAlreadyTagged = extractIntIssueId(request.prTitle) !== null;
   await updatePRTitleWithLinearTag(deps, {
     repository, prNumber, userId,
     ...(linearIssueId !== undefined && { linearIssueId }),
