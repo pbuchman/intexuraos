@@ -3978,6 +3978,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         whatsappNotifier: services.whatsappNotifier,
         workerSettingsRepo: services.workerSettingsRepo,
         taskEnqueueService: services.taskEnqueueService,
+        orchestratorSecret: loadConfig().orchestratorSecret,
       });
 
       if (!result.ok) {

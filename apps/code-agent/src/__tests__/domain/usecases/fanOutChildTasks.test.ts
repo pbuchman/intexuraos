@@ -135,6 +135,7 @@ describe('fanOutChildTasks', () => {
       codeTaskRepo: mockCodeTaskRepo as unknown as FanOutChildTasksDeps['codeTaskRepo'],
       linearAgentClient: mockLinearAgentClient as unknown as FanOutChildTasksDeps['linearAgentClient'],
       taskEnqueueService: mockTaskEnqueueService as unknown as FanOutChildTasksDeps['taskEnqueueService'],
+      orchestratorSecret: 'test-orchestrator-secret',
     };
   }
 
@@ -418,7 +419,7 @@ describe('fanOutChildTasks', () => {
       );
     });
 
-    it('passes parent prompt, workerType, repository, and baseBranch to child tasks', async () => {
+    it('passes parent workerType, repository, and baseBranch to child tasks', async () => {
       const parentTask = createParentTask({
         prompt: 'Custom parent prompt',
         workerType: 'opus',
@@ -442,7 +443,8 @@ describe('fanOutChildTasks', () => {
 
       expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          prompt: 'Custom parent prompt',
+          prompt: expect.stringContaining('INT-957'),
+          webhookSecret: expect.any(String),
           workerType: 'opus',
           repository: 'custom/repo',
           baseBranch: 'main',

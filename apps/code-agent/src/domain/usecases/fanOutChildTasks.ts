@@ -17,12 +17,14 @@ import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LinearAgentClient, IssueTreeNode } from '../ports/linearAgentClient.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import { hasCodeTaskLabel } from '../utils/labelUtils.js';
+import { generateWebhookSecret } from '../utils/secrets.js';
 
 export interface FanOutChildTasksDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   linearAgentClient: LinearAgentClient;
   taskEnqueueService: TaskEnqueueService;
+  orchestratorSecret: string;
 }
 
 export interface FanOutChildTasksRequest {
@@ -63,19 +65,25 @@ export function shouldFanOut(hasChildren: boolean, linearIssueLabels: string[]):
  * Returns the child task ID on success, or null on failure.
  */
 async function createAndEnqueueChild(
-  deps: Pick<FanOutChildTasksDeps, 'codeTaskRepo' | 'taskEnqueueService' | 'logger'>,
+  deps: Pick<FanOutChildTasksDeps, 'codeTaskRepo' | 'taskEnqueueService' | 'logger' | 'orchestratorSecret'>,
   parentTask: CodeTask,
   child: IssueTreeNode,
   userId: string,
 ): Promise<string | null> {
   const { codeTaskRepo, taskEnqueueService, logger } = deps;
   const childTaskId = `task_${randomUUID()}`;
+  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, childTaskId);
 
   const createResult = await codeTaskRepo.create({
     id: childTaskId,
     userId,
-    prompt: parentTask.prompt,
+    // prompt stores a descriptive summary; sanitizedPrompt is the child identifier
+    // sent to the worker (the worker reads the Linear issue for full instructions)
+    /* v8 ignore start -- ts-type: nullish coalescing fallback for optional linearIssueId (fan-out requires linearIssueId so fallback is unreachable) @preserve */
+    prompt: `[Fan-out from ${parentTask.linearIssueId ?? 'parent'}] ${child.identifier}`,
+    /* v8 ignore stop @preserve */
     sanitizedPrompt: child.identifier,
+    webhookSecret,
     systemPromptHash: parentTask.systemPromptHash,
     workerType: parentTask.workerType,
     workerLocation: parentTask.workerLocation,

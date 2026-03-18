@@ -37,6 +37,7 @@ vi.mock('../../../config.js', () => ({
 // Mock secrets
 vi.mock('../../../domain/utils/secrets.js', () => ({
   generateCancelNonce: (): string => 'abcd1234',
+  generateWebhookSecret: (_secret: string, taskId: string): string => `webhook-${taskId}`,
   CANCEL_NONCE_TTL_MS: 15 * 60 * 1000,
 }));
 
@@ -165,6 +166,7 @@ describe('drainTaskQueue', () => {
       whatsappNotifier: mockWhatsappNotifier as unknown as DrainTaskQueueDeps['whatsappNotifier'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as DrainTaskQueueDeps['workerSettingsRepo'],
       taskEnqueueService: mockTaskEnqueueService as unknown as DrainTaskQueueDeps['taskEnqueueService'],
+      orchestratorSecret: 'test-orchestrator-secret',
     };
   }
 

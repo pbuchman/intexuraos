@@ -233,6 +233,7 @@ export async function processCodeAction(
         codeTaskRepo,
         linearAgentClient: deps.linearAgentClient,
         taskEnqueueService: deps.taskEnqueueService,
+        orchestratorSecret: deps.orchestratorSecret,
       },
       {
         parentTask,
