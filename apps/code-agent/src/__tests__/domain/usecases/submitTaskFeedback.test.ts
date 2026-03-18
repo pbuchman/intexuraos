@@ -125,7 +125,7 @@ describe('submitTaskFeedback', () => {
     };
 
     mockTaskEnqueueService = {
-      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'task_followup-456', queuePosition: 1, estimatedWaitMinutes: 0 })),
+      enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'task_followup-456', queuePosition: 1 })),
     };
 
     mockMetricsClient = {

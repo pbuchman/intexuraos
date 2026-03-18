@@ -193,7 +193,7 @@ describe('POST /internal/code/process', () => {
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
       automationLog: {} as never,
-      taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1, estimatedWaitMinutes: 5 })) } as never,
+      taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
     } as {
       firestore: Firestore;
       logger: Logger;
