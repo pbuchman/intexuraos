@@ -186,7 +186,7 @@ describe('executeSchedule', () => {
     expect(result.value.status).toBe('success');
   });
 
-  it('returns fallback execution when findById fails after success', async () => {
+  it('returns fallback execution when update fails after success', async () => {
     const deps: ExecuteScheduleDeps = {
       logger: createTestLogger(),
       executionRepo: {
@@ -195,7 +195,7 @@ describe('executeSchedule', () => {
         findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
         findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
         findRunningByScheduleId: async () => ok(null),
-        update: async () => ok(testExecution),
+        update: async () => err({ code: 'INTERNAL_ERROR' as const, message: 'update failed' }),
       },
       scheduleRepo: {
         create: async () => ok(testSchedule),
@@ -249,7 +249,7 @@ describe('executeSchedule', () => {
     expect(result.value.status).toBe('failure');
   });
 
-  it('returns fallback execution when findById returns null after action failure', async () => {
+  it('returns fallback execution when update fails after action failure', async () => {
     const deps: ExecuteScheduleDeps = {
       logger: createTestLogger(),
       executionRepo: {
@@ -258,7 +258,7 @@ describe('executeSchedule', () => {
         findByUserId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
         findByScheduleId: async () => ok({ executions: [], nextCursor: null, count: 0 }),
         findRunningByScheduleId: async () => ok(null),
-        update: async () => ok(testExecution),
+        update: async () => err({ code: 'INTERNAL_ERROR' as const, message: 'update failed' }),
       },
       scheduleRepo: {
         create: async () => ok(testSchedule),

@@ -49,7 +49,7 @@ export async function executeSchedule(
 
     if (!actionResult.ok) {
       // Update execution as failure
-      await executionRepo.update(execution.id, {
+      const failedUpdate = await executionRepo.update(execution.id, {
         status: 'failure',
         completedAt,
         durationMs,
@@ -64,9 +64,8 @@ export async function executeSchedule(
         failureCount: schedule.failureCount + 1,
       });
 
-      const failedExecution = await executionRepo.findById(execution.id);
-      if (failedExecution.ok && failedExecution.value !== null) {
-        return ok(failedExecution.value);
+      if (failedUpdate.ok) {
+        return ok(failedUpdate.value);
       }
       return ok({
         ...execution,
@@ -80,7 +79,7 @@ export async function executeSchedule(
     const { toolCalls, agentResponse, tokenUsage } = actionResult.value;
 
     // Update execution as success
-    await executionRepo.update(execution.id, {
+    const successUpdate = await executionRepo.update(execution.id, {
       status: 'success',
       completedAt,
       durationMs,
@@ -96,9 +95,8 @@ export async function executeSchedule(
       executionCount: schedule.executionCount + 1,
     });
 
-    const updatedExecution = await executionRepo.findById(execution.id);
-    if (updatedExecution.ok && updatedExecution.value !== null) {
-      return ok(updatedExecution.value);
+    if (successUpdate.ok) {
+      return ok(successUpdate.value);
     }
     return ok({
       ...execution,
