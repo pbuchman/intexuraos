@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
+  Activity,
   BarChart2,
   Bell,
   BellRing,
@@ -31,6 +32,7 @@ import {
   Settings,
   Sparkles,
   StickyNote,
+  Timer,
   TrendingUp,
   X,
 } from 'lucide-react';
@@ -73,6 +75,11 @@ const codeTasksItems: NavItem[] = [
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
   { to: '/code-tasks/dispatch-queue', label: 'Dispatch Queue', icon: Clock },
   { to: '/code-tasks/pr-events', label: 'PR Events', icon: GitPullRequest },
+];
+
+const cronAgentItems: NavItem[] = [
+  { to: '/cron-agent', label: 'Schedules', icon: List },
+  { to: '/cron-agent/executions', label: 'Executions', icon: Activity },
 ];
 
 /**
@@ -137,6 +144,9 @@ export function Sidebar(): React.JSX.Element {
   const [isCodeTasksOpen, setIsCodeTasksOpen] = useState(() =>
     window.location.hash.includes('/code-tasks')
   );
+  const [isCronAgentOpen, setIsCronAgentOpen] = useState(() =>
+    window.location.hash.includes('/cron-agent')
+  );
   const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
@@ -198,6 +208,13 @@ export function Sidebar(): React.JSX.Element {
   useEffect(() => {
     if (location.pathname.startsWith('/code-tasks')) {
       setIsCodeTasksOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand cron agent when on cron-agent page
+  useEffect(() => {
+    if (location.pathname.startsWith('/cron-agent')) {
+      setIsCronAgentOpen(true);
     }
   }, [location.pathname]);
 
@@ -353,6 +370,58 @@ export function Sidebar(): React.JSX.Element {
                     key={item.to}
                     to={item.to}
                     end={item.to === '/code-tasks'}
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Cron Agent section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                if (!isCronAgentOpen) {
+                  void navigate(cronAgentItems[0]?.to ?? '/cron-agent');
+                }
+                setIsCronAgentOpen(!isCronAgentOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/cron-agent')
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`}
+            >
+              <Timer className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Cron Agent</span>
+                  {isCronAgentOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Cron Agent sub-items */}
+            {isCronAgentOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
+                {cronAgentItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/cron-agent'}
                     className={({ isActive }): string =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         isActive
