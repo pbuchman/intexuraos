@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Clock,
   Code2,
   Database,
   DollarSign,
@@ -70,6 +71,7 @@ const dataInsightsItems: NavItem[] = [
 const codeTasksItems: NavItem[] = [
   { to: '/code-tasks', label: 'Battlefield', icon: List },
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
+  { to: '/code-tasks/dispatch-queue', label: 'Dispatch Queue', icon: Clock },
   { to: '/code-tasks/pr-events', label: 'PR Events', icon: GitPullRequest },
 ];
 

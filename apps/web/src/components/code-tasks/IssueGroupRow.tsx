@@ -42,6 +42,13 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
       </span>
     );
   }
+  if (state === 'dispatched') {
+    return (
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-500/20 text-slate-400">
+        <Clock className="h-3 w-3" />
+      </span>
+    );
+  }
   if (state === 'queued') {
     return (
       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
@@ -74,6 +81,7 @@ function StepDot({ state }: StepDotProps): React.JSX.Element {
 function stepLabel(name: string, state: StepState): string {
   if (state === 'completed') return name;
   if (state === 'running') return `${name}...`;
+  if (state === 'dispatched') return `${name} (dispatched)`;
   if (state === 'queued') return `${name} (queued)`;
   if (state === 'failed') return `${name} Failed`;
   if (state === 'actionable') return 'Implement';
@@ -249,7 +257,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
             </p>
             <p className="text-slate-400 dark:text-slate-500">
               <span className="text-slate-500 dark:text-slate-600">Dispatched</span>{' '}
-              {latestTask.dispatchedAt !== undefined ? formatRelative(latestTask.dispatchedAt) : 'Pending'}
+              {group.mostRecentDispatchedAt !== undefined ? formatRelative(group.mostRecentDispatchedAt) : 'Pending'}
             </p>
           </div>
 
@@ -475,6 +483,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   }) &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
+  prev.group.mostRecentDispatchedAt === next.group.mostRecentDispatchedAt &&
   prev.actioningTaskId === next.actioningTaskId &&
   prev.onAction === next.onAction &&
   prev.onOpenLogs === next.onOpenLogs,
