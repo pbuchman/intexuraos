@@ -27,7 +27,6 @@ export function createHandleCodeActionUseCase(deps: HandleCodeActionDeps): Handl
   return createHandleActionTemplate(
     {
       actionType: 'code',
-      emoji: '👻',
       buildMessage: (event, webAppUrl) => {
         const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
         const promptPreview = event.title.length > 100 ? `${event.title.substring(0, 100)}...` : event.title;

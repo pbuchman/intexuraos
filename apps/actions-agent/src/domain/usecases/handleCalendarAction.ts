@@ -27,7 +27,6 @@ export function createHandleCalendarActionUseCase(deps: HandleCalendarActionDeps
   return createHandleActionTemplate(
     {
       actionType: 'calendar',
-      emoji: '📅',
       buildMessage: (event, webAppUrl, preProcessData) => {
         const preview = (preProcessData?.['preview'] as CalendarPreview | null) ?? null;
         return formatCalendarApprovalMessage({

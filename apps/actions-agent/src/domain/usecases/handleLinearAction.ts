@@ -20,7 +20,6 @@ export function createHandleLinearActionUseCase(deps: HandleLinearActionDeps): H
   return createHandleActionTemplate(
     {
       actionType: 'linear',
-      emoji: '🎯',
       buildMessage: (event, webAppUrl) => {
         const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
         return `🎯 New Linear issue ready for approval: "${event.title}"\n\nReview: ${actionLink}`;

@@ -22,7 +22,6 @@ export function createHandleTodoActionUseCase(deps: HandleTodoActionDeps): Handl
   return createHandleActionTemplate(
     {
       actionType: 'todo',
-      emoji: '👷',
       buildMessage: (event, webAppUrl) => {
         const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
         return `👷 New todo ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
