@@ -8,7 +8,10 @@ interface ScheduleListItemProps {
   onRowClick: (id: string) => void;
   onPauseResume: (id: string, status: CronScheduleStatus) => void;
   onTrigger: (id: string) => void;
-  onDelete: (id: string, name: string) => void;
+  onDeleteRequest: (id: string) => void;
+  onDeleteConfirm: (id: string) => void;
+  onDeleteCancel: () => void;
+  showDeleteConfirm: boolean;
 }
 
 export function ScheduleListItem({
@@ -16,7 +19,10 @@ export function ScheduleListItem({
   onRowClick,
   onPauseResume,
   onTrigger,
-  onDelete,
+  onDeleteRequest,
+  onDeleteConfirm,
+  onDeleteCancel,
+  showDeleteConfirm,
 }: ScheduleListItemProps): React.JSX.Element {
   return (
     <div
@@ -122,16 +128,37 @@ export function ScheduleListItem({
           >
             <Zap className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            onClick={(): void => {
-              onDelete(schedule.id, schedule.name);
-            }}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-            title="Delete"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {showDeleteConfirm ? (
+            <>
+              <button
+                type="button"
+                onClick={(): void => {
+                  onDeleteConfirm(schedule.id);
+                }}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                onClick={onDeleteCancel}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={(): void => {
+                onDeleteRequest(schedule.id);
+              }}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>
