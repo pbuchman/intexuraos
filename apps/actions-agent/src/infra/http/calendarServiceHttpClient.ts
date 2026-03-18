@@ -6,8 +6,6 @@ import type {
   CalendarPreview,
   GeneratePreviewRequest,
 } from '../../domain/ports/calendarServiceClient.js';
-import { createAppLogger } from '@intexuraos/infra-sentry';
-
 type LogMethod = (obj: unknown, msg?: string) => void;
 
 interface HttpLogger {
@@ -20,10 +18,8 @@ interface HttpLogger {
 export interface CalendarServiceHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: HttpLogger;
+  logger: HttpLogger;
 }
-
-const defaultLogger = createAppLogger({ name: 'calendarServiceHttpClient' }) as unknown as HttpLogger;
 
 interface ApiResponse {
   success: boolean;
@@ -115,7 +111,7 @@ async function fetchInternal(
 export function createCalendarServiceHttpClient(
   config: CalendarServiceHttpClientConfig
 ): CalendarServiceClient {
-  const logger = config.logger ?? defaultLogger;
+  const logger = config.logger;
 
   return {
     async processAction(request: ProcessCalendarRequest): Promise<Result<ServiceFeedback>> {
