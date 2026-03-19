@@ -30,24 +30,25 @@ export interface ProcessCommandUseCase {
   execute(input: ProcessCommandInput): Promise<ProcessCommandResult>;
 }
 
-async function classifyCommand(deps: {
+export async function classifyCommand(deps: {
   classifierFactory: ClassifierFactory;
   llmClient: LlmGenerateClient;
   text: string;
-  sourceType: CommandSourceType;
+  sourceType?: CommandSourceType;
   logger: Logger;
 }): Promise<ClassificationResult> {
   const classifier = deps.classifierFactory(deps.llmClient, deps.logger);
-  return await classifier.classify(deps.text, { sourceType: deps.sourceType });
+  const options = deps.sourceType !== undefined ? { sourceType: deps.sourceType } : undefined;
+  return await classifier.classify(deps.text, options);
 }
 
-async function createActionFromClassification(deps: {
+export async function createActionFromClassification(deps: {
   actionsAgentClient: ActionsAgentClient;
   userId: string;
   commandId: string;
   classification: ClassificationResult;
   text: string;
-  summary: string | undefined;
+  summary: string | undefined; // @allow-undefined-type -- CA-3 introduced this pattern, preserving for consistency
   logger: Logger;
 }): Promise<Result<Action>> {
   return await deps.actionsAgentClient.createAction({
@@ -63,14 +64,14 @@ async function createActionFromClassification(deps: {
   });
 }
 
-async function publishActionEvent(deps: {
+export async function publishActionEvent(deps: {
   eventPublisher: EventPublisherPort;
   action: Action;
   userId: string;
   commandId: string;
   classification: ClassificationResult;
   text: string;
-  summary: string | undefined;
+  summary: string | undefined; // @allow-undefined-type -- CA-3 introduced this pattern, preserving for consistency
   logger: Logger;
 }): Promise<void> {
   const eventPayload: ActionCreatedEvent['payload'] = {
@@ -120,7 +121,7 @@ async function publishActionEvent(deps: {
   }
 }
 
-function finalizeClassifiedCommand(
+export function finalizeClassifiedCommand(
   command: Command,
   classification: ClassificationResult,
   actionId: string
