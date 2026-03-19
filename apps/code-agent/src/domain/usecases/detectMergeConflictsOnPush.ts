@@ -1055,19 +1055,19 @@ export function createDetectMergeConflictsOnPush(
       const openResult = await deps.gitHubPRSummaryRepo.findAllOpen();
       if (!openResult.ok) {
         logger.warn({ error: openResult.error }, 'Failed to load open PR summaries for merge-conflict reconciliation');
-        return { attempted: 0 };
+        return { processed: 0 };
       }
 
       const summaries = openResult.value;
       if (summaries.length === 0) {
         logger.debug({}, 'No open PR summaries to reconcile for merge conflicts');
-        return { attempted: 0 };
+        return { processed: 0 };
       }
 
       logger.info({ count: summaries.length }, 'Reconciling merge conflicts for open PRs');
 
       const reconcileId = randomUUID();
-      let attempted = 0;
+      let processed = 0;
 
       for (const existingSummary of summaries) {
         const parsedRepository = parseOwnerRepo(existingSummary.repository);
@@ -1090,10 +1090,10 @@ export function createDetectMergeConflictsOnPush(
             'Unhandled error processing PR in merge-conflict reconcile; continuing'
           );
         }
-        attempted++;
+        processed++;
       }
 
-      return { attempted };
+      return { processed };
     },
   };
 }

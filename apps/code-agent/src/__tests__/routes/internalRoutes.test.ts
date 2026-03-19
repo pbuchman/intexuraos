@@ -109,7 +109,7 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
 
     const reconcileSpy = vi.fn().mockImplementation(async () => {
       resolveFn();
-      return { attempted: 3 };
+      return { processed: 3 };
     });
 
     setServices({

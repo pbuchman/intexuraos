@@ -191,7 +191,7 @@ describe('POST /code/cancel', () => {
       taskEnqueueService: {} as never,
       mergeConflictDetector: {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
-        reconcile: vi.fn().mockResolvedValue({ attempted: 0 }),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
       },
     } as {
       firestore: Firestore;

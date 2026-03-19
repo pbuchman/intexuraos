@@ -16,8 +16,8 @@ export type InternalAuthStrategy = 'scheduler-oidc' | 'internal-token';
  *
  * For defense in depth, direct internal callers should prefer the x-internal-auth header path.
  *
- * TODO (INT-1023): If Cloud Run ingress is ever opened beyond IAM-invoker-only, add application-level
- * OIDC validation here (e.g., verify the token audience + issuer using jose).
+ * If Cloud Run ingress is ever opened beyond IAM-invoker-only, add application-level OIDC
+ * validation here (e.g., verify the token audience + issuer using jose).
  */
 export function authenticateInternalScheduler(
   request: FastifyRequest
@@ -29,6 +29,7 @@ export function authenticateInternalScheduler(
     return { authenticated: true, strategy: 'scheduler-oidc' };
   }
 
+  // validateInternalAuth logs the failure reason internally; callers do not need to re-log it.
   const authResult = validateInternalAuth(request);
   if (!authResult.valid) {
     return { authenticated: false };
