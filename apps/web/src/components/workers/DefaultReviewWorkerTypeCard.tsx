@@ -11,13 +11,19 @@ export interface DefaultReviewWorkerTypeCardProps {
 export function DefaultReviewWorkerTypeCard({ currentType, onUpdate }: DefaultReviewWorkerTypeCardProps): React.JSX.Element {
   const [saving, setSaving] = useState(false);
   const [pendingType, setPendingType] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const handleSelect = async (type: string): Promise<void> => {
     if (type === currentType) return;
     setSaving(true);
     setPendingType(type);
+    setSaveSuccess(false);
     try {
       await onUpdate(type);
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+      }, 3000);
     } finally {
       setSaving(false);
       setPendingType(null);
@@ -32,6 +38,11 @@ export function DefaultReviewWorkerTypeCard({ currentType, onUpdate }: DefaultRe
           Model used for automated PR reviews when no specific model is requested.
         </p>
       </div>
+      {saveSuccess ? (
+        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/30">
+          <p className="text-sm font-medium text-green-800 dark:text-green-300">✓ Default review model saved</p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-3">
         {CODE_TASK_WORKER_TYPES.map((type) => {
           const meta = WORKER_TYPE_METADATA[type];
