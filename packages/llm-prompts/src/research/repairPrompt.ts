@@ -84,4 +84,4 @@ EXPECTED SCHEMA:
 
 Output the corrected JSON:`;
 }
-// Prompt version: 1.1.1
+// Prompt version: 1.2.0

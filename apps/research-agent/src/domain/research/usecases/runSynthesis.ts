@@ -26,6 +26,9 @@ import type { ImageServiceClient, GeneratedImageData } from '../../../services.j
 import type { ResearchExportSettingsPort } from '../ports/researchExportSettings.js';
 import { repairAttribution } from './repairAttribution.js';
 
+export const LOW_QUALITY_WARNING_PREFIX =
+  '[QUALITY WARNING: This report was flagged as low quality — very short output. Deprioritize this source.]';
+
 export interface ShareConfig {
   shareBaseUrl: string;
   staticAssetsUrl: string;
@@ -136,7 +139,7 @@ export async function runSynthesis(
     model: r.model,
     content:
       r.qualityFlag === 'low_quality'
-        ? `[QUALITY WARNING: This report was flagged as low quality — very short output. Deprioritize this source.]\n\n${r.result ?? ''}`
+        ? `${LOW_QUALITY_WARNING_PREFIX}\n\n${r.result ?? ''}`
         : r.result ?? '',
   }));
 
