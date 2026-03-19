@@ -229,7 +229,7 @@ describe('POST /webhooks/github', () => {
       unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
       mergeConflictDetector: {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
-        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+        reconcile: vi.fn().mockResolvedValue({ attempted: 0 }),
       },
       automationLog: { record: vi.fn().mockResolvedValue(undefined) },
       taskEnqueueService: {} as never,

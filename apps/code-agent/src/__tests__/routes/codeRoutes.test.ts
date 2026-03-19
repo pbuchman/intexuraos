@@ -229,7 +229,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
       mergeConflictDetector: {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
-        reconcile: vi.fn().mockResolvedValue({ checked: 0 }),
+        reconcile: vi.fn().mockResolvedValue({ attempted: 0 }),
       },
     } as {
       firestore: Firestore;

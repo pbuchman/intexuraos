@@ -1916,6 +1916,8 @@ resource "google_cloud_scheduler_job" "merge_conflict_reconcile" {
 
   depends_on = [
     google_project_service.apis,
+    # Reuses the existing IAM binding that grants the scheduler SA Cloud Run invoker
+    # rights on code-agent — no separate IAM member resource is needed.
     google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
     module.code_agent,
   ]
