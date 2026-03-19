@@ -212,7 +212,7 @@ export class FirestoreOAuthConnectionRepository implements OAuthConnectionReposi
       }
 
       const doc = snapshot.docs[0];
-      /* v8 ignore start -- ts-type: Firestore snapshot always has docs when !empty @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces undefined check on snapshot.docs[0] despite snapshot.empty guard @preserve */
       if (doc === undefined) {
         return ok(null);
       }
