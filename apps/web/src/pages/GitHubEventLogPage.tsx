@@ -46,12 +46,13 @@ function PageHeader({ totalCount, listenerHealthy, refreshing, onRefresh }: Page
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[100px_1fr_160px_120px_36px] gap-2 px-3 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+    <div className="mb-1 hidden grid-cols-[80px_160px_120px_100px_1fr_220px] gap-2 px-3 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
       <div>Time</div>
       <div>Event</div>
+      <div>Action</div>
       <div>Decision</div>
-      <div>User</div>
-      <div />
+      <div>Reason</div>
+      <div>Entity</div>
     </div>
   );
 }
