@@ -49,13 +49,6 @@
       "files": ["packages/internal-clients/src/user-service/client.ts"],
       "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
     },
-    "PENDING-apps-linear-agent": {
-      "files": [
-        "apps/linear-agent/src/infra/firestore/linearCommentRepository.ts",
-        "apps/linear-agent/src/infra/firestore/linearIssueRepository.ts"
-      ],
-      "description": "Firestore batch query functions (getCommentSummaries, findByIdentifiers) — requires emulator to exercise real chunked in-queries"
-    },
     "PENDING-workers-orchestrator": {
       "files": [
         "workers/orchestrator/src/github/token-service.ts",
