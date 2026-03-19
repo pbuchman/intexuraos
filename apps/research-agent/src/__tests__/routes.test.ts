@@ -12,6 +12,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
+import { MIN_QUALITY_CHARS } from '../routes/internalRoutes.js';
 import { getServices, resetServices, type ServiceContainer, setServices } from '../services.js';
 import {
   createFakeContextInferrer,
@@ -4843,7 +4844,7 @@ describe('Internal Routes', () => {
       };
     }
 
-    it('flags short LLM output as low_quality when below 800 chars', async () => {
+    it('flags short LLM output as low_quality when below MIN_QUALITY_CHARS', async () => {
       const shortContent = 'Short response';
       fakeUserServiceClient = new FakeUserServiceClient();
       fakeNotificationSender = new FakeNotificationSender();
@@ -4903,8 +4904,8 @@ describe('Internal Routes', () => {
       expect(result?.qualityFlag).toBe('low_quality');
     });
 
-    it('does not set qualityFlag when LLM output is >= 800 chars', async () => {
-      const longContent = 'A'.repeat(800);
+    it('does not set qualityFlag when LLM output is >= MIN_QUALITY_CHARS', async () => {
+      const longContent = 'A'.repeat(MIN_QUALITY_CHARS);
       fakeUserServiceClient = new FakeUserServiceClient();
       fakeNotificationSender = new FakeNotificationSender();
       const services: ServiceContainer = {
