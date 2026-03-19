@@ -1,7 +1,7 @@
 export { BookmarksListPage } from './BookmarksListPage.js';
 export { CalendarPage } from './CalendarPage.js';
 export { DataInsightsPage } from './DataInsightsPage.js';
-export { PREventsPage } from './PREventsPage.js';
+export { GitHubEventLogPage } from './GitHubEventLogPage.js';
 export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
 export { NotionConnectionPage } from './NotionConnectionPage.js';

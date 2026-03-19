@@ -43,7 +43,7 @@ import {
   MobileNotificationsListPage,
   NotesListPage,
   NotionConnectionPage,
-  PREventsPage,
+  GitHubEventLogPage,
   ResearchDetailPage,
   ResearchListPage,
   ShareHistoryPage,
@@ -280,7 +280,7 @@ function AppRoutes(): React.JSX.Element {
         path="/code-tasks/pr-events"
         element={
           <ProtectedRoute>
-            <PREventsPage />
+            <GitHubEventLogPage />
           </ProtectedRoute>
         }
       />

@@ -18,7 +18,7 @@ import {
   FileText,
   Filter,
   GitBranch,
-  GitPullRequest,
+  RadioTower,
   Inbox,
   Key,
   LayoutList,
@@ -72,7 +72,7 @@ const codeTasksItems: NavItem[] = [
   { to: '/code-tasks', label: 'Battlefield', icon: List },
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
   { to: '/code-tasks/dispatch-queue', label: 'Dispatch Queue', icon: Clock },
-  { to: '/code-tasks/pr-events', label: 'PR Events', icon: GitPullRequest },
+  { to: '/code-tasks/pr-events', label: 'GitHub Event Log', icon: RadioTower },
 ];
 
 /**

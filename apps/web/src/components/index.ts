@@ -23,6 +23,7 @@ export { AudioPlayer } from './AudioPlayer.js';
 export { LinkPreview } from './LinkPreview.js';
 export { LinkPreviewList } from './LinkPreviewList.js';
 export { MarkdownContent, type MarkdownContentProps } from './MarkdownContent.js';
+export { GitHubEventLogTableRow, type GitHubEventLogTableRowProps } from './GitHubEventLogTableRow.js';
 export { PREventsGroup, type PREventsGroupProps } from './PREventsGroup.js';
 export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS } from './ModelSelector.js';
 export { VegaChart } from './VegaChart.js';

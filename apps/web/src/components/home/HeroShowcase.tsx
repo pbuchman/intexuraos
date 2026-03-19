@@ -9,7 +9,7 @@ import {
   Code2,
   Database,
   ExternalLink,
-  GitPullRequest,
+  RadioTower,
   Inbox,
   LayoutList,
   List,
@@ -183,7 +183,7 @@ export function HeroShowcase(): React.JSX.Element {
             <SbItem icon={Code2} label="Code Tasks" active chevron="up" />
             <SbSub icon={List} label="Battlefield" active />
             <SbSub icon={Plus} label="New Task" />
-            <SbSub icon={GitPullRequest} label="PR Events" />
+            <SbSub icon={RadioTower} label="GitHub Event Log" />
             <div className="h-1" />
             <SbItem icon={Sparkles} label="Research Studio" chevron="down" />
             <div className="h-1" />
