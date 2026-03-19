@@ -212,6 +212,10 @@ describe('TaskDispatcher', () => {
     listWorkers: vi.fn(async () => []),
     cleanupTaskSession: vi.fn(async () => undefined),
     isHealthy: vi.fn(() => true),
+    pullImage: vi.fn(async (_taskId: string, onProgress?: (msg: string) => void) => {
+      onProgress?.('Image pull completed in 2s');
+      return 'resolved-image@sha256:test';
+    }),
   };
 
   // Mock TokenRefresher
@@ -6534,6 +6538,109 @@ describe('TaskDispatcher', () => {
         expect(result.error.type).toBe('service_error');
         expect(result.error.message).toContain('Failed to start worker');
       }
+      vi.useRealTimers();
+    });
+
+    it('image pull timeout fails the task via submitTask', async () => {
+      vi.useFakeTimers();
+      const statePersistence = createStatePersistence();
+      const hangingPullProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        pullImage: vi.fn(
+          // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentionally never resolves to simulate stuck pull
+          (): Promise<string> => new Promise(() => {})
+        ),
+        isHealthy: vi.fn(() => true),
+      };
+      const hangingPullIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: hangingPullProvider,
+      };
+      const pullTimeoutDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        hangingPullIsolation,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'pull-timeout-test',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        workerType: 'auto',
+        baseBranch: 'development',
+        linearIssueLabels: [],
+        hasChildren: false,
+        repository: 'pbuchman/intexuraos',
+      };
+
+      await pullTimeoutDispatcher.submitTask(request);
+      // Flush async chain so executeTaskSetup reaches pullImage
+      await vi.advanceTimersByTimeAsync(0);
+      // Trigger IMAGE_PULL_TIMEOUT_MS (15 minutes)
+      await vi.advanceTimersByTimeAsync(900_000);
+
+      // createWorker should NOT have been called since pull timed out
+      expect(hangingPullProvider.createWorker).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('passes resolvedImage from pullImage to createWorker', async () => {
+      vi.useFakeTimers();
+
+      const request: CreateTaskRequest = {
+        taskId: 'resolved-image-test',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        workerType: 'auto',
+        baseBranch: 'development',
+        linearIssueLabels: [],
+        hasChildren: false,
+        repository: 'pbuchman/intexuraos',
+      };
+
+      await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const config = createWorkerCall?.[0];
+      expect(config?.resolvedImage).toBe('resolved-image@sha256:test');
+      vi.useRealTimers();
+    });
+
+    it('forwards pull progress callback to provider', async () => {
+      vi.useFakeTimers();
+
+      const request: CreateTaskRequest = {
+        taskId: 'progress-test',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        workerType: 'auto',
+        baseBranch: 'development',
+        linearIssueLabels: [],
+        hasChildren: false,
+        repository: 'pbuchman/intexuraos',
+      };
+
+      await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Verify pullImage was called with taskId and an onProgress callback
+      const pullImageFn = mockIsolationProvider.pullImage;
+      expect(pullImageFn).toBeDefined();
+      const pullImageMock = vi.mocked(pullImageFn as NonNullable<typeof pullImageFn>);
+      expect(pullImageMock).toHaveBeenCalled();
+      const pullImageCall = pullImageMock.mock.calls[0];
+      expect(pullImageCall?.[0]).toBe('progress-test');
+      expect(typeof pullImageCall?.[1]).toBe('function');
       vi.useRealTimers();
     });
   });

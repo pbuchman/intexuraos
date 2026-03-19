@@ -98,9 +98,12 @@ function createMockDocker(): MockDockerResult {
       }),
     }),
     modem: {
-      followProgress: vi.fn((_stream: unknown, onFinished: (err: Error | null) => void) => {
-        onFinished(null);
-      }),
+      followProgress: vi.fn(
+        (_stream: unknown, onFinished: (err: Error | null) => void, _onProgress?: () => void) => {
+          _onProgress?.();
+          onFinished(null);
+        }
+      ),
     },
   };
 
@@ -440,6 +443,24 @@ describe('DockerProvider', () => {
         e.startsWith('CLAUDE_CODE_EXIT_AFTER_STOP_DELAY')
       );
       expect(hasExitDelay).toBe(false);
+    });
+
+    it('skips image pull when resolvedImage is provided', async () => {
+      const config = createTestConfig({
+        resolvedImage: 'registry/image@sha256:pre-pulled-digest',
+      });
+      await provider.createWorker(config);
+
+      expect(mocks.mockDocker.pull).not.toHaveBeenCalled();
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall?.Image).toBe('registry/image@sha256:pre-pulled-digest');
+    });
+
+    it('still pulls when resolvedImage is not provided', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(config);
+
+      expect(mocks.mockDocker.pull).toHaveBeenCalled();
     });
   });
 
@@ -1236,6 +1257,48 @@ describe('DockerProvider', () => {
       expect(info.configuredRef).toBe('custom-image:v1');
       expect(info.pullPolicy).toBe('if-not-present');
       expect(info.managedAttemptsMode).toBe(false);
+    });
+  });
+
+  describe('pullImage', () => {
+    it('returns resolved image digest', async () => {
+      const resolvedImage = await provider.pullImage('test-task-123');
+
+      expect(mocks.mockDocker.pull).toHaveBeenCalled();
+      expect(resolvedImage).toBe(
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:testdigest'
+      );
+    });
+
+    it('invokes onProgress with status messages', async () => {
+      const onProgress = vi.fn();
+      await provider.pullImage('test-task-123', onProgress);
+
+      expect(onProgress).toHaveBeenCalledWith('Pulling image...');
+      expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('Image pull completed in'));
+    });
+
+    it('returns image name unchanged when pull policy is if-not-present', async () => {
+      const noPullProvider = new TestableDockerProvider(
+        { imagePullPolicy: 'if-not-present' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const resolvedImage = await noPullProvider.pullImage('test-task-123');
+
+      expect(mocks.mockDocker.pull).not.toHaveBeenCalled();
+      expect(resolvedImage).toBe(
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest'
+      );
+    });
+
+    it('throws when pull fails', async () => {
+      mocks.mockDocker.pull.mockRejectedValueOnce(new Error('network error'));
+
+      await expect(provider.pullImage('test-task-123')).rejects.toThrow(
+        'Failed to pull worker image'
+      );
     });
   });
 
