@@ -72,7 +72,7 @@ export function getAccentShadow(status: TodoStatus): string {
 }
 
 // Priority sort order (lowest index = highest priority)
-export const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+export const PRIORITY_ORDER: Record<TodoPriority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
 // Sort config
 export type TodoSortOption = 'created' | 'priority' | 'updated';

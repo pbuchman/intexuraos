@@ -25,7 +25,7 @@ function getStoredStatuses(): Set<TodoStatus> {
       return new Set(parsed);
     }
   } catch {
-    // ignore
+    // Corrupted localStorage data — silently fall back to defaults rather than crashing the page
   }
   // Default: all except cancelled
   return new Set(TODO_GROUP_STATUSES.filter((s) => s !== 'cancelled'));
@@ -101,7 +101,7 @@ export function TodosListPage(): React.JSX.Element {
     const filtered = todos.filter((t) => activeStatuses.has(t.status));
     return [...filtered].sort((a, b) => {
       if (sort === 'priority') {
-        return (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4);
+        return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
       }
       if (sort === 'updated') {
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
