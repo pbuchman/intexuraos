@@ -32,4 +32,3 @@ export { LinearIssueCombobox } from './LinearIssueCombobox.js';
 export { LinearIssueSelectorModal } from './LinearIssueSelectorModal.js';
 export * from './ui/index.js';
 export * from './Chat/index.js';
-export * from './inbox/index.js';
