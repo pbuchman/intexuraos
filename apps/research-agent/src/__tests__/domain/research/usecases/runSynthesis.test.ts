@@ -323,6 +323,42 @@ describe('runSynthesis', () => {
     );
   });
 
+  it('handles low_quality flagged result with empty string result', async () => {
+    const research = createTestResearch({
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: '',
+          qualityFlag: 'low_quality',
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    await runSynthesis('research-1', deps);
+
+    expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
+      'Test research prompt',
+      [
+        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        {
+          model: LlmModels.O4MiniDeepResearch,
+          content: `${LOW_QUALITY_WARNING_PREFIX}\n\n`,
+        },
+      ],
+      undefined,
+      undefined
+    );
+  });
+
   it('passes through content unchanged when qualityFlag is not low_quality', async () => {
     const research = createTestResearch({
       llmResults: [
