@@ -151,7 +151,7 @@ Network: `claude-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquera
 | `auto`    | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | None            |
 | `opus`    | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | `opus`          |
 | `sonnet`  | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY` | `sonnet`        |
-| `minimax` | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`   | `MiniMax-M2.5`  |
+| `minimax` | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`   | `MiniMax-M2.7`  |
 | `glm`     | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `glm-5`         |
 | `qwen`    | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `qwen3.5-plus`  |
 | `kimi`    | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY` | `kimi-k2.5`     |

@@ -347,18 +347,22 @@ class FakeQuery {
     return query;
   }
 
+  /**
+   * Execute query against a specific store (used by FakeTransaction).
+   */
+  executeOnStore(store: DocumentStore): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
+    return this.executeGet(store);
+  }
+
   get(): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
-    const collection = this.store.get(this.collectionName) ?? new Map<string, DocumentData>();
+    return this.executeGet(this.store);
+  }
+
+  private executeGet(store: DocumentStore): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
+    const collection = store.get(this.collectionName) ?? new Map<string, DocumentData>();
     let docs = Array.from(collection.entries()).map(
       ([id, data]: [string, DocumentData | undefined]) =>
-        new FakeDocumentSnapshot(
-          id,
-          data,
-          true,
-          this.collectionName,
-          this.store,
-          this.docCounterRef
-        )
+        new FakeDocumentSnapshot(id, data, true, this.collectionName, store, this.docCounterRef)
     );
 
     // Apply filters
@@ -638,10 +642,17 @@ class FakeTransaction {
   ) {}
 
   /**
-   * Get a document snapshot within the transaction.
-   * Returns pending writes if available, otherwise reads from store.
+   * Get a document snapshot or query results within the transaction.
+   * For document references: Returns pending writes if available, otherwise reads from store.
+   * For queries: Executes against store with pending writes applied.
    */
-  get(docRef: FakeDocumentReference): Promise<FakeDocumentSnapshot> {
+  get(arg: FakeDocumentReference | FakeQuery): Promise<FakeDocumentSnapshot | FakeQuerySnapshot> {
+    // Check if argument is a query (has collectionName property and get method that returns QuerySnapshot)
+    if (arg instanceof FakeQuery) {
+      return this.getQuery(arg);
+    }
+    // Otherwise it's a document reference
+    const docRef = arg;
     const key = `${docRef._collectionName}/${docRef.id}`;
     const pending = this.pendingWrites.get(key);
 
@@ -658,6 +669,41 @@ class FakeTransaction {
 
     // Read from underlying store
     return docRef.get();
+  }
+
+  /**
+   * Execute a query within the transaction.
+   * Applies pending writes to the store before executing the query.
+   */
+  private async getQuery(query: FakeQuery): Promise<FakeQuerySnapshot> {
+    // Create a temporary store that includes pending writes
+    const tempStore: DocumentStore = new Map();
+
+    // Copy base store
+    for (const [collName, collDocs] of this.store.entries()) {
+      tempStore.set(collName, new Map(collDocs));
+    }
+
+    // Apply pending writes to temp store
+    for (const [key, value] of this.pendingWrites.entries()) {
+      const [collectionName, docId] = key.split('/');
+      if (collectionName === undefined || docId === undefined) continue;
+
+      let collection = tempStore.get(collectionName);
+      if (collection === undefined) {
+        collection = new Map();
+        tempStore.set(collectionName, collection);
+      }
+
+      if (value.deleted) {
+        collection.delete(docId);
+      } else {
+        collection.set(docId, value.data);
+      }
+    }
+
+    // Execute query against temp store
+    return await query.executeOnStore(tempStore);
   }
 
   /**

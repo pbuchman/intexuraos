@@ -80,6 +80,21 @@ export class WorktreeManager {
         // Ensure base directory exists
         await mkdir(this.config.worktreeBasePath, { recursive: true });
 
+        // Fetch base branch to ensure origin/${baseBranch} is up-to-date
+        // Without this, worktrees are created from whatever was last fetched at startup
+        this.logger.info({ taskId, baseBranch }, 'Fetching base branch before worktree creation');
+        try {
+          await execAsync(`git fetch origin "${baseBranch}" --force`, {
+            cwd: this.config.repositoryPath,
+          });
+        } catch (fetchError: unknown) {
+          const message = fetchError instanceof Error ? fetchError.message : 'Unknown error';
+          this.logger.warn(
+            { taskId, baseBranch, error: message },
+            'Failed to fetch base branch — proceeding with existing local state'
+          );
+        }
+
         // Create worktree with a new branch for the task
         // Using -b creates a local branch, avoiding detached HEAD state
         // which is required for Claude to create commits and PRs
