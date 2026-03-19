@@ -13,14 +13,18 @@ interface TodoRowProps {
 export function TodoRow({ todo, onSelect, onDelete }: TodoRowProps): React.JSX.Element {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDelete = async (): Promise<void> => {
     setDeleting(true);
+    setDeleteError(null);
     try {
       await onDelete(todo.id);
+      setShowDeleteConfirm(false); // only hide on success — keep overlay visible if delete fails
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete');
     } finally {
       setDeleting(false);
-      setShowDeleteConfirm(false);
     }
   };
 
@@ -38,7 +42,7 @@ export function TodoRow({ todo, onSelect, onDelete }: TodoRowProps): React.JSX.E
         <span className="text-xs text-slate-400 dark:text-slate-500">{formatRelative(todo.updatedAt)}</span>
         <div className="flex items-center justify-end">
           <button
-            onClick={(e): void => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+            onClick={(e): void => { e.stopPropagation(); setShowDeleteConfirm(true); setDeleteError(null); }}
             className="rounded p-1 text-slate-400 opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
             title="Delete"
           >
@@ -51,21 +55,26 @@ export function TodoRow({ todo, onSelect, onDelete }: TodoRowProps): React.JSX.E
           className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur-sm dark:bg-slate-900/80"
           onClick={(e): void => { e.stopPropagation(); }}
         >
-          <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg dark:bg-slate-800">
+          <div className="flex flex-col items-center gap-2 rounded-lg bg-white px-4 py-3 shadow-lg dark:bg-slate-800">
             <p className="text-sm text-slate-700 dark:text-slate-200">Delete this item?</p>
-            <button
-              onClick={(): void => { setShowDeleteConfirm(false); }}
-              className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={(): void => { void handleDelete(); }}
-              disabled={deleting}
-              className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50"
-            >
-              {deleting ? 'Deleting...' : 'Delete'}
-            </button>
+            {deleteError !== null ? (
+              <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>
+            ) : null}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={(): void => { setShowDeleteConfirm(false); setDeleteError(null); }}
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={(): void => { void handleDelete(); }}
+                disabled={deleting}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

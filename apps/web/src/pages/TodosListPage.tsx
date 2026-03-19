@@ -15,6 +15,7 @@ import {
 import { useTodos } from '@/hooks';
 import type { Todo, TodoStatus } from '@/types';
 
+// Page-scoped inactive pill style — intentionally not exported to shared.tsx since it is only used by the filter pills on this page
 const INACTIVE_CLASS = 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500';
 
 function getStoredStatuses(): Set<TodoStatus> {
