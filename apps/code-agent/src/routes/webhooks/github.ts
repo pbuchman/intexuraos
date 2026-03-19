@@ -620,12 +620,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
-      const { unifiedEvaluator, mergeConflictDetector } = getServices();
-      if (parsedEvent.eventType === 'push' && mergeConflictDetector !== undefined) {
-        void mergeConflictDetector.detectOnPush(savedEvent, logger).catch((detectErr: unknown) => {
-          logger.error({ error: getErrorMessage(detectErr) }, 'Unhandled error in merge conflict detector');
-        });
-      }
+      const { unifiedEvaluator } = getServices();
 
       // INT-744: Unified evaluation — hard rules + optional LLM triage
       void unifiedEvaluator.evaluate(savedEvent, logger).catch((evalErr: unknown) => {

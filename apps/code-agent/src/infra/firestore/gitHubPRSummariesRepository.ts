@@ -219,5 +219,25 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
         });
       }
     },
+
+    async findAllOpen(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+      // No pagination limit — expected to be bounded by the number of active repos and open PRs
+      // in a single IntexuraOS deployment. Add a limit + cursor if this grows beyond ~500 rows.
+      try {
+        const snapshot = await collection
+          .where('state', '==', 'open')
+          .get();
+
+        return ok(
+          snapshot.docs.map((doc) => mapSummaryData(doc.data() as Record<string, unknown>))
+        );
+      } catch (error) {
+        logger.error({ error }, 'Failed to find all open GitHub PR summaries');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
   };
 }
