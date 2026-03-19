@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpDown, Clock, Plus } from 'lucide-react';
 import { Button, CodeTaskLogsModal, Layout } from '@/components';
@@ -248,6 +248,32 @@ export function CodeTasksPage(): React.JSX.Element {
 
   const allGroups = useMemo(() => groupByLinearIssue(tasks), [tasks]);
 
+  // --- Rapid poll + transition detection while an action is in flight ---
+  const rapidPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (actioningTaskId === null) return;
+    const pollId = setInterval(() => { void refresh(false); }, 3000);
+    rapidPollTimeoutRef.current = setTimeout(() => { rapidPollTimeoutRef.current = null; setActioningTaskId(null); }, 30000);
+    return (): void => {
+      clearInterval(pollId);
+      if (rapidPollTimeoutRef.current !== null) {
+        clearTimeout(rapidPollTimeoutRef.current);
+        rapidPollTimeoutRef.current = null;
+      }
+    };
+  }, [actioningTaskId, refresh]);
+
+  useEffect(() => {
+    if (actioningTaskId === null) return;
+    const group = allGroups.find(
+      (g) => g.latestTask.id === actioningTaskId || g.tasks.some((t) => t.id === actioningTaskId),
+    );
+    if (group === undefined || (group.aggregateStatus !== 'failed' && group.aggregateStatus !== 'needs-action')) {
+      setActioningTaskId(null);
+    }
+  }, [actioningTaskId, allGroups]);
+
   const filteredGroups = useMemo(() => {
     const filtered =
       activeFilters.size === 0
@@ -305,8 +331,6 @@ export function CodeTasksPage(): React.JSX.Element {
         }
         await refresh(false);
       } catch {
-        // Errors are transient — the row will show its normal state after refresh
-      } finally {
         setActioningTaskId(null);
       }
     },
