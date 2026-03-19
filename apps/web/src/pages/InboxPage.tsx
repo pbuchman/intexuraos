@@ -5,11 +5,11 @@ import {
   Button,
   Card,
   CommandDetailModal,
-  CommandItem,
   ErrorBanner,
-  InboxFilters,
   Layout,
 } from '@/components';
+import { CommandItem } from '@/components/inbox/CommandItem.js';
+import { InboxFilters } from '@/components/inbox/InboxFilters.js';
 import { useAuth } from '@/context';
 import {
   ApiError,
