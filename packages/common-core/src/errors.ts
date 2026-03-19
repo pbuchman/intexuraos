@@ -115,6 +115,10 @@ const MAX_CAUSE_DEPTH = 10;
 /**
  * Serialized error object suitable for structured logging.
  * Contains all non-enumerable Error properties extracted explicitly.
+ *
+ * @property cause - Recursive chain of serialized causes (max depth 10).
+ *   Present when the original error has an `error.cause` property, mirroring
+ *   the standard `Error.cause` chain as a plain JSON-safe structure.
  */
 export interface SerializedError {
   message: string;
