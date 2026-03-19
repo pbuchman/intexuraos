@@ -34,4 +34,9 @@ export interface GitHubPRSummaryRepository {
     repository: string,
     baseBranch: string
   ): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>>;
+
+  /**
+   * Find all open PR summaries across all repositories and base branches.
+   */
+  findAllOpen(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>>;
 }

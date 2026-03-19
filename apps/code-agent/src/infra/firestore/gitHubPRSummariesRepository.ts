@@ -219,5 +219,23 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
         });
       }
     },
+
+    async findAllOpen(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+      try {
+        const snapshot = await collection
+          .where('state', '==', 'open')
+          .get();
+
+        return ok(
+          snapshot.docs.map((doc) => mapSummaryData(doc.data() as Record<string, unknown>))
+        );
+      } catch (error) {
+        logger.error({ error }, 'Failed to find all open GitHub PR summaries');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
   };
 }
