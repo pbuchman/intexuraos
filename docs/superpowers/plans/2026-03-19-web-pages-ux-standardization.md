@@ -10,6 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-19-web-pages-ux-standardization-design.md`
 
+**Deep-link preservation:** Several pages (Todos, Bookmarks, Notes) use `useSearchParams` to read a `?id=` query param and auto-open a modal for that item. The Inbox page uses `?action=` from the hash query string. When rewriting these pages, you MUST preserve this `useEffect` + `searchParams` logic in the parent page so that direct item links and browser back/forward continue to work.
+
+**Import convention:** This codebase uses `@/` path aliases (mapped to `apps/web/src/`). When importing from extracted component files, always use direct file imports like `import { Foo } from '@/components/todos/TodoRow.js'`. There are NO barrel `index.ts` files in the new component directories — do NOT use directory imports.
+
 **Prerequisite:** INT-992 (Research pages standardization) should be completed first — it creates `apps/web/src/components/ui/ErrorBanner.tsx` and exports it from `apps/web/src/components/ui/index.ts`. If INT-992 is not yet done, the first task group you work on must create `ErrorBanner` (see spec Section "ErrorBanner Usage" for exact code).
 
 ---
@@ -140,16 +144,17 @@ import { ErrorBanner } from '@/components';
 
 ```tsx
 // Filter config
-export type TodoGroupStatus = 'in_progress' | 'pending' | 'completed' | 'cancelled' | 'draft';
+export type TodoGroupStatus = 'in_progress' | 'processing' | 'pending' | 'completed' | 'cancelled' | 'draft';
 
-export const TODO_GROUP_STATUSES: TodoGroupStatus[] = ['in_progress', 'pending', 'completed', 'cancelled', 'draft'];
+export const TODO_GROUP_STATUSES: TodoGroupStatus[] = ['in_progress', 'processing', 'pending', 'completed', 'cancelled', 'draft'];
 
 export const TODO_FILTER_CONFIG: Record<TodoGroupStatus, { label: string; dotClass: string; activeClass: string }> = {
-  in_progress: { label: 'In Progress', dotClass: 'bg-blue-500', activeClass: 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400' },
-  pending:     { label: 'Pending',     dotClass: 'bg-amber-500', activeClass: 'border-amber-500 bg-amber-50 text-amber-700 dark:border-amber-400 dark:bg-amber-900/30 dark:text-amber-400' },
-  completed:   { label: 'Completed',   dotClass: 'bg-green-500', activeClass: 'border-green-500 bg-green-50 text-green-700 dark:border-green-400 dark:bg-green-900/30 dark:text-green-400' },
-  cancelled:   { label: 'Cancelled',   dotClass: 'bg-red-500',   activeClass: 'border-red-500 bg-red-50 text-red-700 dark:border-red-400 dark:bg-red-900/30 dark:text-red-400' },
-  draft:       { label: 'Draft',       dotClass: 'bg-slate-400', activeClass: 'border-slate-400 bg-slate-50 text-slate-600 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-400' },
+  in_progress: { label: 'In Progress', dotClass: 'bg-blue-500',   activeClass: 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400' },
+  processing:  { label: 'Processing',  dotClass: 'bg-purple-500', activeClass: 'border-purple-500 bg-purple-50 text-purple-700 dark:border-purple-400 dark:bg-purple-900/30 dark:text-purple-400' },
+  pending:     { label: 'Pending',     dotClass: 'bg-amber-500',  activeClass: 'border-amber-500 bg-amber-50 text-amber-700 dark:border-amber-400 dark:bg-amber-900/30 dark:text-amber-400' },
+  completed:   { label: 'Completed',   dotClass: 'bg-green-500',  activeClass: 'border-green-500 bg-green-50 text-green-700 dark:border-green-400 dark:bg-green-900/30 dark:text-green-400' },
+  cancelled:   { label: 'Cancelled',   dotClass: 'bg-red-500',    activeClass: 'border-red-500 bg-red-50 text-red-700 dark:border-red-400 dark:bg-red-900/30 dark:text-red-400' },
+  draft:       { label: 'Draft',       dotClass: 'bg-slate-400',  activeClass: 'border-slate-400 bg-slate-50 text-slate-600 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-400' },
 };
 
 export function getAccentShadow(status: string): string {
@@ -221,7 +226,7 @@ Import `getAccentShadow`, `PriorityBadge`, `StatusBadge` from `./shared.js`. Imp
 
 ### Task 4: Rewrite TodosListPage as composition
 
-- [ ] **Step 1:** Rewrite `apps/web/src/pages/TodosListPage.tsx` (~100 lines). Delete all local component definitions. Import from `./components/todos/`. Add:
+- [ ] **Step 1:** Rewrite `apps/web/src/pages/TodosListPage.tsx` (~100 lines). Delete all local component definitions. Import each component directly from its file using `@/` path aliases (e.g., `import { TodoRow } from '@/components/todos/TodoRow.js'`, `import { TodoModal } from '@/components/todos/TodoModal.js'`). Do NOT use barrel imports — there is no `index.ts` in these directories. Add:
   - `PageHeader` with R1 pattern. Subtitle: `"{n} todos · {m} in progress"`.
   - `StatusPipeline` with R2 pattern using `TODO_FILTER_CONFIG`. localStorage key: `todos-status-filter`. Default: all except `cancelled`.
   - `SortSelector` with R3 pattern using `TODO_SORT_OPTIONS`. localStorage key: `todos-sort`. Default: `created`.
@@ -299,6 +304,7 @@ export const BOOKMARK_SORT_OPTIONS: { key: BookmarkSortOption; label: string }[]
   - R3 sort selector with `BOOKMARK_SORT_OPTIONS`. localStorage key: `bookmarks-sort`. Default: `created`.
   - Compact `BookmarkRow` items in `<div className="space-y-1">`.
   - R6 `ErrorBanner`.
+  - **IMPORTANT: Preserve `useBookmarkChanges()` real-time enrichment flow.** The current page uses `useBookmarkChanges()` with a debounced `refreshBookmarkById()` callback so that OG enrichment updates (titles, images, favicons) land automatically after initial fetch. This hook + debounce timer must remain in the rewritten parent page. Without it, bookmark previews will be stale until manual refresh.
 
 - [ ] **Step 2:** Verify build: `pnpm run verify:workspace:tracked -- web`
 
@@ -364,9 +370,11 @@ export const BOOKMARK_SORT_OPTIONS: { key: BookmarkSortOption; label: string }[]
 - [ ] **Step 2:** Create `apps/web/src/components/whatsapp/shared.tsx`. Move `TextWithLinks` component.
 
 - [ ] **Step 3:** Create `apps/web/src/components/whatsapp/MessageItem.tsx`. Move ~310-line `MessageItem`. Keep animated deletion behavior. Rewrite as compact row with R4 pattern:
-  - Desktop grid: `grid-cols-[auto_1fr_140px_80px]` — Media icon (Image/Mic/MessageSquare, 16x16) | Content preview (single-line truncate) | Time | Actions (note/transcription buttons + R8 hover-reveal trash)
+  - Desktop grid: `grid-cols-[auto_1fr_140px_100px]` — Media type indicator | Content preview (single-line truncate) | Time | Actions (note/transcription/image buttons + R8 hover-reveal trash)
+  - **Media type indicator column:** For text messages: `MessageSquare` icon (16x16). For audio: `Mic` icon (16x16). For images: render a small `ImageThumbnail` (32x32 rounded) — NOT just an icon. This preserves the current image preview affordance. Import `ImageThumbnail` from `@/components`. Clicking the thumbnail opens the `ImageModal` (same as current behavior).
   - Keep `deletingIds` Set pattern for animated deletion (scale-95 opacity-50)
   - R5 overlay delete, R8 hover-reveal trash
+  - **IMPORTANT:** Preserve the `ImageModal` state (`selectedImageId`) in the parent page. The compact row for image messages must have an onClick handler that sets `selectedImageId` to open the full-size image viewer. Import `ImageModal` from `@/components`.
 
 - [ ] **Step 4:** Create `apps/web/src/components/whatsapp/NoteDetailModal.tsx` (~110 lines) and `TranscriptionDetailModal.tsx` (~100 lines). Move as-is.
 
