@@ -219,7 +219,8 @@ export function getProviderForModel(model: ResearchModel): LlmProvider {
   if (isOpenRouterModel(model)) {
     return LlmProviders.OpenRouter;
   }
-  return MODEL_PROVIDER_MAP[model];
+  // After the OpenRouter guard, model is a static LLMModel
+  return MODEL_PROVIDER_MAP[model as LLMModel];
 }
 ```
 
@@ -989,9 +990,12 @@ export interface DecryptedApiKeys {
 }
 ```
 
-- [ ] **Step 2: Update providerToKeyField**
+- [ ] **Step 2: Update providerToKeyField and getApiKeys body parsing**
 
-In `packages/internal-clients/src/user-service/client.ts`, add case to the switch:
+In `packages/internal-clients/src/user-service/client.ts`:
+
+1. Add case to the `providerToKeyField` switch
+2. Add `openrouter` to the `getApiKeys()` response body type and null-to-undefined conversion block (around lines 93-104):
 
 ```typescript
 case LlmProviders.OpenRouter:
@@ -1013,9 +1017,14 @@ In `apps/user-service/src/routes/internalRoutes.ts`:
 
 - [ ] **Step 5: Add OpenRouter key validation**
 
-In `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`, add OpenRouter validation using `GET https://openrouter.ai/api/v1/key`:
+In `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`:
+
+1. Add OpenRouter to `VALIDATION_MODELS` constant (no validation model needed — OpenRouter uses `/api/v1/key` endpoint instead)
+2. Add OpenRouter to `ValidationPricing` interface
+3. Add `case LlmProviders.OpenRouter` to **both** `validateKey()` AND `testRequest()`:
 
 ```typescript
+// In validateKey():
 case LlmProviders.OpenRouter: {
   const response = await fetch('https://openrouter.ai/api/v1/key', {
     headers: { Authorization: `Bearer ${apiKey}` },
@@ -1024,6 +1033,23 @@ case LlmProviders.OpenRouter: {
     return err({ code: 'INVALID_KEY', message: 'Invalid OpenRouter API key' });
   }
   return ok({ valid: true });
+}
+
+// In testRequest() — use a cheap model via OpenRouter:
+case LlmProviders.OpenRouter: {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'openai/gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 100,
+    }),
+  });
+  // ... handle response and return test result
 }
 ```
 
@@ -1219,7 +1245,7 @@ In `apps/research-agent/src/routes/schemas/common.ts`:
 export const supportedModelSchema = {
   anyOf: [
     { type: 'string', enum: ALL_LLM_MODELS },
-    { type: 'string', pattern: '^or:[a-z0-9-]+/[a-z0-9._-]+$' },
+    { type: 'string', pattern: '^or:[a-z0-9-]+/[a-z0-9._:-]+$' },
   ],
 } as const;
 ```
@@ -1287,8 +1313,9 @@ Expected: ALL PASS — entire monorepo builds and tests pass
 
 - [ ] **Step 5: Commit**
 
+Stage all files modified during the audit (use `git status` to identify them, then `git add` each specifically).
+
 ```bash
-git add -A
 git commit -m "feat: complete OpenRouter backend integration — exhaustive switch audit and pricing resolution"
 ```
 
@@ -1317,6 +1344,24 @@ Expected: ALL PASS
 git add docs/plans/INT-616-design.md
 git commit -m "docs: update OpenRouter design doc with phase split"
 ```
+
+---
+
+## Endpoint Changes
+
+| Category     | Endpoint                                            | Change                                           |
+| ------------ | --------------------------------------------------- | ------------------------------------------------ |
+| **Created**  | `GET /research/openrouter/models`                   | Model catalog proxy (5-min cache)                |
+| **Modified** | `POST /research`                                    | Schema accepts `or:` prefixed models via `anyOf` |
+| **Modified** | `POST /research/draft`                              | Same schema change                               |
+| **Modified** | `POST /research/:id/enhance`                        | Same schema change                               |
+| **Modified** | `PATCH /research/:id`                               | Same schema change                               |
+| **Modified** | `GET /users/:uid/settings/llm-keys`                 | Response includes `openrouter` field             |
+| **Modified** | `PATCH /users/:uid/settings/llm-keys`               | Accepts `'openrouter'` as provider               |
+| **Modified** | `DELETE /users/:uid/settings/llm-keys/:provider`    | Accepts `'openrouter'`                           |
+| **Modified** | `POST /users/:uid/settings/llm-keys/:provider/test` | Accepts `'openrouter'`                           |
+| **Modified** | `GET /internal/users/:uid/llm-keys`                 | Response includes `openrouter` field             |
+| Unchanged    | All other endpoints                                 | No changes                                       |
 
 ---
 
