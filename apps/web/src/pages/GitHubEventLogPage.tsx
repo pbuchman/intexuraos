@@ -1,6 +1,5 @@
 import { AlertCircle, RadioTower, RefreshCw } from 'lucide-react';
-import { Button, Layout } from '@/components';
-import { GitHubEventLogTableRow } from '@/components';
+import { Button, GitHubEventLogTableRow, Layout } from '@/components';
 import { useGitHubEventLog } from '@/hooks';
 
 // --- PageHeader ---
