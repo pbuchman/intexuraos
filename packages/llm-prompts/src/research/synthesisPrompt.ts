@@ -182,11 +182,7 @@ ${formattedSources}
 
   const filteredRedFlags = ctx.safety.high_stakes
     ? ctx.red_flags
-    : userExclusions.length > 0
-      ? ctx.red_flags.filter(
-          (f) => !userExclusions.some((excl) => f.toLowerCase().includes(excl.toLowerCase()))
-        )
-      : ctx.red_flags;
+    : filterByExclusions(ctx.red_flags, userExclusions);
 
   const safetySection =
     ctx.safety.high_stakes || filteredDisclaimers.length > 0

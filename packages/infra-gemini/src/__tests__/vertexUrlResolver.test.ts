@@ -1,36 +1,46 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import nock from 'nock';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveVertexRedirectUrls } from '../vertexUrlResolver.js';
 
 describe('resolveVertexRedirectUrls', () => {
+  const originalFetch = globalThis.fetch;
+
   beforeEach(() => {
-    nock.disableNetConnect();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockRejectedValue(new Error('Unexpected fetch call'))
+    );
   });
 
   afterEach(() => {
-    nock.cleanAll();
-    nock.enableNetConnect();
+    vi.stubGlobal('fetch', originalFetch);
   });
+
+  function mockFetch(): ReturnType<typeof vi.fn<typeof fetch>> {
+    return globalThis.fetch as ReturnType<typeof vi.fn<typeof fetch>>;
+  }
 
   it('resolves Vertex redirect URL to Location header value', async () => {
     const redirectUrl = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc123';
     const resolvedUrl = 'https://example.com/real-article';
 
-    nock('https://vertexaisearch.cloud.google.com')
-      .head('/grounding-api-redirect/abc123')
-      .reply(302, '', { Location: resolvedUrl });
+    mockFetch().mockResolvedValueOnce(
+      new Response('', { status: 302, headers: { Location: resolvedUrl } })
+    );
 
     const result = await resolveVertexRedirectUrls([redirectUrl]);
 
     expect(result).toEqual([resolvedUrl]);
+    expect(mockFetch()).toHaveBeenCalledWith(redirectUrl, {
+      method: 'HEAD',
+      redirect: 'manual',
+      signal: expect.any(AbortSignal) as AbortSignal,
+    });
   });
 
   it('returns original URL when no Location header in response', async () => {
     const redirectUrl = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc123';
 
-    nock('https://vertexaisearch.cloud.google.com')
-      .head('/grounding-api-redirect/abc123')
-      .reply(200, '');
+    mockFetch().mockResolvedValueOnce(new Response('', { status: 200 }));
 
     const result = await resolveVertexRedirectUrls([redirectUrl]);
 
@@ -40,9 +50,7 @@ describe('resolveVertexRedirectUrls', () => {
   it('returns original URL on network error', async () => {
     const redirectUrl = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc123';
 
-    nock('https://vertexaisearch.cloud.google.com')
-      .head('/grounding-api-redirect/abc123')
-      .replyWithError('Connection refused');
+    mockFetch().mockRejectedValueOnce(new Error('Connection refused'));
 
     const result = await resolveVertexRedirectUrls([redirectUrl]);
 
@@ -55,6 +63,7 @@ describe('resolveVertexRedirectUrls', () => {
     const result = await resolveVertexRedirectUrls([normalUrl]);
 
     expect(result).toEqual([normalUrl]);
+    expect(mockFetch()).not.toHaveBeenCalled();
   });
 
   it('handles mixed Vertex and non-Vertex URLs', async () => {
@@ -62,9 +71,9 @@ describe('resolveVertexRedirectUrls', () => {
     const normalUrl = 'https://example.com/article';
     const resolvedUrl = 'https://real-source.com/page';
 
-    nock('https://vertexaisearch.cloud.google.com')
-      .head('/grounding-api-redirect/xyz')
-      .reply(302, '', { Location: resolvedUrl });
+    mockFetch().mockResolvedValueOnce(
+      new Response('', { status: 302, headers: { Location: resolvedUrl } })
+    );
 
     const result = await resolveVertexRedirectUrls([vertexUrl, normalUrl]);
 
@@ -81,13 +90,13 @@ describe('resolveVertexRedirectUrls', () => {
     const url1 = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/aaa';
     const url2 = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/bbb';
 
-    nock('https://vertexaisearch.cloud.google.com')
-      .head('/grounding-api-redirect/aaa')
-      .reply(302, '', { Location: 'https://resolved1.com' });
-
-    nock('https://vertexaisearch.cloud.google.com')
-      .head('/grounding-api-redirect/bbb')
-      .reply(302, '', { Location: 'https://resolved2.com' });
+    mockFetch()
+      .mockResolvedValueOnce(
+        new Response('', { status: 302, headers: { Location: 'https://resolved1.com' } })
+      )
+      .mockResolvedValueOnce(
+        new Response('', { status: 302, headers: { Location: 'https://resolved2.com' } })
+      );
 
     const result = await resolveVertexRedirectUrls([url1, url2]);
 
@@ -105,9 +114,7 @@ describe('resolveVertexRedirectUrls', () => {
   it('returns original URL when Location header is empty string', async () => {
     const redirectUrl = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc123';
 
-    nock('https://vertexaisearch.cloud.google.com')
-      .head('/grounding-api-redirect/abc123')
-      .reply(302, '', { Location: '' });
+    mockFetch().mockResolvedValueOnce(new Response('', { status: 302, headers: { Location: '' } }));
 
     const result = await resolveVertexRedirectUrls([redirectUrl]);
 
