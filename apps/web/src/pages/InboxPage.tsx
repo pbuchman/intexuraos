@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionDetailModal,
   ActionItem,
@@ -52,6 +52,16 @@ const DEBOUNCE_DELAY_MS = 500;
 // 💰 CostGuard: Max IDs per batch request (must match backend maxItems)
 const BATCH_SIZE_LIMIT = 50;
 
+const STATUS_ORDER: Record<ActionStatus, number> = {
+  pending: 0,
+  awaiting_approval: 1,
+  processing: 2,
+  completed: 3,
+  failed: 4,
+  rejected: 5,
+  archived: 6,
+};
+
 function getActionsCountByStatus(actions: Action[]): Record<ActionStatus, number> {
   const counts: Record<ActionStatus, number> = {
     pending: 0,
@@ -76,17 +86,7 @@ function sortActions(actions: Action[], sortKey: ActionSortKey): Action[] {
     sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
   if (sortKey === 'status') {
-    // pending first
-    const statusOrder: Record<ActionStatus, number> = {
-      pending: 0,
-      awaiting_approval: 1,
-      processing: 2,
-      completed: 3,
-      failed: 4,
-      rejected: 5,
-      archived: 6,
-    };
-    sorted.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+    sorted.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
   }
   return sorted;
 }
@@ -413,22 +413,22 @@ export function InboxPage(): React.JSX.Element {
     localStorage.setItem('inbox-sort-commands', commandSort);
   }, [commandSort]);
 
-  const handleToggleStatus = (status: ActionStatus): void => {
+  const handleToggleStatus = useCallback((status: ActionStatus): void => {
     setStatusFilter((prev) =>
       prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
     );
-  };
+  }, []);
 
-  const handleClearAllStatuses = (): void => {
+  const handleClearAllStatuses = useCallback((): void => {
     setStatusFilter([]);
-  };
+  }, []);
 
-  const handleToggleFilterExpanded = (): void => {
+  const handleToggleFilterExpanded = useCallback((): void => {
     setIsFilterExpanded((prev) => {
       localStorage.setItem('inbox-filter-expanded', String(!prev));
       return !prev;
     });
-  };
+  }, []);
 
   // Deep linking: open action modal from URL query parameter
   useEffect(() => {
@@ -507,14 +507,14 @@ export function InboxPage(): React.JSX.Element {
   }, [currentCursor, isLoadingMore, handleLoadMore]);
 
   // Compute sorted and filtered actions
-  const pendingCount = actions.filter((a) => a.status === 'pending').length;
-  const sortedActions = sortActions(actions, actionSort);
+  const pendingCount = useMemo(() => actions.filter((a) => a.status === 'pending').length, [actions]);
+  const sortedActions = useMemo(() => sortActions(actions, actionSort), [actions, actionSort]);
 
   // Compute sorted commands
-  const sortedCommands = sortCommands(commands, commandSort);
+  const sortedCommands = useMemo(() => sortCommands(commands, commandSort), [commands, commandSort]);
 
   // Compute counts by status for filter pills
-  const actionsCountByStatus = getActionsCountByStatus(actions);
+  const actionsCountByStatus = useMemo(() => getActionsCountByStatus(actions), [actions]);
 
   // Header subtitle
   const headerSubtitle =
