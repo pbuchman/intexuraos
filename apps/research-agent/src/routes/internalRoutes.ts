@@ -69,6 +69,13 @@ interface LlmCallEvent {
   prompt: string;
 }
 
+/**
+ * Minimum character count for an LLM research result to be considered adequate.
+ * Results below this threshold are flagged as `low_quality` and deprioritized
+ * during synthesis. The 800-char threshold was chosen empirically — most useful
+ * research responses are 1000+ characters; anything shorter typically indicates
+ * a refusal, error message, or extremely shallow answer.
+ */
 export const MIN_QUALITY_CHARS = 800;
 
 function isPubSubPush(request: FastifyRequest): boolean {
