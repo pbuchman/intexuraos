@@ -8,7 +8,7 @@
 
 Extract merge conflict detection from the push webhook handler into a standalone 1-minute cron endpoint. The existing `detectMergeConflictsOnPush` use case is renamed to `reconcileMergeConflicts` and rewired: instead of being triggered by push events, it runs on a cron that queries PR summaries with stale or unknown mergeability status.
 
-All existing workflow logic (conflict detection, task dispatch, comment management, WhatsApp notifications, task reuse) is preserved unchanged. Only the trigger mechanism changes.
+The internal workflow logic (conflict dispatch, comment management, task reuse) is preserved. The `processOpenSummary` function signature changes to no longer require a `GitHubPREvent` — it derives all needed context from the PR summary document instead. See "Function Signature Changes" section.
 
 ## Problem
 
@@ -54,12 +54,13 @@ All existing endpoints.
 
 ## Query Scope
 
-Each tick queries PR summaries matching ANY of:
-- `mergeConflictStatus` is `'unknown'`
-- `mergeConflictStatus` is `null`
-- `lastConflictCheckedAt` is older than 5 minutes (catches stale `'conflicting'` or `'clean'` that may have changed due to external activity)
+Each tick queries PR summaries matching ALL of:
+- `state` is `'open'` (skip closed/merged PRs), AND
+- ANY of:
+  - `mergeConflictStatus` is `'unknown'` OR `null`, OR
+  - `lastConflictCheckedAt` is older than 5 minutes (catches stale `'conflicting'` or `'clean'` that may have changed)
 
-This keeps GitHub API calls proportional to actual uncertainty, not total open PRs.
+This keeps GitHub API calls proportional to actual uncertainty, not total open PRs. Closed/merged PRs are excluded to avoid wasteful API calls.
 
 ## Tick Logic
 
@@ -88,6 +89,7 @@ ReconcileMergeConflicts:
 | Before                                             | After                                           |
 | -------------------------------------------------- | ----------------------------------------------- |
 | `domain/usecases/detectMergeConflictsOnPush.ts`    | `domain/usecases/reconcileMergeConflicts.ts`    |
+| `domain/services/mergeConflictDetector.ts`         | `domain/services/mergeConflictReconciler.ts`    |
 | `processOpenSummaryOnPush()`                       | `processOpenSummary()`                          |
 | `detectOnPush()` entry point                       | `reconcile()` entry point                       |
 | `MergeConflictDetector` interface                  | `MergeConflictReconciler` interface             |
@@ -110,13 +112,48 @@ ReconcileMergeConflicts:
 
 ### Unchanged (preserved as-is)
 
-- `processOpenSummary()` internal logic (only renamed from `processOpenSummaryOnPush`)
 - `executeConflictWorkflow()` / `resolveConflictWorkflow()`
 - Token resolution cascade (`resolveGitHubAccessContext`)
 - Comment management (phases: starting, queued, resumed, no-worker, failed, resolved)
 - Task dispatch/reuse logic (`createConflictTaskWorkflow`, `reuseConflictTask`)
 - WhatsApp notifications
 - PR summary model and all conflict-related fields
+
+### Updated (not just renamed)
+
+- `processOpenSummary()` — signature changes, see "Function Signature Changes" below
+- Deps interface — `sleep`, `mergeabilityRetries`, `retryDelayMs` fields removed (retry loop eliminated)
+- Webhook route test file (`__tests__/routes/webhooks/github.test.ts`) — remove any references to `mergeConflictDetector`
+
+## Function Signature Changes
+
+### `processOpenSummary` (formerly `processOpenSummaryOnPush`)
+
+The existing function takes a `GitHubPREvent` parameter. In the cron context, there is no webhook event. Changes:
+
+1. **Remove `event: GitHubPREvent` parameter** — replace with just the `GitHubPRSummary` (already a parameter)
+2. **`repository`** — derive from `summary.repository` instead of `event.repository`
+3. **`eventId` for tracing** — generate a synthetic trace ID: `reconcile_${crypto.randomUUID()}`. Used in `actionId` and `traceId` for task creation.
+4. **`lastActivityAt`** — do NOT update this field during cron reconciliation. No new activity occurred; preserve the existing value from the summary. Only `lastConflictCheckedAt` should be updated.
+
+### `buildSummaryUpdateInput`
+
+- Remove `event.createdAt` usage for `lastActivityAt`
+- When called from `reconcile()`, `lastActivityAt` is `undefined` (not updated)
+- When called from a push event context (removed), it would have been `event.createdAt`
+
+### Deps interface
+
+Remove fields that only served the retry loop:
+
+```typescript
+// REMOVE from deps:
+sleep?: (ms: number) => Promise<void>;
+mergeabilityRetries?: number;
+retryDelayMs?: number;
+```
+
+Pass `mergeabilityRetries: 0` to `loadPullRequestDetails` rather than modifying that function, preserving its retry capability for any future caller.
 
 ## New Repository Method
 
@@ -130,13 +167,20 @@ Returns PR summaries where:
 - `mergeConflictStatus` is `'unknown'` OR `null`, OR
 - `lastConflictCheckedAt` is older than 5 minutes ago
 
-Needs a composite Firestore index on `mergeConflictStatus` + `lastConflictCheckedAt`.
+Implemented as two separate Firestore queries merged in application code (Firestore does not support OR across different field predicates in a single query):
 
-Note: Since the query has an OR condition across different fields, this may need to be implemented as two separate queries merged in application code:
-1. `where('mergeConflictStatus', 'in', ['unknown', null])`
-2. `where('lastConflictCheckedAt', '<', fiveMinutesAgo)`
+1. `where('state', '==', 'open').where('mergeConflictStatus', 'in', ['unknown', null])`
+2. `where('state', '==', 'open').where('lastConflictCheckedAt', '<', fiveMinutesAgo)`
+
+Each sub-query needs its own composite index:
+- Index 1: `state` ASC + `mergeConflictStatus` ASC
+- Index 2: `state` ASC + `lastConflictCheckedAt` ASC
+
+Add these as migrations in `apps/code-agent/migrations/`.
 
 Deduplicate results by document ID before returning.
+
+Note: Firestore `in` queries with `null` may not match documents where the field is missing entirely. Test this. If needed, split into two equality queries: one for `'unknown'` and one explicit check for missing field.
 
 ## Retry Budget Change
 
@@ -148,6 +192,12 @@ Cloud Scheduler job: `merge-conflict-reconcile`
 - Schedule: `* * * * *` (every 1 minute)
 - Target: `POST /internal/merge-conflicts/reconcile`
 - Auth: HMAC-SHA256 internal auth header (same as existing cron endpoints)
+
+## Infrastructure
+
+Cloud Scheduler job requires Terraform configuration:
+- Add to `terraform/environments/dev/main.tf` (same pattern as existing cron jobs like `drain-queue`)
+- Add to `ecosystem.config.cjs` for dev environment cron simulation (if applicable — check existing cron patterns)
 
 ## Environment Variables
 
