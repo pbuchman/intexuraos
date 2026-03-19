@@ -38,6 +38,9 @@ export function BookmarkRow({
   const favicon = getProxiedImageUrl(bookmark.ogPreview?.favicon);
   const ogImage = getProxiedImageUrl(bookmark.ogPreview?.image);
   const hasAiSummary = bookmark.aiSummary !== null && bookmark.aiSummary !== '';
+  const showFallbackImage = ogImage === null || ogImageError;
+  const showFavicon = favicon !== null && !faviconError;
+  const showGlobe = favicon === null || faviconError;
 
   return (
     <div className="group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
@@ -53,9 +56,9 @@ export function BookmarkRow({
             />
           ) : null}
           <div
-            className={`h-10 w-10 items-center justify-center rounded bg-slate-100 dark:bg-slate-700 ${ogImage === null || ogImageError ? 'flex' : 'hidden'}`}
+            className={`h-10 w-10 items-center justify-center rounded bg-slate-100 dark:bg-slate-700 ${showFallbackImage ? 'flex' : 'hidden'}`}
           >
-            {favicon !== null && !faviconError ? (
+            {showFavicon ? (
               <img
                 src={favicon}
                 alt=""
@@ -64,7 +67,7 @@ export function BookmarkRow({
               />
             ) : null}
             <Globe
-              className={`h-6 w-6 text-slate-400 dark:text-slate-500 ${favicon === null || faviconError ? '' : 'hidden'}`}
+              className={`h-6 w-6 text-slate-400 dark:text-slate-500 ${showGlobe ? '' : 'hidden'}`}
             />
           </div>
         </div>
