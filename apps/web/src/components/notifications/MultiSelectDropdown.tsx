@@ -56,27 +56,30 @@ export function MultiSelectDropdown({
             }}
           />
           <div className="absolute top-full z-20 mt-1 max-h-60 w-full min-w-[200px] overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-            {options.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={(): void => {
-                  toggleOption(option);
-                }}
-                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700"
-              >
-                <div
-                  className={`flex h-4 w-4 items-center justify-center rounded border ${
-                    selected.includes(option)
-                      ? 'border-blue-600 bg-blue-600 text-white'
-                      : 'border-slate-300 dark:border-slate-600'
-                  }`}
+            {options.map((option) => {
+              const isSelected = selected.includes(option);
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={(): void => {
+                    toggleOption(option);
+                  }}
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700"
                 >
-                  {selected.includes(option) ? <Check className="h-3 w-3" /> : null}
-                </div>
-                <span className="truncate text-sm text-slate-700 dark:text-slate-200">{option}</span>
-              </button>
-            ))}
+                  <div
+                    className={`flex h-4 w-4 items-center justify-center rounded border ${
+                      isSelected
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-slate-300 dark:border-slate-600'
+                    }`}
+                  >
+                    {isSelected ? <Check className="h-3 w-3" /> : null}
+                  </div>
+                  <span className="truncate text-sm text-slate-700 dark:text-slate-200">{option}</span>
+                </button>
+              );
+            })}
             {options.length === 0 ? (
               <div className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">No options available</div>
             ) : null}
