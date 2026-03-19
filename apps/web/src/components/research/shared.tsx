@@ -108,7 +108,7 @@ export function getModelDisplayName(modelId: string): string {
 
 /** Returns true for statuses that indicate the research is actively being processed. */
 export function isProcessingStatus(status: ResearchStatus): boolean {
-  return status === 'pending' || status === 'processing' || status === 'retrying' || status === 'synthesizing';
+  return deriveGroupStatus(status) === 'processing';
 }
 
 // --- Filter helpers ---
