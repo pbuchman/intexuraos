@@ -122,6 +122,117 @@ describe('WorktreeManager', () => {
       );
     });
 
+    it('should fetch base branch before creating worktree', async () => {
+      const calls: { command: string; cwd?: string }[] = [];
+      mockExecAsyncImpl = async (
+        command: string,
+        options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        calls.push({ command, ...(options.cwd !== undefined ? { cwd: options.cwd } : {}) });
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.createWorktree('task-fetch', 'development');
+
+      const fetchIndex = calls.findIndex(
+        (c) => c.command === 'git fetch origin "development" --force'
+      );
+      const worktreeAddIndex = calls.findIndex((c) => c.command.includes('git worktree add'));
+
+      expect(fetchIndex).toBeGreaterThanOrEqual(0);
+      expect(calls[fetchIndex]?.cwd).toBe(repoPath);
+      expect(worktreeAddIndex).toBeGreaterThanOrEqual(0);
+      expect(fetchIndex).toBeLessThan(worktreeAddIndex);
+    });
+
+    it('should proceed with worktree creation when fetch fails', async () => {
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git fetch origin "development" --force')) {
+          throw new Error('fatal: unable to access remote');
+        }
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      const worktreePath = await manager.createWorktree('task-fetch-fail', 'development');
+
+      expect(worktreePath).toBe(join(worktreeBasePath, 'task-fetch-fail'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-fetch-fail', baseBranch: 'development' }),
+        'Failed to fetch base branch — proceeding with existing local state'
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('should log Unknown error when fetch throws a non-Error', async () => {
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git fetch origin "development" --force')) {
+          throw 'network timeout';
+        }
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      const worktreePath = await manager.createWorktree('task-fetch-non-error', 'development');
+
+      expect(worktreePath).toBe(join(worktreeBasePath, 'task-fetch-non-error'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-fetch-non-error', error: 'Unknown error' }),
+        'Failed to fetch base branch — proceeding with existing local state'
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('should fetch base branch even for continuation PR worktrees', async () => {
+      const commands: string[] = [];
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        commands.push(command);
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.createWorktree('task-cont-fetch', 'development', 'task_existing_branch');
+
+      expect(commands).toContain('git fetch origin "development" --force');
+      expect(commands).toContain('git fetch origin "task_existing_branch"');
+    });
+
     it('should reject continuation branch names with shell metacharacters', async () => {
       const commands: string[] = [];
       mockExecAsyncImpl = async (

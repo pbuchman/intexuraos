@@ -19,7 +19,7 @@ export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
 
 // --- Status badge config ---
 
-interface StatusConfig {
+export interface StatusConfig {
   bg: string;
   text: string;
   label: string;
