@@ -1171,6 +1171,280 @@ describe('drainTaskQueue', () => {
     });
   });
 
+  describe('queued review merge (INT-1014)', () => {
+    it('merges 2 duplicate queued reviews for same PR — oldest cancelled, newest dispatched', async () => {
+      // Older review (createdAt first)
+      const olderReview = createMockTask({
+        id: 'review-old',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)), // 10 min ago
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+      });
+      // Newer review (createdAt later)
+      const newerReview = createMockTask({
+        id: 'review-new',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)), // 5 min ago
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([olderReview, newerReview]));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'review-new' });
+      }
+
+      // Older review should be cancelled
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'review-old',
+        expect.objectContaining({
+          status: 'cancelled',
+          completedAt: expect.any(Date),
+          error: expect.objectContaining({
+            code: 'review_replaced',
+            message: 'Superseded by newer queued review for same PR',
+          }),
+        })
+      );
+
+      // Newer review should be dispatched (not cancelled)
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'review-new' })
+      );
+
+      // Info log for cancellation
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cancelledTaskId: 'review-old',
+          survivingTaskId: 'review-new',
+          repository: 'pbuchman/intexuraos',
+          prNumber: 42,
+        }),
+        expect.stringContaining('superseded by newer queued review')
+      );
+    });
+
+    it('merges 3+ queued reviews for same PR — all but newest cancelled', async () => {
+      const review1 = createMockTask({
+        id: 'review-1',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 30 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 30 * 60 * 1000)),
+      });
+      const review2 = createMockTask({
+        id: 'review-2',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 20 * 60 * 1000)),
+      });
+      const review3 = createMockTask({
+        id: 'review-3',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+      });
+      // Return in order: oldest first (FIFO from listQueuedByAge)
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([review1, review2, review3]));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'review-3' });
+      }
+
+      // review-1 and review-2 should be cancelled; review-3 survives
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'review-1',
+        expect.objectContaining({ status: 'cancelled', error: expect.objectContaining({ code: 'review_replaced' }) })
+      );
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'review-2',
+        expect.objectContaining({ status: 'cancelled', error: expect.objectContaining({ code: 'review_replaced' }) })
+      );
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'review-3' })
+      );
+    });
+
+    it('does not merge different PRs — both remain, oldest dispatched normally', async () => {
+      const reviewPR42 = createMockTask({
+        id: 'review-pr42',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+      });
+      const reviewPR99 = createMockTask({
+        id: 'review-pr99',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 99,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+      });
+      // FIFO order from listQueuedByAge: reviewPR42 first (older)
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([reviewPR42, reviewPR99]));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Oldest (reviewPR42) dispatched since different PRs don't merge
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'review-pr42' });
+      }
+
+      // No cancellations — different PRs
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ status: 'cancelled' })
+      );
+    });
+
+    it('does not merge non-review tasks — execution tasks follow normal FIFO', async () => {
+      const execOld = createMockTask({
+        id: 'exec-old',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'execution',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+      });
+      const execNew = createMockTask({
+        id: 'exec-new',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'execution',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([execOld, execNew]));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Oldest dispatched, no merge
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'exec-old' });
+      }
+
+      // No cancellations
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ status: 'cancelled' })
+      );
+    });
+
+    it('does not merge mixed review + non-review tasks for same PR', async () => {
+      const execTask = createMockTask({
+        id: 'exec-task',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'execution',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+      });
+      const reviewTask = createMockTask({
+        id: 'review-task',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([execTask, reviewTask]));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // execTask (older) dispatched, reviewTask skipped because same PR has active (dispatched) task
+        // Actually — the candidate loop skips when findActiveReviewForPR returns non-null for same PR
+        // But after merge step, reviewTask should still be skipped because execTask becomes the "active" for that PR
+        expect(result.value.action).toBe('dispatched');
+      }
+
+      // No cancellation — different agentType, no merge
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ status: 'cancelled' })
+      );
+    });
+
+    it('skips merge for review without prNumber — normal dispatch', async () => {
+      const reviewNoPR = createMockTask({
+        id: 'review-no-pr',
+        repository: 'pbuchman/intexuraos',
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([reviewNoPR]));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'review-no-pr' });
+      }
+
+      // No cancellations — prNumber undefined means skipped by merge logic
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ status: 'cancelled' })
+      );
+    });
+  });
+
   describe('dispatch metadata field reconstruction (INT-949)', () => {
     it('passes planningPrBranch and planningPrUrl through to dispatch request', async () => {
       const task = createMockTask({

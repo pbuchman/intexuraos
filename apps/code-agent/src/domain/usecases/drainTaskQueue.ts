@@ -83,9 +83,64 @@ export async function drainTaskQueue(
       return ok({ action: 'empty' });
     }
 
+    // Step 1b: Merge duplicate queued review tasks per PR (INT-1014)
+    // At most 1 queued review per PR is allowed — cancel all but the newest (by createdAt)
+    const reviewCandidates = candidates.filter(
+      (c) => c.agentType === 'review' && c.prNumber !== undefined
+    );
+
+    // Group by (repository, prNumber)
+    const reviewGroups = new Map<string, CodeTask[]>();
+    for (const task of reviewCandidates) {
+      const key = `${task.repository}:${String(task.prNumber)}`;
+      const group = reviewGroups.get(key) ?? [];
+      group.push(task);
+      reviewGroups.set(key, group);
+    }
+
+    // Remove cancelled reviews from candidates so they are not considered for dispatch
+    const cancelledReviewIds = new Set<string>();
+
+    for (const [, group] of reviewGroups) {
+      if (group.length <= 1) continue;
+
+      // Sort by createdAt descending (newest first), cancel older ones
+      group.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+      const newest = group[0];
+      /* v8 ignore start -- ts-type: newest is always defined after sort given group.length > 1 @preserve */
+      if (newest === undefined) continue;
+      /* v8 ignore stop @preserve */
+      const toCancel = group.slice(1);
+
+      for (const cancelled of toCancel) {
+        cancelledReviewIds.add(cancelled.id);
+
+        logger.info(
+          {
+            cancelledTaskId: cancelled.id,
+            survivingTaskId: newest.id,
+            repository: cancelled.repository,
+            prNumber: cancelled.prNumber,
+          },
+          'Cancelling duplicate queued review — superseded by newer queued review for same PR'
+        );
+
+        await codeTaskRepo.update(cancelled.id, {
+          status: 'cancelled',
+          completedAt: new Date(),
+          error: {
+            code: 'review_replaced',
+            message: 'Superseded by newer queued review for same PR',
+          },
+        });
+      }
+    }
+
+    const activeCandidates = candidates.filter((c) => !cancelledReviewIds.has(c.id));
+
     // Find first dispatchable candidate (no active task for same resource)
     let task: CodeTask | null = null;
-    for (const candidate of candidates) {
+    for (const candidate of activeCandidates) {
       // Check Linear issue concurrency
       if (candidate.linearIssueId !== undefined) {
         const activeResult = await codeTaskRepo.hasActiveTaskForLinearIssue(candidate.linearIssueId);
@@ -118,7 +173,7 @@ export async function drainTaskQueue(
     }
 
     if (task === null) {
-      logger.info({ candidateCount: candidates.length }, 'All queued tasks blocked by active resources');
+      logger.info({ candidateCount: activeCandidates.length }, 'All queued tasks blocked by active resources');
       return ok({ action: 'still_busy' });
     }
 
