@@ -43,7 +43,9 @@ export function ItemStatusIcon({ status }: { status: TodoStatus }): React.JSX.El
       return <Circle className="h-4 w-4 text-blue-600 dark:text-blue-400" />;
     case 'cancelled':
       return <X className="h-4 w-4 text-red-600 dark:text-red-400" />;
-    default:
+    case 'pending':
+    case 'processing':
+    case 'draft':
       return <Square className="h-4 w-4 text-slate-400 dark:text-slate-500" />;
   }
 }
