@@ -6,6 +6,7 @@ import { TodoModal } from '@/components/todos/TodoModal.js';
 import { CreateTodoModal } from '@/components/todos/CreateTodoModal.js';
 import { TodoRow } from '@/components/todos/TodoRow.js';
 import {
+  PRIORITY_ORDER,
   TODO_FILTER_CONFIG,
   TODO_GROUP_STATUSES,
   TODO_SORT_OPTIONS,
@@ -35,8 +36,6 @@ function getStoredSort(): TodoSortOption {
   if (stored === 'created' || stored === 'priority' || stored === 'updated') return stored;
   return 'created';
 }
-
-const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
 export function TodosListPage(): React.JSX.Element {
   const {
@@ -100,7 +99,7 @@ export function TodosListPage(): React.JSX.Element {
 
   const filteredSortedTodos = useMemo(() => {
     const filtered = todos.filter((t) => activeStatuses.has(t.status));
-    return filtered.sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       if (sort === 'priority') {
         return (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4);
       }

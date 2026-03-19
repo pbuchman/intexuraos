@@ -71,6 +71,9 @@ export function getAccentShadow(status: TodoStatus): string {
   return ACCENT_SHADOW[status] ?? '';
 }
 
+// Priority sort order (lowest index = highest priority)
+export const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+
 // Sort config
 export type TodoSortOption = 'created' | 'priority' | 'updated';
 export const TODO_SORT_OPTIONS: { key: TodoSortOption; label: string }[] = [
