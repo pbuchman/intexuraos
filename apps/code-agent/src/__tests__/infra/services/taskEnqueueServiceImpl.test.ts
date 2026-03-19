@@ -25,7 +25,7 @@ import { TaskEnqueueServiceImpl } from '../../../infra/services/taskEnqueueServi
 // Mock config
 vi.mock('../../../config.js', () => ({
   loadConfig: (): { queue: { maxSize: number; ttlMinutes: number } } => ({
-    queue: { maxSize: 10, ttlMinutes: 360 },
+    queue: { maxSize: 50, ttlMinutes: 30 },
   }),
 }));
 
@@ -129,7 +129,7 @@ describe('TaskEnqueueServiceImpl', () => {
   it('returns queue_full error and marks task as failed when queue reaches maxSize', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.findById.mockResolvedValue(ok(task));
-    mockCodeTaskRepo.countQueued.mockResolvedValue(ok(10)); // >= maxSize of 10
+    mockCodeTaskRepo.countQueued.mockResolvedValue(ok(50)); // >= maxSize of 50
     mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
     const service = createService();
