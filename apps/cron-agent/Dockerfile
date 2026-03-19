@@ -14,6 +14,7 @@ COPY pnpm-workspace.yaml ./
 COPY pnpm-lock.yaml ./
 COPY package*.json ./
 COPY apps/cron-agent/package*.json ./apps/cron-agent/
+COPY packages/ ./packages/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
