@@ -142,6 +142,11 @@ export function ResearchResults({ research, copiedSection, onCopy }: ResearchRes
     research.inputContexts !== undefined && research.inputContexts.length > 0;
   const isSingleModelResearch = completedResults.length === 1 && !hasInputContexts;
   const singleResult = isSingleModelResearch ? completedResults[0] : undefined;
+  const hasResults = research.llmResults.some(
+    (r) =>
+      (r.result !== undefined && r.result !== '') || (r.error !== undefined && r.error !== '')
+  );
+  const showIndividualResults = !isSingleModelResearch && hasResults;
 
   return (
     <>
@@ -296,48 +301,34 @@ export function ResearchResults({ research, copiedSection, onCopy }: ResearchRes
       ) : null}
 
       {/* Individual LLM Results */}
-      {((): React.JSX.Element | null => {
-        const hasResults = research.llmResults.some(
-          (r) =>
-            (r.result !== undefined && r.result !== '') || (r.error !== undefined && r.error !== '')
-        );
-
-        if (isSingleModelResearch || !hasResults) {
-          return null;
-        }
-
-        return (
-          <div>
-            <h3 className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">Individual LLM Results</h3>
-            <div className="space-y-4">
-              {/* Input Contexts */}
-              {research.inputContexts !== undefined && research.inputContexts.length > 0
-                ? research.inputContexts.map((ctx, idx) => (
-                    <CollapsibleInputContext key={`ctx-${ctx.id}`} ctx={ctx} index={idx} showFull />
-                  ))
-                : null}
-
-              {/* LLM Results - only show cards with content */}
-              {research.llmResults
-                .filter(
-                  (r) =>
-                    (r.result !== undefined && r.result !== '') ||
-                    (r.error !== undefined && r.error !== '')
-                )
-                .map((result) => (
-                  <LlmResultCard
-                    key={result.provider}
-                    result={result}
-                    onCopy={(text): void => {
-                      onCopy(text, result.provider);
-                    }}
-                    copied={copiedSection === result.provider}
-                  />
-                ))}
-            </div>
+      {showIndividualResults ? (
+        <div>
+          <h3 className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">Individual LLM Results</h3>
+          <div className="space-y-4">
+            {research.inputContexts !== undefined && research.inputContexts.length > 0
+              ? research.inputContexts.map((ctx, idx) => (
+                  <CollapsibleInputContext key={`ctx-${ctx.id}`} ctx={ctx} index={idx} showFull />
+                ))
+              : null}
+            {research.llmResults
+              .filter(
+                (r) =>
+                  (r.result !== undefined && r.result !== '') ||
+                  (r.error !== undefined && r.error !== '')
+              )
+              .map((result) => (
+                <LlmResultCard
+                  key={result.provider}
+                  result={result}
+                  onCopy={(text): void => {
+                    onCopy(text, result.provider);
+                  }}
+                  copied={copiedSection === result.provider}
+                />
+              ))}
           </div>
-        );
-      })()}
+        </div>
+      ) : null}
     </>
   );
 }

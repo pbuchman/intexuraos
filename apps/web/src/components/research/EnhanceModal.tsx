@@ -1,20 +1,19 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Trash2, XCircle } from 'lucide-react';
 import { LlmModels } from '@intexuraos/llm-contract';
 import {
   Button,
+  ErrorBanner,
   ModelSelector,
-  PROVIDER_MODELS,
   getSelectedModelsList,
 } from '@/components';
-import { ErrorBanner } from '@/components';
 import {
   getProviderForModel,
   type LlmProvider,
   type Research,
   type SupportedModel,
 } from '@/services/researchAgentApi.types';
-// getModelDisplayName not needed — PROVIDER_MODELS used directly for synthesis model display
+import { getModelDisplayName } from './shared.js';
 
 const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT52];
 
@@ -47,7 +46,10 @@ export function EnhanceModal({
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const [enhancing, setEnhancing] = useState(false);
 
-  const existingProviders = new Set(research.selectedModels.map(getProviderForModel));
+  const existingProviders = useMemo(
+    () => new Set(research.selectedModels.map(getProviderForModel)),
+    [research.selectedModels],
+  );
 
   const handleEnhanceModelChange = (provider: LlmProvider, model: SupportedModel | null): void => {
     setEnhanceModelSelections((prev) => {
@@ -69,20 +71,21 @@ export function EnhanceModal({
     });
   };
 
+  const additionalModels = getSelectedModelsList(enhanceModelSelections);
+  const validContexts = enhanceContexts.filter((c) => c.trim().length > 0);
+  const hasSynthesisChange =
+    enhanceSynthesisModel !== null && enhanceSynthesisModel !== research.synthesisModel;
+  const isDisabled =
+    enhancing ||
+    (additionalModels.length === 0 &&
+      validContexts.length === 0 &&
+      removeContextIds.size === 0 &&
+      !hasSynthesisChange);
+
   const handleEnhance = async (): Promise<void> => {
-    const validContexts = enhanceContexts.filter((ctx) => ctx.trim().length > 0);
-    const additionalModels = getSelectedModelsList(enhanceModelSelections);
+    if (isDisabled) return;
+
     const removeIds = Array.from(removeContextIds);
-    const hasSynthesisChange =
-      enhanceSynthesisModel !== null && enhanceSynthesisModel !== research.synthesisModel;
-
-    const hasChanges =
-      additionalModels.length > 0 ||
-      validContexts.length > 0 ||
-      removeIds.length > 0 ||
-      hasSynthesisChange;
-
-    if (!hasChanges) return;
 
     setEnhancing(true);
     setEnhanceError(null);
@@ -102,17 +105,6 @@ export function EnhanceModal({
       setEnhancing(false);
     }
   };
-
-  const additionalModels = getSelectedModelsList(enhanceModelSelections);
-  const validContexts = enhanceContexts.filter((c) => c.trim().length > 0);
-  const hasSynthesisChange =
-    enhanceSynthesisModel !== null && enhanceSynthesisModel !== research.synthesisModel;
-  const isDisabled =
-    enhancing ||
-    (additionalModels.length === 0 &&
-      validContexts.length === 0 &&
-      removeContextIds.size === 0 &&
-      !hasSynthesisChange);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -146,9 +138,7 @@ export function EnhanceModal({
             Synthesis Model{' '}
             <span className="font-normal text-slate-500 dark:text-slate-400">
               (current:{' '}
-              {PROVIDER_MODELS.flatMap((p) => p.models).find(
-                (m) => m.id === research.synthesisModel
-              )?.name ?? research.synthesisModel}
+              {getModelDisplayName(research.synthesisModel)}
               )
             </span>
           </p>
@@ -156,9 +146,7 @@ export function EnhanceModal({
             {SYNTHESIS_CAPABLE_MODELS.map((model) => {
               const isSelected = enhanceSynthesisModel === model;
               const isCurrent = research.synthesisModel === model;
-              const modelConfig = PROVIDER_MODELS.flatMap((p) => p.models).find(
-                (m) => m.id === model
-              );
+              const modelDisplayName = getModelDisplayName(model);
               const provider = getProviderForModel(model);
               const hasKey = configuredProviders.includes(provider);
               const isModelDisabled = !hasKey || enhancing;
@@ -184,7 +172,7 @@ export function EnhanceModal({
                     !hasKey ? 'API key not configured' : isCurrent ? 'Current model' : undefined
                   }
                 >
-                  {modelConfig?.name ?? model}
+                  {modelDisplayName}
                   {!hasKey ? ' (no key)' : ''}
                   {isCurrent && !isSelected ? ' ✓' : ''}
                 </button>

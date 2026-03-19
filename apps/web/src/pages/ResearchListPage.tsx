@@ -85,12 +85,10 @@ function sortResearches(items: Research[], sort: ResearchSortOption): Research[]
 
 // --- PageHeader ---
 
-function PageHeader({ researches }: { researches: Research[] }): React.JSX.Element {
-  const total = researches.length;
-  const processing = researches.filter((r) => deriveGroupStatus(r.status) === 'processing').length;
-  const failed = researches.filter((r) => deriveGroupStatus(r.status) === 'failed').length;
-
+function PageHeader({ total, counts }: { total: number; counts: Record<ResearchGroupStatus, number> }): React.JSX.Element {
   const parts: string[] = [`${String(total)} research${total !== 1 ? 'es' : ''}`];
+  const processing = counts.processing;
+  const failed = counts.failed;
   if (processing > 0) parts.push(`${String(processing)} processing`);
   if (failed > 0) parts.push(`${String(failed)} failed`);
 
@@ -414,7 +412,7 @@ export function ResearchListPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <PageHeader researches={researches} />
+      <PageHeader total={researches.length} counts={counts} />
 
       <ErrorBanner message={error} className="mb-6" />
 
