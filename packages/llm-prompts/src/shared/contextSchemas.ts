@@ -28,6 +28,8 @@ export const DOMAINS = [
   'fitness_sports',
   'entertainment_media',
   'diy_home',
+  'outdoor_recreation',
+  'fishing',
   'general',
   'unknown',
 ] as const;
@@ -62,6 +64,10 @@ export const DefaultAppliedSchema = z.object({
 export const SafetyInfoSchema = z.object({
   high_stakes: z.boolean(),
   required_disclaimers: z.array(z.string()),
+  user_exclusions: z
+    .array(z.string())
+    .optional()
+    .transform((v) => v ?? []) as unknown as z.ZodType<string[]>,
 });
 
 /**

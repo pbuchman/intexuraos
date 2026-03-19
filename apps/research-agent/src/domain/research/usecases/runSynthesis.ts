@@ -134,7 +134,10 @@ export async function runSynthesis(
 
   const reports = successfulResults.map((r) => ({
     model: r.model,
-    content: r.result ?? '',
+    content:
+      r.qualityFlag === 'low_quality'
+        ? `[QUALITY WARNING: This report was flagged as low quality — very short output. Deprioritize this source.]\n\n${r.result ?? ''}`
+        : r.result ?? '',
   }));
 
   const additionalSources = research.inputContexts?.map((ctx) => {
@@ -154,6 +157,7 @@ export async function runSynthesis(
       originalPrompt: research.prompt,
       reports: reports.map((r) => ({ model: r.model, content: r.content })),
       ...(additionalSources !== undefined && { additionalSources }),
+      ...(research.researchContext?.language !== undefined && { languageOverride: research.researchContext.language }),
     });
     if (contextResult.ok) {
       synthesisContext = contextResult.value.context;
