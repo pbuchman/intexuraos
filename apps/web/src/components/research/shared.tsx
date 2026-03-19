@@ -132,3 +132,23 @@ const ACCENT_SHADOW: Record<ResearchGroupStatus, string> = {
 export function getAccentShadow(groupStatus: ResearchGroupStatus): string {
   return ACCENT_SHADOW[groupStatus];
 }
+
+// --- Format helpers (used by ResearchResults and other sub-components) ---
+
+/** Formats a token count with "k" suffix for thousands. */
+export function formatTokenCount(count: number): string {
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}k`;
+  }
+  return String(count);
+}
+
+/** Formats a USD cost with 4 decimal places. */
+export function formatCost(cost: number): string {
+  return `$${cost.toFixed(4)}`;
+}
+
+/** Formats a number with locale-specific separators. */
+export function formatNumber(num: number): string {
+  return num.toLocaleString();
+}

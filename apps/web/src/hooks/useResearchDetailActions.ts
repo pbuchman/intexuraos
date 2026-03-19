@@ -97,12 +97,17 @@ export function useResearchDetailActions(
   })();
 
   const copyToClipboard = (text: string, section: string): void => {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopiedSection(section);
-      setTimeout(() => {
-        setCopiedSection(null);
-      }, 2000);
-    });
+    void navigator.clipboard.writeText(text).then(
+      () => {
+        setCopiedSection(section);
+        setTimeout(() => {
+          setCopiedSection(null);
+        }, 2000);
+      },
+      () => {
+        // Clipboard access denied — silently ignore
+      },
+    );
   };
 
   const handleApprove = async (): Promise<void> => {

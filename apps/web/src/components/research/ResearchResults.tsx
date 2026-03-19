@@ -2,23 +2,8 @@ import { useState } from 'react';
 import { CheckCircle, Copy } from 'lucide-react';
 import { Card, MarkdownContent } from '@/components';
 import type { LlmResult, Research, SupportedModel } from '@/services/researchAgentApi.types';
-import { getModelDisplayName } from './shared.js';
+import { getModelDisplayName, formatTokenCount, formatCost, formatNumber } from './shared.js';
 import { StatusDot, CollapsibleInputContext } from './ProcessingStatus.js';
-
-function formatTokenCount(count: number): string {
-  if (count >= 1000) {
-    return `${(count / 1000).toFixed(1)}k`;
-  }
-  return String(count);
-}
-
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(4)}`;
-}
-
-function formatNumber(num: number): string {
-  return num.toLocaleString();
-}
 
 interface LlmResultCardProps {
   result: LlmResult;
