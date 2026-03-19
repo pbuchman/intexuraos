@@ -35,16 +35,6 @@
       "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
       "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
     },
-    "PENDING-apps-user-service": {
-      "files": [
-        "apps/user-service/src/domain/settings/formatLlmError.ts",
-        "apps/user-service/src/infra/firestore/oauthConnectionRepository.ts",
-        "apps/user-service/src/routes/deviceRoutes.ts",
-        "apps/user-service/src/routes/gitHubOAuthConnectionRoutes.ts",
-        "apps/user-service/src/routes/oauthConnectionRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/user-service"
-    },
     "PENDING-apps-whatsapp-service": {
       "files": [
         "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
