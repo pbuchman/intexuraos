@@ -82,7 +82,7 @@ export function loadConfig(): Config {
     auth0JwksUri,
     queue: {
       maxSize: parseInt(process.env['INTEXURAOS_QUEUE_MAX_SIZE'] ?? '50', 10),
-      ttlMinutes: parseInt(process.env['INTEXURAOS_QUEUE_TTL_MINUTES'] ?? '360', 10),
+      ttlMinutes: parseInt(process.env['INTEXURAOS_QUEUE_TTL_MINUTES'] ?? '30', 10),
     },
     retryQueue: {
       maxAttempts: parseInt(process.env['INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS'] ?? '3', 10),
