@@ -45,14 +45,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/user-service"
     },
-    "PENDING-apps-whatsapp-service": {
-      "files": [
-        "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
-        "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
-        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
-      ],
-      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
-    },
     "PENDING-apps-linear-agent": {
       "files": [
         "apps/linear-agent/src/infra/firestore/linearCommentRepository.ts",
