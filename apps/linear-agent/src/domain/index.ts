@@ -101,3 +101,5 @@ export {
   type ProcessWebhookResult,
 } from './useCases/processWebhook.js';
 export { parseExtractionResponse } from './extractionParser.js';
+export { buildIssueDescription } from './descriptionBuilder.js';
+export { checkProcessedAction, type CheckIdempotencyDeps } from './useCases/checkIdempotency.js';
