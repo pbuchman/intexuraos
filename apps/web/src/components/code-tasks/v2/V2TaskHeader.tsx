@@ -19,19 +19,20 @@ import {
 
 const ICON_MAP = { Clock, Loader2, CheckCircle2, XCircle, AlertCircle, Archive } as const;
 
+const FALLBACK_STATUS: StatusConfig = {
+  bg: 'bg-slate-100 dark:bg-slate-700',
+  text: 'text-slate-600 dark:text-slate-400',
+  label: 'Unknown',
+  icon: 'AlertCircle',
+};
+
 interface V2TaskHeaderProps {
   task: CodeTask;
   workerStatusTag: WorkerStatusTag | null;
 }
 
 export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): React.JSX.Element {
-  const FALLBACK_STATUS: StatusConfig = {
-    bg: 'bg-slate-100 dark:bg-slate-700',
-    text: 'text-slate-600 dark:text-slate-400',
-    label: task.status,
-    icon: 'AlertCircle',
-  };
-  const status = (STATUS_MAP as Partial<Record<string, StatusConfig>>)[task.status] ?? FALLBACK_STATUS;
+  const status = (STATUS_MAP as Partial<Record<string, StatusConfig>>)[task.status] ?? { ...FALLBACK_STATUS, label: task.status };
   const StatusIcon = ICON_MAP[status.icon];
 
   return (
