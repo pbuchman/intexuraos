@@ -227,9 +227,11 @@ Expected: No TypeScript errors.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -A
+git add src/domain/usecases/reconcileMergeConflicts.ts src/domain/services/mergeConflictReconciler.ts src/services.ts src/routes/webhooks/github.ts
 git commit -m "refactor(code-agent): rename detectMergeConflictsOnPush to reconcileMergeConflicts"
 ```
+
+Note: `git mv` stages the rename automatically. Only need to `git add` files with updated imports.
 
 ---
 
@@ -249,8 +251,9 @@ The existing `processOpenSummaryOnPush` takes a `GitHubPREvent` parameter. In th
 1. Remove `event: GitHubPREvent` parameter — the function only needs the `GitHubPRSummary`
 2. Replace `event.repository` usage with `summary.repository`
 3. Replace `event.id` (used for `traceId`/`actionId`) with a synthetic ID: `reconcile_${crypto.randomUUID()}`
-4. In `buildSummaryUpdateInput`: do NOT update `lastActivityAt` (no new activity). Pass `undefined` so the field is preserved. Only update `lastConflictCheckedAt`.
-5. Remove `sleep`, `mergeabilityRetries`, `retryDelayMs` from the deps interface — pass `mergeabilityRetries: 0` directly to `loadPullRequestDetails`
+4. **Refactor `SummaryUpdateParams` and `buildSummaryUpdateInput`**: These types/functions currently require a `GitHubPREvent`. Change `SummaryUpdateParams` to accept `repository: string` and `eventId: string` directly instead of `event: GitHubPREvent`. In `buildSummaryUpdateInput`, replace `event.repository` → `params.repository`, `event.id` → `params.eventId`, and make `lastActivityAt` optional (do not update it when called from cron — no new activity occurred, only update `lastConflictCheckedAt`).
+5. **Refactor `ConflictWorkflowParams`**: The `eventId` field currently comes from the push event. Change the call site in `processOpenSummary` to pass the synthetic `reconcile_${crypto.randomUUID()}` ID.
+6. Remove `sleep`, `mergeabilityRetries`, `retryDelayMs` from the deps interface — pass `mergeabilityRetries: 0` directly to `loadPullRequestDetails`
 
 - [ ] **Step 3: Add `reconcile()` entry point**
 
@@ -326,7 +329,66 @@ git commit -m "feat(code-agent): replace push entry point with cron reconcile() 
 
 ---
 
-## Task 4: Remove Push Webhook Call Site + Service Container Entry
+## Task 4: Migrate Tests (must happen before Tasks 5-6 to avoid broken CI)
+
+**Files:**
+- Rename: `src/__tests__/domain/useCases/detectMergeConflictsOnPush.test.ts` → `src/__tests__/domain/useCases/reconcileMergeConflicts.test.ts`
+
+- [ ] **Step 1: Rename test file**
+
+```bash
+cd apps/code-agent
+git mv src/__tests__/domain/useCases/detectMergeConflictsOnPush.test.ts src/__tests__/domain/useCases/reconcileMergeConflicts.test.ts
+```
+
+- [ ] **Step 2: Update imports and describe blocks**
+
+Update all imports from `detectMergeConflictsOnPush` → `reconcileMergeConflicts`, `MergeConflictDetector` → `MergeConflictReconciler`, etc.
+
+Update describe block names.
+
+- [ ] **Step 3: Remove push-event-specific tests**
+
+Delete test cases that test:
+- Ref parsing (`refs/heads/main` → `main`)
+- Non-branch push handling (tag pushes, etc.)
+- Branch extraction from push event payload
+- The `detectOnPush()` entry point specifically
+
+- [ ] **Step 4: Add cron-specific tests**
+
+Add test cases for the `reconcile()` method:
+1. **Queries stale summaries** — verify `findStaleConflictSummaries()` is called
+2. **Returns correct counts** — 2 conflicting + 1 clean + 1 unknown → `{ checked: 4, conflicting: 2, clean: 1, stillUnknown: 1, errors: 0 }`
+3. **Per-PR error does not block others** — one PR throws, others still processed, error counted
+4. **Empty result** — no stale summaries → `{ checked: 0, ... }`
+5. **Still unknown updates lastConflictCheckedAt** — verify summary is updated without triggering workflow
+
+- [ ] **Step 5: Keep all workflow tests unchanged**
+
+The following test categories should remain and pass without modification:
+- executeConflictWorkflow tests (task dispatch, comment phases)
+- resolveConflictWorkflow tests (comment update, field clearing)
+- Token resolution cascade tests
+- Task reuse tests (reuseConflictTask)
+- WhatsApp notification tests
+
+- [ ] **Step 6: Run all tests**
+
+Run: `pnpm vitest run apps/code-agent/src/__tests__/domain/useCases/reconcileMergeConflicts.test.ts`
+
+Expected: All tests pass.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/__tests__/domain/useCases/
+git commit -m "test(code-agent): migrate merge conflict tests from push-triggered to cron-triggered"
+```
+
+---
+
+## Task 5: Remove Push Webhook Call Site + Service Container Entry
 
 **Files:**
 - Modify: `src/routes/webhooks/github.ts`
@@ -400,7 +462,7 @@ git commit -m "refactor(code-agent): remove merge conflict detection from push w
 
 ---
 
-## Task 5: Add Cron Route
+## Task 6: Add Cron Route
 
 **Files:**
 - Create: `src/routes/merge-conflicts/reconcileRoute.ts`
@@ -513,65 +575,6 @@ git add src/routes/merge-conflicts/
 git add src/__tests__/routes/merge-conflicts/
 git add src/routes/index.ts
 git commit -m "feat(code-agent): add POST /internal/merge-conflicts/reconcile cron route"
-```
-
----
-
-## Task 6: Migrate Tests
-
-**Files:**
-- Rename: `src/__tests__/domain/useCases/detectMergeConflictsOnPush.test.ts` → `src/__tests__/domain/useCases/reconcileMergeConflicts.test.ts`
-
-- [ ] **Step 1: Rename test file**
-
-```bash
-cd apps/code-agent
-git mv src/__tests__/domain/useCases/detectMergeConflictsOnPush.test.ts src/__tests__/domain/useCases/reconcileMergeConflicts.test.ts
-```
-
-- [ ] **Step 2: Update imports and describe blocks**
-
-Update all imports from `detectMergeConflictsOnPush` → `reconcileMergeConflicts`, `MergeConflictDetector` → `MergeConflictReconciler`, etc.
-
-Update describe block names.
-
-- [ ] **Step 3: Remove push-event-specific tests**
-
-Delete test cases that test:
-- Ref parsing (`refs/heads/main` → `main`)
-- Non-branch push handling (tag pushes, etc.)
-- Branch extraction from push event payload
-- The `detectOnPush()` entry point specifically
-
-- [ ] **Step 4: Add cron-specific tests**
-
-Add test cases for the `reconcile()` method:
-1. **Queries stale summaries** — verify `findStaleConflictSummaries()` is called
-2. **Returns correct counts** — 2 conflicting + 1 clean + 1 unknown → `{ checked: 4, conflicting: 2, clean: 1, stillUnknown: 1, errors: 0 }`
-3. **Per-PR error does not block others** — one PR throws, others still processed, error counted
-4. **Empty result** — no stale summaries → `{ checked: 0, ... }`
-5. **Still unknown updates lastConflictCheckedAt** — verify summary is updated without triggering workflow
-
-- [ ] **Step 5: Keep all workflow tests unchanged**
-
-The following test categories should remain and pass without modification:
-- executeConflictWorkflow tests (task dispatch, comment phases)
-- resolveConflictWorkflow tests (comment update, field clearing)
-- Token resolution cascade tests
-- Task reuse tests (reuseConflictTask)
-- WhatsApp notification tests
-
-- [ ] **Step 6: Run all tests**
-
-Run: `pnpm vitest run apps/code-agent/src/__tests__/domain/useCases/reconcileMergeConflicts.test.ts`
-
-Expected: All tests pass.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add src/__tests__/domain/useCases/
-git commit -m "test(code-agent): migrate merge conflict tests from push-triggered to cron-triggered"
 ```
 
 ---
