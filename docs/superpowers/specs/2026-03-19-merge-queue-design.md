@@ -487,7 +487,7 @@ Dot: `bg-emerald-500 rounded-full h-2.5 w-2.5`
 - **Merge conflict at merge time** (race condition — was clean, now conflicting): Skip the PR, record `merge_conflict`, continue to next eligible PR in the same tick.
 - **PR already merged** (race condition — another user merged it between list and merge): GitHub returns 405. Treat as success, do not add to `mergedPrs`, continue to next.
 - **Watch creator deleted/deactivated:** Token resolution fails, `lastError` set. Watch stays active but errors until manually cancelled.
-- **Concurrent ticks:** If Cloud Scheduler fires while a previous tick is still running, two ticks could attempt to merge the same PR. Mitigation: `mergePullRequest` is idempotent (GitHub returns 405 if already merged). The Firestore update uses a transaction on the watch document to prevent double-appending to `mergedPrs`.
+- **Concurrent ticks:** If Cloud Scheduler fires while a previous tick is still running, two ticks could attempt to merge the same PR. Mitigation: `mergePullRequest` is idempotent (GitHub returns 405 if already merged). The `mergedPrs` append uses Firestore `FieldValue.arrayUnion()`, which is atomic per-field and prevents duplicate entries without a full transaction. The `skippedPrs`/`lastTickAt`/`status` update is a separate non-transactional call — worst case is a stale `skippedPrs` list, which is overwritten next tick anyway.
 
 ## Testing
 

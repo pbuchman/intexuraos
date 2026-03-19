@@ -75,9 +75,11 @@ export interface MergedPrEntry {
   mergedAt: string;
 }
 
+export type SkipReason = 'merge_conflict' | 'checks_failing' | 'checks_pending' | 'mergeability_unknown' | 'not_eligible_author';
+
 export interface SkippedPrEntry {
   prNumber: number;
-  reason: string;
+  reason: SkipReason;
 }
 
 export type WatchStatus = 'active' | 'drained' | 'cancelled';
@@ -108,6 +110,7 @@ export type {
   MergeQueuePr,
   PrFilterStatus,
   MergedPrEntry,
+  SkipReason,
   SkippedPrEntry,
   WatchStatus,
   MergeQueueWatch,
@@ -433,9 +436,9 @@ const DEFAULT_REPO = 'intexuraos';
 - `prsLoading: boolean` — loading state when switching branches or refreshing PR list
 
 **Data flow:**
-1. On mount: fetch `listBranches` + `listWatches` in parallel. If either fails, set `error`.
+1. On mount: set `loading = true`. Fetch `listBranches` + `listWatches` in parallel. On success, set `loading = false`. If either fails, set `error` and `loading = false`.
 2. Auto-select first branch (most PRs)
-3. On branch select: set `prsLoading = true`, fetch `listPrs` for that branch, clear on completion
+3. On branch select: set `prsLoading = true`, fetch `listPrs` for that branch, set `prsLoading = false` on completion (success or error)
 4. Poll `listWatches` every 30s to update watch state (merged count, skipped, last tick). Use `document.visibilityState` — pause polling when tab is hidden.
 5. Poll `listPrs` every 60s to update mergeability. Same visibility check.
 
@@ -473,6 +476,8 @@ MergeHistoryTimeline
 ```
 
 **Hardcoded repo for now**: Extracted to `DEFAULT_OWNER` / `DEFAULT_REPO` constants. The repo selector is a secondary concern — start with constants, can add a dropdown later.
+
+> **⚠️ Blocking before multi-user deployment:** The hardcoded owner/repo means all authenticated users see the same repo. Before shipping to other users, replace with a dynamic lookup — e.g., derive from the authenticated user's GitHub username/org via the user service, or add a repo selector dropdown. This is acceptable for single-user MVP but must be resolved before the feature is available to other accounts.
 
 - [ ] **Step 2: Verify visually**
 
