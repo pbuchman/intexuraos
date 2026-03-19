@@ -27,8 +27,14 @@ export {
   type ListIssuesDeps,
   type ListIssuesRequest,
   type ListIssuesResponse,
-  type GroupedIssues,
 } from './useCases/listIssues.js';
+export { syncedToLinearIssue } from './syncedIssueMapper.js';
+export { buildIssueHierarchy, type IssueHierarchy } from './issueTreeBuilder.js';
+export {
+  groupIssuesByDashboardColumn,
+  DONE_RECENT_DAYS,
+  type GroupIssuesOptions,
+} from './issueGrouper.js';
 export {
   generateIssueTitle,
   type GenerateIssueTitleDeps,
