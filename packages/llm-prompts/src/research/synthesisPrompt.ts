@@ -4,6 +4,7 @@
  */
 
 import type { SynthesisContext } from '../synthesis/contextTypes.js';
+import { filterByExclusions, extractUserExclusions } from './promptUtils.js';
 
 export interface SynthesisReport {
   model: string;
@@ -173,20 +174,30 @@ ${formattedSources}
     ? `- **LLM models**: ${modelsList}\n- **Additional sources**: ${additionalSourcesList}`
     : `- **LLM models**: ${modelsList}`;
 
+  const userExclusions = extractUserExclusions(ctx.safety);
+
+  const filteredDisclaimers = ctx.safety.high_stakes
+    ? ctx.safety.required_disclaimers
+    : filterByExclusions(ctx.safety.required_disclaimers, userExclusions);
+
+  const filteredRedFlags = ctx.safety.high_stakes
+    ? ctx.red_flags
+    : filterByExclusions(ctx.red_flags, userExclusions);
+
   const safetySection =
-    ctx.safety.high_stakes || ctx.safety.required_disclaimers.length > 0
+    ctx.safety.high_stakes || filteredDisclaimers.length > 0
       ? `
 ## Safety Considerations
 
-${ctx.safety.high_stakes ? '⚠️ This is a HIGH-STAKES topic. Be extra careful with accuracy.\n' : ''}${ctx.safety.required_disclaimers.length > 0 ? `Include these disclaimers:\n${ctx.safety.required_disclaimers.map((d) => `- ${d}`).join('\n')}` : ''}`
+${ctx.safety.high_stakes ? '⚠️ This is a HIGH-STAKES topic. Be extra careful with accuracy.\n' : ''}${filteredDisclaimers.length > 0 ? `Include these disclaimers:\n${filteredDisclaimers.map((d) => `- ${d}`).join('\n')}` : ''}`
       : '';
 
   const redFlagsSection =
-    ctx.red_flags.length > 0
+    filteredRedFlags.length > 0
       ? `
 ## Concerns to Address
 
-${ctx.red_flags.map((f) => `- ${f}`).join('\n')}`
+${filteredRedFlags.map((f) => `- ${f}`).join('\n')}`
       : '';
 
   const outputFormatSection =

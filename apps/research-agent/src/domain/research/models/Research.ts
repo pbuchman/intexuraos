@@ -49,6 +49,7 @@ export interface LlmResult {
   costUsd?: number;
   /** Marks results copied from source research in enhanced research (costs tracked in sourceLlmCostUsd) */
   copiedFromSource?: boolean;
+  qualityFlag?: 'normal' | 'low_quality';
 }
 
 /**
