@@ -278,12 +278,7 @@ class FakeQuerySnapshot {
 class FakeQuerySnapshotWithCount extends FakeQuerySnapshot {
   private readonly _count: number;
 
-  constructor(
-    docs: FakeDocumentSnapshot[],
-    _collectionName: string,
-    _store: DocumentStore,
-    _filters: { field: string; op: string; value: unknown }[]
-  ) {
+  constructor(docs: FakeDocumentSnapshot[]) {
     super(docs);
     // Count is the number of filtered documents passed in
     this._count = docs.length;
@@ -464,9 +459,7 @@ class FakeQuery {
 
     // Return appropriate snapshot type based on countRequested
     if (this.countRequested) {
-      return Promise.resolve(
-        new FakeQuerySnapshotWithCount(docs, this.collectionName, this.store, this.filters)
-      );
+      return Promise.resolve(new FakeQuerySnapshotWithCount(docs));
     }
     return Promise.resolve(new FakeQuerySnapshot(docs));
   }
