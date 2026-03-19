@@ -31,6 +31,7 @@
 | `apps/web/src/pages/ApiKeysSettingsPage.tsx`      | Add OpenRouter provider with `sk-or-` key validation |
 | `apps/web/src/components/ModelSelector.tsx`       | Add OpenRouter section with dynamic model picker     |
 | `apps/web/src/pages/ResearchAgentPage.tsx`        | Handle mixed static + OpenRouter model state         |
+| `apps/web/src/pages/ResearchDetailPage.tsx`       | Extend configuredProviders to include OpenRouter     |
 | `apps/web/src/services/researchAgentApi.types.ts` | Add `OpenRouterModelInfo` type, extend model types   |
 | `apps/web/src/services/researchAgentApi.ts`       | Add `fetchOpenRouterModels()` API function           |
 
@@ -98,7 +99,7 @@ export async function fetchOpenRouterModels(
 ): Promise<OpenRouterModelsResponse> {
   return apiRequest<OpenRouterModelsResponse>(
     config.ResearchAgentUrl,
-    '/openrouter/models',
+    '/research/openrouter/models',
     accessToken
   );
 }
@@ -215,7 +216,7 @@ Expected: FAIL — module not found
 ```typescript
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApiClient } from './useApiClient.js';
-import { getErrorMessage } from '../utils/errors.js';
+import { getErrorMessage } from '@intexuraos/common-core/errors';
 import type { OpenRouterModelInfo, OpenRouterModelsResponse } from '../services/researchAgentApi.types.js';
 import { config } from '../config.js';
 
@@ -244,7 +245,7 @@ export function useOpenRouterModels(isConfigured: boolean): UseOpenRouterModelsR
     try {
       const response = await request<OpenRouterModelsResponse>(
         config.ResearchAgentUrl,
-        '/openrouter/models'
+        '/research/openrouter/models'
       );
       setModels(response.models);
       fetchedRef.current = true;
@@ -394,7 +395,7 @@ interface ModelSelectorProps {
 After the existing provider rows, conditionally render the OpenRouter section:
 
 ```tsx
-{configuredProviders.includes('openrouter' as LlmProvider) && (
+{isOpenRouterConfigured && (
   <div className="mt-4 border-t pt-4">
     <h4 className="text-sm font-medium text-gray-700 mb-2">
       OpenRouter Models
@@ -457,11 +458,27 @@ const [selectedOpenRouterModels, setSelectedOpenRouterModels] = useState<string[
 - [ ] **Step 2: Wire useOpenRouterModels hook**
 
 ```typescript
-const isOpenRouterConfigured = keys?.openrouter?.configured ?? false;
+const isOpenRouterConfigured = keys !== null && keys.openrouter !== null;
 const { models: openRouterModels, loading: openRouterLoading } = useOpenRouterModels(isOpenRouterConfigured);
 ```
 
-- [ ] **Step 3: Pass props to ModelSelector**
+- [ ] **Step 3: Extend configuredProviders to include OpenRouter**
+
+Both `ResearchAgentPage.tsx` and `ResearchDetailPage.tsx` build `configuredProviders` from `PROVIDER_MODELS.filter(...)`. Since OpenRouter is NOT in `PROVIDER_MODELS` (it's dynamic, not static), add OpenRouter manually:
+
+```typescript
+const configuredProviders: LlmProvider[] =
+  keysLoading || keys === null
+    ? []
+    : [
+        ...PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id),
+        ...(keys.openrouter !== null ? ['openrouter' as LlmProvider] : []),
+      ];
+```
+
+Apply the same pattern in `ResearchDetailPage.tsx`.
+
+- [ ] **Step 4: Pass props to ModelSelector**
 
 ```tsx
 <ModelSelector

@@ -1136,14 +1136,28 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
   }
 
   async synthesize(
-    _originalPrompt: string,
-    _reports: { model: string; content: string }[],
-    _additionalSources?: { content: string; label?: string }[],
+    originalPrompt: string,
+    reports: { model: string; content: string }[],
+    additionalSources?: { content: string; label?: string }[],
     _synthesisContext?: SynthesisContext
   ): Promise<Result<LlmSynthesisResult, LlmError>> {
-    // Delegate to generate with a synthesis-formatted prompt
-    // Implementation follows the same pattern as GptAdapter
-    throw new Error('OpenRouter synthesis not yet implemented');
+    // Build synthesis prompt from reports (same pattern as GptAdapter)
+    const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
+    this.logger.info({ model: this.model }, 'OpenRouter synthesis started');
+    const result = await this.client.generate(synthesisPrompt);
+    if (!result.ok) {
+      const error = mapToLlmError(result.error);
+      this.logger.error(
+        { model: this.model, errorCode: error.code },
+        'OpenRouter synthesis failed'
+      );
+      return { ok: false, error };
+    }
+    this.logger.info(
+      { model: this.model, usage: result.value.usage },
+      'OpenRouter synthesis completed'
+    );
+    return { ok: true, value: { content: result.value.content, usage: result.value.usage } };
   }
 }
 
