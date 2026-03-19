@@ -9,19 +9,18 @@ import {
   TODO_FILTER_CONFIG,
   TODO_GROUP_STATUSES,
   TODO_SORT_OPTIONS,
-  type TodoGroupStatus,
   type TodoSortOption,
 } from '@/components/todos/shared.js';
 import { useTodos } from '@/hooks';
-import type { Todo } from '@/types';
+import type { Todo, TodoStatus } from '@/types';
 
 const INACTIVE_CLASS = 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500';
 
-function getStoredStatuses(): Set<TodoGroupStatus> {
+function getStoredStatuses(): Set<TodoStatus> {
   try {
     const stored = localStorage.getItem('todos-status-filter');
     if (stored !== null) {
-      const parsed = JSON.parse(stored) as TodoGroupStatus[];
+      const parsed = JSON.parse(stored) as TodoStatus[];
       return new Set(parsed);
     }
   } catch {
@@ -57,7 +56,7 @@ export function TodosListPage(): React.JSX.Element {
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeStatuses, setActiveStatuses] = useState<Set<TodoGroupStatus>>(getStoredStatuses);
+  const [activeStatuses, setActiveStatuses] = useState<Set<TodoStatus>>(getStoredStatuses);
   const [sort, setSort] = useState<TodoSortOption>(getStoredSort);
 
   useEffect(() => {
@@ -71,7 +70,7 @@ export function TodosListPage(): React.JSX.Element {
     }
   }, [todos, searchParams, setSearchParams]);
 
-  const toggleStatus = (status: TodoGroupStatus): void => {
+  const toggleStatus = (status: TodoStatus): void => {
     setActiveStatuses((prev) => {
       const next = new Set(prev);
       if (next.has(status)) {
@@ -89,9 +88,19 @@ export function TodosListPage(): React.JSX.Element {
     localStorage.setItem('todos-sort', s);
   };
 
+  const statusCounts = useMemo(() => {
+    const counts: Partial<Record<TodoStatus, number>> = {};
+    for (const t of todos) {
+      counts[t.status] = (counts[t.status] ?? 0) + 1;
+    }
+    return counts;
+  }, [todos]);
+
+  const inProgressCount = statusCounts.in_progress ?? 0;
+
   const filteredSortedTodos = useMemo(() => {
-    const filtered = todos.filter((t) => activeStatuses.has(t.status as TodoGroupStatus));
-    return [...filtered].sort((a, b) => {
+    const filtered = todos.filter((t) => activeStatuses.has(t.status));
+    return filtered.sort((a, b) => {
       if (sort === 'priority') {
         return (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4);
       }
@@ -102,16 +111,6 @@ export function TodosListPage(): React.JSX.Element {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   }, [todos, activeStatuses, sort]);
-
-  const inProgressCount = todos.filter((t) => t.status === 'in_progress').length;
-  const statusCounts = useMemo(() => {
-    const counts: Partial<Record<TodoGroupStatus, number>> = {};
-    for (const t of todos) {
-      const s = t.status as TodoGroupStatus;
-      counts[s] = (counts[s] ?? 0) + 1;
-    }
-    return counts;
-  }, [todos]);
 
   if (loading) {
     return (

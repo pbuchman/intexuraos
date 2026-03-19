@@ -49,11 +49,9 @@ export function ItemStatusIcon({ status }: { status: TodoStatus }): React.JSX.El
 }
 
 // Filter config
-export type TodoGroupStatus = 'in_progress' | 'processing' | 'pending' | 'completed' | 'cancelled' | 'draft';
+export const TODO_GROUP_STATUSES: TodoStatus[] = ['in_progress', 'processing', 'pending', 'completed', 'cancelled', 'draft'];
 
-export const TODO_GROUP_STATUSES: TodoGroupStatus[] = ['in_progress', 'processing', 'pending', 'completed', 'cancelled', 'draft'];
-
-export const TODO_FILTER_CONFIG: Record<TodoGroupStatus, { label: string; dotClass: string; activeClass: string }> = {
+export const TODO_FILTER_CONFIG: Record<TodoStatus, { label: string; dotClass: string; activeClass: string }> = {
   in_progress: { label: 'In Progress', dotClass: 'bg-blue-500',   activeClass: 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400' },
   processing:  { label: 'Processing',  dotClass: 'bg-purple-500', activeClass: 'border-purple-500 bg-purple-50 text-purple-700 dark:border-purple-400 dark:bg-purple-900/30 dark:text-purple-400' },
   pending:     { label: 'Pending',     dotClass: 'bg-amber-500',  activeClass: 'border-amber-500 bg-amber-50 text-amber-700 dark:border-amber-400 dark:bg-amber-900/30 dark:text-amber-400' },
@@ -62,12 +60,15 @@ export const TODO_FILTER_CONFIG: Record<TodoGroupStatus, { label: string; dotCla
   draft:       { label: 'Draft',       dotClass: 'bg-slate-400',  activeClass: 'border-slate-400 bg-slate-50 text-slate-600 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-400' },
 };
 
-export function getAccentShadow(status: string): string {
-  if (status === 'in_progress') return 'shadow-[inset_3px_0_0_theme(colors.blue.500)]';
-  if (status === 'pending') return 'shadow-[inset_3px_0_0_theme(colors.amber.500)]';
-  if (status === 'completed') return 'shadow-[inset_3px_0_0_theme(colors.green.500)]';
-  if (status === 'cancelled') return 'shadow-[inset_3px_0_0_theme(colors.red.500)]';
-  return '';
+const ACCENT_SHADOW: Partial<Record<TodoStatus, string>> = {
+  in_progress: 'shadow-[inset_3px_0_0_theme(colors.blue.500)]',
+  pending: 'shadow-[inset_3px_0_0_theme(colors.amber.500)]',
+  completed: 'shadow-[inset_3px_0_0_theme(colors.green.500)]',
+  cancelled: 'shadow-[inset_3px_0_0_theme(colors.red.500)]',
+};
+
+export function getAccentShadow(status: TodoStatus): string {
+  return ACCENT_SHADOW[status] ?? '';
 }
 
 // Sort config

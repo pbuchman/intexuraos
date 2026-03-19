@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import { Button, Input } from '@/components';
+import { Button, ErrorBanner, Input } from '@/components';
 import type { CreateTodoRequest, Todo, TodoPriority } from '@/types';
 
 export interface CreateTodoModalProps {
@@ -70,11 +70,7 @@ export function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): Re
         </div>
 
         <div className="p-6">
-          {error !== null ? (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
-              {error}
-            </div>
-          ) : null}
+          <ErrorBanner message={error} className="mb-4" />
 
           <div className="space-y-4">
             <Input
