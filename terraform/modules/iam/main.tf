@@ -134,6 +134,13 @@ resource "google_service_account" "chat_agent" {
   description  = "Service account for chat-agent Cloud Run deployment"
 }
 
+# Service account for cron-agent
+resource "google_service_account" "cron_agent" {
+  account_id   = "intexuraos-cron-${var.environment}"
+  display_name = "IntexuraOS Cron Agent (${var.environment})"
+  description  = "Service account for cron-agent Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -297,6 +304,15 @@ resource "google_secret_manager_secret_iam_member" "chat_agent_secrets" {
   member    = "serviceAccount:${google_service_account.chat_agent.email}"
 }
 
+# Cron Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "cron_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cron_agent.email}"
+}
+
 # API Docs Hub: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "api_docs_hub_secrets" {
   for_each = var.secret_ids
@@ -440,6 +456,13 @@ resource "google_project_iam_member" "chat_agent_firestore" {
   member  = "serviceAccount:${google_service_account.chat_agent.email}"
 }
 
+# Cron Agent: Firestore access
+resource "google_project_iam_member" "cron_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.cron_agent.email}"
+}
+
 
 # All services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "user_service_logging" {
@@ -579,4 +602,11 @@ resource "google_project_iam_member" "chat_agent_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.chat_agent.email}"
+}
+
+# Cron Agent: Cloud Logging
+resource "google_project_iam_member" "cron_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.cron_agent.email}"
 }
