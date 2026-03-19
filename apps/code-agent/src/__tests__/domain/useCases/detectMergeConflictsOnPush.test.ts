@@ -1516,5 +1516,32 @@ describe('createDetectMergeConflictsOnPush', () => {
       expect(deps.gitHubPRClient.postPRComment).toHaveBeenCalledTimes(1);
       expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
     });
+
+    it('continues processing remaining PRs when one throws during reconcile', async () => {
+      const logger = createLogger();
+      const deps = createDeps(logger);
+
+      const summary1 = createSummary({ pullRequestNumber: 1 });
+      const summary2 = createSummary({ pullRequestNumber: 2 });
+      const summary3 = createSummary({ pullRequestNumber: 3 });
+      deps.gitHubPRSummaryRepo.findAllOpen.mockResolvedValue(ok([summary1, summary2, summary3]));
+
+      // PR #2 causes getPullRequestDetails to throw
+      deps.gitHubPRClient.getPullRequestDetails
+        .mockResolvedValueOnce(ok(createPRDetails({ mergeable: true })))  // PR #1: success
+        .mockRejectedValueOnce(new Error('GitHub API failure'))            // PR #2: throws
+        .mockResolvedValueOnce(ok(createPRDetails({ mergeable: true }))); // PR #3: success
+
+      const detector = createDetectMergeConflictsOnPush(deps as never);
+      const result = await detector.reconcile(logger);
+
+      // All 3 PRs were attempted despite the error on PR #2
+      expect(result).toEqual({ attempted: 3 });
+      expect(deps.gitHubPRClient.getPullRequestDetails).toHaveBeenCalledTimes(3);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ prNumber: 2 }),
+        expect.stringContaining('Unhandled error processing PR in merge-conflict reconcile')
+      );
+    });
   });
 });
