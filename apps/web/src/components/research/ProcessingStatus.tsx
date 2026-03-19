@@ -5,16 +5,18 @@ import { formatRelative } from '@/utils/dateFormat';
 import type { InputContext, LlmResult, ResearchStatus, SupportedModel } from '@/services/researchAgentApi.types';
 import { getModelDisplayName } from './shared.js';
 
-export function StatusDot({ status }: { status: string }): React.JSX.Element {
-  const colors: Record<string, string> = {
-    pending: 'bg-slate-300',
-    processing: 'bg-blue-500 animate-pulse',
-    completed: 'bg-green-500',
-    failed: 'bg-red-500',
-    skipped: 'bg-slate-200',
-  };
+type DotStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
 
-  return <div className={`h-3 w-3 rounded-full ${colors[status] ?? 'bg-slate-300'}`} />;
+const DOT_COLORS: Record<DotStatus, string> = {
+  pending: 'bg-slate-300',
+  processing: 'bg-blue-500 animate-pulse',
+  completed: 'bg-green-500',
+  failed: 'bg-red-500',
+  skipped: 'bg-slate-200',
+};
+
+export function StatusDot({ status }: { status: DotStatus }): React.JSX.Element {
+  return <div className={`h-3 w-3 rounded-full ${DOT_COLORS[status]}`} />;
 }
 
 export function ErrorDisplay({
@@ -115,7 +117,7 @@ export function ProcessingStatus({
     return '';
   };
 
-  const getSynthesisStatus = (): { status: string; text: string } => {
+  const getSynthesisStatus = (): { status: DotStatus; text: string } => {
     if (researchStatus === 'synthesizing') {
       return { status: 'processing', text: 'Synthesizing...' };
     }
