@@ -206,6 +206,14 @@
     "pr_automation_comments": {
       "owner": "code-agent",
       "description": "PR automation comment tracking for unified PR log (one doc per PR, keyed by repository:prNumber)"
+    },
+    "cron_schedules": {
+      "owner": "cron-agent",
+      "description": "User-defined recurring schedules with cron expressions and action definitions"
+    },
+    "cron_executions": {
+      "owner": "cron-agent",
+      "description": "Execution log entries for cron schedule runs"
     }
   }
 }

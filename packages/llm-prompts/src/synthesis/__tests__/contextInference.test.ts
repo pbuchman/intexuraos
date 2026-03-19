@@ -127,6 +127,26 @@ describe('buildInferSynthesisContextPrompt', () => {
     expect(result).toContain('"detected_conflicts":');
   });
 
+  describe('languageOverride', () => {
+    it('should instruct to use languageOverride when provided', () => {
+      const result = buildInferSynthesisContextPrompt({
+        originalPrompt: 'test query',
+        reports: [{ model: 'test-model', content: 'test content' }],
+        languageOverride: 'en',
+      });
+      expect(result).toContain('LANGUAGE OVERRIDE');
+      expect(result).toContain('"en"');
+    });
+
+    it('should not include language override section when not provided', () => {
+      const result = buildInferSynthesisContextPrompt({
+        originalPrompt: 'test query',
+        reports: [{ model: 'test-model', content: 'test content' }],
+      });
+      expect(result).not.toContain('LANGUAGE OVERRIDE');
+    });
+  });
+
   describe('F-003: anti-injection guards for untrusted inputs', () => {
     it('includes guard before original user query block', () => {
       const result = buildInferSynthesisContextPrompt({

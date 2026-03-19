@@ -49,6 +49,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_CHAT_AGENT_URL: 'http://localhost:8129',
   INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
+  INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -214,6 +215,7 @@ module.exports = {
     createServiceConfig('notes-agent', 8121),
     createServiceConfig('bookmarks-agent', 8124),
     createServiceConfig('code-agent', 8128),
+    createServiceConfig('cron-agent', 8130),
 
     // Services that depend on app-settings-service (fetch pricing at startup)
     // Poll health endpoint until app-settings-service is ready (max 30s)
