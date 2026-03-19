@@ -7,7 +7,7 @@ interface ParseScheduleInput {
 export const parseSchedulePrompt: PromptBuilder<ParseScheduleInput> = {
   name: 'parse-schedule',
   description: 'Converts human-language schedule descriptions into standard cron expressions',
-  version: '1.0.0',
+  version: '1.1.0',
 
   build(input: ParseScheduleInput): string {
     return `You are a cron expression parser. Convert the following human-language schedule description into a standard 5-field cron expression (minute hour day-of-month month day-of-week).
@@ -17,7 +17,7 @@ Rules:
 - Day of week: 0=Sunday, 1=Monday, ..., 6=Saturday
 - Return ONLY valid JSON, no markdown, no explanation
 
-Input: "${input.description}"
+Input: "${input.description.replace(/["\\]/g, '')}"
 
 Return JSON in exactly this format:
 {"cronExpression": "<5-field cron expression>", "humanSummary": "<readable summary of when it runs>"}

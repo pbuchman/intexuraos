@@ -56,6 +56,19 @@ export async function parseSchedule(
       return err({ code: 'INVALID_CRON', message: `Invalid cron expression: ${cronExpression}` });
     }
 
+    // Validate minimum interval: reject schedules more frequent than every 5 minutes
+    const interval = cronParser.parseExpression(cronExpression);
+    const first = interval.next().toDate();
+    const second = interval.next().toDate();
+    const intervalMs = second.getTime() - first.getTime();
+    const MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+    if (intervalMs < MIN_INTERVAL_MS) {
+      return err({
+        code: 'INVALID_CRON',
+        message: `Schedule frequency too high: interval is ${String(Math.round(intervalMs / 1000))}s, minimum is 300s (5 minutes)`,
+      });
+    }
+
     return ok({ cronExpression, humanSummary });
   } catch {
     return err({ code: 'PARSE_FAILED', message: 'Failed to parse LLM response as JSON' });
