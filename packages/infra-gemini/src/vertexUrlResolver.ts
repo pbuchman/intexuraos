@@ -29,7 +29,7 @@ async function resolveOneUrl(url: string): Promise<string> {
     const response = await fetch(url, {
       method: 'HEAD',
       redirect: 'manual',
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(3000),
     });
 
     const location = response.headers.get('location');
