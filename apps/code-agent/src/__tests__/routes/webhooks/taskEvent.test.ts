@@ -21,12 +21,13 @@ import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import { ok, err } from '@intexuraos/common-core';
 import type { AutomationLog, AutomationEvent } from '../../../domain/ports/automationLog.js';
+import { generateWebhookSecret } from '../../../domain/utils/secrets.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function generateOrchestratorSignature(
+function generateSignature(
   body: object,
   secret: string
 ): { timestamp: string; signature: string } {
@@ -39,6 +40,7 @@ function generateOrchestratorSignature(
 
 const ORCHESTRATOR_SECRET = 'test-orchestrator-secret';
 const INTERNAL_AUTH_TOKEN = 'test-internal-token';
+const TASK_ID = 'task-abc';
 
 // ---------------------------------------------------------------------------
 // Test setup
@@ -76,11 +78,12 @@ describe('POST /internal/webhooks/task-event', () => {
     mockAutomationLog = { record: vi.fn().mockResolvedValue(undefined) };
     mockCodeTaskRepo = {
       findById: vi.fn().mockResolvedValue(ok({
-        id: 'task-abc',
+        id: TASK_ID,
         repository: 'pbuchman/intexuraos',
         prNumber: 42,
         userId: 'user-123',
         status: 'running',
+        webhookSecret: generateWebhookSecret(ORCHESTRATOR_SECRET, TASK_ID),
       })),
       create: vi.fn(),
       findByIdForUser: vi.fn(),
@@ -150,7 +153,9 @@ describe('POST /internal/webhooks/task-event', () => {
     };
 
     if (overrides?.skipSignature !== true) {
-      const { timestamp, signature } = generateOrchestratorSignature(body, ORCHESTRATOR_SECRET);
+      const bodyTaskId = (body as { taskId?: string }).taskId ?? '';
+      const perTaskSecret = generateWebhookSecret(ORCHESTRATOR_SECRET, bodyTaskId);
+      const { timestamp, signature } = generateSignature(body, perTaskSecret);
       headers['X-Request-Timestamp'] = timestamp;
       headers['X-Request-Signature'] = signature;
     }
@@ -168,8 +173,9 @@ describe('POST /internal/webhooks/task-event', () => {
   // -----------------------------------------------------------------------
 
   it('rejects request without X-Internal-Auth header', async () => {
-    const body = { taskId: 'task-abc', event: 'task_started', attempt: 1, workerType: 'opus' };
-    const { timestamp, signature } = generateOrchestratorSignature(body, ORCHESTRATOR_SECRET);
+    const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
+    const perTaskSecret = generateWebhookSecret(ORCHESTRATOR_SECRET, TASK_ID);
+    const { timestamp, signature } = generateSignature(body, perTaskSecret);
 
     const response = await app.inject({
       method: 'POST',
@@ -184,8 +190,8 @@ describe('POST /internal/webhooks/task-event', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  it('rejects request with invalid orchestrator signature', async () => {
-    const body = { taskId: 'task-abc', event: 'task_started', attempt: 1, workerType: 'opus' };
+  it('rejects request with invalid webhook signature', async () => {
+    const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
 
     const response = await app.inject({
       method: 'POST',
@@ -202,7 +208,7 @@ describe('POST /internal/webhooks/task-event', () => {
   });
 
   it('rejects request without timestamp header', async () => {
-    const body = { taskId: 'task-abc', event: 'task_started', attempt: 1, workerType: 'opus' };
+    const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
 
     const response = await app.inject({
       method: 'POST',
@@ -228,11 +234,11 @@ describe('POST /internal/webhooks/task-event', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('returns 400 for empty taskId', async () => {
+  it('returns 401 for empty taskId (caught by signature validation)', async () => {
     const body = { taskId: '', event: 'task_started' };
     const response = await sendTaskEvent(body);
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(401);
   });
 
   it('returns 400 for unknown event type', async () => {
@@ -246,27 +252,61 @@ describe('POST /internal/webhooks/task-event', () => {
   // Task lookup
   // -----------------------------------------------------------------------
 
-  it('returns 200 and logs warning when task is not found', async () => {
+  it('returns 401 when task is not found (webhook secret unavailable)', async () => {
     mockCodeTaskRepo.findById.mockResolvedValue(err({ code: 'NOT_FOUND', message: 'Task not found' }));
 
     const body = { taskId: 'task-nonexistent', event: 'task_started', attempt: 1, workerType: 'opus' };
     const response = await sendTaskEvent(body);
 
-    // Best-effort: we still return 200 because the orchestrator should not retry
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('returns 401 when task has no webhook secret', async () => {
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      id: TASK_ID,
+      repository: 'pbuchman/intexuraos',
+      prNumber: 42,
+      userId: 'user-123',
+      status: 'running',
+    }));
+
+    const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
+    const response = await sendTaskEvent(body);
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('returns 200 when task disappears between signature validation and lookup', async () => {
+    // First findById call (signature validation) succeeds, second call (route body) fails
+    mockCodeTaskRepo.findById
+      .mockResolvedValueOnce(ok({
+        id: TASK_ID,
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        userId: 'user-123',
+        status: 'running',
+        webhookSecret: generateWebhookSecret(ORCHESTRATOR_SECRET, TASK_ID),
+      }))
+      .mockResolvedValueOnce(err({ code: 'NOT_FOUND', message: 'Task not found' }));
+
+    const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
+    const response = await sendTaskEvent(body);
+
     expect(response.statusCode).toBe(200);
     expect(mockAutomationLog.record).not.toHaveBeenCalled();
   });
 
   it('returns 200 and logs warning when task has no prNumber', async () => {
     mockCodeTaskRepo.findById.mockResolvedValue(ok({
-      id: 'task-abc',
+      id: TASK_ID,
       repository: 'pbuchman/intexuraos',
       prNumber: undefined,
       userId: 'user-123',
       status: 'running',
+      webhookSecret: generateWebhookSecret(ORCHESTRATOR_SECRET, TASK_ID),
     }));
 
-    const body = { taskId: 'task-abc', event: 'task_started', attempt: 1, workerType: 'opus' };
+    const body = { taskId: TASK_ID, event: 'task_started', attempt: 1, workerType: 'opus' };
     const response = await sendTaskEvent(body);
 
     expect(response.statusCode).toBe(200);
