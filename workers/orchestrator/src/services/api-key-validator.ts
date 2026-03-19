@@ -1,4 +1,4 @@
-import type { Logger } from '@intexuraos/common-core';
+import { getErrorCauseChain, type Logger } from '@intexuraos/common-core';
 import type { CredentialMonitor } from './isolation/credential-monitor.js';
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -104,8 +104,12 @@ export class ApiKeyValidator {
       this.setCache(keyType, result);
       return result;
     } catch (error) {
+      const cause = error instanceof Error ? getErrorCauseChain(error) : undefined;
       this.logger.warn(
-        { error: error instanceof Error ? error.message : String(error) },
+        {
+          error: error instanceof Error ? error.message : String(error),
+          ...(cause !== undefined && { cause }),
+        },
         'API key validation request failed (network issue), treating as valid'
       );
       return { valid: true };

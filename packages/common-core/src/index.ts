@@ -14,6 +14,7 @@ export {
   ERROR_HTTP_STATUS,
   IntexuraOSError,
   getErrorMessage,
+  getErrorCauseChain,
   type SerializedError,
   serializeError,
 } from './errors.js';
