@@ -171,7 +171,7 @@ jobs:
             app-settings-service mobile-notifications-service research-agent
             commands-agent actions-agent data-insights-agent notes-agent
             todos-agent bookmarks-agent calendar-agent linear-agent
-            web-agent code-agent chat-agent
+            web-agent code-agent chat-agent cron-agent
           )
           for svc in "${SERVICES[@]}"; do
             bash "cloudbuild/scripts/deploy-${svc}.sh" &
@@ -199,6 +199,7 @@ jobs:
             "app-settings-service:APP_SETTINGS_SERVICE"
             "linear-agent:LINEAR_AGENT"
             "code-agent:CODE_AGENT"
+            "cron-agent:CRON_AGENT"
           )
 
           declare -A SERVICE_URLS
@@ -381,6 +382,7 @@ jobs:
                 "app-settings-service:APP_SETTINGS_SERVICE"
                 "linear-agent:LINEAR_AGENT"
                 "code-agent:CODE_AGENT"
+                "cron-agent:CRON_AGENT"
               )
 
               declare -A SERVICE_URLS
