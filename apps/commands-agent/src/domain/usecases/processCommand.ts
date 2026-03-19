@@ -6,7 +6,7 @@ import type { CommandRepository } from '../ports/commandRepository.js';
 import type { ClassifierFactory, ClassificationResult } from '../ports/classifier.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../events/actionCreatedEvent.js';
-import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { UserServicePort } from '../ports/userServicePort.js';
 import type { ActionsAgentClient } from '../ports/actionsAgentClient.js';
 import type { Action } from '../models/action.js';
 import type { Result } from '@intexuraos/common-core';
@@ -141,7 +141,7 @@ export function createProcessCommandUseCase(deps: {
   commandRepository: CommandRepository;
   actionsAgentClient: ActionsAgentClient;
   classifierFactory: ClassifierFactory;
-  userServiceClient: UserServiceClient;
+  userServiceClient: UserServicePort;
   eventPublisher: EventPublisherPort;
   logger: Logger;
 }): ProcessCommandUseCase {
