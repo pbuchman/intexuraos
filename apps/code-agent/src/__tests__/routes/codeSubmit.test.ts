@@ -758,7 +758,7 @@ describe('POST /code/submit', () => {
 
       // Mock enqueue to return queue_full error
       vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
-        err({ code: 'queue_full', message: 'Queue is full (11/10). Please try again later.' })
+        err({ code: 'queue_full', message: 'Queue is full (51/50). Please try again later.' })
       );
 
       const response = await app.inject({
