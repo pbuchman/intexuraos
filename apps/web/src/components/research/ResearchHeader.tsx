@@ -4,7 +4,7 @@ import type { Research } from '@/services/researchAgentApi.types';
 import { getProviderForModel } from '@/services/researchAgentApi.types';
 import { formatRelative } from '@/utils/dateFormat';
 import { stripMarkdown } from '@/utils';
-import { ResearchStatusBadge, getModelDisplayName } from './shared.js';
+import { ResearchStatusBadge, getModelDisplayName, isProcessingStatus } from './shared.js';
 
 interface ResearchHeaderProps {
   research: Research;
@@ -25,11 +25,7 @@ export function ResearchHeader({
     typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches
   );
 
-  const isProcessing =
-    research.status === 'pending' ||
-    research.status === 'processing' ||
-    research.status === 'retrying' ||
-    research.status === 'synthesizing';
+  const isProcessing = isProcessingStatus(research.status);
 
   const getDisplayTitle = (): string => {
     if (research.title !== '') {
