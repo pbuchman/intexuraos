@@ -306,27 +306,31 @@ sequenceDiagram
 
 ## Configuration
 
-| Variable                                | Purpose                                                | Required                |
-| --------------------------------------- | ------------------------------------------------------ | ----------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`             | GCP project for Firestore and Pub/Sub                  | Yes                     |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Shared secret for internal endpoints                   | Yes                     |
-| `INTEXURAOS_WEBHOOK_VERIFY_SECRET`      | HMAC secret for log chunk validation from orchestrator | Yes                     |
-| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`       | AES-256-GCM key for encrypting worker credentials      | Yes (dev fallback)      |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`        | HMAC secret for task dispatch and webhook signatures   | Yes                     |
-| `INTEXURAOS_GITHUB_WEBHOOK_SECRET`      | GitHub webhook signature verification secret           | Yes                     |
-| `INTEXURAOS_SERVICE_URL`                | Callback URL — orchestrator reports task status here   | Yes                     |
-| `INTEXURAOS_WHATSAPP_SERVICE_URL`       | WhatsApp service URL                                   | Production              |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Pub/Sub topic for WhatsApp send messages               | Production              |
-| `INTEXURAOS_LINEAR_AGENT_URL`           | linear-agent base URL                                  | Production              |
-| `INTEXURAOS_ACTIONS_AGENT_URL`          | actions-agent base URL                                 | Production              |
-| `INTEXURAOS_USER_SERVICE_URL`           | user-service base URL                                  | Production              |
-| `INTEXURAOS_GEMINI_APP_API_KEY`         | Gemini API key for GitHub Agent triage                 | Production              |
-| `INTEXURAOS_AUTH_AUDIENCE`              | Auth0 JWT audience                                     | Production              |
-| `INTEXURAOS_AUTH_ISSUER`                | Auth0 JWT issuer                                       | Production              |
-| `INTEXURAOS_AUTH_JWKS_URL`              | Auth0 JWKS endpoint                                    | Production              |
-| `INTEXURAOS_WEB_URL`                    | Web app URL for task links in notifications            | Optional (has default)  |
-| `INTEXURAOS_SENTRY_DSN`                 | Sentry error tracking DSN                              | Optional                |
-| `E2E_MODE`                              | Enable E2E mode with mocked external services          | Optional                |
+| Variable                                | Purpose                                                | Required                  |
+| --------------------------------------- | ------------------------------------------------------ | ------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`             | GCP project for Firestore and Pub/Sub                  | Yes                       |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Shared secret for internal endpoints                   | Yes                       |
+| `INTEXURAOS_WEBHOOK_VERIFY_SECRET`      | HMAC secret for log chunk validation from orchestrator | Yes                       |
+| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`       | AES-256-GCM key for encrypting worker credentials      | Yes (dev fallback)        |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`        | HMAC secret for task dispatch and webhook signatures   | Yes                       |
+| `INTEXURAOS_GITHUB_WEBHOOK_SECRET`      | GitHub webhook signature verification secret           | Yes                       |
+| `INTEXURAOS_SERVICE_URL`                | Callback URL — orchestrator reports task status here   | Yes                       |
+| `INTEXURAOS_WHATSAPP_SERVICE_URL`       | WhatsApp service URL                                   | Production                |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Pub/Sub topic for WhatsApp send messages               | Production                |
+| `INTEXURAOS_LINEAR_AGENT_URL`           | linear-agent base URL                                  | Production                |
+| `INTEXURAOS_ACTIONS_AGENT_URL`          | actions-agent base URL                                 | Production                |
+| `INTEXURAOS_USER_SERVICE_URL`           | user-service base URL                                  | Production                |
+| `INTEXURAOS_GEMINI_APP_API_KEY`         | Gemini API key for GitHub Agent triage                 | Production                |
+| `INTEXURAOS_AUTH_AUDIENCE`              | Auth0 JWT audience                                     | Production                |
+| `INTEXURAOS_AUTH_ISSUER`                | Auth0 JWT issuer                                       | Production                |
+| `INTEXURAOS_AUTH_JWKS_URL`              | Auth0 JWKS endpoint                                    | Production                |
+| `INTEXURAOS_WEB_URL`                    | Web app URL for task links in notifications            | Optional (has default)    |
+| `INTEXURAOS_SENTRY_DSN`                 | Sentry error tracking DSN                              | Optional                  |
+| `E2E_MODE`                              | Enable E2E mode with mocked external services          | Optional                  |
+| `INTEXURAOS_QUEUE_MAX_SIZE`             | Maximum queued tasks (default: 50)                     | Optional (defaults to 50) |
+| `INTEXURAOS_QUEUE_TTL_MINUTES`          | Queue task TTL in minutes (default: 30)                | Optional (defaults to 30) |
+| `INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS`   | Max retry attempts (default: 3)                        | Optional (defaults to 3)  |
+| `INTEXURAOS_RETRY_QUEUE_TTL_MINUTES`    | Retry queue TTL in minutes (default: 10)               | Optional (defaults to 10) |
 
 ## Gotchas
 
