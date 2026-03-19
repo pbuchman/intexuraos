@@ -1,10 +1,6 @@
 {
   "_comment": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
   "overrides": {
-    "PENDING-apps-bookmarks-agent": {
-      "files": ["apps/bookmarks-agent/src/infra/firestore/firestoreBookmarkRepository.ts"],
-      "description": "Firestore findByUserIdAndUrl ts-type guard fails pattern validation despite valid undefined check"
-    },
     "PENDING-apps-code-agent": {
       "files": [
         "apps/code-agent/src/domain/services/logFormatter.ts",
