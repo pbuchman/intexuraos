@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle, ChevronDown, Copy, Link2, Star } from 'lucide-react';
+import { ErrorBanner } from '@/components';
 import type { Research } from '@/services/researchAgentApi.types';
 import { getProviderForModel } from '@/services/researchAgentApi.types';
 import { formatRelative } from '@/utils/dateFormat';
@@ -9,6 +10,7 @@ import { ResearchStatusBadge, getModelDisplayName, isProcessingStatus } from './
 interface ResearchHeaderProps {
   research: Research;
   togglingFavourite: boolean;
+  favouriteError: string | null;
   onToggleFavourite: () => void;
   copiedSection: string | null;
   onCopyToClipboard: (text: string, section: string) => void;
@@ -17,6 +19,7 @@ interface ResearchHeaderProps {
 export function ResearchHeader({
   research,
   togglingFavourite,
+  favouriteError,
   onToggleFavourite,
   copiedSection,
   onCopyToClipboard,
@@ -56,6 +59,7 @@ export function ResearchHeader({
           />
         </button>
       </div>
+      <ErrorBanner message={favouriteError} className="mt-2" />
 
       {/* Row 2: Time + Model chips */}
       <div className="flex flex-wrap items-center gap-2 mt-1 min-h-[1.75rem]">
