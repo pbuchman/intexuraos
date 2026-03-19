@@ -12,6 +12,27 @@
 
 ---
 
+## Endpoint Changes
+
+### Created
+- `POST /internal/merge-queue/tick` — cron endpoint, internal auth
+- `POST /code/merge-queue/watch` — JWT, create watch
+- `DELETE /code/merge-queue/watch/:watchId` — JWT, cancel watch
+- `GET /code/merge-queue/watches` — JWT, list watches
+- `GET /code/merge-queue/branches` — JWT, list branches with open PRs
+- `GET /code/merge-queue/prs` — JWT, list PRs with mergeability
+
+### Modified
+None.
+
+### Removed
+None.
+
+### Unchanged
+All existing endpoints.
+
+---
+
 ## File Structure
 
 ### New files (code-agent)
@@ -47,6 +68,8 @@
 **Files:**
 - Create: `apps/code-agent/src/domain/models/mergeQueueWatch.ts`
 
+**TDD exception:** This file contains only TypeScript interfaces and type aliases — no runtime logic. It is tested through usage in Task 5 (repository) and Task 7 (use case).
+
 - [ ] **Step 1: Create domain model**
 
 ```typescript
@@ -72,6 +95,7 @@ export interface SkippedPr {
 export interface MergeQueueWatch {
   id: string;
   userId: string;
+  gitHubUsername: string;  // Resolved at creation time via GitHub API GET /user
   owner: string;
   repo: string;
   baseBranch: string;
@@ -115,6 +139,7 @@ export interface MergeQueueWatchRepositoryError {
 
 export interface CreateWatchInput {
   userId: string;
+  gitHubUsername: string;  // Resolved by caller before creation
   owner: string;
   repo: string;
   baseBranch: string;
@@ -165,9 +190,24 @@ git commit -m "feat(code-agent): add MergeQueueWatchRepository port"
 - Modify: `apps/code-agent/src/domain/ports/gitHubPRClient.ts`
 - Test: `apps/code-agent/src/__tests__/infra/http/gitHubPRHttpClient.test.ts` (if exists, update; if not, note that HTTP client tests are done via route-level integration tests)
 
-- [ ] **Step 1: Add `headSha` to `GitHubPullRequestDetails`**
+- [ ] **Step 1: Add `createdAt` to `GitHubPullRequestListItem`**
 
-In `apps/code-agent/src/domain/ports/gitHubPRClient.ts`, add `headSha` field:
+In `apps/code-agent/src/domain/ports/gitHubPRClient.ts`, add `createdAt` to the list item interface (needed for sorting by age in tick logic):
+
+```typescript
+export interface GitHubPullRequestListItem {
+  number: number;
+  title: string;
+  authorLogin: string;
+  baseBranch: string;
+  headBranch: string;
+  createdAt: string;  // NEW — ISO 8601 string from GitHub API
+}
+```
+
+- [ ] **Step 2: Add `headSha` to `GitHubPullRequestDetails`**
+
+In the same file, add `headSha` field:
 
 ```typescript
 export interface GitHubPullRequestDetails {
@@ -183,7 +223,7 @@ export interface GitHubPullRequestDetails {
 }
 ```
 
-- [ ] **Step 2: Add `mergePullRequest` to `GitHubPRClient` interface**
+- [ ] **Step 3: Add `mergePullRequest`, `getCombinedCheckStatus`, and `listAllOpenPullRequests` to `GitHubPRClient` interface**
 
 Append to the `GitHubPRClient` interface:
 
@@ -209,9 +249,19 @@ Append to the `GitHubPRClient` interface:
     repo: string,
     ref: string
   ): Promise<Result<{ state: 'success' | 'failure' | 'pending' }, GitHubPRClientError>>;
+
+  /**
+   * List all open pull requests in a repo (not filtered by base branch).
+   * Used by the branches endpoint to group by base branch.
+   */
+  listAllOpenPullRequests(
+    token: string,
+    owner: string,
+    repo: string
+  ): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>>;
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add apps/code-agent/src/domain/ports/gitHubPRClient.ts
@@ -331,7 +381,60 @@ async getCombinedCheckStatus(
 },
 ```
 
-- [ ] **Step 4: Update any fake/mock implementations**
+- [ ] **Step 4: Implement `listAllOpenPullRequests`**
+
+```typescript
+async listAllOpenPullRequests(
+  token: string,
+  owner: string,
+  repo: string
+): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>> {
+  try {
+    const response = await fetch(
+      `${GITHUB_API}/repos/${owner}/${repo}/pulls?state=open&per_page=100&sort=created&direction=asc`,
+      {
+        method: 'GET',
+        headers: githubHeaders(token),
+        signal: AbortSignal.timeout(config.timeoutMs),
+      }
+    );
+
+    if (response.ok) {
+      const data = (await response.json()) as Array<{
+        number: number;
+        title: string;
+        user: { login: string };
+        base: { ref: string };
+        head: { ref: string };
+        created_at: string;
+      }>;
+      return ok(data.map((pr) => ({
+        number: pr.number,
+        title: pr.title,
+        authorLogin: pr.user.login,
+        baseBranch: pr.base.ref,
+        headBranch: pr.head.ref,
+        createdAt: pr.created_at,
+      })));
+    }
+
+    return err(mapErrorStatus(response.status, `Failed to list PRs for ${owner}/${repo}`));
+  } catch (error) {
+    return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
+  }
+},
+```
+
+Also update `listOpenPullRequestsByBaseBranch` to include `createdAt` in its response mapping (same `created_at` → `createdAt` pattern).
+
+- [ ] **Step 5: Add tests for new HTTP client methods**
+
+In `apps/code-agent/src/__tests__/infra/http/gitHubPRHttpClient.test.ts` (if it exists), add tests using `nock` for:
+- `mergePullRequest` — success, 405 (already merged), 409 (conflict), 401 (unauthorized)
+- `getCombinedCheckStatus` — success/failure/pending states
+- `listAllOpenPullRequests` — success with multiple PRs
+
+- [ ] **Step 6: Update any fake/mock implementations**
 
 Search for `GitHubPRClient` fake implementations in test helpers. Add stub implementations of the two new methods to any fakes so existing tests still compile:
 
@@ -344,15 +447,16 @@ For each file, add:
 ```typescript
 mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
 getCombinedCheckStatus: vi.fn().mockResolvedValue(ok({ state: 'success' })),
+listAllOpenPullRequests: vi.fn().mockResolvedValue(ok([])),
 ```
 
-- [ ] **Step 5: Build and verify compilation**
+- [ ] **Step 7: Build and verify compilation**
 
 Run: `pnpm build`
 
 Expected: No TypeScript errors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add apps/code-agent/src/infra/http/gitHubPRHttpClient.ts
@@ -399,16 +503,17 @@ Follow the `eventDecisionRepository.ts` pattern:
 - Collection name: `merge_queue_watches`
 - Use `crypto.randomUUID()` prefixed with `watch_` for IDs
 - `create`: Check for existing active watch first (query by userId+owner+repo+baseBranch+status=active), return `CONFLICT` if found. Set status to `active`, empty arrays, null timestamps.
-- `findAllActive`: Query `where('status', '==', 'active')`
+- `findAllActive`: Query `where('status', '==', 'active')` — single-field query, no composite index needed
+- `findActiveByUserAndBranch`: Query `where('userId') + where('owner') + where('repo') + where('baseBranch') + where('status', '==', 'active')` — needs a composite index. Create migration in `apps/code-agent/migrations/` following existing patterns.
 - `appendMergedPr`: Use `FieldValue.arrayUnion()` for atomic append (safe for concurrent ticks)
 - `update`: Use `docRef.update()` with only the provided fields
 
 ```typescript
-import type { Firestore } from '@google-cloud/firestore';
 import { FieldValue } from '@google-cloud/firestore';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
   MergeQueueWatchRepository,
   MergeQueueWatchRepositoryError,
@@ -419,19 +524,22 @@ import type { MergeQueueWatch, MergedPr } from '../../domain/models/mergeQueueWa
 
 const COLLECTION = 'merge_queue_watches';
 
-interface MergeQueueWatchRepositoryDeps {
-  firestore: Firestore;
-  logger: Logger;
-}
-
 export function createFirestoreMergeQueueWatchRepository(
-  deps: MergeQueueWatchRepositoryDeps
+  deps: { logger: Logger }
 ): MergeQueueWatchRepository {
-  const { firestore, logger } = deps;
+  const { logger } = deps;
+  const firestore = getFirestore();  // follows eventDecisionRepository pattern
   const collection = firestore.collection(COLLECTION);
 
   return {
     // ... implement all methods following eventDecisionRepository pattern
+    // Use FieldValue.arrayUnion() for appendMergedPr (atomic, safe for concurrent ticks)
+    // For the full tick update (skippedPrs + lastTickAt + status + mergedPr):
+    //   appendMergedPr uses arrayUnion (atomic per-field)
+    //   update() is a separate call for skippedPrs/lastTickAt/status
+    //   These two calls are NOT wrapped in a transaction — worst case is
+    //   a stale skippedPrs list, which is overwritten next tick anyway.
+    //   The critical invariant (no duplicate mergedPrs) is protected by arrayUnion.
   };
 }
 ```
@@ -487,7 +595,7 @@ import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/merg
 Add after the other repo creations:
 
 ```typescript
-const mergeQueueWatchRepo = createFirestoreMergeQueueWatchRepository({ firestore, logger });
+const mergeQueueWatchRepo = createFirestoreMergeQueueWatchRepository({ logger });
 ```
 
 Add to the container assignment:
@@ -567,11 +675,13 @@ Deps interface for the use case:
 interface MergeQueueTickDeps {
   mergeQueueWatchRepo: MergeQueueWatchRepository;
   gitHubPRClient: GitHubPRClient;
-  userServiceClient: UserServiceClient;
+  userServiceClient: UserServiceClient;  // for getOAuthToken(userId, 'github')
   allowedBots: ReadonlySet<string>;
   logger: Logger;
 }
 ```
+
+Note: The tick resolves the GitHub token via `userServiceClient.getOAuthToken(watch.userId, 'github')`. The GitHub **username** is already stored on the watch document (`gitHubUsername` field, resolved at creation time). The tick compares `pr.authorLogin` against `watch.gitHubUsername` and the `allowedBots` set.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -779,10 +889,13 @@ Follow the `github-pr-summaries.ts` pattern for JWT auth. Key details:
 - All routes wrapped in `fastify.register()` with `fastify.addHook('onRequest', jwtValidator)`
 - Every handler calls `logIncomingRequest()`
 - `POST /code/merge-queue/watch`:
-  - Extract `userId` from JWT (via `request.user`)
-  - Resolve user's GitHub token via `userServiceClient` to verify repo access
-  - Call `mergeQueueWatchRepo.create()`
+  - Extract `userId` from JWT (via `request.user?.userId`)
+  - Resolve user's GitHub token via `userServiceClient.getOAuthToken(userId, 'github')`
+  - Call GitHub `GET /user` with the token to get the authenticated user's `login` → this is the `gitHubUsername`
+  - Verify push access: call GitHub `GET /repos/{owner}/{repo}` with the token, check `response.permissions.push === true`. Return 403 if not.
+  - Call `mergeQueueWatchRepo.create({ userId, gitHubUsername, owner, repo, baseBranch })`
   - Handle `CONFLICT` error → 409
+  - Note: The GitHub `GET /user` and `GET /repos` calls can use `gitHubPRClient` (add `getAuthenticatedUser` and `getRepositoryPermissions` methods) or inline `fetch` calls in the route handler. Inline fetch is simpler for two one-off calls.
 - `DELETE /code/merge-queue/watch/:watchId`:
   - Find watch by ID, check `userId` matches requesting user
   - Set status to `cancelled`, `cancelledAt` to now
@@ -800,25 +913,9 @@ Follow the `github-pr-summaries.ts` pattern for JWT auth. Key details:
   - Use `Promise.all()` to parallelize detail fetches
   - Compute `authorIsEligible` against requesting user's GitHub username + `ALLOWED_BOTS`
 
-- [ ] **Step 4: If needed, add `listAllOpenPullRequests` to the port**
+- [ ] **Step 4: Implement branches endpoint using `listAllOpenPullRequests`**
 
-If the branches endpoint needs all open PRs (not filtered by base branch), add to `gitHubPRClient.ts`:
-
-```typescript
-listAllOpenPullRequests(
-  token: string,
-  owner: string,
-  repo: string
-): Promise<Result<GitHubPullRequestListItem[], GitHubPRClientError>>;
-```
-
-And implement in `gitHubPRHttpClient.ts`:
-
-```typescript
-async listAllOpenPullRequests(token, owner, repo) {
-  // GET /repos/{owner}/{repo}/pulls?state=open&per_page=100&sort=created&direction=asc
-}
-```
+The `GET /code/merge-queue/branches` endpoint uses the `listAllOpenPullRequests` method (added to the port in Task 3, implemented in Task 4). It calls `gitHubPRClient.listAllOpenPullRequests(token, owner, repo)`, groups results by `baseBranch`, and returns the count per branch. No additional port changes needed here.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
