@@ -1,10 +1,6 @@
 {
   "_comment": "Blocks that fail tightened validation but have planned fixes. Keyed by Linear task ID.",
   "overrides": {
-    "PENDING-apps-bookmarks-agent": {
-      "files": ["apps/bookmarks-agent/src/infra/firestore/firestoreBookmarkRepository.ts"],
-      "description": "Firestore findByUserIdAndUrl ts-type guard fails pattern validation despite valid undefined check"
-    },
     "PENDING-apps-code-agent": {
       "files": [
         "apps/code-agent/src/domain/services/logFormatter.ts",
@@ -31,10 +27,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/code-agent"
     },
-    "PENDING-apps-todos-agent": {
-      "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
-      "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
-    },
     "PENDING-apps-user-service": {
       "files": [
         "apps/user-service/src/domain/settings/formatLlmError.ts",
@@ -56,6 +48,13 @@
     "PENDING-packages-internal-clients": {
       "files": ["packages/internal-clients/src/user-service/client.ts"],
       "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
+    },
+    "PENDING-apps-linear-agent": {
+      "files": [
+        "apps/linear-agent/src/infra/firestore/linearCommentRepository.ts",
+        "apps/linear-agent/src/infra/firestore/linearIssueRepository.ts"
+      ],
+      "description": "Firestore batch query functions (getCommentSummaries, findByIdentifiers) — requires emulator to exercise real chunked in-queries"
     },
     "PENDING-workers-orchestrator": {
       "files": [
