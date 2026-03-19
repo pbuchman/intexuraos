@@ -9,10 +9,10 @@ interface FilterBarProps {
 
 const INACTIVE_CLASS = 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500';
 
-const archiveOptions: { value: boolean | undefined; label: string }[] = [
-  { value: undefined, label: 'All' },
-  { value: false, label: 'Active' },
-  { value: true, label: 'Archived' },
+const archiveOptions: { value: boolean | undefined; label: string; dotClass: string }[] = [
+  { value: undefined, label: 'All', dotClass: 'bg-blue-500' },
+  { value: false, label: 'Active', dotClass: 'bg-green-500' },
+  { value: true, label: 'Archived', dotClass: 'bg-slate-400' },
 ];
 
 export function FilterBar({ filters, onFiltersChange, availableTags }: FilterBarProps): React.JSX.Element {
@@ -42,12 +42,13 @@ export function FilterBar({ filters, onFiltersChange, availableTags }: FilterBar
                 }
                 onFiltersChange(newFilters);
               }}
-              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
                 isActive
                   ? 'border-slate-400 bg-slate-100 font-medium text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
                   : INACTIVE_CLASS
               }`}
             >
+              <span className={`inline-block h-2 w-2 rounded-full ${opt.dotClass}`} />
               {opt.label}
             </button>
           );
