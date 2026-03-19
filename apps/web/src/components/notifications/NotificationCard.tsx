@@ -56,6 +56,7 @@ export function NotificationCard({
             }}
             disabled={isDeleting}
             className="rounded p-1 text-slate-400 opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50 group-hover:opacity-100"
+            aria-label="Delete notification"
             title="Delete"
           >
             <Trash2 className="h-3.5 w-3.5" />
