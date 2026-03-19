@@ -113,8 +113,6 @@ export async function drainTaskQueue(
       const toCancel = group.slice(1);
 
       for (const cancelled of toCancel) {
-        cancelledReviewIds.add(cancelled.id);
-
         logger.info(
           {
             cancelledTaskId: cancelled.id,
@@ -125,7 +123,7 @@ export async function drainTaskQueue(
           'Cancelling duplicate queued review — superseded by newer queued review for same PR'
         );
 
-        await codeTaskRepo.update(cancelled.id, {
+        const updateResult = await codeTaskRepo.update(cancelled.id, {
           status: 'cancelled',
           completedAt: new Date(),
           error: {
@@ -133,6 +131,15 @@ export async function drainTaskQueue(
             message: 'Superseded by newer queued review for same PR',
           },
         });
+
+        if (!updateResult.ok) {
+          logger.warn(
+            { cancelledTaskId: cancelled.id, error: updateResult.error },
+            'Failed to cancel duplicate queued review — will remain eligible for future dispatch'
+          );
+          continue;
+        }
+        cancelledReviewIds.add(cancelled.id);
       }
     }
 

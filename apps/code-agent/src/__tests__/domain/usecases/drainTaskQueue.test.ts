@@ -1291,6 +1291,57 @@ describe('drainTaskQueue', () => {
       );
     });
 
+    it('keeps cancelled review eligible when update fails — newest review still dispatched', async () => {
+      const reviewOld = createMockTask({
+        id: 'review-old',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+      });
+      const reviewNew = createMockTask({
+        id: 'review-new',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+      });
+      // FIFO order from listQueuedByAge: oldest first
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([reviewOld, reviewNew]));
+      setupWorkerSettings();
+
+      // First update (cancel oldest) fails — reviewOld stays eligible
+      // Subsequent updates succeed
+      mockCodeTaskRepo.update
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }))
+        .mockResolvedValueOnce(ok(createMockTask({ id: 'review-old', status: 'cancelled' })));
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Oldest (reviewOld) dispatched — its cancellation failed so it remained in activeCandidates
+        // and was picked first in FIFO dispatch order before findActiveReviewForPR could block it
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'review-old' });
+      }
+
+      // reviewOld's cancellation update was called (and failed)
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'review-old',
+        expect.objectContaining({ status: 'cancelled', error: expect.objectContaining({ code: 'review_replaced' }) })
+      );
+      // reviewNew was not dispatched since reviewOld was picked first
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'review-new' })
+      );
+    });
+
     it('does not merge different PRs — both remain, oldest dispatched normally', async () => {
       const reviewPR42 = createMockTask({
         id: 'review-pr42',
@@ -1401,10 +1452,10 @@ describe('drainTaskQueue', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // execTask (older) dispatched, reviewTask skipped because same PR has active (dispatched) task
-        // Actually — the candidate loop skips when findActiveReviewForPR returns non-null for same PR
-        // But after merge step, reviewTask should still be skipped because execTask becomes the "active" for that PR
-        expect(result.value.action).toBe('dispatched');
+        // execTask (older) dispatched first; function returns after first dispatch
+        // reviewTask is not evaluated since drainTaskQueue exits early
+        // No merge occurs — different agentType means review merge logic does not apply
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'exec-task' });
       }
 
       // No cancellation — different agentType, no merge
