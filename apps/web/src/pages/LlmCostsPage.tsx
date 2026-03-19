@@ -225,7 +225,9 @@ export function LlmCostsPage(): React.JSX.Element {
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">LLM Usage Costs</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Last 90 days · {formatCost(costs?.totalCostUsd ?? 0)}
+            {costs !== null
+              ? `Last 90 days · ${formatCost(costs.totalCostUsd)}`
+              : 'Last 90 days · Loading...'}
           </p>
         </div>
         <Button
