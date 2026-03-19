@@ -119,7 +119,6 @@ const FIRESTORE_IN_LIMIT = 30;
  * Chunks issueIds into groups of 30 (Firestore `in` operator limit).
  * Aggregates count and max createdAt per issueId in memory.
  */
-/* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
 export async function getCommentSummaries(
   issueIds: string[]
 ): Promise<Result<CommentSummary[], LinearError>> {
@@ -167,7 +166,6 @@ export async function getCommentSummaries(
     });
   }
 }
-/* v8 ignore stop @preserve */
 
 export async function deleteCommentById(id: string): Promise<Result<void, LinearError>> {
   try {

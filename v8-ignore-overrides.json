@@ -39,12 +39,17 @@
       ],
       "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
     },
-    "PENDING-apps-linear-agent": {
+    "PENDING-apps-whatsapp-service": {
       "files": [
-        "apps/linear-agent/src/infra/firestore/linearCommentRepository.ts",
-        "apps/linear-agent/src/infra/firestore/linearIssueRepository.ts"
+        "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
+        "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
+        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
       ],
-      "description": "Firestore batch query functions (getCommentSummaries, findByIdentifiers) — requires emulator to exercise real chunked in-queries"
+      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
+    },
+    "PENDING-packages-internal-clients": {
+      "files": ["packages/internal-clients/src/user-service/client.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
     },
     "PENDING-workers-orchestrator": {
       "files": [
