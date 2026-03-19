@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button, Card, Layout } from '@/components';
+import { ArrowUpDown, Bell, RefreshCw } from 'lucide-react';
+import { Button, Card, ErrorBanner, Layout } from '@/components';
 import { useAuth } from '@/context';
 import {
   ApiError,
@@ -11,263 +12,26 @@ import {
   getNotificationFilters,
 } from '@/services';
 import type { MobileNotification, SavedNotificationFilter } from '@/types';
-import { formatRelative } from '@/utils/dateFormat';
-import { Bell, Check, ChevronDown, Filter, RefreshCw, Save, Trash2, X } from 'lucide-react';
-
-/**
- * Active filter state for multi-dimension filtering.
- * App supports multiple selections (OR within dimension), source is single-select.
- */
-interface ActiveFilters {
-  app: string[];
-  source: string;
-  title: string;
-}
+import { hasActiveFilters } from '@/components/notifications/shared.js';
+import { NotificationCard } from '@/components/notifications/NotificationCard.js';
+import { NotificationFilters } from '@/components/notifications/NotificationFilters.js';
+import type { ActiveFilters } from '@/components/notifications/shared.js';
 
 /** Animation duration for delete transitions in milliseconds */
 const DELETE_ANIMATION_MS = 300;
 
-/**
- * Pill badge for notification metadata.
- */
-function Badge({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return (
-    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-      {children}
-    </span>
-  );
-}
+export type NotificationSortOption = 'newest' | 'oldest' | 'app';
+export const NOTIFICATION_SORT_OPTIONS: { key: NotificationSortOption; label: string }[] = [
+  { key: 'newest', label: 'Newest' },
+  { key: 'oldest', label: 'Oldest' },
+  { key: 'app', label: 'App' },
+];
 
-interface NotificationCardProps {
-  notification: MobileNotification;
-  onDelete: (id: string) => void;
-  isDeleting: boolean;
-}
-
-/**
- * Individual notification card styled like Android notifications.
- */
-function NotificationCard({
-  notification,
-  onDelete,
-  isDeleting,
-}: NotificationCardProps): React.JSX.Element {
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const handleDeleteClick = (): void => {
-    setShowDeleteConfirm(true);
-  };
-
-  const handleDeleteConfirm = (): void => {
-    setShowDeleteConfirm(false);
-    onDelete(notification.id);
-  };
-
-  const handleDeleteCancel = (): void => {
-    setShowDeleteConfirm(false);
-  };
-
-  return (
-    <div
-      className={`group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 dark:border-slate-700 dark:bg-slate-800 ${
-        isDeleting ? 'scale-95 opacity-50' : 'hover:border-slate-300 hover:shadow-md dark:hover:border-slate-600'
-      }`}
-    >
-      {/* Delete confirmation dialog */}
-      {showDeleteConfirm ? (
-        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
-          <p className="mb-2 text-sm text-red-700 dark:text-red-300">
-            Are you sure you want to delete this notification?
-          </p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              onClick={handleDeleteConfirm}
-              disabled={isDeleting}
-            >
-              Delete
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={handleDeleteCancel}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Header: Tags and time */}
-      <div className="mb-2 flex items-center justify-between">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge>{notification.device}</Badge>
-          <Badge>{notification.app}</Badge>
-          <Badge>{notification.source}</Badge>
-        </div>
-        <span className="text-xs text-slate-400 dark:text-slate-500">
-          {formatRelative(notification.receivedAt)}
-        </span>
-      </div>
-
-      {/* Title */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <h3 className="break-words font-semibold text-slate-900 dark:text-slate-100">{notification.title}</h3>
-          {/* Body text */}
-          {notification.text !== '' ? (
-            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600 wrap-anywhere dark:text-slate-300">
-              {notification.text}
-            </p>
-          ) : null}
-        </div>
-
-        {/* Delete button - always visible for mobile accessibility */}
-        <div className="flex shrink-0 gap-1">
-          <button
-            onClick={handleDeleteClick}
-            disabled={isDeleting || showDeleteConfirm}
-            className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-            aria-label="Delete notification"
-          >
-            <Trash2 className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Check if active filters have any values set.
- * Also checks titleInput for pending debounced input.
- */
-function hasActiveFilters(filters: ActiveFilters, titleInput?: string): boolean {
-  return (
-    filters.app.length > 0 ||
-    filters.source !== '' ||
-    filters.title !== '' ||
-    (titleInput !== undefined && titleInput !== '')
-  );
-}
-
-/**
- * Check if two string arrays have the same values (order-independent).
- */
-function arraysEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const sortedA = [...a].sort();
-  const sortedB = [...b].sort();
-  return sortedA.every((val, idx) => val === sortedB[idx]);
-}
-
-/**
- * Check if current filters match a saved filter's values.
- */
-function filtersMatchSaved(
-  filters: ActiveFilters,
-  titleInput: string,
-  savedFilter: SavedNotificationFilter
-): boolean {
-  const savedApp = savedFilter.app ?? [];
-  const savedSource = savedFilter.source ?? '';
-  const savedTitle = savedFilter.title ?? '';
-
-  return (
-    arraysEqual(filters.app, savedApp) &&
-    filters.source === savedSource &&
-    (filters.title === savedTitle || titleInput === savedTitle)
-  );
-}
-
-interface MultiSelectDropdownProps {
-  label: string;
-  options: string[];
-  selected: string[];
-  onChange: (selected: string[]) => void;
-  allLabel: string;
-}
-
-function MultiSelectDropdown({
-  label,
-  options,
-  selected,
-  onChange,
-  allLabel,
-}: MultiSelectDropdownProps): React.JSX.Element {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const toggleOption = (option: string): void => {
-    if (selected.includes(option)) {
-      onChange(selected.filter((s) => s !== option));
-    } else {
-      onChange([...selected, option]);
-    }
-  };
-
-  const displayText =
-    selected.length === 0
-      ? allLabel
-      : selected.length === 1
-        ? selected[0]
-        : `${String(selected.length)} selected`;
-
-  return (
-    <div className="relative flex flex-col gap-1">
-      <label className="text-xs text-slate-500 dark:text-slate-400">{label}</label>
-      <button
-        type="button"
-        onClick={(): void => {
-          setIsOpen(!isOpen);
-        }}
-        className="flex min-w-[140px] items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500"
-      >
-        <span className="truncate">{displayText}</span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen ? (
-        <>
-          <div
-            className="fixed inset-0 z-10"
-            onClick={(): void => {
-              setIsOpen(false);
-            }}
-          />
-          <div className="absolute top-full z-20 mt-1 max-h-60 w-full min-w-[200px] overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-            {options.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={(): void => {
-                  toggleOption(option);
-                }}
-                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700"
-              >
-                <div
-                  className={`flex h-4 w-4 items-center justify-center rounded border ${
-                    selected.includes(option)
-                      ? 'border-blue-600 bg-blue-600 text-white'
-                      : 'border-slate-300 dark:border-slate-600'
-                  }`}
-                >
-                  {selected.includes(option) ? <Check className="h-3 w-3" /> : null}
-                </div>
-                <span className="truncate text-sm text-slate-700 dark:text-slate-200">{option}</span>
-              </button>
-            ))}
-            {options.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">No options available</div>
-            ) : null}
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
+function getSortOptionFromStorage(): NotificationSortOption {
+  if (typeof window === 'undefined') return 'newest';
+  const stored = localStorage.getItem('notifications-sort');
+  if (stored === 'oldest' || stored === 'app') return stored;
+  return 'newest';
 }
 
 export function MobileNotificationsListPage(): React.JSX.Element {
@@ -280,6 +44,9 @@ export function MobileNotificationsListPage(): React.JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  // Sort state
+  const [sort, setSort] = useState<NotificationSortOption>(getSortOptionFromStorage);
 
   // Multi-dimension filter state
   const [filters, setFilters] = useState<ActiveFilters>({ app: [], source: '', title: '' });
@@ -389,22 +156,6 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     setTitleInput('');
     setFilterName('');
     setSearchParams(new URLSearchParams());
-  };
-
-  const handleApplySavedFilter = (filter: SavedNotificationFilter): void => {
-    const newApp = filter.app ?? [];
-    const newSource = filter.source ?? '';
-    const newTitle = filter.title ?? '';
-
-    setFilters({ app: newApp, source: newSource, title: newTitle });
-    setTitleInput(newTitle);
-
-    const params = new URLSearchParams();
-    params.set('filterId', filter.id);
-    if (newApp.length > 0) params.set('app', newApp.join(','));
-    if (newSource !== '') params.set('source', newSource);
-    if (newTitle !== '') params.set('title', newTitle);
-    setSearchParams(params);
   };
 
   const handleDelete = async (notificationId: string): Promise<void> => {
@@ -526,6 +277,24 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     }
   };
 
+  // Sort handler
+  const handleSortChange = (newSort: NotificationSortOption): void => {
+    setSort(newSort);
+    localStorage.setItem('notifications-sort', newSort);
+  };
+
+  // Sort notifications
+  const sortedNotifications = [...notifications].sort((a, b) => {
+    if (sort === 'newest') {
+      return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
+    }
+    if (sort === 'oldest') {
+      return new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime();
+    }
+    // 'app' - group by app name
+    return a.app.localeCompare(b.app);
+  });
+
   if (isLoading) {
     return (
       <Layout>
@@ -538,188 +307,61 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
   return (
     <Layout>
+      {/* R1 Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Notifications</h2>
-          <p className="text-slate-600 dark:text-slate-300">Notifications captured from your mobile device</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{notifications.length} notifications</p>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-          title="Refresh"
-        >
+        <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={isRefreshing} title="Refresh">
           <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-        </button>
+        </Button>
       </div>
 
-      {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
-          <div className="flex items-start justify-between gap-2">
-            <span className="min-w-0 break-words">{error}</span>
+      <ErrorBanner message={error} className="mb-6" />
+
+      {/* NotificationFilters component */}
+      <NotificationFilters
+        filters={filters}
+        setFilters={setFilters}
+        titleInput={titleInput}
+        setTitleInput={setTitleInput}
+        appOptions={appOptions}
+        sourceOptions={sourceOptions}
+        savedFilters={savedFilters}
+        filterName={filterName}
+        setFilterName={setFilterName}
+        isSaving={isSaving}
+        onSaveFilter={handleSaveFilter}
+        onDeleteFilter={handleDeleteFilter}
+        onClearFilters={handleClearFilters}
+      />
+
+      {/* R3 Sort selector */}
+      <div className="mb-4 flex items-center gap-2">
+        <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+        <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500">Sort</span>
+        <div className="flex gap-1.5">
+          {NOTIFICATION_SORT_OPTIONS.map(({ key, label }) => (
             <button
+              key={key}
               onClick={(): void => {
-                setError(null);
+                handleSortChange(key);
               }}
-              className="text-red-400 hover:text-red-600 dark:hover:text-red-300"
+              className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                sort === key
+                  ? 'border-slate-400 bg-slate-100 font-medium text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500'
+              }`}
             >
-              <X className="h-4 w-4" />
+              {label}
             </button>
-          </div>
+          ))}
         </div>
-      ) : null}
-
-      {/* Filter controls */}
-      <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-        <div className="mb-3 flex items-center gap-2">
-          <Filter className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-          <span className="font-medium text-slate-700 dark:text-slate-200">Filters</span>
-        </div>
-
-        <div className="flex flex-wrap items-end gap-3">
-          {/* App multi-select */}
-          <MultiSelectDropdown
-            label="App"
-            options={appOptions}
-            selected={filters.app}
-            onChange={(selected): void => {
-              setFilters((prev) => ({ ...prev, app: selected }));
-            }}
-            allLabel="All Apps"
-          />
-
-          {/* Source single-select */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500 dark:text-slate-400">Source</label>
-            <select
-              value={filters.source}
-              onChange={(e): void => {
-                setFilters((prev) => ({ ...prev, source: e.target.value }));
-              }}
-              className="min-w-[140px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500"
-            >
-              <option value="">All Sources</option>
-              {sourceOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Title text input */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500 dark:text-slate-400">Title contains</label>
-            <input
-              type="text"
-              value={titleInput}
-              onChange={(e): void => {
-                setTitleInput(e.target.value);
-              }}
-              onBlur={(): void => {
-                setFilters((prev) => ({ ...prev, title: titleInput }));
-              }}
-              onKeyDown={(e): void => {
-                if (e.key === 'Enter') {
-                  setFilters((prev) => ({ ...prev, title: titleInput }));
-                }
-              }}
-              placeholder="Search in title..."
-              className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder-slate-400"
-            />
-          </div>
-
-          {/* Clear button */}
-          {hasActiveFilters(filters, titleInput) ? (
-            <button
-              onClick={handleClearFilters}
-              className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-            >
-              Clear All
-            </button>
-          ) : null}
-        </div>
-
-        {/* Save filter row - only show if filters are active AND modified from any selected saved filter */}
-        {((): React.JSX.Element | null => {
-          if (!hasActiveFilters(filters, titleInput)) return null;
-
-          const currentFilterId = searchParams.get('filterId');
-          if (currentFilterId !== null) {
-            const currentSavedFilter = savedFilters.find((f) => f.id === currentFilterId);
-            if (
-              currentSavedFilter !== undefined &&
-              filtersMatchSaved(filters, titleInput, currentSavedFilter)
-            ) {
-              return null;
-            }
-          }
-
-          return (
-            <div className="mt-4 flex items-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-slate-500 dark:text-slate-400">Filter name</label>
-                <input
-                  type="text"
-                  value={filterName}
-                  onChange={(e): void => {
-                    setFilterName(e.target.value);
-                  }}
-                  placeholder="e.g., Important"
-                  className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder-slate-400"
-                />
-              </div>
-              <button
-                onClick={(): void => {
-                  void handleSaveFilter();
-                }}
-                disabled={isSaving || filterName.trim() === ''}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" />
-                Save Filter
-              </button>
-            </div>
-          );
-        })()}
-
-        {/* Saved filters list */}
-        {savedFilters.length > 0 ? (
-          <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Saved Filters</span>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {savedFilters.map((filter) => (
-                <div
-                  key={filter.id}
-                  className="flex items-center gap-1 rounded-full bg-white pl-3 pr-1 py-1 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200 hover:ring-blue-400 transition-all dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600 dark:hover:ring-blue-500"
-                >
-                  <button
-                    onClick={(): void => {
-                      handleApplySavedFilter(filter);
-                    }}
-                    className="hover:text-blue-600 transition-colors dark:hover:text-blue-400"
-                    aria-label={`Apply filter ${filter.name}`}
-                  >
-                    {filter.name}
-                  </button>
-                  <button
-                    onClick={(): void => {
-                      void handleDeleteFilter(filter.id);
-                    }}
-                    className="p-1 text-slate-400 hover:text-red-600 rounded-full hover:bg-slate-100 transition-colors dark:hover:bg-slate-600 dark:hover:text-red-400"
-                    aria-label={`Delete filter ${filter.name}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
 
-      <div className="space-y-4">
-        {notifications.length === 0 ? (
+      <div className="space-y-1">
+        {sortedNotifications.length === 0 ? (
           <Card title="">
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Bell className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
@@ -741,7 +383,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
             </div>
           </Card>
         ) : (
-          notifications.map((notification) => (
+          sortedNotifications.map((notification) => (
             <NotificationCard
               key={notification.id}
               notification={notification}
