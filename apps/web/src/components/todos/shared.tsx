@@ -60,15 +60,17 @@ export const TODO_FILTER_CONFIG: Record<TodoStatus, { label: string; dotClass: s
   draft:       { label: 'Draft',       dotClass: 'bg-slate-400',  activeClass: 'border-slate-400 bg-slate-50 text-slate-600 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-400' },
 };
 
-const ACCENT_SHADOW: Partial<Record<TodoStatus, string>> = {
+const ACCENT_SHADOW: Record<TodoStatus, string> = {
   in_progress: 'shadow-[inset_3px_0_0_theme(colors.blue.500)]',
-  pending: 'shadow-[inset_3px_0_0_theme(colors.amber.500)]',
-  completed: 'shadow-[inset_3px_0_0_theme(colors.green.500)]',
-  cancelled: 'shadow-[inset_3px_0_0_theme(colors.red.500)]',
+  processing:  '',
+  pending:     'shadow-[inset_3px_0_0_theme(colors.amber.500)]',
+  completed:   'shadow-[inset_3px_0_0_theme(colors.green.500)]',
+  cancelled:   'shadow-[inset_3px_0_0_theme(colors.red.500)]',
+  draft:       '',
 };
 
 export function getAccentShadow(status: TodoStatus): string {
-  return ACCENT_SHADOW[status] ?? '';
+  return ACCENT_SHADOW[status];
 }
 
 // Priority sort order (lowest index = highest priority)
