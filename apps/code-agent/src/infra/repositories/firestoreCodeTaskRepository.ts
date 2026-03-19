@@ -15,7 +15,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import type { CodeTask } from '../../domain/models/codeTask.js';
+import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH, type CodeTask } from '../../domain/models/codeTask.js';
 import type {
   CodeTaskRepository,
   CreateTaskInput,
@@ -157,7 +157,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
 
         // Layer 3: Check active task for Linear issue (design lines 448-458)
-        if (input.linearIssueId !== undefined && input.agentType !== 'review') {
+        if (input.linearIssueId !== undefined && input.agentType !== 'review' && input.systemPromptHash !== MERGE_CONFLICT_SYSTEM_PROMPT_HASH) {
           const linearQuery = collection
             .where('linearIssueId', '==', input.linearIssueId)
             .where('status', 'in', ACTIVE_TASK_STATUSES);
@@ -165,7 +165,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
           for (const existingTask of linearSnapshot.docs) {
             const existingData = existingTask.data();
-            if (existingData['agentType'] === 'review') {
+            if (existingData['agentType'] === 'review' || existingData['systemPromptHash'] === MERGE_CONFLICT_SYSTEM_PROMPT_HASH) {
               continue;
             }
 

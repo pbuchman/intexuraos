@@ -6,6 +6,7 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
+import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH } from '../../../domain/models/codeTask.js';
 import type { CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 
 describe('firestoreCodeTaskRepository', () => {
@@ -416,6 +417,58 @@ describe('firestoreCodeTaskRepository', () => {
         sanitizedPrompt: 'review pr #42',
       }));
       expect(reviewTask.ok).toBe(true);
+
+      const executionTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+        prompt: 'Implement issue',
+        sanitizedPrompt: 'implement issue',
+      }));
+
+      expect(executionTask.ok).toBe(true);
+    });
+
+    it('allows merge-conflict task when an execution task is active for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const executionTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        agentType: 'execution',
+      }));
+      expect(executionTask.ok).toBe(true);
+
+      const mergeConflictTask = await repo.create(createTaskInput({
+        userId: 'user-456',
+        prompt: 'Resolve merge conflicts',
+        sanitizedPrompt: 'resolve merge conflicts',
+        linearIssueId: 'LIN-123',
+        systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+        agentType: 'pull_request',
+      }));
+
+      expect(mergeConflictTask.ok).toBe(true);
+      if (!mergeConflictTask.ok) return;
+      expect(mergeConflictTask.value.agentType).toBe('pull_request');
+    });
+
+    it('allows non-merge-conflict task when only an active merge-conflict task exists for the same Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const mergeConflictTask = await repo.create(createTaskInput({
+        linearIssueId: 'LIN-123',
+        systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+        agentType: 'pull_request',
+        prompt: 'Resolve merge conflicts',
+        sanitizedPrompt: 'resolve merge conflicts',
+      }));
+      expect(mergeConflictTask.ok).toBe(true);
 
       const executionTask = await repo.create(createTaskInput({
         userId: 'user-456',
