@@ -99,12 +99,13 @@ async findStaleConflictSummaries(): Promise<Result<GitHubPRSummary[], SummaryRep
   try {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
-    // Query 1: unknown or null status
+    // Query 1: open PRs with unknown or null status
     const unknownSnapshot = await collection
+      .where('state', '==', 'open')
       .where('mergeConflictStatus', 'in', ['unknown', null])
       .get();
 
-    // Query 2: stale lastConflictCheckedAt (older than 5 min)
+    // Query 2: open PRs with stale lastConflictCheckedAt (older than 5 min)
     const staleSnapshot = await collection
       .where('state', '==', 'open')
       .where('lastConflictCheckedAt', '<', fiveMinutesAgo)
@@ -133,9 +134,13 @@ async findStaleConflictSummaries(): Promise<Result<GitHubPRSummary[], SummaryRep
 }
 ```
 
-Note: The `staleSnapshot` query uses `state` + `lastConflictCheckedAt` — may need a composite index. Check if one exists. If not, add a migration in `apps/code-agent/migrations/`.
+Note: Both queries need composite indexes:
+- Index 1: `state` ASC + `mergeConflictStatus` ASC
+- Index 2: `state` ASC + `lastConflictCheckedAt` ASC
 
-Also note: `'in'` queries with `null` may behave differently in Firestore. Test this. If `null` doesn't match, split into two separate equality queries: one for `'unknown'` and one for `null`.
+Check if these exist in `apps/code-agent/migrations/`. If not, add migration files.
+
+Also note: Firestore `in` queries with `null` may not match documents where the field is missing entirely. Test this. If `null` doesn't match, split into two separate equality queries: one for `'unknown'` and one explicit check for missing field.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -237,7 +242,17 @@ git commit -m "refactor(code-agent): rename detectMergeConflictsOnPush to reconc
 
 Delete the `detectOnPush` method (the one that parses `refs/heads/{branch}`, extracts the base branch, queries `findOpenByBaseBranch`, and iterates). This is the push-event-specific entry point.
 
-- [ ] **Step 2: Add `reconcile()` entry point**
+- [ ] **Step 2: Update `processOpenSummary` signature — remove `GitHubPREvent` dependency**
+
+The existing `processOpenSummaryOnPush` takes a `GitHubPREvent` parameter. In the cron context there is no event. Changes:
+
+1. Remove `event: GitHubPREvent` parameter — the function only needs the `GitHubPRSummary`
+2. Replace `event.repository` usage with `summary.repository`
+3. Replace `event.id` (used for `traceId`/`actionId`) with a synthetic ID: `reconcile_${crypto.randomUUID()}`
+4. In `buildSummaryUpdateInput`: do NOT update `lastActivityAt` (no new activity). Pass `undefined` so the field is preserved. Only update `lastConflictCheckedAt`.
+5. Remove `sleep`, `mergeabilityRetries`, `retryDelayMs` from the deps interface — pass `mergeabilityRetries: 0` directly to `loadPullRequestDetails`
+
+- [ ] **Step 3: Add `reconcile()` entry point**
 
 Add a new public method that:
 1. Calls `gitHubPRSummaryRepo.findStaleConflictSummaries()`
@@ -360,16 +375,26 @@ And the interface import:
 import type { MergeConflictDetector } from './domain/services/mergeConflictReconciler.js';
 ```
 
-- [ ] **Step 4: Build to verify**
+- [ ] **Step 4: Update webhook route tests**
+
+In `src/__tests__/routes/webhooks/github.test.ts`, remove any references to `mergeConflictDetector`. Search for it:
+
+```bash
+grep -n "mergeConflictDetector" apps/code-agent/src/__tests__/routes/webhooks/github.test.ts
+```
+
+Remove or update any test cases that assert `mergeConflictDetector.detectOnPush` was called.
+
+- [ ] **Step 5: Build to verify**
 
 Run: `pnpm build`
 
 Expected: No errors. Any remaining references to `mergeConflictDetector` will cause type errors.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/routes/webhooks/github.ts src/services.ts
+git add src/routes/webhooks/github.ts src/services.ts src/__tests__/routes/webhooks/
 git commit -m "refactor(code-agent): remove merge conflict detection from push webhook and service container"
 ```
 
