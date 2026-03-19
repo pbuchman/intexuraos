@@ -209,6 +209,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const commandsAgentClient = createCommandsAgentHttpClient({
     baseUrl: config.commandsAgentUrl,
     internalAuthToken: config.internalAuthToken,
+    logger: createAppLogger({ name: 'commandsAgentClient' }),
   });
 
   const researchServiceClient = createResearchAgentClient({

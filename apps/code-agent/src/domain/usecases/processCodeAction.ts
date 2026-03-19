@@ -187,6 +187,9 @@ export async function processCodeAction(
     const parentTaskId = `task_${randomUUID()}`;
     const parentWebhookSecret = generateWebhookSecret(deps.orchestratorSecret, parentTaskId);
 
+    // INT-977: Create parent with 'dispatched' status so it's excluded from countQueued().
+    // The parent is a container — it won't be dispatched to a worker during fan-out.
+    // If fan-out fails, the fallback path resets status to 'queued' before enqueue.
     const parentCreateResult = await codeTaskRepo.create({
       id: parentTaskId,
       userId,
@@ -205,6 +208,7 @@ export async function processCodeAction(
       webhookSecret: parentWebhookSecret,
       linearIssueId: finalLinearIssueId,
       agentType: 'execution',
+      initialStatus: 'dispatched',
     });
 
     if (!parentCreateResult.ok) {
@@ -256,6 +260,13 @@ export async function processCodeAction(
       }
 
       await backLinkPlanningTask(codeTaskRepo, logger, parentTask);
+
+      // INT-977: Parent was created with 'dispatched' status to avoid polluting queue count
+      // during fan-out. Reset to 'queued' before enqueue so it enters the queue properly.
+      const statusResetResult = await codeTaskRepo.update(parentTask.id, { status: 'queued' });
+      if (!statusResetResult.ok) {
+        logger.warn({ taskId: parentTask.id, error: statusResetResult.error }, 'Failed to reset parent status to queued before fallback enqueue');
+      }
 
       const enqueueResult = await deps.taskEnqueueService.enqueue({ taskId: parentTask.id, userId });
       if (!enqueueResult.ok) {
