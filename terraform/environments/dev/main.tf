@@ -1893,6 +1893,36 @@ resource "google_cloud_scheduler_job" "drain_task_queue" {
   ]
 }
 
+resource "google_cloud_scheduler_job" "merge_conflict_reconcile" {
+  name        = "intexuraos-merge-conflict-reconcile-${var.environment}"
+  description = "Check mergeability of all open PRs and dispatch conflict resolution tasks"
+  schedule    = "*/1 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/merge-conflicts/reconcile"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    # Reuses the existing IAM binding that grants the scheduler SA Cloud Run invoker
+    # rights on code-agent — no separate IAM member resource is needed.
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Firebase Authentication (Identity Platform)
 # -----------------------------------------------------------------------------

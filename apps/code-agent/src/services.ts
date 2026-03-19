@@ -115,7 +115,7 @@ export interface ServiceContainer {
   eventDecisionRepo: EventDecisionRepository;
   dispatchRetryRepo: DispatchRetryRepository;
   unifiedEvaluator: UnifiedEvaluator;
-  mergeConflictDetector?: MergeConflictDetector;
+  mergeConflictDetector: MergeConflictDetector;
   automationLog: AutomationLog;
   taskEnqueueService: TaskEnqueueService;
 }
