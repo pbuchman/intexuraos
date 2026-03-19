@@ -5,7 +5,7 @@
  * Creates state token for CSRF protection.
  */
 
-import { ok, type Result, type Logger } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
 import { randomBytes } from 'node:crypto';
 import type { OAuthProvider } from '../models/OAuthConnection.js';
 import type { GitHubOAuthClient } from '../ports/GitHubOAuthClient.js';
@@ -29,7 +29,7 @@ export interface InitiateGitHubOAuthFlowDeps {
 export function initiateGitHubOAuthFlow(
   input: InitiateGitHubOAuthFlowInput,
   deps: InitiateGitHubOAuthFlowDeps
-): Result<InitiateGitHubOAuthFlowResult, never> {
+): InitiateGitHubOAuthFlowResult {
   const { userId, provider, redirectUri } = input;
   const { gitHubOAuthClient, logger } = deps;
 
@@ -48,8 +48,8 @@ export function initiateGitHubOAuthFlow(
 
   logger.info({ userId, provider, state }, 'GitHub OAuth state generated for CSRF protection');
 
-  return ok({
+  return {
     authorizationUrl,
     state,
-  });
+  };
 }
