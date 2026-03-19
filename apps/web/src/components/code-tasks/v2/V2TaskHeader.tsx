@@ -32,7 +32,8 @@ interface V2TaskHeaderProps {
 }
 
 export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): React.JSX.Element {
-  const status = (STATUS_MAP as Partial<Record<string, StatusConfig>>)[task.status] ?? { ...FALLBACK_STATUS, label: task.status };
+  // Runtime guard: Firestore data may contain status values outside the CodeTaskStatus union
+  const status = (STATUS_MAP[task.status] as StatusConfig | undefined) ?? { ...FALLBACK_STATUS, label: task.status };
   const StatusIcon = ICON_MAP[status.icon];
 
   return (
