@@ -224,10 +224,37 @@ export class OpenApiToolRegistry implements ToolRegistry {
         });
 
         const MAX_RESPONSE_SIZE = 50_000;
-        const responseText = await response.text();
-        return responseText.length > MAX_RESPONSE_SIZE
-          ? responseText.slice(0, MAX_RESPONSE_SIZE) + `... [RESPONSE TRUNCATED - original size: ${String(responseText.length)} bytes]`
-          : responseText;
+
+        if (response.body === null) {
+          const responseText = await response.text();
+          return responseText.length > MAX_RESPONSE_SIZE
+            ? responseText.slice(0, MAX_RESPONSE_SIZE) + `... [RESPONSE TRUNCATED]`
+            : responseText;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let result = '';
+        let truncated = false;
+
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) {
+            break;
+          }
+
+          result += decoder.decode(chunk.value as Uint8Array, { stream: true });
+
+          if (result.length >= MAX_RESPONSE_SIZE) {
+            truncated = true;
+            result = result.slice(0, MAX_RESPONSE_SIZE);
+            break;
+          }
+        }
+
+        return truncated
+          ? result + `... [RESPONSE TRUNCATED - exceeded ${String(MAX_RESPONSE_SIZE)} byte limit]`
+          : result;
       } catch (fetchError: unknown) {
         return `Error: Request to ${service.key} failed — ${getErrorMessage(fetchError, 'unknown error')}`;
       } finally {

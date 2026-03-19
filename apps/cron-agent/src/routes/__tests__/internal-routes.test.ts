@@ -148,11 +148,21 @@ describe('Internal Routes', () => {
       expect(body.data.errors).toBe(0);
     });
 
+    it('returns 401 when Bearer token is not a valid JWT structure', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/cron/tick',
+        headers: { authorization: 'Bearer not-a-jwt' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('returns 200 when authenticated via OIDC Bearer token (Cloud Scheduler)', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/cron/tick',
-        headers: { authorization: 'Bearer some-oidc-token' },
+        headers: { authorization: 'Bearer header.payload.signature' },
       });
 
       expect(response.statusCode).toBe(200);
