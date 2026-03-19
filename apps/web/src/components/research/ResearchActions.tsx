@@ -18,76 +18,58 @@ import type {
   Research,
 } from '@/services/researchAgentApi.types';
 
+export interface ActionState {
+  loading: boolean;
+  error: string | null;
+}
+
+export interface ConfirmableAction extends ActionState {
+  showConfirm: boolean;
+  onShowConfirm: (show: boolean) => void;
+  onConfirm: () => void;
+}
+
+export interface ExportState extends ActionState {
+  success: { mainPageUrl: string } | null;
+  onExport: () => void;
+}
+
 interface ResearchActionsProps {
   research: Research;
-  approving: boolean;
-  approveError: string | null;
-  onApprove: () => void;
-  retrying: boolean;
-  retryError: string | null;
-  onRetry: () => void;
-  deleting: boolean;
-  deleteError: string | null;
-  showDeleteConfirm: boolean;
-  onShowDeleteConfirm: (show: boolean) => void;
-  onConfirmDelete: () => void;
-  unsharing: boolean;
-  unshareError: string | null;
-  showUnshareConfirm: boolean;
-  onShowUnshareConfirm: (show: boolean) => void;
-  onConfirmUnshare: () => void;
-  exporting: boolean;
-  exportError: string | null;
-  exportSuccess: { mainPageUrl: string } | null;
-  onExportToNotion: () => void;
+  approve: ActionState & { onApprove: () => void };
+  retry: ActionState & { onRetry: () => void };
+  deleteAction: ConfirmableAction;
+  unshare: ConfirmableAction;
+  exportToNotion: ExportState;
   onShowEnhanceModal: () => void;
   onShare: () => void;
   onEditDraft: () => void;
-  confirming: boolean;
-  confirmError: string | null;
-  onConfirmPartialFailure: (action: PartialFailureDecision) => void;
+  partialFailure: ActionState & { onConfirm: (action: PartialFailureDecision) => void };
 }
 
 export function ResearchActions({
   research,
-  approving,
-  approveError,
-  onApprove,
-  retrying,
-  retryError,
-  onRetry,
-  deleting,
-  deleteError,
-  showDeleteConfirm,
-  onShowDeleteConfirm,
-  onConfirmDelete,
-  unsharing,
-  unshareError,
-  showUnshareConfirm,
-  onShowUnshareConfirm,
-  onConfirmUnshare,
-  exporting,
-  exportError,
-  exportSuccess,
-  onExportToNotion,
+  approve,
+  retry,
+  deleteAction,
+  unshare,
+  exportToNotion,
   onShowEnhanceModal,
   onShare,
   onEditDraft,
-  confirming,
-  confirmError,
-  onConfirmPartialFailure,
+  partialFailure: partialFailureState,
 }: ResearchActionsProps): React.JSX.Element {
   return (
     <>
-      <ErrorBanner message={unshareError} className="mt-2" />
+      <ErrorBanner message={unshare.error} className="mt-2" />
 
       {research.status === 'draft' ? (
         <>
           <div className="mt-4 flex flex-wrap gap-3">
             <Button
-              onClick={onApprove}
-              disabled={approving || deleting}
-              isLoading={approving}
+              onClick={approve.onApprove}
+              disabled={approve.loading || deleteAction.loading}
+              isLoading={approve.loading}
             >
               <Play className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Start Research</span>
@@ -95,7 +77,7 @@ export function ResearchActions({
             <Button
               variant="secondary"
               onClick={onEditDraft}
-              disabled={deleting}
+              disabled={deleteAction.loading}
             >
               <FileText className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Edit Draft</span>
@@ -104,15 +86,15 @@ export function ResearchActions({
               variant="ghost"
               size="sm"
               onClick={(): void => {
-                onShowDeleteConfirm(!showDeleteConfirm);
+                deleteAction.onShowConfirm(!deleteAction.showConfirm);
               }}
-              disabled={deleting}
+              disabled={deleteAction.loading}
             >
               <Trash2 className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Discard</span>
             </Button>
           </div>
-          {showDeleteConfirm ? (
+          {deleteAction.showConfirm ? (
             <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
               <p className="mb-3 text-sm text-red-800 dark:text-red-300">
                 Discard &quot;{research.title !== '' ? research.title : 'Untitled Research'}&quot;?
@@ -122,9 +104,9 @@ export function ResearchActions({
                   type="button"
                   variant="danger"
                   size="sm"
-                  onClick={onConfirmDelete}
-                  disabled={deleting}
-                  isLoading={deleting}
+                  onClick={deleteAction.onConfirm}
+                  disabled={deleteAction.loading}
+                  isLoading={deleteAction.loading}
                 >
                   Discard
                 </Button>
@@ -133,9 +115,9 @@ export function ResearchActions({
                   variant="secondary"
                   size="sm"
                   onClick={(): void => {
-                    onShowDeleteConfirm(false);
+                    deleteAction.onShowConfirm(false);
                   }}
-                  disabled={deleting}
+                  disabled={deleteAction.loading}
                 >
                   Cancel
                 </Button>
@@ -148,9 +130,9 @@ export function ResearchActions({
           <div className="mt-4 flex flex-wrap gap-3">
             {research.status === 'failed' ? (
               <Button
-                onClick={onRetry}
-                disabled={retrying || deleting}
-                isLoading={retrying}
+                onClick={retry.onRetry}
+                disabled={retry.loading || deleteAction.loading}
+                isLoading={retry.loading}
               >
                 <RefreshCw className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Retry Research</span>
@@ -160,7 +142,7 @@ export function ResearchActions({
               <>
                 <Button
                   onClick={onShowEnhanceModal}
-                  disabled={deleting}
+                  disabled={deleteAction.loading}
                 >
                   <Plus className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Enhance</span>
@@ -169,12 +151,12 @@ export function ResearchActions({
                 research.synthesizedResult !== undefined &&
                 research.synthesizedResult !== '' ? (
                   <Button
-                    onClick={onExportToNotion}
-                    disabled={exporting || deleting}
-                    isLoading={exporting}
+                    onClick={exportToNotion.onExport}
+                    disabled={exportToNotion.loading || deleteAction.loading}
+                    isLoading={exportToNotion.loading}
                     variant="secondary"
                   >
-                    {exporting ? (
+                    {exportToNotion.loading ? (
                       <>
                         <RefreshCw className="h-4 w-4 sm:mr-2 animate-spin" />
                         <span className="hidden sm:inline">Exporting...</span>
@@ -200,7 +182,7 @@ export function ResearchActions({
                       variant="ghost"
                       size="sm"
                       onClick={(): void => {
-                        onShowUnshareConfirm(!showUnshareConfirm);
+                        unshare.onShowConfirm(!unshare.showConfirm);
                       }}
                     >
                       <Link2Off className="h-4 w-4 sm:mr-2" />
@@ -214,15 +196,15 @@ export function ResearchActions({
               variant="ghost"
               size="sm"
               onClick={(): void => {
-                onShowDeleteConfirm(!showDeleteConfirm);
+                deleteAction.onShowConfirm(!deleteAction.showConfirm);
               }}
-              disabled={deleting || retrying}
+              disabled={deleteAction.loading || retry.loading}
             >
               <Trash2 className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Delete</span>
             </Button>
           </div>
-          {showUnshareConfirm ? (
+          {unshare.showConfirm ? (
             <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
               <p className="mb-3 text-sm text-red-800 dark:text-red-300">Unshare this research?</p>
               <div className="flex gap-2">
@@ -230,9 +212,9 @@ export function ResearchActions({
                   type="button"
                   variant="danger"
                   size="sm"
-                  onClick={onConfirmUnshare}
-                  disabled={unsharing}
-                  isLoading={unsharing}
+                  onClick={unshare.onConfirm}
+                  disabled={unshare.loading}
+                  isLoading={unshare.loading}
                 >
                   Unshare
                 </Button>
@@ -241,16 +223,16 @@ export function ResearchActions({
                   variant="secondary"
                   size="sm"
                   onClick={(): void => {
-                    onShowUnshareConfirm(false);
+                    unshare.onShowConfirm(false);
                   }}
-                  disabled={unsharing}
+                  disabled={unshare.loading}
                 >
                   Cancel
                 </Button>
               </div>
             </div>
           ) : null}
-          {showDeleteConfirm ? (
+          {deleteAction.showConfirm ? (
             <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
               <p className="mb-3 text-sm text-red-800 dark:text-red-300">
                 Delete &quot;{research.title !== '' ? research.title : 'Untitled Research'}&quot;?
@@ -260,9 +242,9 @@ export function ResearchActions({
                   type="button"
                   variant="danger"
                   size="sm"
-                  onClick={onConfirmDelete}
-                  disabled={deleting}
-                  isLoading={deleting}
+                  onClick={deleteAction.onConfirm}
+                  disabled={deleteAction.loading}
+                  isLoading={deleteAction.loading}
                 >
                   Delete
                 </Button>
@@ -271,9 +253,9 @@ export function ResearchActions({
                   variant="secondary"
                   size="sm"
                   onClick={(): void => {
-                    onShowDeleteConfirm(false);
+                    deleteAction.onShowConfirm(false);
                   }}
-                  disabled={deleting}
+                  disabled={deleteAction.loading}
                 >
                   Cancel
                 </Button>
@@ -283,16 +265,16 @@ export function ResearchActions({
         </>
       )}
 
-      <ErrorBanner message={approveError} className="mt-4" />
-      <ErrorBanner message={deleteError} className="mt-4" />
-      <ErrorBanner message={retryError} className="mt-4" />
-      <ErrorBanner message={exportError} className="mt-4" />
+      <ErrorBanner message={approve.error} className="mt-4" />
+      <ErrorBanner message={deleteAction.error} className="mt-4" />
+      <ErrorBanner message={retry.error} className="mt-4" />
+      <ErrorBanner message={exportToNotion.error} className="mt-4" />
 
-      {exportSuccess !== null ? (
+      {exportToNotion.success !== null ? (
         <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
           Research exported to Notion!{' '}
           <a
-            href={exportSuccess.mainPageUrl}
+            href={exportToNotion.success.mainPageUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="font-medium underline hover:text-green-800 dark:hover:text-green-300"
@@ -306,9 +288,9 @@ export function ResearchActions({
       {research.status === 'awaiting_confirmation' && research.partialFailure !== undefined ? (
         <PartialFailureConfirmation
           partialFailure={research.partialFailure}
-          onConfirm={onConfirmPartialFailure}
-          confirming={confirming}
-          error={confirmError}
+          onConfirm={partialFailureState.onConfirm}
+          confirming={partialFailureState.loading}
+          error={partialFailureState.error}
         />
       ) : null}
     </>

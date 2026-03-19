@@ -297,32 +297,29 @@ export function ResearchDetailPage(): React.JSX.Element {
 
       <ResearchActions
         research={research}
-        approving={approving}
-        approveError={approveError}
-        onApprove={(): void => { void handleApprove(); }}
-        retrying={retrying}
-        retryError={retryError}
-        onRetry={(): void => { void handleRetry(); }}
-        deleting={deleting}
-        deleteError={deleteError}
-        showDeleteConfirm={showDeleteConfirm}
-        onShowDeleteConfirm={setShowDeleteConfirm}
-        onConfirmDelete={(): void => { void handleDelete(); }}
-        unsharing={unsharing}
-        unshareError={unshareError}
-        showUnshareConfirm={showUnshareConfirm}
-        onShowUnshareConfirm={setShowUnshareConfirm}
-        onConfirmUnshare={(): void => { void handleUnshare(); }}
-        exporting={exporting}
-        exportError={exportError}
-        exportSuccess={exportSuccess}
-        onExportToNotion={(): void => { void handleExportToNotion(); }}
+        approve={{ loading: approving, error: approveError, onApprove: (): void => { void handleApprove(); } }}
+        retry={{ loading: retrying, error: retryError, onRetry: (): void => { void handleRetry(); } }}
+        deleteAction={{
+          loading: deleting, error: deleteError,
+          showConfirm: showDeleteConfirm, onShowConfirm: setShowDeleteConfirm,
+          onConfirm: (): void => { void handleDelete(); },
+        }}
+        unshare={{
+          loading: unsharing, error: unshareError,
+          showConfirm: showUnshareConfirm, onShowConfirm: setShowUnshareConfirm,
+          onConfirm: (): void => { void handleUnshare(); },
+        }}
+        exportToNotion={{
+          loading: exporting, error: exportError,
+          success: exportSuccess, onExport: (): void => { void handleExportToNotion(); },
+        }}
         onShowEnhanceModal={(): void => { setShowEnhanceModal(true); }}
         onShare={(): void => { void handleShare(); }}
         onEditDraft={(): void => { void navigate(`/research/new?draftId=${research.id}`); }}
-        confirming={confirming}
-        confirmError={confirmError}
-        onConfirmPartialFailure={(action): void => { void handleConfirm(action); }}
+        partialFailure={{
+          loading: confirming, error: confirmError,
+          onConfirm: (action): void => { void handleConfirm(action); },
+        }}
       />
 
       <Card className="mb-6 mt-6">

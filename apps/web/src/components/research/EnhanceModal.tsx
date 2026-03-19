@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, XCircle } from 'lucide-react';
 import { LlmModels } from '@intexuraos/llm-contract';
 import {
@@ -45,6 +45,18 @@ export function EnhanceModal({
   const [enhanceSynthesisModel, setEnhanceSynthesisModel] = useState<SupportedModel | null>(null);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const [enhancing, setEnhancing] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return (): void => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   const existingProviders = useMemo(
     () => new Set(research.selectedModels.map(getProviderForModel)),
