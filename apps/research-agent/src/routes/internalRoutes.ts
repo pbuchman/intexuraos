@@ -68,6 +68,8 @@ interface LlmCallEvent {
   prompt: string;
 }
 
+export const MIN_QUALITY_CHARS = 800;
+
 function isPubSubPush(request: FastifyRequest): boolean {
   const fromHeader = request.headers.from;
   return typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
@@ -453,7 +455,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         // For enhanced researches where all LLM results are already completed,
         // trigger synthesis immediately
         if (processResult.triggerSynthesis) {
-          request.log.info({ researchId: event.researchId }, 'Triggering synthesis directly');
           request.log.info({ researchId: event.researchId }, 'Triggering synthesis directly');
 
           await runSynthesis(event.researchId, {
@@ -914,7 +915,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           '[3.3] LLM research call succeeded'
         );
 
-        const MIN_QUALITY_CHARS = 800;
         const qualityFlag: 'normal' | 'low_quality' | undefined =
           llmResult.value.content.length < MIN_QUALITY_CHARS ? 'low_quality' : undefined;
 
