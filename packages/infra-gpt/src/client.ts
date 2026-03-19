@@ -41,7 +41,6 @@
 
 import { randomUUID } from 'node:crypto';
 import OpenAI from 'openai';
-import { buildResearchPrompt } from '@intexuraos/llm-prompts';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
@@ -163,15 +162,14 @@ export function createGptClient(config: GptConfig): GptClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
-      const researchPrompt = buildResearchPrompt(prompt);
-      const { auditContext } = createRequestContext('research', model, researchPrompt);
+      const { auditContext } = createRequestContext('research', model, prompt);
 
       try {
         const response = await client.responses.create({
           model,
           instructions:
             'You are a senior research analyst. Search the web for current, authoritative information. Cross-reference sources and cite all findings with URLs.',
-          input: researchPrompt,
+          input: prompt,
           tools: [{ type: 'web_search_preview', search_context_size: 'medium' }],
         });
 

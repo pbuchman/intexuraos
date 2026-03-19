@@ -7,9 +7,11 @@ import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini'
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import {
+  buildResearchPrompt,
   buildSynthesisPrompt,
   titlePrompt,
   labelPrompt,
+  type ResearchContext,
   type SynthesisContext,
 } from '@intexuraos/llm-prompts';
 import type {
@@ -39,9 +41,10 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     this.logger = logger;
   }
 
-  async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
-    this.logger.info({ model: this.model, promptLength: prompt.length }, 'Gemini research started');
-    const result = await this.client.research(prompt);
+  async research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>> {
+    const builtPrompt = buildResearchPrompt(prompt, ctx);
+    this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'Gemini research started');
+    const result = await this.client.research(builtPrompt);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
       this.logger.error(
