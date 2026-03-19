@@ -253,7 +253,7 @@ export function CodeTasksPage(): React.JSX.Element {
 
   useEffect(() => {
     if (actioningTaskId === null) return;
-    const pollId = setInterval(() => { void refresh(false); }, 3000);
+    const pollId = setInterval(() => { refresh(false).catch(() => undefined); }, 3000);
     rapidPollTimeoutRef.current = setTimeout(() => { rapidPollTimeoutRef.current = null; setActioningTaskId(null); }, 30000);
     return (): void => {
       clearInterval(pollId);
