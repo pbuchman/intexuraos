@@ -221,6 +221,8 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
     },
 
     async findAllOpen(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+      // No pagination limit — expected to be bounded by the number of active repos and open PRs
+      // in a single IntexuraOS deployment. Add a limit + cursor if this grows beyond ~500 rows.
       try {
         const snapshot = await collection
           .where('state', '==', 'open')
