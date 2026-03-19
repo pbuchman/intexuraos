@@ -31,10 +31,6 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/code-agent"
     },
-    "PENDING-apps-todos-agent": {
-      "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
-      "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
-    },
     "PENDING-apps-user-service": {
       "files": [
         "apps/user-service/src/domain/settings/formatLlmError.ts",
