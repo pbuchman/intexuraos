@@ -63,7 +63,8 @@ Expected: FAIL — prompt does not contain `gh pr checks`
 In `system-prompt.ts`, inside `reviewPrompt.build()` return template, after line 631 (`3. Fetch existing comments`), add:
 
 ```
-4. Check CI status: \`gh pr checks {pr_number} --json name,state,conclusion\`
+4. Check CI status: \`gh pr checks {pr_number} --json name,state,bucket\`
+   The \`bucket\` field categorizes each check as \`pass\`, \`fail\`, \`pending\`, \`skipping\`, or \`cancel\`.
    If CI is failing, prioritize reviewing the areas causing failures. Flag coverage decreases.
 ```
 
@@ -194,7 +195,7 @@ Key rules to validate during review. Read \`/repo/.claude/CLAUDE.md\` and \`/rep
 
 **Code Patterns:**
 - Result type: narrow with \`if (!result.ok) return result;\` before accessing \`.value\`
-- ESM imports MUST use \`.js\` extension
+- ESM imports MUST use \`.js\` extension (except \`apps/web\` — Vite handles resolution; look for \`@allow-missing-js\` escape hatch)
 - Mock Logger needs all 4 methods: \`info\`, \`warn\`, \`error\`, \`debug\`
 
 **Testing:**
