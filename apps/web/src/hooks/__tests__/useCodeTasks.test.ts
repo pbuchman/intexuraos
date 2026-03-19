@@ -79,7 +79,7 @@ describe('useCodeTasks hooks', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      expect(mockListCodeTasks).toHaveBeenCalledWith('test-token', { limit: 50 });
+      expect(mockListCodeTasks).toHaveBeenCalledWith('test-token', { limit: 100 });
       expect(result.current.tasks).toHaveLength(1);
       expect(result.current.hasMore).toBe(true);
       expect(result.current.error).toBeNull();
@@ -94,7 +94,7 @@ describe('useCodeTasks hooks', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      expect(mockListCodeTasks).toHaveBeenCalledWith('test-token', { status: ['running'], limit: 50 });
+      expect(mockListCodeTasks).toHaveBeenCalledWith('test-token', { status: ['running'], limit: 100 });
     });
 
     it('handles fetch error', async () => {
@@ -131,7 +131,7 @@ describe('useCodeTasks hooks', () => {
         await result.current.loadMore();
       });
 
-      expect(mockListCodeTasks).toHaveBeenLastCalledWith('test-token', { cursor: 'cursor-abc', limit: 50 });
+      expect(mockListCodeTasks).toHaveBeenLastCalledWith('test-token', { cursor: 'cursor-abc', limit: 100 });
       expect(result.current.tasks).toHaveLength(2);
       expect(result.current.hasMore).toBe(false);
     });

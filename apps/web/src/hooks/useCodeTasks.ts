@@ -70,7 +70,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus[] }): {
 
       try {
         const token = await getAccessToken();
-        const listOptions: { status?: CodeTaskStatus[]; limit: number } = { limit: 50 };
+        const listOptions: { status?: CodeTaskStatus[]; limit: number } = { limit: 100 };
         if (options?.status !== undefined && options.status.length > 0) {
           listOptions.status = options.status;
         }
@@ -133,7 +133,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus[] }): {
     setLoadingMore(true);
     try {
       const token = await getAccessToken();
-      const loadMoreOptions: { status?: CodeTaskStatus[]; cursor?: string; limit: number } = { limit: 50 };
+      const loadMoreOptions: { status?: CodeTaskStatus[]; cursor?: string; limit: number } = { limit: 100 };
       if (options?.status !== undefined && options.status.length > 0) {
         loadMoreOptions.status = options.status;
       }
