@@ -83,7 +83,7 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
       }
 
       const protocol = String(request.headers['x-forwarded-proto'] ?? 'http');
-      /* v8 ignore start -- test-infra: Fastify FakeFastify inject() always provides host header, cannot test full nullish coalescing fallback to localhost @preserve */
+      /* v8 ignore start -- test-infra: Fastify app.inject() sets default host header, cannot test full nullish coalescing fallback to localhost @preserve */
       const host = String(request.headers['x-forwarded-host'] ?? request.headers.host ?? 'localhost');
       /* v8 ignore stop @preserve */
       const redirectUri = `${protocol}://${host}/oauth/connections/google/callback`;
