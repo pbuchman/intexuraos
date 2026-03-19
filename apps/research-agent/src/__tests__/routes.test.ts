@@ -4825,6 +4825,145 @@ describe('Internal Routes', () => {
     });
   });
 
+  describe('POST /internal/llm/pubsub/process-llm-call - quality flag', () => {
+    let fakeUserServiceClient: FakeUserServiceClient;
+    let fakeNotificationSender: FakeNotificationSender;
+
+    function encodePubSubMessage(data: object): string {
+      return Buffer.from(JSON.stringify(data)).toString('base64');
+    }
+
+    function createLlmCallEvent(): object {
+      return {
+        type: 'llm.call',
+        researchId: 'research-123',
+        userId: TEST_USER_ID,
+        model: LlmModels.Gemini25Pro,
+        prompt: 'Test prompt',
+      };
+    }
+
+    it('flags short LLM output as low_quality when below 800 chars', async () => {
+      const shortContent = 'Short response';
+      fakeUserServiceClient = new FakeUserServiceClient();
+      fakeNotificationSender = new FakeNotificationSender();
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        researchExportSettings: new FakeResearchExportSettings(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notionServiceClient: new FakeNotionServiceClient(),
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+          createFakeLlmResearchProvider(shortContent),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
+      };
+      setServices(services);
+
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updatedResearch = fakeRepo.getAll()[0];
+      const result = updatedResearch?.llmResults.find((r) => r.model === LlmModels.Gemini25Pro);
+      expect(result?.status).toBe('completed');
+      expect(result?.qualityFlag).toBe('low_quality');
+    });
+
+    it('does not set qualityFlag when LLM output is >= 800 chars', async () => {
+      const longContent = 'A'.repeat(800);
+      fakeUserServiceClient = new FakeUserServiceClient();
+      fakeNotificationSender = new FakeNotificationSender();
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        researchExportSettings: new FakeResearchExportSettings(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notionServiceClient: new FakeNotionServiceClient(),
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+          createFakeLlmResearchProvider(longContent),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
+      };
+      setServices(services);
+
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updatedResearch = fakeRepo.getAll()[0];
+      const result = updatedResearch?.llmResults.find((r) => r.model === LlmModels.Gemini25Pro);
+      expect(result?.status).toBe('completed');
+      expect(result?.qualityFlag).toBeUndefined();
+    });
+  });
+
   describe('POST /internal/llm/pubsub/process-llm-call - completion states', () => {
     let fakeUserServiceClient: FakeUserServiceClient;
     let fakeNotificationSender: FakeNotificationSender;

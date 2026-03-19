@@ -860,7 +860,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log
         );
         const startTime = Date.now();
-        const llmResult = await llmProvider.research(event.prompt);
+        const llmResult = await llmProvider.research(event.prompt, research.researchContext);
         const durationMs = Date.now() - startTime;
 
         if (!llmResult.ok) {
@@ -914,12 +914,28 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           '[3.3] LLM research call succeeded'
         );
 
+        const MIN_QUALITY_CHARS = 800;
+        const qualityFlag: 'normal' | 'low_quality' | undefined =
+          llmResult.value.content.length < MIN_QUALITY_CHARS ? 'low_quality' : undefined;
+
+        if (qualityFlag === 'low_quality') {
+          request.log.warn(
+            { model: event.model, contentLength: llmResult.value.content.length },
+            '[3.3.1] LLM result flagged as low_quality (below minimum length threshold)'
+          );
+        }
+
         const updateData: Parameters<typeof researchRepo.updateLlmResult>[2] = {
           status: 'completed',
           result: llmResult.value.content,
           completedAt: new Date().toISOString(),
           durationMs,
         };
+
+        if (qualityFlag !== undefined) {
+          updateData.qualityFlag = qualityFlag;
+        }
+
         if (llmResult.value.sources !== undefined) {
           updateData.sources = llmResult.value.sources;
         }

@@ -34,6 +34,7 @@ ANALYSIS INSTRUCTIONS:
 11. Determine output format preferences from the query
 12. Assess safety considerations
 13. Flag any red flags or concerns
+14. Extract user exclusions: If the user explicitly says "do not focus on X", "must not include X", or "X is known/not needed", record X in user_exclusions. When high_stakes is false, do NOT generate required_disclaimers that contradict user_exclusions.
 
 DEFAULTS (record in defaults_applied if used):
 - as_of_date: "${asOfDate}"
@@ -43,7 +44,7 @@ DEFAULTS (record in defaults_applied if used):
 - prefers_recent_years: ${String(prefersRecentYears)}
 
 DOMAIN OPTIONS:
-travel, product, technical, legal, medical, financial, security_privacy, business_strategy, marketing_sales, hr_people_ops, education_learning, science_research, history_culture, politics_policy, real_estate, food_nutrition, fitness_sports, entertainment_media, diy_home, general, unknown
+travel, product, technical, legal, medical, financial, security_privacy, business_strategy, marketing_sales, hr_people_ops, education_learning, science_research, history_culture, politics_policy, real_estate, food_nutrition, fitness_sports, entertainment_media, diy_home, outdoor_recreation, fishing, general, unknown
 
 MODE RULES:
 - "compact": User wants quick, direct answer (keywords: "quickly", "briefly", "just tell me")
@@ -98,7 +99,8 @@ OUTPUT STRICT JSON (no markdown, no explanation):
   },
   "safety": {
     "high_stakes": <boolean>,
-    "required_disclaimers": ["<disclaimer if needed>"]
+    "required_disclaimers": ["<disclaimer if needed — OMIT any that contradict user_exclusions when high_stakes is false>"],
+    "user_exclusions": ["<topics the user explicitly asked to exclude>"]
   },
   "red_flags": ["<any concerns about the query>"]
 }
@@ -110,4 +112,4 @@ USER QUERY:
 ${userQuery}
 """`;
 }
-// Prompt version: 1.0.0
+// Prompt version: 2.1.0

@@ -27,6 +27,7 @@ const createTestSynthesisContext = (overrides?: Partial<SynthesisContext>): Synt
   safety: {
     high_stakes: false,
     required_disclaimers: [],
+    user_exclusions: [],
   },
   red_flags: [],
   ...overrides,
@@ -1096,6 +1097,33 @@ describe('buildSynthesisPrompt', () => {
           expect(maliciousIndex).toBeGreaterThan(guardIndex);
         });
       });
+    });
+  });
+
+  describe('user_exclusions filtering', () => {
+    it('should exclude disclaimers matching user_exclusions in synthesis when not high_stakes', () => {
+      const ctx = createTestSynthesisContext({
+        safety: {
+          high_stakes: false,
+          required_disclaimers: ['Verify local regulations.', 'Wear safety gear.'],
+          user_exclusions: ['regulations'],
+        },
+      });
+      const result = buildSynthesisPrompt('test', [{ model: 'test', content: 'report' }], ctx);
+      expect(result).not.toContain('local regulations');
+      expect(result).toContain('safety gear');
+    });
+
+    it('should keep all disclaimers when high_stakes even with user_exclusions', () => {
+      const ctx = createTestSynthesisContext({
+        safety: {
+          high_stakes: true,
+          required_disclaimers: ['Verify local regulations.'],
+          user_exclusions: ['regulations'],
+        },
+      });
+      const result = buildSynthesisPrompt('test', [{ model: 'test', content: 'report' }], ctx);
+      expect(result).toContain('local regulations');
     });
   });
 });
