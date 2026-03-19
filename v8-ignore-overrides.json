@@ -27,22 +27,29 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/code-agent"
     },
-    "PENDING-apps-user-service": {
-      "files": [
-        "apps/user-service/src/domain/settings/formatLlmError.ts",
-        "apps/user-service/src/infra/firestore/oauthConnectionRepository.ts",
-        "apps/user-service/src/routes/deviceRoutes.ts",
-        "apps/user-service/src/routes/gitHubOAuthConnectionRoutes.ts",
-        "apps/user-service/src/routes/oauthConnectionRoutes.ts"
-      ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/user-service"
+    "PENDING-apps-todos-agent": {
+      "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
     },
-    "PENDING-apps-linear-agent": {
+    "PENDING-apps-whatsapp-service": {
       "files": [
-        "apps/linear-agent/src/infra/firestore/linearCommentRepository.ts",
-        "apps/linear-agent/src/infra/firestore/linearIssueRepository.ts"
+        "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
+        "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
+        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
       ],
-      "description": "Firestore batch query functions (getCommentSummaries, findByIdentifiers) — requires emulator to exercise real chunked in-queries"
+      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
+    },
+    "PENDING-apps-whatsapp-service": {
+      "files": [
+        "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
+        "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
+        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
+      ],
+      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
+    },
+    "PENDING-packages-internal-clients": {
+      "files": ["packages/internal-clients/src/user-service/client.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in packages/internal-clients"
     },
     "PENDING-workers-orchestrator": {
       "files": [

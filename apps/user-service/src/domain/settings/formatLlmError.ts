@@ -168,11 +168,9 @@ function tryParseAnthropicError(raw: string): string | null {
       if (isAnthropicError(parsed)) {
         const { message } = parsed.error;
         // Double-check parsed message for billing error
-        /* v8 ignore start -- test-infra: requires actual Anthropic billing error response @preserve */
         if (message.includes('credit balance') || message.includes('credit_balance')) {
           return 'Insufficient Anthropic API credits. Please add funds at console.anthropic.com';
         }
-        /* v8 ignore stop @preserve */
         return message.length > 150 ? message.slice(0, 147) + '...' : message;
       }
     } catch {

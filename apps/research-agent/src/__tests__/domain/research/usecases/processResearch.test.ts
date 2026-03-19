@@ -402,6 +402,7 @@ describe('processResearch', () => {
       safety: {
         high_stakes: false,
         required_disclaimers: [],
+        user_exclusions: [],
       },
       red_flags: [],
     };

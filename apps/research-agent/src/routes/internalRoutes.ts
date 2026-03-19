@@ -17,6 +17,7 @@ import {
   extractModelPreferences,
   processResearch,
   runSynthesis,
+  type LlmResult,
   type ResearchModel,
   type TextGenerationClient,
 } from '../domain/research/index.js';
@@ -67,6 +68,15 @@ interface LlmCallEvent {
   model: ResearchModel;
   prompt: string;
 }
+
+/**
+ * Minimum character count for an LLM research result to be considered adequate.
+ * Results below this threshold are flagged as `low_quality` and deprioritized
+ * during synthesis. The 800-char threshold was chosen empirically — most useful
+ * research responses are 1000+ characters; anything shorter typically indicates
+ * a refusal, error message, or extremely shallow answer.
+ */
+export const MIN_QUALITY_CHARS = 800;
 
 function isPubSubPush(request: FastifyRequest): boolean {
   const fromHeader = request.headers.from;
@@ -453,7 +463,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         // For enhanced researches where all LLM results are already completed,
         // trigger synthesis immediately
         if (processResult.triggerSynthesis) {
-          request.log.info({ researchId: event.researchId }, 'Triggering synthesis directly');
           request.log.info({ researchId: event.researchId }, 'Triggering synthesis directly');
 
           await runSynthesis(event.researchId, {
@@ -860,7 +869,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log
         );
         const startTime = Date.now();
-        const llmResult = await llmProvider.research(event.prompt);
+        const llmResult = await llmProvider.research(event.prompt, research.researchContext);
         const durationMs = Date.now() - startTime;
 
         if (!llmResult.ok) {
@@ -914,12 +923,27 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           '[3.3] LLM research call succeeded'
         );
 
+        const qualityFlag: LlmResult['qualityFlag'] =
+          llmResult.value.content.length < MIN_QUALITY_CHARS ? 'low_quality' : undefined;
+
+        if (qualityFlag === 'low_quality') {
+          request.log.warn(
+            { model: event.model, contentLength: llmResult.value.content.length },
+            '[3.3.1] LLM result flagged as low_quality (below minimum length threshold)'
+          );
+        }
+
         const updateData: Parameters<typeof researchRepo.updateLlmResult>[2] = {
           status: 'completed',
           result: llmResult.value.content,
           completedAt: new Date().toISOString(),
           durationMs,
         };
+
+        if (qualityFlag !== undefined) {
+          updateData.qualityFlag = qualityFlag;
+        }
+
         if (llmResult.value.sources !== undefined) {
           updateData.sources = llmResult.value.sources;
         }

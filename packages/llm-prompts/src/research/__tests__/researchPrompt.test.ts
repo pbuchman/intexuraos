@@ -39,6 +39,7 @@ const createTestResearchContext = (overrides?: Partial<ResearchContext>): Resear
   safety: {
     high_stakes: false,
     required_disclaimers: [],
+    user_exclusions: [],
   },
   red_flags: [],
   ...overrides,
@@ -354,6 +355,7 @@ describe('buildResearchPrompt', () => {
         safety: {
           high_stakes: true,
           required_disclaimers: ['Consult a professional', 'This is not advice'],
+          user_exclusions: [],
         },
       });
       const result = buildResearchPrompt('query', ctx);
@@ -361,6 +363,57 @@ describe('buildResearchPrompt', () => {
       expect(result).toContain('HIGH-STAKES');
       expect(result).toContain('Consult a professional');
       expect(result).toContain('This is not advice');
+    });
+
+    it('should include language instruction before the Research Request section', () => {
+      const ctx = createTestResearchContext();
+      const result = buildResearchPrompt('test query', ctx);
+      const languagePos = result.indexOf('**LANGUAGE: Write your ENTIRE response in EN');
+      const requestPos = result.indexOf('## Research Request');
+      expect(languagePos).toBeGreaterThan(-1);
+      expect(requestPos).toBeGreaterThan(-1);
+      expect(languagePos).toBeLessThan(requestPos);
+    });
+
+    it('should exclude disclaimers matching user_exclusions when not high_stakes', () => {
+      const ctx = createTestResearchContext({
+        safety: {
+          high_stakes: false,
+          required_disclaimers: [
+            'Always verify local fishing regulations.',
+            'Wear a life jacket near water.',
+          ],
+          user_exclusions: ['regulations', 'permits'],
+        },
+      });
+      const result = buildResearchPrompt('test query', ctx);
+      expect(result).not.toContain('fishing regulations');
+      expect(result).toContain('life jacket');
+    });
+
+    it('should keep all disclaimers when high_stakes even with user_exclusions', () => {
+      const ctx = createTestResearchContext({
+        safety: {
+          high_stakes: true,
+          required_disclaimers: ['Always consult a doctor.'],
+          user_exclusions: ['doctor'],
+        },
+      });
+      const result = buildResearchPrompt('test query', ctx);
+      expect(result).toContain('consult a doctor');
+    });
+
+    it('should include fishing-specific guidelines for fishing domain', () => {
+      const ctx = createTestResearchContext({ domain: 'fishing' });
+      const result = buildResearchPrompt('test query', ctx);
+      expect(result).toContain('species');
+      expect(result).toContain('spinning');
+    });
+
+    it('should include outdoor_recreation guidelines', () => {
+      const ctx = createTestResearchContext({ domain: 'outdoor_recreation' });
+      const result = buildResearchPrompt('test query', ctx);
+      expect(result).toContain('local conditions');
     });
   });
 });

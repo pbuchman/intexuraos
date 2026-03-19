@@ -161,7 +161,6 @@ const FIRESTORE_IN_LIMIT = 30;
  * Find multiple issues by identifiers, scoped to a user.
  * Chunks identifiers into groups of 30 (Firestore `in` operator limit).
  */
-/* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
 export async function findLinearIssuesByIdentifiers(
   identifiers: string[],
   userId: string
@@ -193,7 +192,6 @@ export async function findLinearIssuesByIdentifiers(
     });
   }
 }
-/* v8 ignore stop @preserve */
 
 export async function listLinearIssuesByUserId(
   userId: string

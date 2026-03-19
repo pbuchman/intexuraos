@@ -23,6 +23,10 @@ import {
   CodeTaskViewPageV2,
   CodeTaskNewPage,
   CodeTasksPage,
+  CronExecutionsPage,
+  CronScheduleNewPage,
+  CronSchedulesPage,
+  CronScheduleViewPage,
   DispatchQueuePage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
@@ -281,6 +285,39 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <GitHubEventLogPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Cron Agent routes */}
+      <Route
+        path="/cron-agent"
+        element={
+          <ProtectedRoute>
+            <CronSchedulesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cron-agent/new"
+        element={
+          <ProtectedRoute>
+            <CronScheduleNewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cron-agent/executions"
+        element={
+          <ProtectedRoute>
+            <CronExecutionsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cron-agent/:id"
+        element={
+          <ProtectedRoute>
+            <CronScheduleViewPage />
           </ProtectedRoute>
         }
       />

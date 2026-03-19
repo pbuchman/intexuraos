@@ -4,6 +4,7 @@
  */
 
 import type { ResearchContext } from './contextTypes.js';
+import { filterByExclusions, extractUserExclusions } from './promptUtils.js';
 
 function buildDomainGuidelines(ctx: ResearchContext): string {
   const domainGuides: Record<string, string> = {
@@ -38,6 +39,10 @@ function buildDomainGuidelines(ctx: ResearchContext): string {
     entertainment_media:
       'Include release dates, cite official sources, note regional availability.',
     diy_home: 'Include safety warnings, cite building codes, provide step-by-step guidance.',
+    outdoor_recreation:
+      'Include local conditions, seasonal availability, safety precautions, required equipment, and cite community forums and local guides.',
+    fishing:
+      'Identify target species by season, recommend technique-specific tackle and lures (spinning, surfcasting, fly), cite local fishing communities and forums, include tidal/weather influence, and distinguish between shore and boat fishing.',
     general: 'Provide balanced, factual information with appropriate depth.',
     unknown: 'Provide balanced, factual information with appropriate depth.',
   };
@@ -65,21 +70,31 @@ function buildOutputFormatGuidelines(ctx: ResearchContext): string {
 }
 
 function buildContextualResearchPrompt(userPrompt: string, ctx: ResearchContext): string {
+  const userExclusions = extractUserExclusions(ctx.safety);
+
+  const filteredDisclaimers = ctx.safety.high_stakes
+    ? ctx.safety.required_disclaimers
+    : filterByExclusions(ctx.safety.required_disclaimers, userExclusions);
+
+  const filteredRedFlags = ctx.safety.high_stakes
+    ? ctx.red_flags
+    : filterByExclusions(ctx.red_flags, userExclusions);
+
   const safetySection =
-    ctx.safety.high_stakes || ctx.safety.required_disclaimers.length > 0
+    ctx.safety.high_stakes || filteredDisclaimers.length > 0
       ? `
 ## Safety Considerations
 
-${ctx.safety.high_stakes ? '⚠️ This is a HIGH-STAKES topic. Be extra careful with accuracy.\n' : ''}${ctx.safety.required_disclaimers.length > 0 ? `Include these disclaimers:\n${ctx.safety.required_disclaimers.map((d) => `- ${d}`).join('\n')}` : ''}`
+${ctx.safety.high_stakes ? '⚠️ This is a HIGH-STAKES topic. Be extra careful with accuracy.\n' : ''}${filteredDisclaimers.length > 0 ? `Include these disclaimers:\n${filteredDisclaimers.map((d) => `- ${d}`).join('\n')}` : ''}`
       : '';
 
   const redFlagsSection =
-    ctx.red_flags.length > 0
+    filteredRedFlags.length > 0
       ? `
 ## Research Concerns
 
 Address these concerns identified in the query:
-${ctx.red_flags.map((f) => `- ${f}`).join('\n')}`
+${filteredRedFlags.map((f) => `- ${f}`).join('\n')}`
       : '';
 
   const keyQuestions =
@@ -91,6 +106,8 @@ ${ctx.research_plan.key_questions.map((q, i) => `${String(i + 1)}. ${q}`).join('
       : '';
 
   return `Conduct comprehensive research on the following topic.
+
+**LANGUAGE: Write your ENTIRE response in ${ctx.language.toUpperCase()}. This is non-negotiable.**
 
 ## Pipeline Context
 
@@ -225,4 +242,4 @@ Adjust your approach based on the topic:
 
 Write the ENTIRE response in the SAME LANGUAGE as the Research Request (Polish → Polish, Spanish → Spanish, etc.)`;
 }
-// Prompt version: 1.1.0
+// Prompt version: 2.0.0
