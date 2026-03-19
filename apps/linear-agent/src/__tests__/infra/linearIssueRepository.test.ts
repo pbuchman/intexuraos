@@ -331,6 +331,32 @@ describe('linearIssueRepository', () => {
         expect(result.value).toEqual([]);
       }
     });
+
+    it('correctly chunks more than 30 identifiers (Firestore in limit)', async () => {
+      // Create 35 issues (exceeds Firestore in limit of 30)
+      for (let i = 0; i < 35; i++) {
+        await saveLinearIssue(
+          createTestIssue({
+            id: `issue-${String(i)}`,
+            identifier: `INT-${String(i)}`,
+            userId: 'user-123',
+          })
+        );
+      }
+
+      const identifiers = Array.from({ length: 35 }, (_, i) => `INT-${String(i)}`);
+      const result = await findLinearIssuesByIdentifiers(identifiers, 'user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(35);
+        // Verify issues from both chunks are present
+        const foundIdentifiers = result.value.map((i) => i.identifier).sort();
+        expect(foundIdentifiers).toContain('INT-0');
+        expect(foundIdentifiers).toContain('INT-29');
+        expect(foundIdentifiers).toContain('INT-34');
+      }
+    });
   });
 });
 
