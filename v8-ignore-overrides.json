@@ -27,15 +27,17 @@
       ],
       "description": "Write tests for tightened v8 ignore blocks in apps/code-agent"
     },
-    "PENDING-apps-user-service": {
+    "PENDING-apps-todos-agent": {
+      "files": ["apps/todos-agent/src/domain/usecases/reorderTodoItems.ts"],
+      "description": "Write tests for tightened v8 ignore blocks in apps/todos-agent"
+    },
+    "PENDING-apps-whatsapp-service": {
       "files": [
-        "apps/user-service/src/domain/settings/formatLlmError.ts",
-        "apps/user-service/src/infra/firestore/oauthConnectionRepository.ts",
-        "apps/user-service/src/routes/deviceRoutes.ts",
-        "apps/user-service/src/routes/gitHubOAuthConnectionRoutes.ts",
-        "apps/user-service/src/routes/oauthConnectionRoutes.ts"
+        "apps/whatsapp-service/src/infra/firestore/phoneVerificationRepository.ts",
+        "apps/whatsapp-service/src/infra/firestore/userMappingRepository.ts",
+        "apps/whatsapp-service/src/infra/whatsapp/sender.ts"
       ],
-      "description": "Write tests for tightened v8 ignore blocks in apps/user-service"
+      "description": "Real Firestore transaction and HTTP sender code — requires integration tests or emulator to cover"
     },
     "PENDING-apps-linear-agent": {
       "files": [
