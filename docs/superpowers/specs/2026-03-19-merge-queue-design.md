@@ -269,6 +269,7 @@ interface MergeQueueWatch {
 interface MergedPr {
   prNumber: number;
   title: string;
+  author: string;
   mergedAt: Timestamp;
 }
 
@@ -373,19 +374,20 @@ Branch pills using the exact `StatusPipeline` pattern:
 
 #### WatchStatusCard
 
+User enables/disables auto-merging via a **toggle switch** (not a button). The toggle and watch status are combined in a single card.
+
 When **no active watch** for the selected branch:
 
 ```
-[Start Watching]  ← primary Button component
+Auto-merge  [○ toggle OFF]
 ```
 
 When **active**:
 
 ```
 ┌─ Card variant: border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/30 ─┐
-│  ⟳ (Loader2 animate-spin) Active                                                     │
+│  ⟳ (Loader2 animate-spin) Auto-merge active              [● toggle ON]               │
 │  Merged: 3 · Skipped: 2 · Last tick: 45s ago                                         │
-│                                                          [Stop Watching] (danger btn) │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -397,8 +399,7 @@ When **active with error** (`lastError` is non-null):
 ┌─ Card variant: border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30 ─────┐
 │  ⚠ (AlertCircle) Active — Error                                                      │
 │  Token expired: unable to resolve GitHub token · 2 min ago                            │
-│  Merged: 3 · Skipped: 2                                                              │
-│                                                          [Stop Watching] (danger btn) │
+│  Merged: 3 · Skipped: 2                                    [● toggle ON]              │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -407,8 +408,7 @@ When **drained**:
 ```
 ┌─ Card variant: border-emerald-200 bg-emerald-50 ────────────────────────────────────┐
 │  ✓ (CheckCircle2) Drained                                                            │
-│  Merged: 7 · Completed 3 min ago                                                     │
-│                                                         [Start Again] (secondary btn) │
+│  Merged: 7 · Completed 3 min ago                        [○ toggle OFF]                │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -428,13 +428,9 @@ Exact same component pattern as Code Tasks `StatusPipeline`:
 
 Multi-select toggle (same as Code Tasks).
 
-#### SortSelector
+#### Merge Order
 
-```
-Sort: [Oldest] [Newest] [PR#]
-```
-
-`ArrowUpDown` icon + `rounded-full border px-2.5 py-1 text-xs` pills. Same as Code Tasks `SortSelector`.
+PRs are displayed in fixed oldest-first order (by `createdAt` ASC, tiebreak by PR number ASC). This matches the merge order used by the tick logic. No user-selectable sort — a small "Merge order: oldest first" indicator is shown above the list.
 
 #### ColumnHeader
 

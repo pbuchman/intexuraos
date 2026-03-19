@@ -60,6 +60,7 @@ export type SkipReason = 'merge_conflict' | 'checks_failing' | 'checks_pending' 
 export interface MergedPr {
   prNumber: number;
   title: string;
+  author: string;
   mergedAt: Timestamp;
 }
 
