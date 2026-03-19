@@ -1,29 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle, Copy } from 'lucide-react';
 import {
   Card,
   Layout,
   MarkdownContent,
-  PROVIDER_MODELS,
 } from '@/components';
-import { useAuth } from '@/context';
-import { useLlmKeys, useResearch } from '@/hooks';
-import {
-  approveResearch,
-  confirmPartialFailure,
-  deleteResearch,
-  enhanceResearch,
-  retryFromFailed,
-  toggleResearchFavourite,
-  unshareResearch,
-  exportToNotion,
-} from '@/services/researchAgentApi';
-import {
-  type LlmProvider,
-  type PartialFailureDecision,
-  type SupportedModel,
-} from '@/services/researchAgentApi.types';
+import { useResearch, useResearchDetailActions } from '@/hooks';
 import { ResearchHeader } from '@/components/research/ResearchHeader.js';
 import { ResearchActions } from '@/components/research/ResearchActions.js';
 import { ResearchResults } from '@/components/research/ResearchResults.js';
@@ -34,216 +17,9 @@ import { isProcessingStatus } from '@/components/research/shared.js';
 export function ResearchDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const { research, loading, error, refresh } = useResearch(id ?? '');
-  const { getAccessToken } = useAuth();
-  const { keys, loading: keysLoading } = useLlmKeys();
   const navigate = useNavigate();
-  const [copiedSection, setCopiedSection] = useState<string | null>(null);
-  const [approving, setApproving] = useState(false);
-  const [approveError, setApproveError] = useState<string | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [confirmError, setConfirmError] = useState<string | null>(null);
-  const [unsharing, setUnsharing] = useState(false);
-  const [unshareError, setUnshareError] = useState<string | null>(null);
-  const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
-  const [shareToast, setShareToast] = useState<string | null>(null);
-  const [retrying, setRetrying] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
-  const [showEnhanceModal, setShowEnhanceModal] = useState(false);
-  const [togglingFavourite, setTogglingFavourite] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [exportSuccess, setExportSuccess] = useState<{ mainPageUrl: string } | null>(null);
 
-  const configuredProviders: LlmProvider[] =
-    keysLoading || keys === null
-      ? []
-      : PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
-
-  const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {
-    const map = new Map<LlmProvider, string>();
-    if (keys !== null) {
-      for (const provider of PROVIDER_MODELS) {
-        const testResult = keys.testResults[provider.id];
-        if (testResult?.status === 'failure') {
-          map.set(provider.id, testResult.message);
-        }
-      }
-    }
-    return map;
-  })();
-
-  const copyToClipboard = async (text: string, section: string): Promise<void> => {
-    await navigator.clipboard.writeText(text);
-    setCopiedSection(section);
-    setTimeout(() => {
-      setCopiedSection(null);
-    }, 2000);
-  };
-
-  const handleApprove = async (): Promise<void> => {
-    if (id === undefined || id === '') return;
-    setApproving(true);
-    setApproveError(null);
-    try {
-      const token = await getAccessToken();
-      await approveResearch(token, id);
-      await refresh();
-    } catch (err) {
-      setApproveError(err instanceof Error ? err.message : 'Failed to start research');
-    } finally {
-      setApproving(false);
-    }
-  };
-
-  const handleDelete = async (): Promise<void> => {
-    if (id === undefined || id === '') return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const token = await getAccessToken();
-      await deleteResearch(token, id);
-      void navigate('/research');
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete research');
-      setShowDeleteConfirm(false);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const handleConfirm = async (action: PartialFailureDecision): Promise<void> => {
-    if (id === undefined || id === '') return;
-    setConfirming(true);
-    setConfirmError(null);
-    try {
-      const token = await getAccessToken();
-      await confirmPartialFailure(token, id, action);
-      await refresh();
-    } catch (err) {
-      setConfirmError(err instanceof Error ? err.message : 'Failed to confirm action');
-    } finally {
-      setConfirming(false);
-    }
-  };
-
-  const handleRetry = async (): Promise<void> => {
-    if (id === undefined || id === '') return;
-    setRetrying(true);
-    setRetryError(null);
-    try {
-      const token = await getAccessToken();
-      await retryFromFailed(token, id);
-      await refresh();
-    } catch (err) {
-      setRetryError(err instanceof Error ? err.message : 'Failed to retry research');
-    } finally {
-      setRetrying(false);
-    }
-  };
-
-  const handleCopyShareUrl = async (): Promise<void> => {
-    if (research?.shareInfo?.shareUrl === undefined) return;
-    await navigator.clipboard.writeText(research.shareInfo.shareUrl);
-    setShareToast('Link copied to clipboard');
-    setTimeout(() => {
-      setShareToast(null);
-    }, 2000);
-  };
-
-  const handleShare = async (): Promise<void> => {
-    if (research?.shareInfo?.shareUrl === undefined) return;
-    const shareUrl = research.shareInfo.shareUrl;
-    const shareData = {
-      title: research.title !== '' ? research.title : 'Research',
-      text: `Check out this research: ${research.title}`,
-      url: shareUrl,
-    };
-    const canShare =
-      typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
-    if (canShare) {
-      try {
-        await navigator.share(shareData);
-      } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
-          await handleCopyShareUrl();
-        }
-      }
-    } else {
-      await handleCopyShareUrl();
-    }
-  };
-
-  const handleUnshare = async (): Promise<void> => {
-    if (id === undefined || id === '') return;
-    setUnsharing(true);
-    setUnshareError(null);
-    try {
-      const token = await getAccessToken();
-      await unshareResearch(token, id);
-      setShowUnshareConfirm(false);
-      await refresh();
-    } catch (err) {
-      setUnshareError(err instanceof Error ? err.message : 'Failed to remove share');
-    } finally {
-      setUnsharing(false);
-    }
-  };
-
-  const handleEnhance = async (params: {
-    additionalModels?: SupportedModel[];
-    additionalContexts?: { content: string }[];
-    removeContextIds?: string[];
-    synthesisModel?: SupportedModel;
-  }): Promise<void> => {
-    if (id === undefined || id === '') return;
-    const token = await getAccessToken();
-    const enhanced = await enhanceResearch(token, id, params);
-    setShowEnhanceModal(false);
-    void navigate(`/research/${enhanced.id}`);
-  };
-
-  const handleToggleFavourite = async (): Promise<void> => {
-    if (research === null) return;
-    setTogglingFavourite(true);
-    try {
-      const token = await getAccessToken();
-      await toggleResearchFavourite(token, research.id, !(research.favourite ?? false));
-      await refresh();
-    } catch {
-      // Silently fail for now
-    } finally {
-      setTogglingFavourite(false);
-    }
-  };
-
-  const handleExportToNotion = async (): Promise<void> => {
-    if (id === undefined || id === '') return;
-    setExporting(true);
-    setExportError(null);
-    setExportSuccess(null);
-    try {
-      const token = await getAccessToken();
-      const updatedResearch = await exportToNotion(token, id);
-      if (updatedResearch.notionExportInfo !== undefined) {
-        setExportSuccess({ mainPageUrl: updatedResearch.notionExportInfo.mainPageUrl });
-      }
-      await refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to export to Notion';
-      if (message.includes('NOTION_NOT_CONNECTED')) {
-        setExportError('Please connect Notion first in Settings');
-      } else if (message.includes('PAGE_NOT_CONFIGURED')) {
-        setExportError('Please configure Research Export Page ID in Settings');
-      } else {
-        setExportError(message);
-      }
-    } finally {
-      setExporting(false);
-    }
-  };
+  const actions = useResearchDetailActions(id, research, refresh, navigate);
 
   useEffect(() => {
     if (research !== null && research.status === 'draft') {
@@ -289,37 +65,23 @@ export function ResearchDetailPage(): React.JSX.Element {
     <Layout>
       <ResearchHeader
         research={research}
-        togglingFavourite={togglingFavourite}
-        onToggleFavourite={(): void => { void handleToggleFavourite(); }}
-        copiedSection={copiedSection}
-        onCopyToClipboard={(text, section): void => { void copyToClipboard(text, section); }}
+        togglingFavourite={actions.togglingFavourite}
+        onToggleFavourite={actions.onToggleFavourite}
+        copiedSection={actions.copiedSection}
+        onCopyToClipboard={actions.copyToClipboard}
       />
 
       <ResearchActions
         research={research}
-        approve={{ loading: approving, error: approveError, onApprove: (): void => { void handleApprove(); } }}
-        retry={{ loading: retrying, error: retryError, onRetry: (): void => { void handleRetry(); } }}
-        deleteAction={{
-          loading: deleting, error: deleteError,
-          showConfirm: showDeleteConfirm, onShowConfirm: setShowDeleteConfirm,
-          onConfirm: (): void => { void handleDelete(); },
-        }}
-        unshare={{
-          loading: unsharing, error: unshareError,
-          showConfirm: showUnshareConfirm, onShowConfirm: setShowUnshareConfirm,
-          onConfirm: (): void => { void handleUnshare(); },
-        }}
-        exportToNotion={{
-          loading: exporting, error: exportError,
-          success: exportSuccess, onExport: (): void => { void handleExportToNotion(); },
-        }}
-        onShowEnhanceModal={(): void => { setShowEnhanceModal(true); }}
-        onShare={(): void => { void handleShare(); }}
+        approve={actions.approve}
+        retry={actions.retry}
+        deleteAction={actions.deleteAction}
+        unshare={actions.unshare}
+        exportToNotion={actions.exportToNotion}
+        onShowEnhanceModal={actions.onShowEnhanceModal}
+        onShare={actions.onShare}
         onEditDraft={(): void => { void navigate(`/research/new?draftId=${research.id}`); }}
-        partialFailure={{
-          loading: confirming, error: confirmError,
-          onConfirm: (action): void => { void handleConfirm(action); },
-        }}
+        partialFailure={actions.partialFailure}
       />
 
       <Card className="mb-6 mt-6">
@@ -330,12 +92,12 @@ export function ResearchDetailPage(): React.JSX.Element {
           <button
             type="button"
             onClick={() => {
-              void copyToClipboard(research.prompt, 'research-topic');
+              actions.copyToClipboard(research.prompt, 'research-topic');
             }}
             className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
-            title={copiedSection === 'research-topic' ? 'Copied!' : 'Copy'}
+            title={actions.copiedSection === 'research-topic' ? 'Copied!' : 'Copy'}
           >
-            {copiedSection === 'research-topic' ? (
+            {actions.copiedSection === 'research-topic' ? (
               <CheckCircle className="h-4 w-4 text-green-500" />
             ) : (
               <Copy className="h-4 w-4" />
@@ -361,8 +123,8 @@ export function ResearchDetailPage(): React.JSX.Element {
 
       <ResearchResults
         research={research}
-        copiedSection={copiedSection}
-        onCopy={(text, section): void => { void copyToClipboard(text, section); }}
+        copiedSection={actions.copiedSection}
+        onCopy={actions.copyToClipboard}
       />
 
       {showLlmStatus ? (
@@ -392,19 +154,19 @@ export function ResearchDetailPage(): React.JSX.Element {
         </Card>
       ) : null}
 
-      {showEnhanceModal ? (
+      {actions.showEnhanceModal ? (
         <EnhanceModal
           research={research}
-          configuredProviders={configuredProviders}
-          failedProviders={failedProviders}
-          onEnhance={handleEnhance}
-          onClose={(): void => { setShowEnhanceModal(false); }}
+          configuredProviders={actions.configuredProviders}
+          failedProviders={actions.failedProviders}
+          onEnhance={actions.handleEnhance}
+          onClose={actions.onCloseEnhanceModal}
         />
       ) : null}
 
-      {shareToast !== null ? (
+      {actions.shareToast !== null ? (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">
-          {shareToast}
+          {actions.shareToast}
         </div>
       ) : null}
     </Layout>
