@@ -69,7 +69,10 @@ export function createLinearActionExtractionService(
 
       const parseResult = parseExtractionResponse(result.value.content);
       if (!parseResult.ok) {
-        log.error({ userId, error: parseResult.error.message }, 'Failed to parse LLM response');
+        log.error(
+          { userId, error: parseResult.error.message, rawResponsePreview: result.value.content.slice(0, 500) },
+          'Failed to parse LLM response'
+        );
         return parseResult;
       }
 
