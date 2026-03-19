@@ -9,6 +9,7 @@ import type { SynthesisContext } from '@intexuraos/llm-prompts';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import {
+  LOW_QUALITY_WARNING_PREFIX,
   runSynthesis,
   type RunSynthesisDeps,
 } from '../../../../domain/research/usecases/runSynthesis.js';
@@ -245,6 +246,145 @@ describe('runSynthesis', () => {
       [
         { model: LlmModels.Gemini20Flash, content: 'Google Result' },
         { model: 'claude-3', content: 'Claude Result' },
+      ],
+      undefined,
+      undefined
+    );
+  });
+
+  it('prefixes low_quality flagged results with quality warning in synthesis reports', async () => {
+    const research = createTestResearch({
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: 'Short OpenAI Result',
+          qualityFlag: 'low_quality',
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    await runSynthesis('research-1', deps);
+
+    expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
+      'Test research prompt',
+      [
+        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        {
+          model: LlmModels.O4MiniDeepResearch,
+          content: `${LOW_QUALITY_WARNING_PREFIX}\n\nShort OpenAI Result`,
+        },
+      ],
+      undefined,
+      undefined
+    );
+  });
+
+  it('handles low_quality flagged result with undefined result field', async () => {
+    const research = createTestResearch({
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          qualityFlag: 'low_quality',
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    await runSynthesis('research-1', deps);
+
+    expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
+      'Test research prompt',
+      [
+        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        {
+          model: LlmModels.O4MiniDeepResearch,
+          content: `${LOW_QUALITY_WARNING_PREFIX}\n\n`,
+        },
+      ],
+      undefined,
+      undefined
+    );
+  });
+
+  it('handles low_quality flagged result with empty string result', async () => {
+    const research = createTestResearch({
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: '',
+          qualityFlag: 'low_quality',
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    await runSynthesis('research-1', deps);
+
+    expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
+      'Test research prompt',
+      [
+        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        {
+          model: LlmModels.O4MiniDeepResearch,
+          content: `${LOW_QUALITY_WARNING_PREFIX}\n\n`,
+        },
+      ],
+      undefined,
+      undefined
+    );
+  });
+
+  it('passes through content unchanged when qualityFlag is not low_quality', async () => {
+    const research = createTestResearch({
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: 'OpenAI Result',
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    await runSynthesis('research-1', deps);
+
+    expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
+      'Test research prompt',
+      [
+        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        { model: LlmModels.O4MiniDeepResearch, content: 'OpenAI Result' },
       ],
       undefined,
       undefined
@@ -576,6 +716,7 @@ describe('runSynthesis', () => {
       safety: {
         high_stakes: false,
         required_disclaimers: [],
+        user_exclusions: [],
       },
       red_flags: [],
     };
@@ -616,6 +757,71 @@ describe('runSynthesis', () => {
         {},
         '[4.2.2] Synthesis context inferred successfully (costUsd: 0.003)'
       );
+    });
+
+    it('passes researchContext.language as languageOverride to inferSynthesisContext', async () => {
+      const research = createTestResearch({
+        researchContext: {
+          language: 'es',
+          domain: 'general',
+          mode: 'standard',
+          intent_summary: 'Consulta general',
+          defaults_applied: [],
+          assumptions: [],
+          answer_style: ['practical'],
+          time_scope: {
+            as_of_date: '2024-01-01',
+            prefers_recent_years: 2,
+            is_time_sensitive: false,
+          },
+          locale_scope: {
+            country_or_region: 'Spain',
+            jurisdiction: 'Spain',
+            currency: 'EUR',
+          },
+          research_plan: {
+            key_questions: ['What are the main aspects?'],
+            search_queries: ['general query'],
+            preferred_source_types: ['official'],
+            avoid_source_types: [],
+          },
+          output_format: {
+            wants_table: false,
+            wants_steps: false,
+            wants_pros_cons: false,
+            wants_budget_numbers: false,
+          },
+          safety: {
+            high_stakes: false,
+            required_disclaimers: [],
+            user_exclusions: [],
+          },
+          red_flags: [],
+        },
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn(),
+        inferSynthesisContext: vi.fn().mockResolvedValue(
+          ok({ context: mockSynthesisContext, usage: { inputTokens: 200, outputTokens: 100, costUsd: 0.003 } })
+        ),
+      };
+
+      await runSynthesis('research-1', {
+        ...deps,
+        contextInferrer: mockContextInferrer,
+        logger: mockLogger,
+      });
+
+      expect(mockContextInferrer.inferSynthesisContext).toHaveBeenCalledWith({
+        originalPrompt: 'Test research prompt',
+        reports: [
+          { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+          { model: LlmModels.O4MiniDeepResearch, content: 'OpenAI Result' },
+        ],
+        languageOverride: 'es',
+      });
     });
 
     it('passes synthesis context to synthesizer', async () => {

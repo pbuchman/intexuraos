@@ -1215,30 +1215,26 @@ describe('createDetectMergeConflictsOnPush', () => {
     }));
   });
 
-  it('retries task creation without a linear issue id after ACTIVE_TASK_EXISTS', async () => {
+  it('does not retry task creation after ACTIVE_TASK_EXISTS', async () => {
     const logger = createLogger();
     const deps = createDeps(logger);
     deps.gitHubPRClient.getPullRequestDetails.mockResolvedValue(ok(createPRDetails({
       title: 'INT-777 Resolve merge issue',
     })));
-    deps.codeTaskRepo.create
-      .mockResolvedValueOnce(err({
-        code: 'ACTIVE_TASK_EXISTS',
-        message: 'already active',
-      }))
-      .mockResolvedValueOnce(ok(createTask({
-        id: 'task_11111111-1111-4111-8111-111111111111',
-        status: 'queued',
-      })));
+    deps.codeTaskRepo.create.mockResolvedValue(err({
+      code: 'ACTIVE_TASK_EXISTS',
+      message: 'already active',
+    }));
 
     const detector = createDetectMergeConflictsOnPush(deps as never);
     await detector.detectOnPush(createPushEvent('refs/heads/release/2026.03'), logger);
 
-    expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(2);
-    const firstCreateCall = deps.codeTaskRepo.create.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-    const secondCreateCall = deps.codeTaskRepo.create.mock.calls[1]?.[0] as Record<string, unknown> | undefined;
-    expect(firstCreateCall?.['linearIssueId']).toBe('INT-123');
-    expect(secondCreateCall?.['linearIssueId']).toBeUndefined();
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+    expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      managedConflictTaskId: null,
+      managedConflictTaskOwnerUserId: 'user-1',
+    }));
   });
 
   it('omits linearIssueId reuse when the latest task is an active non-pull-request task', async () => {

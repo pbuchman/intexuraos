@@ -502,6 +502,41 @@ describe('LogForwarder', () => {
         vi.useFakeTimers();
       }
     });
+
+    it('includes cause chain when TypeError has a cause', async () => {
+      const warnSpy = vi.fn();
+      const loggerWithWarn: Logger = {
+        info(): void {},
+        warn: warnSpy,
+        error(): void {},
+        debug(): void {},
+      };
+
+      const fwd = new LogForwarder(baseConfig, loggerWithWarn);
+      const cause = new Error('connect ECONNREFUSED 34.143.76.2:443') as Error & { code: string };
+      cause.code = 'ECONNREFUSED';
+      const fetchError = new TypeError('fetch failed', { cause });
+      fetchSpy.mockRejectedValue(fetchError);
+      fwd.registerTask('task-cause', 'secret');
+      fwd.appendChunk('task-cause', 'content\n');
+
+      vi.useRealTimers();
+      try {
+        await fwd.flush('task-cause');
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-cause',
+            name: 'TypeError',
+            message: 'fetch failed',
+            cause: 'connect ECONNREFUSED 34.143.76.2:443 [ECONNREFUSED]',
+          }),
+          'Log upload failed, retrying'
+        );
+      } finally {
+        vi.useFakeTimers();
+      }
+    });
   });
 
   describe('prefixTimestamps already-prefixed line', () => {

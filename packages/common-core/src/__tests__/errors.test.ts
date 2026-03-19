@@ -6,6 +6,7 @@ import {
   ERROR_HTTP_STATUS,
   type ErrorCode,
   getErrorMessage,
+  getErrorCauseChain,
   IntexuraOSError,
   serializeError,
 } from '../errors.js';
@@ -314,6 +315,84 @@ describe('Error utilities', () => {
       const result = serializeError(error);
 
       expect(result.syscall).toBe('open');
+    });
+
+    it('serializes single-level cause chain', () => {
+      const cause = new Error('connect ECONNREFUSED 34.143.76.2:443');
+      const error = new TypeError('fetch failed', { cause });
+      const result = serializeError(error);
+
+      expect(result.cause).toBeDefined();
+      expect(result.cause?.message).toBe('connect ECONNREFUSED 34.143.76.2:443');
+      expect(result.cause?.name).toBe('Error');
+    });
+
+    it('serializes two-level cause chain', () => {
+      const root = new Error('getaddrinfo ENOTFOUND example.com');
+      const mid = new Error('connect failed', { cause: root });
+      const error = new TypeError('fetch failed', { cause: mid });
+      const result = serializeError(error);
+
+      expect(result.cause).toBeDefined();
+      expect(result.cause?.message).toBe('connect failed');
+      expect(result.cause?.cause).toBeDefined();
+      expect(result.cause?.cause?.message).toBe('getaddrinfo ENOTFOUND example.com');
+    });
+
+    it('preserves existing behavior when error has no cause', () => {
+      const error = new Error('plain error');
+      const result = serializeError(error);
+
+      expect(result.cause).toBeUndefined();
+    });
+
+    it('serializes non-Error cause values', () => {
+      const error = new Error('wrapper', { cause: 'string cause' });
+      const result = serializeError(error);
+
+      expect(result.cause).toBeDefined();
+      expect(result.cause?.message).toBe('string cause');
+    });
+  });
+
+  describe('getErrorCauseChain', () => {
+    it('returns cause chain string for TypeError with Error cause', () => {
+      const cause = new Error('connect ECONNREFUSED 34.143.76.2:443') as Error & { code: string };
+      cause.code = 'ECONNREFUSED';
+      const error = new TypeError('fetch failed', { cause });
+
+      const chain = getErrorCauseChain(error);
+
+      expect(chain).toBe('connect ECONNREFUSED 34.143.76.2:443 [ECONNREFUSED]');
+    });
+
+    it('returns multi-level cause chain joined by arrow', () => {
+      const root = new Error('getaddrinfo ENOTFOUND example.com') as Error & { code: string };
+      root.code = 'ENOTFOUND';
+      const mid = new Error('connect failed', { cause: root });
+      const error = new TypeError('fetch failed', { cause: mid });
+
+      const chain = getErrorCauseChain(error);
+
+      expect(chain).toBe('connect failed -> getaddrinfo ENOTFOUND example.com [ENOTFOUND]');
+    });
+
+    it('returns undefined for errors without cause', () => {
+      const error = new Error('no cause');
+      expect(getErrorCauseChain(error)).toBeUndefined();
+    });
+
+    it('returns undefined for non-Error values', () => {
+      expect(getErrorCauseChain('string')).toBeUndefined();
+      expect(getErrorCauseChain(null)).toBeUndefined();
+      expect(getErrorCauseChain(42)).toBeUndefined();
+    });
+
+    it('handles non-Error cause values', () => {
+      const error = new Error('wrapper', { cause: 'string cause' });
+      const chain = getErrorCauseChain(error);
+
+      expect(chain).toBe('string cause');
     });
   });
 });

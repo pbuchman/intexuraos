@@ -34,7 +34,6 @@
 
 import { randomUUID } from 'node:crypto';
 import { type GenerateContentResponse, GoogleGenAI } from '@google/genai';
-import { buildResearchPrompt } from '@intexuraos/llm-prompts';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, type AuditSink, createAuditContext } from '@intexuraos/llm-audit';
 import {
@@ -50,6 +49,7 @@ import {
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 import { normalizeUsage, calculateImageCost } from './costCalculator.js';
+import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
 
 export type GeminiClient = LLMClient;
 
@@ -104,18 +104,18 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
-      const researchPrompt = buildResearchPrompt(prompt);
-      const { auditContext } = createRequestContext('research', model, researchPrompt, auditSink);
+      const { auditContext } = createRequestContext('research', model, prompt, auditSink);
 
       try {
         const response = await ai.models.generateContent({
           model,
-          contents: researchPrompt,
+          contents: prompt,
           config: { tools: [{ googleSearch: {} }] },
         });
 
         const text = response.text ?? '';
-        const sources = extractSourcesFromResponse(response);
+        const rawSources = extractSourcesFromResponse(response);
+        const sources = await resolveVertexRedirectUrls(rawSources);
         const groundingEnabled = hasGroundingMetadata(response);
         const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;

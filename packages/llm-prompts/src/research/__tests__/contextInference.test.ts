@@ -83,6 +83,14 @@ describe('buildInferResearchContextPrompt', () => {
     });
   });
 
+  describe('user_exclusions', () => {
+    it('should include user_exclusions instruction in the prompt', () => {
+      const result = buildInferResearchContextPrompt('test query');
+      expect(result).toContain('user_exclusions');
+      expect(result).toContain('do not');
+    });
+  });
+
   describe('F-012 version metadata contract', () => {
     it('contains a valid prompt version comment', () => {
       const source = readFileSync(sourceFilePath, 'utf8');

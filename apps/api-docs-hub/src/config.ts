@@ -83,6 +83,10 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'INTEXURAOS_WEB_AGENT_OPENAPI_URL',
     displayName: 'Web Agent API',
   },
+  {
+    key: 'INTEXURAOS_CRON_AGENT_OPENAPI_URL',
+    displayName: 'Cron Agent API',
+  },
 ];
 
 /**

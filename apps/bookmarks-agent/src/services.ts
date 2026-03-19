@@ -18,7 +18,7 @@ import {
   createWhatsAppSendPublisher,
   type WhatsAppSendPublisher,
 } from '@intexuraos/infra-pubsub';
-import { createWebAgentSummaryClient } from './infra/summary/webAgentSummaryClient.js';
+import { createWebAgentSummaryClient } from './infra/summary/index.js';
 
 export interface ServiceContainer {
   bookmarkRepository: BookmarkRepository;
