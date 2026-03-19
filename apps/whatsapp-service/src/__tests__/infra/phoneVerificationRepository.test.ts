@@ -584,5 +584,16 @@ describe('phoneVerificationRepository', () => {
 
       expect(result.ok).toBe(true);
     });
+
+    it('returns error on persistence failure', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Transaction error') });
+
+      const result = await createVerificationWithChecks(baseParams);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
   });
 });
