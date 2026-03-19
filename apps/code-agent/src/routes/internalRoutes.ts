@@ -1,6 +1,7 @@
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import type { FastifyPluginCallback } from 'fastify';
+import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
+import { authenticateInternalScheduler } from './helpers/internalAuth.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /internal/merge-conflicts/reconcile - triggered by Cloud Scheduler (INT-1023)
@@ -41,33 +42,17 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/merge-conflicts/reconcile',
       });
 
-      // Auth strategy: Cloud Scheduler sends OIDC tokens; direct service calls use x-internal-auth.
-      //
-      // SECURITY NOTE: The OIDC token is NOT validated at the application layer. In production,
-      // Cloud Run validates the OIDC token at the infrastructure level before the request reaches
-      // this handler. In the current Terraform config, code-agent uses allow_unauthenticated=true
-      // (required for external webhooks), so this OIDC trust relies on Cloud Run's ingress settings
-      // and IAM invoker configuration — NOT on the Bearer header alone. If Cloud Run ingress is
-      // changed to allow all traffic, this endpoint would need application-level OIDC validation.
-      //
-      // For defense in depth, internal callers should prefer the x-internal-auth header path.
-      const authHeader = request.headers.authorization;
-      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
-
-      if (isOidcAuth) {
-        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn({ reason: authResult.reason }, 'Internal auth failed for merge-conflicts reconcile');
-          return await reply.fail('UNAUTHORIZED', 'Unauthorized');
-        }
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for merge-conflicts reconcile');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
+      request.log.info({ strategy: authResult.strategy }, 'Authenticated for merge-conflicts reconcile');
 
       const { mergeConflictDetector, logger } = getServices();
 
