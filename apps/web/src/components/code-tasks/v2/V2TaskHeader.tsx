@@ -14,6 +14,7 @@ import {
   STATUS_MAP,
   WORKER_STATUS_STYLES,
   isActiveStatus,
+  type StatusConfig,
 } from './shared.js';
 
 const ICON_MAP = { Clock, Loader2, CheckCircle2, XCircle, AlertCircle, Archive } as const;
@@ -24,7 +25,13 @@ interface V2TaskHeaderProps {
 }
 
 export function V2TaskHeader({ task, workerStatusTag }: V2TaskHeaderProps): React.JSX.Element {
-  const status = STATUS_MAP[task.status];
+  const FALLBACK_STATUS: StatusConfig = {
+    bg: 'bg-slate-100 dark:bg-slate-700',
+    text: 'text-slate-600 dark:text-slate-400',
+    label: task.status,
+    icon: 'AlertCircle',
+  };
+  const status = (STATUS_MAP as Partial<Record<string, StatusConfig>>)[task.status] ?? FALLBACK_STATUS;
   const StatusIcon = ICON_MAP[status.icon];
 
   return (
