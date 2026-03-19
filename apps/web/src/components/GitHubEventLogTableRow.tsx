@@ -1,0 +1,163 @@
+import { memo } from 'react';
+import { ExternalLink, Loader2 } from 'lucide-react';
+import type { GitHubEventLogListRow } from '@/hooks';
+import { formatTimeOnly } from '@/utils/dateFormat';
+
+export interface GitHubEventLogTableRowProps {
+  row: GitHubEventLogListRow;
+}
+
+function formatEventLabel(row: GitHubEventLogListRow): string {
+  const base = row.githubEventName;
+  if (row.action === null || row.action === 'unknown') {
+    return base;
+  }
+  return `${base}.${row.action}`;
+}
+
+function formatDecisionSummary(row: GitHubEventLogListRow): string {
+  if (row.dispatchAction === 'create_review_task' && row.reviewTypes.length > 0) {
+    return `requested_review(${row.reviewTypes.join(', ')})`;
+  }
+  if (row.dispatchAction !== null) {
+    return row.dispatchAction;
+  }
+  if (row.decisionOutcome !== null) {
+    return row.decisionOutcome;
+  }
+  return 'pending';
+}
+
+function decisionClasses(row: GitHubEventLogListRow): string {
+  if (row.decisionState === 'pending') {
+    return 'bg-amber-100 text-amber-700 ring-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-800';
+  }
+  if (row.decisionOutcome === 'request_review') {
+    return 'bg-sky-100 text-sky-700 ring-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:ring-sky-800';
+  }
+  if (row.decisionOutcome === 'dispatch') {
+    return 'bg-emerald-100 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-800';
+  }
+  if (row.decisionOutcome === 'skip') {
+    return 'bg-slate-100 text-slate-500 ring-slate-200 dark:bg-slate-700/50 dark:text-slate-400 dark:ring-slate-600';
+  }
+  return 'bg-slate-200 text-slate-700 ring-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:ring-slate-600';
+}
+
+function eventClasses(row: GitHubEventLogListRow): string {
+  const name = row.githubEventName;
+  if (name === 'pull_request') {
+    return 'bg-indigo-100 text-indigo-700 ring-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:ring-indigo-800';
+  }
+  if (name === 'issue_comment' || name === 'pull_request_review_comment') {
+    return 'bg-orange-100 text-orange-700 ring-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:ring-orange-800';
+  }
+  if (name === 'pull_request_review') {
+    return 'bg-rose-100 text-rose-700 ring-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:ring-rose-800';
+  }
+  if (name === 'push') {
+    return 'bg-teal-100 text-teal-700 ring-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:ring-teal-800';
+  }
+  if (name === 'check_run' || name === 'check_suite') {
+    return 'bg-cyan-100 text-cyan-700 ring-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400 dark:ring-cyan-800';
+  }
+  if (name === 'workflow_run' || name === 'workflow_job') {
+    return 'bg-violet-100 text-violet-700 ring-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:ring-violet-800';
+  }
+  if (name === 'create' || name === 'delete') {
+    return 'bg-amber-100 text-amber-700 ring-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-800';
+  }
+  return 'bg-slate-200 text-slate-700 ring-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:ring-slate-600';
+}
+
+function getAccentShadow(row: GitHubEventLogListRow): string {
+  if (row.decisionState === 'pending') return 'shadow-[inset_3px_0_0_theme(colors.amber.500)]';
+  if (row.decisionOutcome === 'request_review') return 'shadow-[inset_3px_0_0_theme(colors.sky.500)]';
+  if (row.decisionOutcome === 'dispatch') return 'shadow-[inset_3px_0_0_theme(colors.emerald.500)]';
+  return '';
+}
+
+function buildEntityUrl(row: GitHubEventLogListRow): string | null {
+  if (row.repository === null) {
+    return null;
+  }
+  if (row.pullRequestNumber !== null) {
+    return `https://github.com/${row.repository}/pull/${String(row.pullRequestNumber)}`;
+  }
+  return `https://github.com/${row.repository}`;
+}
+
+function GitHubEventLogTableRowComponent({ row }: GitHubEventLogTableRowProps): React.JSX.Element {
+  const entityUrl = buildEntityUrl(row);
+
+  return (
+    <div
+      className={`group overflow-hidden rounded-lg border border-slate-200 bg-white transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${getAccentShadow(row)}`}
+    >
+      {/* Desktop: grid layout */}
+      <div className="hidden items-center gap-2 px-3 py-1.5 lg:grid lg:grid-cols-[100px_1fr_160px_120px_36px]">
+        {/* Time */}
+        <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+          {formatTimeOnly(row.authPassedAt)}
+        </span>
+
+        {/* Event Type */}
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-[0.08em] ring-1 ${eventClasses(row)}`}>
+            {formatEventLabel(row)}
+          </span>
+          {row.isHydrating ? (
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-amber-500" />
+          ) : null}
+        </div>
+
+        {/* Decision */}
+        <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${decisionClasses(row)}`}>
+          {formatDecisionSummary(row)}
+        </span>
+
+        {/* User */}
+        <span className="truncate text-xs text-slate-600 dark:text-slate-400">
+          @{row.senderLogin ?? 'system'}
+        </span>
+
+        {/* Link */}
+        {entityUrl !== null ? (
+          <a
+            href={entityUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center text-slate-400 transition-colors hover:text-blue-600 dark:hover:text-blue-400"
+            aria-label="Open on GitHub"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        ) : null}
+      </div>
+
+      {/* Mobile: compact flex row */}
+      <div className="flex items-center gap-2 px-3 py-1.5 lg:hidden">
+        <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+          {formatTimeOnly(row.authPassedAt)}
+        </span>
+        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-[0.08em] ring-1 ${eventClasses(row)}`}>
+          {formatEventLabel(row)}
+        </span>
+        {row.isHydrating ? (
+          <Loader2 className="h-3 w-3 shrink-0 animate-spin text-amber-500" />
+        ) : null}
+        <span className={`ml-auto inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${decisionClasses(row)}`}>
+          {formatDecisionSummary(row)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Reference equality is sufficient: the hook (useGitHubEventLog) always emits
+// a new row object when isHydrating transitions, so a changed isHydrating value
+// is automatically detected by the row reference check.
+export const GitHubEventLogTableRow = memo(
+  GitHubEventLogTableRowComponent,
+  (prevProps, nextProps) => prevProps.row === nextProps.row,
+);
