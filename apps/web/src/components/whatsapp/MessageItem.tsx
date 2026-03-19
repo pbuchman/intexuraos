@@ -77,6 +77,7 @@ export function MessageItem({
   const [copied, setCopied] = useState(false);
   const [copiedTranscription, setCopiedTranscription] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [fullSizeError, setFullSizeError] = useState(false);
 
   const handleCopy = async (): Promise<void> => {
     const textToCopy = message.caption ?? message.text;
@@ -108,11 +109,15 @@ export function MessageItem({
   };
 
   const handleOpenFullSize = async (messageId: string): Promise<void> => {
+    setFullSizeError(false);
     try {
       const response = await getMessageMediaUrl(accessToken, messageId);
       window.open(response.url, '_blank', 'noopener,noreferrer');
     } catch {
-      // Failed to get URL, ignore
+      setFullSizeError(true);
+      setTimeout(() => {
+        setFullSizeError(false);
+      }, 3000);
     }
   };
 
@@ -349,18 +354,23 @@ export function MessageItem({
 
       {/* Image full size link */}
       {message.mediaType === 'image' && message.hasMedia && (
-        <div className="mt-2 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+        <div className="mt-2 flex flex-col gap-1 text-sm">
           <button
             onClick={(e): void => {
               e.stopPropagation();
               void handleOpenFullSize(message.id);
             }}
-            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+            className="flex w-fit items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
             title="Open full size in new tab"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             <span>Full size</span>
           </button>
+          {fullSizeError && (
+            <span className="text-xs text-red-500 dark:text-red-400">
+              Failed to open image
+            </span>
+          )}
         </div>
       )}
     </div>
