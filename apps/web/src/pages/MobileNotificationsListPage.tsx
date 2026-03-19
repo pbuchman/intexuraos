@@ -28,7 +28,6 @@ export const NOTIFICATION_SORT_OPTIONS: { key: NotificationSortOption; label: st
 ];
 
 function getSortOptionFromStorage(): NotificationSortOption {
-  if (typeof window === 'undefined') return 'newest';
   const stored = localStorage.getItem('notifications-sort');
   if (stored === 'oldest' || stored === 'app') return stored;
   return 'newest';
