@@ -41,6 +41,17 @@ describe('buildSynthesisContextRepairPrompt', () => {
     expect(result).toContain('No trailing commas');
   });
 
+  it('should include outdoor_recreation and fishing in domain list', () => {
+    const result = buildSynthesisContextRepairPrompt('query', '{}', 'error');
+    expect(result).toContain('outdoor_recreation');
+    expect(result).toContain('fishing');
+  });
+
+  it('should include user_exclusions in safety schema', () => {
+    const result = buildSynthesisContextRepairPrompt('query', '{}', 'error');
+    expect(result).toContain('user_exclusions');
+  });
+
   it('preserves parameter ordering', () => {
     const result = buildSynthesisContextRepairPrompt(
       'original prompt text',

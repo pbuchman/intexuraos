@@ -48,18 +48,26 @@ export function formatRelative(isoDate: string): string {
   const date = new Date(isoDate);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
+  const absDiffMs = Math.abs(diffMs);
+  const isFuture = diffMs < 0;
 
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
+  const absDiffSeconds = Math.floor(absDiffMs / 1000);
+  const absDiffMinutes = Math.floor(absDiffSeconds / 60);
+  const absDiffHours = Math.floor(absDiffMinutes / 60);
+  const absDiffDays = Math.floor(absDiffHours / 24);
 
-  if (diffSeconds < 60) return 'just now';
-  if (diffMinutes < 60) return `${String(diffMinutes)}m ago`;
-  if (diffHours < 24) return `${String(diffHours)}h ago`;
-  if (diffDays < 7) return `${String(diffDays)}d ago`;
+  if (absDiffSeconds < 60) return isFuture ? 'in < 1m' : 'just now';
+  if (absDiffMinutes < 60) {
+    return isFuture ? `in ${String(absDiffMinutes)}m` : `${String(absDiffMinutes)}m ago`;
+  }
+  if (absDiffHours < 24) {
+    return isFuture ? `in ${String(absDiffHours)}h` : `${String(absDiffHours)}h ago`;
+  }
+  if (absDiffDays < 7) {
+    return isFuture ? `in ${String(absDiffDays)}d` : `${String(absDiffDays)}d ago`;
+  }
 
-  // Older than 7 days: show absolute date
+  // Older/further than 7 days: show absolute date
   if (date.getFullYear() === now.getFullYear()) {
     return date.toLocaleDateString('en-US', {
       month: 'short',
@@ -72,6 +80,16 @@ export function formatRelative(isoDate: string): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+/**
+ * Format relative time from a nullable ISO date string.
+ * Returns 'Never' for null values. Supports future dates.
+ * Use for: Cron schedule next/last execution timestamps
+ */
+export function formatRelativeNullable(isoDate: string | null): string {
+  if (isoDate === null) return 'Never';
+  return formatRelative(isoDate);
 }
 
 /**
@@ -177,6 +195,21 @@ export function formatElapsedTime(seconds: number): string {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return `${String(hours)}h ${String(remainingMinutes)}m`;
+}
+
+/**
+ * Format duration in milliseconds as human-friendly string.
+ * Returns '-' for null. Examples: "150ms", "3.2s", "2m 15s"
+ * Use for: Execution duration, API call timing
+ */
+export function formatDurationMs(ms: number | null): string {
+  if (ms === null) return '-';
+  if (ms < 1000) return `${String(ms)}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.round(seconds % 60);
+  return `${String(minutes)}m ${String(remaining)}s`;
 }
 
 /**

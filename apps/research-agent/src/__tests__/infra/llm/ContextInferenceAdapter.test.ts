@@ -48,7 +48,7 @@ const validResearchContext: ResearchContext = {
     wants_pros_cons: false,
     wants_budget_numbers: false,
   },
-  safety: { high_stakes: false, required_disclaimers: [] },
+  safety: { high_stakes: false, required_disclaimers: [], user_exclusions: [] },
   red_flags: [],
 };
 
@@ -66,7 +66,7 @@ const validSynthesisContext: SynthesisContext = {
   defaults_applied: [],
   assumptions: [],
   output_format: { wants_table: false, wants_actionable_summary: true },
-  safety: { high_stakes: false, required_disclaimers: [] },
+  safety: { high_stakes: false, required_disclaimers: [], user_exclusions: [] },
   red_flags: [],
 };
 
@@ -515,7 +515,7 @@ describe('ContextInferenceAdapter', () => {
             locale_scope: { country_or_region: 'US', jurisdiction: 'US', currency: 'USD' },
             research_plan: { key_questions: [], search_queries: [], preferred_source_types: [], avoid_source_types: [] },
             output_format: { wants_table: false, wants_steps: false, wants_pros_cons: false, wants_budget_numbers: false },
-            safety: { high_stakes: false, required_disclaimers: [] },
+            safety: { high_stakes: false, required_disclaimers: [], user_exclusions: [] },
             red_flags: [],
           }),
           usage: mockUsage,

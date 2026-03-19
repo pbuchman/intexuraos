@@ -83,6 +83,7 @@ export interface WorkerConfig {
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
+  resolvedImage?: string;
   continueSession?: boolean;
   onLog?: (chunk: string) => void;
   onComplete?: (exitCode: number) => void;
@@ -172,6 +173,13 @@ export interface IsolationProvider {
   startPeriodicCleanup?(): void;
 
   stopPeriodicCleanup?(): void;
+
+  /**
+   * Pull the worker image and return the resolved digest reference.
+   * Separates the network-bound pull from container creation so each
+   * phase can have its own timeout.
+   */
+  pullImage?(taskId: string, onProgress?: (message: string) => void): Promise<string>;
 
   getImageInfo?(): {
     configuredRef: string;

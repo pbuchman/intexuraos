@@ -18,7 +18,9 @@ describe('DOMAINS constant', () => {
     expect(DOMAINS).toContain('product');
     expect(DOMAINS).toContain('general');
     expect(DOMAINS).toContain('unknown');
-    expect(DOMAINS.length).toBe(21);
+    expect(DOMAINS).toContain('outdoor_recreation');
+    expect(DOMAINS).toContain('fishing');
+    expect(DOMAINS.length).toBe(23);
   });
 });
 

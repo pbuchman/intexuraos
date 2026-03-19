@@ -51,6 +51,7 @@ const TASK_TIMEOUT_WARNING_MS = 175 * 60 * 1000; // 2h 55m
 const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
+const IMAGE_PULL_TIMEOUT_MS = 900_000; // 15 minutes — image pulls are network-bound
 const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
 const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
 
@@ -1652,6 +1653,24 @@ export class TaskDispatcher {
     try {
       await this.isolation.tokenRefresher.registerTask(task.taskId);
 
+      // Phase 1/2: Pull worker image (network-bound, variable latency)
+      // Only pull for new containers — continued sessions reuse existing containers.
+      if (!params.continueSession && this.isolation.provider.pullImage !== undefined) {
+        this.appendOrchestratorTaskLog(task.taskId, 'Phase 1/2: Pulling worker image...');
+        const resolvedImage = await withTimeout(
+          this.isolation.provider.pullImage(task.taskId, (message) => {
+            this.appendOrchestratorTaskLog(task.taskId, message);
+          }),
+          IMAGE_PULL_TIMEOUT_MS,
+          `Image pull timed out after ${String(IMAGE_PULL_TIMEOUT_MS / 1000)}s`
+        );
+        workerConfig.resolvedImage = resolvedImage;
+      }
+
+      // Phase 2/2: Create worker container (deterministic, ~40s)
+      if (!params.continueSession) {
+        this.appendOrchestratorTaskLog(task.taskId, 'Phase 2/2: Creating worker container...');
+      }
       createPromise = this.isolation.provider.createWorker(workerConfig);
 
       const handle = await withTimeout(

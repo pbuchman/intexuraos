@@ -8,6 +8,7 @@ import {
   saveLinearIssue,
   findLinearIssueById,
   findLinearIssueByIdentifier,
+  findLinearIssuesByIdentifiers,
   listLinearIssuesByUserId,
   deleteLinearIssueById,
   createLinearIssueRepository,
@@ -280,6 +281,81 @@ describe('linearIssueRepository', () => {
       expect(repo.findByIdentifier).toBeDefined();
       expect(repo.listByUserId).toBeDefined();
       expect(repo.deleteById).toBeDefined();
+    });
+  });
+
+  describe('findLinearIssuesByIdentifiers', () => {
+    it('returns empty array for empty identifiers array', async () => {
+      const result = await findLinearIssuesByIdentifiers([], 'user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+    });
+
+    it('finds multiple issues by identifiers for a user', async () => {
+      await saveLinearIssue(createTestIssue({ id: 'issue-1', identifier: 'INT-1', userId: 'user-123' }));
+      await saveLinearIssue(createTestIssue({ id: 'issue-2', identifier: 'INT-2', userId: 'user-123' }));
+      await saveLinearIssue(createTestIssue({ id: 'issue-3', identifier: 'INT-3', userId: 'other-user' }));
+
+      const result = await findLinearIssuesByIdentifiers(['INT-1', 'INT-2'], 'user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(2);
+        expect(result.value.map((i) => i.identifier).sort()).toEqual(['INT-1', 'INT-2']);
+      }
+    });
+
+    it('filters by userId', async () => {
+      await saveLinearIssue(createTestIssue({ identifier: 'INT-1', userId: 'user-A' }));
+      await saveLinearIssue(createTestIssue({ identifier: 'INT-1', userId: 'user-B' }));
+
+      const result = await findLinearIssuesByIdentifiers(['INT-1'], 'user-A');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.userId).toBe('user-A');
+      }
+    });
+
+    it('returns empty array when no issues match', async () => {
+      await saveLinearIssue(createTestIssue({ identifier: 'INT-1', userId: 'user-123' }));
+
+      const result = await findLinearIssuesByIdentifiers(['INT-999'], 'user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+    });
+
+    it('correctly chunks more than 30 identifiers (Firestore in limit)', async () => {
+      // Create 35 issues (exceeds Firestore in limit of 30)
+      for (let i = 0; i < 35; i++) {
+        await saveLinearIssue(
+          createTestIssue({
+            id: `issue-${String(i)}`,
+            identifier: `INT-${String(i)}`,
+            userId: 'user-123',
+          })
+        );
+      }
+
+      const identifiers = Array.from({ length: 35 }, (_, i) => `INT-${String(i)}`);
+      const result = await findLinearIssuesByIdentifiers(identifiers, 'user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(35);
+        // Verify issues from both chunks are present
+        const foundIdentifiers = result.value.map((i) => i.identifier).sort();
+        expect(foundIdentifiers).toContain('INT-0');
+        expect(foundIdentifiers).toContain('INT-29');
+        expect(foundIdentifiers).toContain('INT-34');
+      }
     });
   });
 });

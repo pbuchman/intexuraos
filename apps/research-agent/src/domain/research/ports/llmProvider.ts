@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { SynthesisContext } from '@intexuraos/llm-prompts';
+import type { ResearchContext, SynthesisContext } from '@intexuraos/llm-prompts';
 
 export interface LlmError {
   code: 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED';
@@ -40,7 +40,7 @@ export interface LlmSynthesisResult {
 }
 
 export interface LlmResearchProvider {
-  research(prompt: string): Promise<Result<LlmResearchResult, LlmError>>;
+  research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>>;
 }
 
 export interface LlmSynthesisProvider {

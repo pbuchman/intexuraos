@@ -16,6 +16,9 @@ export type WorkerLocation = string;
 
 export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review';
 
+/** System prompt hash for auto-triggered merge-conflict resolution tasks. */
+export const MERGE_CONFLICT_SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
+
 /**
  * Task status lifecycle.
  * Design reference: Lines 316, 1422

@@ -402,9 +402,11 @@ export class FakeNotificationSender implements NotificationSender {
 export function createFakeLlmResearchProvider(
   response = 'Research content',
   options?: { sources?: string[]; usage?: { inputTokens: number; outputTokens: number; costUsd: number } }
-): LlmResearchProvider {
-  return {
-    async research(_prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
+): LlmResearchProvider & { lastResearchContext?: ResearchContext | undefined } {
+  const provider: LlmResearchProvider & { lastResearchContext?: ResearchContext | undefined } = {
+    lastResearchContext: undefined,
+    async research(_prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>> {
+      provider.lastResearchContext = ctx;
       const result: LlmResearchResult = { content: response };
       if (options?.sources !== undefined) {
         result.sources = options.sources;
@@ -415,6 +417,7 @@ export function createFakeLlmResearchProvider(
       return ok(result);
     },
   };
+  return provider;
 }
 
 /**
@@ -424,7 +427,7 @@ export function createFailingLlmResearchProvider(
   errorMessage = 'Test research failure'
 ): LlmResearchProvider {
   return {
-    async research(_prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
+    async research(_prompt: string, _ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },
   };
@@ -586,6 +589,7 @@ export function createFakeContextInferrer(): ContextInferenceProvider {
     safety: {
       high_stakes: false,
       required_disclaimers: [],
+      user_exclusions: [],
     },
     red_flags: [],
   };
@@ -610,6 +614,7 @@ export function createFakeContextInferrer(): ContextInferenceProvider {
     safety: {
       high_stakes: false,
       required_disclaimers: [],
+      user_exclusions: [],
     },
     red_flags: [],
   };
