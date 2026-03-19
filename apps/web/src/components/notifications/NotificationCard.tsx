@@ -12,7 +12,7 @@ interface NotificationCardProps {
 
 /**
  * Individual notification card styled as compact row with R4 pattern.
- * Desktop grid: App badge | Content preview | Source badge | Time | Actions
+ * Desktop grid: Device badge | App badge | Content preview | Source badge | Time | Actions
  */
 export function NotificationCard({
   notification,
@@ -27,7 +27,10 @@ export function NotificationCard({
         isDeleting ? 'scale-95 opacity-50' : 'hover:shadow-md dark:hover:border-slate-600'
       }`}
     >
-      <div className="grid grid-cols-[auto_1fr_auto_140px_60px] items-center gap-2">
+      <div className="grid grid-cols-[auto_auto_1fr_auto_140px_60px] items-center gap-2">
+        {/* Device badge */}
+        <Badge>{notification.device}</Badge>
+
         {/* App badge */}
         <Badge>{notification.app}</Badge>
 
