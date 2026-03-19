@@ -167,12 +167,18 @@ export function WhatsAppNotesPage(): React.JSX.Element {
       result = result.filter((m) => m.mediaType === mediaFilter);
     }
 
-    // Sort
+    // Sort with safe date parsing
     result.sort((a, b) => {
+      const dateA = new Date(a.receivedAt).getTime();
+      const dateB = new Date(b.receivedAt).getTime();
+      // Handle NaN by placing invalid dates at the end
+      if (Number.isNaN(dateA) && Number.isNaN(dateB)) return 0;
+      if (Number.isNaN(dateA)) return 1;
+      if (Number.isNaN(dateB)) return -1;
       if (sort === 'newest') {
-        return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
+        return dateB - dateA;
       } else {
-        return new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime();
+        return dateA - dateB;
       }
     });
 

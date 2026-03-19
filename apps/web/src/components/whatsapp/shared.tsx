@@ -7,31 +7,46 @@ const URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
  * Renders text with clickable links.
  */
 export function TextWithLinks({ text }: { text: string }): React.JSX.Element {
-  const parts = text.split(URL_REGEX);
+  const matches = [...text.matchAll(URL_REGEX)];
+  const parts: { text: string; isLink: boolean }[] = [];
+  let lastIndex = 0;
+
+  for (const match of matches) {
+    const matchIndex = match.index;
+    // Add text before the match
+    if (matchIndex > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, matchIndex), isLink: false });
+    }
+    // Add the link
+    parts.push({ text: match[0], isLink: true });
+    lastIndex = matchIndex + match[0].length;
+  }
+
+  // Add remaining text after last match
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex), isLink: false });
+  }
 
   return (
     <>
-      {parts.map((part, index) => {
-        if (URL_REGEX.test(part)) {
-          // Reset regex lastIndex after test
-          URL_REGEX.lastIndex = 0;
-          return (
-            <a
-              key={index}
-              href={part}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-              onClick={(e): void => {
-                e.stopPropagation();
-              }}
-            >
-              {part}
-            </a>
-          );
-        }
-        return <span key={index}>{part}</span>;
-      })}
+      {parts.map((part, index) =>
+        part.isLink ? (
+          <a
+            key={index}
+            href={part.text}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            onClick={(e): void => {
+              e.stopPropagation();
+            }}
+          >
+            {part.text}
+          </a>
+        ) : (
+          <span key={index}>{part.text}</span>
+        ),
+      )}
     </>
   );
 }

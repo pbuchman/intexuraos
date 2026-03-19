@@ -16,6 +16,45 @@ import { TextWithLinks } from './shared.js';
 
 const TEXT_PREVIEW_LIMIT = 800;
 
+// Extracted helpers to avoid recomputation on every render
+function getMediaTypeIconForMessage(
+  message: WhatsAppMessage,
+  accessToken: string,
+  onImageClick: (messageId: string) => void,
+): React.JSX.Element {
+  if (message.mediaType === 'image' && message.hasMedia) {
+    return (
+      <ImageThumbnail
+        messageId={message.id}
+        accessToken={accessToken}
+        onClick={(): void => {
+          onImageClick(message.id);
+        }}
+      />
+    );
+  }
+  if (message.mediaType === 'audio') {
+    return <Mic className="h-4 w-4 text-slate-400" />;
+  }
+  return <MessageSquare className="h-4 w-4 text-slate-400" />;
+}
+
+function getContentPreviewForMessage(message: WhatsAppMessage): string {
+  if (message.mediaType === 'image' && message.caption) {
+    return message.caption;
+  }
+  if (message.mediaType === 'audio' && message.transcription) {
+    return message.transcription;
+  }
+  if (message.text) {
+    return message.text;
+  }
+  if (message.caption) {
+    return message.caption;
+  }
+  return '';
+}
+
 interface MessageItemProps {
   message: WhatsAppMessage;
   accessToken: string;
@@ -80,41 +119,7 @@ export function MessageItem({
   const hasTextContent =
     message.text !== '' || (message.caption !== null && message.caption !== '');
 
-  const getMediaTypeIcon = (): React.JSX.Element => {
-    if (message.mediaType === 'image' && message.hasMedia) {
-      return (
-        <ImageThumbnail
-          messageId={message.id}
-          accessToken={accessToken}
-          onClick={(): void => {
-            onImageClick(message.id);
-          }}
-        />
-      );
-    }
-    if (message.mediaType === 'audio') {
-      return <Mic className="h-4 w-4 text-slate-400" />;
-    }
-    return <MessageSquare className="h-4 w-4 text-slate-400" />;
-  };
-
-  const getContentPreview = (): string => {
-    if (message.mediaType === 'image' && message.caption) {
-      return message.caption;
-    }
-    if (message.mediaType === 'audio' && message.transcription) {
-      return message.transcription;
-    }
-    if (message.text) {
-      return message.text;
-    }
-    if (message.caption) {
-      return message.caption;
-    }
-    return '';
-  };
-
-  const contentPreview = getContentPreview();
+  const contentPreview = getContentPreviewForMessage(message);
   const truncatedPreview =
     contentPreview.length > TEXT_PREVIEW_LIMIT
       ? contentPreview.slice(0, TEXT_PREVIEW_LIMIT) + '...'
@@ -136,7 +141,7 @@ export function MessageItem({
       <div className="grid grid-cols-[auto_1fr_140px_100px] items-center gap-2">
         {/* Media type indicator */}
         <div className="flex h-8 w-8 items-center justify-center">
-          {getMediaTypeIcon()}
+          {getMediaTypeIconForMessage(message, accessToken, onImageClick)}
         </div>
 
         {/* Content preview - single line truncate */}
