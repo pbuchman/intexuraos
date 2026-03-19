@@ -60,6 +60,7 @@ export async function processLinearAction(
       warn: () => undefined,
       error: () => undefined,
       debug: () => undefined,
+      // Safe: all Logger methods implemented as noops
     } as Logger);
 
   effectiveLogger.info({ userId, actionId, textLength: text.length }, 'processLinearAction: entry');
