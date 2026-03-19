@@ -1,6 +1,6 @@
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import type { CodeTask } from '../models/codeTask.js';
+import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH, type CodeTask } from '../models/codeTask.js';
 import type { GitHubPREvent } from '../models/gitHubPREvent.js';
 import type { GitHubPRSummary, UpsertGitHubPRSummaryInput } from '../models/gitHubPRSummary.js';
 import type { WorkerConfig } from '../models/workerSettings.js';
@@ -23,7 +23,7 @@ import { generateWebhookSecret } from '../utils/secrets.js';
 import { sendTaskMessage } from './sendTaskMessage.js';
 
 const BRANCH_REF_PREFIX = 'refs/heads/';
-const SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
+const SYSTEM_PROMPT_HASH = MERGE_CONFLICT_SYSTEM_PROMPT_HASH;
 const DEFAULT_WEB_URL = 'https://intexuraos.cloud';
 const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_MERGEABILITY_RETRIES = 2;
@@ -554,7 +554,7 @@ async function createMergeConflictTask(
   const taskId = `task_${crypto.randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, taskId);
 
-  let createResult = await deps.codeTaskRepo.create(buildCreateTaskInput({
+  const createResult = await deps.codeTaskRepo.create(buildCreateTaskInput({
     taskId,
     repository: params.repository,
     prNumber: params.details.number,
@@ -566,25 +566,6 @@ async function createMergeConflictTask(
     webhookSecret,
     ...(linkedLinearIssueId !== undefined && !shouldOmitLinearIssueId && { linearIssueId: linkedLinearIssueId }),
   }));
-
-  if (
-    !createResult.ok &&
-    createResult.error.code === 'ACTIVE_TASK_EXISTS' &&
-    linkedLinearIssueId !== undefined &&
-    !shouldOmitLinearIssueId
-  ) {
-    createResult = await deps.codeTaskRepo.create(buildCreateTaskInput({
-      taskId,
-      repository: params.repository,
-      prNumber: params.details.number,
-      baseBranch: params.details.baseBranch,
-      prompt,
-      eventId: params.eventId,
-  
-      userId: params.ownerUserId,
-      webhookSecret,
-    }));
-  }
 
   if (!createResult.ok) {
     return err({ code: createResult.error.code, message: createResult.error.message });
